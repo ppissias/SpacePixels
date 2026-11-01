@@ -271,7 +271,7 @@ public final class VisualizationSettings {
     /** The values while a copy is made; it starts with the built-in values. */
     private static final class Values {
         double autoStretchBlackSigma = 2.0;
-        double autoStretchWhiteSigma = 20.0;
+        double autoStretchWhiteSigma = 30.0;
         int gifBlinkSpeedMs = 300;
         int trackCropPadding = 200;
         int trackObjectCentricCropSize = 200;

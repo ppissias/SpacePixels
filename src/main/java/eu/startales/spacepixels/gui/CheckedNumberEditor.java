@@ -69,12 +69,16 @@ final class CheckedNumberEditor extends JSpinner.NumberEditor {
 
     /** Whether the text in the field is a value of the spinner. */
     boolean isTextValid() {
+        return typedValue() != null;
+    }
+
+    /** The value the text in the field stands for, before it is committed, or null while it is not a value of the spinner. */
+    Number typedValue() {
         JFormattedTextField field = getTextField();
         try {
-            field.getFormatter().stringToValue(field.getText());
-            return true;
+            return (Number) field.getFormatter().stringToValue(field.getText());
         } catch (ParseException e) {
-            return false;
+            return null;
         }
     }
 

@@ -1461,6 +1461,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.showLastRun();
         }
+        if (detectionSettings != null) {
+            detectionSettings.lastRunChanged();
+        }
     }
 
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */

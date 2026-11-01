@@ -40,7 +40,7 @@ final class TrialSettingsControls {
         Entry(Input input) {
             setting = input.setting();
             initial = baseline = input.value();
-            spinner = UiStyle.spinner(new SpinnerNumberModel(initial, input.minimum(), input.maximum(), input.step()));
+            spinner = UiStyle.spinner(new DecimalSpinnerModel(initial, input.minimum(), input.maximum(), input.step()));
             editor = new CheckedNumberEditor(spinner, initial instanceof Integer ? "#0" : "#0.0", TrialSettingsControls.this::showNote);
             spinner.setEditor(editor);
             spinner.setRequestFocusEnabled(false);

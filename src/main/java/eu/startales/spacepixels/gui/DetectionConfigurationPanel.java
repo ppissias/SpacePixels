@@ -134,6 +134,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private JSpinner spinStreakScale, spinStreakCentroidRad, spinPointBoxRad, spinBoxPad;
     private JSpinner spinAutoBlackSigma, spinAutoWhiteSigma, spinGifBlinkSpeed, spinCropPadding;
+    private StretchSamplePanel stretchSamples;
 
     /** Client property marking a section header label on a settings page. */
     static final String SECTION_HEADER = "spacepixels.sectionHeader";
@@ -1167,6 +1168,29 @@ public class DetectionConfigurationPanel extends JPanel {
                 "Controls how far above the sky median (in robust sky noise) the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
                 false, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value),
                 0.1, 100.0, 0.1);
+        stretchSamples = new StretchSamplePanel(sessions, visualization.getAutoStretchBlackSigma(), visualization.getAutoStretchWhiteSigma());
+        panel.add(stretchSamples);
+        // The preview follows both values while they are dragged or typed, before they are committed.
+        Runnable preview = () -> stretchSamples.setSigmas(SpinnerSlider.typedOrValue(spinAutoBlackSigma),
+                SpinnerSlider.typedOrValue(spinAutoWhiteSigma));
+        SpinnerSlider.attach(spinAutoBlackSigma, "Auto Stretch Black Sigma", preview);
+        SpinnerSlider.attach(spinAutoWhiteSigma, "Auto Stretch White Sigma", preview);
+        // The preview shows while either of its settings does; a search or the unsaved-changes filter can hide both.
+        JPanel blackRow = rowOf(spinAutoBlackSigma).row;
+        JPanel whiteRow = rowOf(spinAutoWhiteSigma).row;
+        java.awt.event.ComponentAdapter followRows = new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentShown(java.awt.event.ComponentEvent e) {
+                stretchSamples.setVisible(blackRow.isVisible() || whiteRow.isVisible());
+            }
+
+            @Override
+            public void componentHidden(java.awt.event.ComponentEvent e) {
+                stretchSamples.setVisible(blackRow.isVisible() || whiteRow.isVisible());
+            }
+        };
+        blackRow.addComponentListener(followRows);
+        whiteRow.addComponentListener(followRows);
         spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings,
                 "gifBlinkSpeedMs", "GIF Blink Speed (ms)", "ms",
                 "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.",
@@ -1217,7 +1241,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private SpinnerNumberModel doubleSpinnerModel(double value, double min, double max, double step) {
-        return new SpinnerNumberModel(clampDouble(value, min, max), min, max, step);
+        return new DecimalSpinnerModel(clampDouble(value, min, max), min, max, step);
     }
 
     private SpinnerNumberModel intSpinnerModel(int value, int min, int max, int step) {
@@ -1623,8 +1647,14 @@ public class DetectionConfigurationPanel extends JPanel {
         }
     }
 
+    /** A detection run's tracks reached the session: the stretch preview shows them. */
+    void lastRunChanged() {
+        stretchSamples.sourceChanged();
+    }
+
     /** A new session, or none: the Overview shows it, and the master stack of the last one is dropped. */
     void sessionChanged(FitsFileInformation[] filesInfo) {
+        stretchSamples.sourceChanged();
         if (filesInfo.length == 0) {
             overviewPanel.setSession(sessions.current(), null, 0, 0, 0, false, null, new ArrayList<>());
             return;

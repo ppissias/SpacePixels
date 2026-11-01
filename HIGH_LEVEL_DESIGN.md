@@ -159,6 +159,8 @@ Main classes:
 - `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with two linked `FrameView`s and a histogram)
 - `StretchPreviewRenderer` (renders the `StretchPanel` previews one request at a time and shows a result only while its request is the newest; a change of frame or stretch, hiding the tab or another import makes a render under way stale)
 - `DetectionConfigurationPanel`
+- `StretchSamplePanel` (the stretch preview under Auto Stretch Black and White Sigma: crops around the last run's tracks, or picked from a frame before a run, with the share of each drawn black and white), and `SpinnerSlider` (the sliders of those two settings, kept in step with their fields)
+- `DecimalSpinnerModel` (the model of every decimal spinner: its arrows step in decimal, so 19.2 up by 0.1 is 19.3)
 - `AutoTuneOverviewPanel`
 - `SettingsNavigator`, `SettingRow`
 - `CheckedNumberEditor` (the editor of every number setting: only text that is one complete number within the setting's range becomes its value; other text stays in the field, outlined. It shows every decimal of its value, so committing the shown text never rounds it)
