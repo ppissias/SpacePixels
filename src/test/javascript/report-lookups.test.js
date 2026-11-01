@@ -5,8 +5,8 @@ const vm = require('node:vm');
 const source = fs.readFileSync('src/main/resources/eu/startales/spacepixels/report/report-lookups.js', 'utf8');
 const {matchesMarker} = require('../../main/resources/eu/startales/spacepixels/report/report-interactions.js');
 
-function client(responses, count = 1, catalogueStar = '') {
-  const slot = {innerHTML: ''}, status = {textContent: ''}, requests = [], buttons = [];
+function client(responses, count = 1, catalogueStar = '', timers = {}) {
+  const slot = {innerHTML: ''}, status = {textContent: ''}, requests = [], requestOptions = [], buttons = [];
   const knownAs = {innerHTML: '', getAttribute: key => key === 'data-catalogue-star' ? catalogueStar : null,
     querySelector: () => null};
   for (let i = 0; i < count; i++) {
@@ -24,14 +24,17 @@ function client(responses, count = 1, catalogueStar = '') {
     __SPACEPIXELS_PROXY_URL__: 'http://127.0.0.1:47831', __SPACEPIXELS_CACHE_ID__: 'cache',
     SpacePixelsCatalogueComparison: {initialize() {}, update() {}},
     module: {exports: {}}, AbortController, setTimeout, clearTimeout, console,
-    fetch: async url => {
+    fetch: async (url, options) => {
       requests.push(url);
+      requestOptions.push(options);
       const response = responses[Math.min(requests.length - 1, responses.length - 1)];
       if (response instanceof Error) throw response;
+      if (typeof response === 'function') return response(url, options);
+      if (response && response.type) return response;
       return {json: async () => response};
-    }};
+    }, ...timers};
   vm.createContext(sandbox); vm.runInContext(source, sandbox);
-  return {api: sandbox.module.exports, buttons, slot, status, requests, knownAs};
+  return {api: sandbox.module.exports, buttons, slot, status, requests, requestOptions, knownAs};
 }
 const success = matches => ({ok: true, provider: 'vsx', persisted: true, normalized: {matches}, payload: {}});
 const hit = {name: 'Example', type: 'EA', periodDays: 1, separationArcsec: 1};
@@ -91,8 +94,7 @@ test('inspector filters compose frame and sigma limits', () => {
   assert.equal(matchesMarker({peak: '8', frame: '3'}, 10, 0), false);
 });
 
-test('local Stellarium button posts directly to 127.0.0.1:8090 and reports status', async () => {
-  const c = client([{}]);
+function stellariumButton(overrides = {}) {
   const statusEl = {style: {}, innerHTML: ''};
   const attributes = {
     'data-time': '1768514400000',
@@ -102,26 +104,158 @@ test('local Stellarium button posts directly to 127.0.0.1:8090 and reports statu
     'data-fov': '2.0000',
     'data-lat': '37.98380',
     'data-lng': '23.72750',
-    'data-elev': '120.0'
+    'data-elev': '120.0',
+    ...overrides
   };
   const button = {
     textContent: 'Stellarium Local',
     disabled: false,
-    getAttribute: k => attributes[k] || null,
+    getAttribute: k => attributes[k] ?? null,
     setAttribute: (k, v) => { attributes[k] = v; },
-    closest: () => ({querySelector: () => statusEl})
+    closest: () => ({querySelector: () => statusEl}),
+    status: statusEl
   };
+  return button;
+}
+
+const opaqueStellariumResponse = () => ({type: 'opaque', ok: false, status: 0});
+const readableStellariumResponse = (status = 200, reply = 'ok') => ({
+  type: 'cors', ok: status >= 200 && status < 300, status, text: async () => reply
+});
+
+/** Controls the overall deadline without waiting ten real seconds or changing unrelated lookup timers. */
+function stellariumDeadline() {
+  let expire;
+  const handle = {};
+  const deadline = {
+    milliseconds: null, cleared: false,
+    timers: {
+      setTimeout(callback, milliseconds) { expire = callback; deadline.milliseconds = milliseconds; return handle; },
+      clearTimeout(value) { assert.equal(value, handle); deadline.cleared = true; }
+    },
+    expire() { assert.equal(deadline.milliseconds, 10000); expire(); }
+  };
+  return deadline;
+}
+
+test('local Stellarium sends the commands directly and marks opaque responses as unconfirmed', async () => {
+  const deadline = stellariumDeadline();
+  const c = client([opaqueStellariumResponse()], 1, '', deadline.timers);
+  const button = stellariumButton();
   const result = await c.api.openLocalStellarium(button);
   assert.equal(result.ok, true);
+  assert.equal(result.confirmed, false);
   assert.equal(c.requests.length, 4);
   assert.equal(c.requests[0], 'http://127.0.0.1:8090/api/location/setlocationfields');
   assert.equal(c.requests[1], 'http://127.0.0.1:8090/api/main/time');
   assert.equal(c.requests[2], 'http://127.0.0.1:8090/api/main/focus');
   assert.equal(c.requests[3], 'http://127.0.0.1:8090/api/main/fov');
-  assert.match(statusEl.innerHTML, /Slewed local Stellarium to 2026-01-15 22:00:00 UTC/);
+  assert.match(button.status.innerHTML, /Commands sent to local Stellarium for 2026-01-15 22:00:00 UTC/);
+  assert.match(button.status.innerHTML, /Acceptance is unconfirmed/);
+  assert.doesNotMatch(button.status.innerHTML, /Slewed|accepted the commands/);
+  assert.equal(button.status.style.color, '#d0a050');
+  assert.ok(c.requestOptions.every(options => options.signal === c.requestOptions[0].signal));
+  assert.equal(c.requestOptions[0].signal.aborted, false);
+  assert.equal(deadline.cleared, true);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Stellarium Local');
+});
 
-  const failing = client([new Error('Connection refused')]);
+test('local Stellarium connection failures restore the button and clear the deadline', async () => {
+  const deadline = stellariumDeadline();
+  const button = stellariumButton();
+  const failing = client([new Error('Connection refused')], 1, '', deadline.timers);
   const failResult = await failing.api.openLocalStellarium(button);
   assert.equal(failResult.ok, false);
-  assert.match(statusEl.innerHTML, /Could not connect to local Stellarium on port 8090/);
+  assert.match(button.status.innerHTML, /Could not complete the commands for local Stellarium on port 8090/);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Stellarium Local');
+  assert.equal(deadline.cleared, true);
+});
+
+test('local Stellarium confirms only readable successful command replies', async () => {
+  const c = client([readableStellariumResponse()]);
+  const button = stellariumButton({'data-lat': null, 'data-lng': null});
+  const result = await c.api.openLocalStellarium(button);
+  assert.equal(result.ok, true);
+  assert.equal(result.confirmed, true);
+  assert.equal(c.requests.length, 3);
+  assert.match(button.status.innerHTML, /Stellarium accepted the commands/);
+  assert.doesNotMatch(button.status.innerHTML, /Slewed/);
+  assert.equal(button.status.style.color, '#8fd19e');
+});
+
+test('one opaque command prevents confirmation even when the final reply is readable', async () => {
+  const c = client([opaqueStellariumResponse(), readableStellariumResponse()]);
+  const button = stellariumButton();
+  const result = await c.api.openLocalStellarium(button);
+  assert.equal(result.ok, true);
+  assert.equal(result.confirmed, false);
+  assert.match(button.status.innerHTML, /Acceptance is unconfirmed/);
+});
+
+for (const [label, response] of [
+  ['HTTP 401', readableStellariumResponse(401)],
+  ['HTTP 500', readableStellariumResponse(500)],
+  ['an error body with HTTP 200', readableStellariumResponse(200, 'error: invalid parameters')]
+]) {
+  test('local Stellarium rejects ' + label + ' and sends no remaining commands', async () => {
+    const deadline = stellariumDeadline();
+    const c = client([opaqueStellariumResponse(), response], 1, '', deadline.timers);
+    const button = stellariumButton();
+    const result = await c.api.openLocalStellarium(button);
+    assert.equal(result.ok, false);
+    assert.equal(c.requests.length, 2);
+    assert.match(button.status.innerHTML, /Could not complete the commands/);
+    assert.doesNotMatch(button.status.innerHTML, /Slewed|Commands sent|accepted the commands/);
+    assert.equal(button.disabled, false);
+    assert.equal(button.textContent, 'Stellarium Local');
+    assert.equal(deadline.cleared, true);
+  });
+}
+
+test('the overall Stellarium deadline aborts a stalled later command and ignores its late response', async () => {
+  const deadline = stellariumDeadline();
+  let respond;
+  const stalled = () => new Promise(resolve => { respond = resolve; });
+  const c = client([opaqueStellariumResponse(), stalled], 1, '', deadline.timers);
+  const button = stellariumButton();
+  const operation = c.api.openLocalStellarium(button);
+  await new Promise(setImmediate);
+  assert.equal(c.requests.length, 2);
+  assert.equal(button.disabled, true);
+  deadline.expire();
+  const result = await operation;
+  assert.equal(result.ok, false);
+  assert.equal(c.requestOptions[1].signal.aborted, true);
+  assert.match(button.status.innerHTML, /timed out after 10 seconds/);
+  assert.match(button.status.innerHTML, /Some commands may already have been applied/);
+  assert.equal(button.disabled, false);
+  assert.equal(button.textContent, 'Stellarium Local');
+  assert.equal(deadline.cleared, true);
+
+  respond(opaqueStellariumResponse());
+  await new Promise(setImmediate);
+  assert.equal(c.requests.length, 2);
+  assert.match(button.status.innerHTML, /timed out/);
+});
+
+test('the Stellarium deadline also bounds reading a stalled response body', async () => {
+  const deadline = stellariumDeadline();
+  let reading = false;
+  const response = readableStellariumResponse();
+  response.text = () => { reading = true; return new Promise(() => {}); };
+  const c = client([response], 1, '', deadline.timers);
+  const button = stellariumButton();
+  const operation = c.api.openLocalStellarium(button);
+  await new Promise(setImmediate);
+  assert.equal(reading, true);
+  deadline.expire();
+  const result = await operation;
+  assert.equal(result.ok, false);
+  assert.equal(c.requests.length, 1);
+  assert.equal(c.requestOptions[0].signal.aborted, true);
+  assert.match(button.status.innerHTML, /timed out after 10 seconds/);
+  assert.equal(button.disabled, false);
+  assert.equal(deadline.cleared, true);
 });

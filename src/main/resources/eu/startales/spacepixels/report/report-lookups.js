@@ -4,6 +4,7 @@
   const REPORT_PROXY_FETCH_URL = REPORT_PROXY_BASE_URL + '/api/report/fetch';
   const STELLARIUM_DIRECT_BASE_URL = 'http://127.0.0.1:8090';
   const STELLARIUM_MANUAL_URL = 'https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md#annex-local-stellarium-integration';
+  const STELLARIUM_TIMEOUT_MS = 10000;
   const PERSISTED_LOOKUP_CACHE_SCRIPT_ID = __SPACEPIXELS_CACHE_ID__;
   const JPL_MAX_RENDER_ROWS = 250;
   const liveLookupCache = new Map();
@@ -551,7 +552,7 @@
     status.innerHTML = htmlMessage;
   }
 
-  function slewStellariumDirect(timeMillis, raDeg, decDeg, fovDeg, lat, lng, elev) {
+  function slewStellariumDirect(timeMillis, raDeg, decDeg, fovDeg, lat, lng, elev, signal) {
     const jd = (Number(timeMillis) / 86400000.0) + 2440587.5;
     const raRad = Number(raDeg) * Math.PI / 180.0;
     const decRad = Number(decDeg) * Math.PI / 180.0;
@@ -559,12 +560,25 @@
     const y = Math.cos(decRad) * Math.sin(raRad);
     const z = Math.sin(decRad);
     const j2000 = '[' + x.toFixed(8) + ',' + y.toFixed(8) + ',' + z.toFixed(8) + ']';
+    let confirmed = true;
     const postForm = function (path, body) {
+      if (signal.aborted) return Promise.reject(new Error('Stellarium request aborted.'));
       return fetch(STELLARIUM_DIRECT_BASE_URL + path, {
         method: 'POST',
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: body
+        body: body,
+        signal: signal
+      }).then(function (response) {
+        // A direct cross-origin request can be sent, but its opaque response cannot confirm acceptance.
+        if (response.type === 'opaque') {
+          confirmed = false;
+          return;
+        }
+        if (!response.ok) throw new Error('Stellarium rejected a command (HTTP ' + response.status + ').');
+        return response.text().then(function (reply) {
+          if (reply.trim() !== 'ok') throw new Error('Stellarium did not accept a command.');
+        });
       });
     };
     let chain = Promise.resolve();
@@ -579,7 +593,8 @@
     return chain
       .then(function () { return postForm('/api/main/time', 'time=' + jd.toFixed(8) + '&timerate=0'); })
       .then(function () { return postForm('/api/main/focus', 'position=' + encodeURIComponent(j2000)); })
-      .then(function () { return postForm('/api/main/fov', 'fov=' + encodeURIComponent(fovDeg)); });
+      .then(function () { return postForm('/api/main/fov', 'fov=' + encodeURIComponent(fovDeg)); })
+      .then(function () { return confirmed; });
   }
 
   function openLocalStellarium(button) {
@@ -598,19 +613,36 @@
     button.disabled = true;
     button.textContent = 'Opening...';
 
-    const failHtml = "Could not connect to local Stellarium on port 8090. Ensure Stellarium is running with the Remote Control plugin enabled (see the <a class='live-link-inline' href='"
+    const failHtml = "Could not complete the commands for local Stellarium on port 8090. Some commands may already have been applied. Check Stellarium and ensure its Remote Control plugin is enabled (see the <a class='live-link-inline' href='"
       + STELLARIUM_MANUAL_URL + "' target='_blank' rel='noopener noreferrer'>setup instructions in the SpacePixels manual</a>).";
+    const controller = new AbortController();
+    let timedOut = false;
+    let timeoutId;
+    const timeout = new Promise(function (_, reject) {
+      timeoutId = setTimeout(function () {
+        timedOut = true;
+        controller.abort();
+        reject(new Error('Stellarium request timed out.'));
+      }, STELLARIUM_TIMEOUT_MS);
+    });
 
-    return slewStellariumDirect(timeMillis, raDeg, decDeg, fovDeg, lat, lng, elev)
-      .then(function () {
-        updateStellariumStatus(button, true, 'Slewed local Stellarium to ' + escapeHtml(utcLabel) + ' (FOV ' + escapeHtml(fovDeg) + '&deg;).');
-        return { ok: true };
+    // The deadline covers every command and response body, even if an aborted transport settles late.
+    return Promise.race([slewStellariumDirect(timeMillis, raDeg, decDeg, fovDeg, lat, lng, elev, controller.signal), timeout])
+      .then(function (confirmed) {
+        const target = escapeHtml(utcLabel) + ' (FOV ' + escapeHtml(fovDeg) + '&deg;).';
+        updateStellariumStatus(button, confirmed, confirmed
+          ? 'Stellarium accepted the commands for ' + target
+          : 'Commands sent to local Stellarium for ' + target + ' Acceptance is unconfirmed; check its window to confirm the view.');
+        return { ok: true, confirmed: confirmed };
       })
       .catch(function () {
-        updateStellariumStatus(button, false, failHtml);
+        updateStellariumStatus(button, false, timedOut
+          ? 'Local Stellarium request timed out after 10 seconds. Some commands may already have been applied; check Stellarium before retrying.'
+          : failHtml);
         return { ok: false };
       })
       .finally(function () {
+        clearTimeout(timeoutId);
         button.disabled = false;
         button.textContent = originalLabel;
       });

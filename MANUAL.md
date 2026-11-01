@@ -749,3 +749,5 @@ To let SpacePixels and its reports control your local Stellarium window, enable 
    ![Configuring the Remote Control server on port 8090 in Stellarium](docs/images/manual/stellarium-remote-control-config.png)
 
 Once enabled, keep Stellarium open while reviewing a detection report and click **Stellarium Local** (crop FOV) or **Stellarium Local Wide** on any finding card to jump directly to that sky position and moment in Stellarium.
+
+The report normally shows **Commands sent** with **Acceptance is unconfirmed**, because the direct browser connection cannot read Stellarium's reply. Check the Stellarium window to confirm the view. When replies can be read, the report checks that every command was accepted before saying so. The complete request has a **10-second timeout**; a timeout or error restores the button so you can retry. Some commands may already have been applied, so check Stellarium before retrying.

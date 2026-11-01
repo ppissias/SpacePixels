@@ -257,6 +257,8 @@ Variable-star brightest/faintest cutouts use each crop's median as its local sky
 
 The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT, VSX) go through `ReportLookupProxyServer`, a small localhost server owned by the window; its **Stellarium Local** buttons post directly from `report-lookups.js` to a local Stellarium Remote Control server on `127.0.0.1:8090`. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
 
+The direct Stellarium command sequence has one 10-second deadline and shares an abort signal across its requests. A timeout aborts outstanding work and prevents later commands from being sent; the button is restored even if the transport settles late. Opaque responses are reported as sent but unconfirmed, not as a completed slew. Readable replies must have a successful HTTP status and the `ok` command acknowledgement before the report confirms acceptance.
+
 ## Headless: the API and the command line
 
 `DefaultSpacePixelsPipelineApi.run(request)` prepares the input according to the request's policy (no questions), validates the frames strictly, optionally runs Auto-Tune, detects, and optionally writes the report. It is synchronous, reads the frames with its own `FitsImportService`, which it closes, and never touches a GUI session or creates a plate solver. `BatchDetectionCli` is a thin client of it. The supported surface is the `api` package and the types it exposes ([API.md](API.md)); everything else is internal.
