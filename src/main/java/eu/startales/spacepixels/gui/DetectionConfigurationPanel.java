@@ -644,7 +644,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 poolToUse,
                 settings,
                 autoTuneMaxCandidateFrames,
-                selectedProfile);
+                selectedProfile).showingPreviews(frames.previewSink(), visualizationSettings());
         JobCoordinator.Admission admission = jobs.start(JobKind.AUTO_TUNE,
                 sessions.current(), tuneTask,
                 sessions.forCurrent((handle, outcome) -> autoTuneFinished(outcome)));

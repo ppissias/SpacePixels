@@ -180,6 +180,7 @@ public class TypedDetectionSettingsTest {
                     @Override public Action detectAction() { return noop; }
                     @Override public Action previewAction() { return noop; }
                     @Override public void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune) { }
+                    @Override public eu.startales.spacepixels.detection.RunPreviewSink previewSink() { return null; }
                 };
                 DetectionConfigurationPanel panel = new DetectionConfigurationPanel(
                         sessions, jobs, storage, null, () -> false, () -> { }, readout, frameList);

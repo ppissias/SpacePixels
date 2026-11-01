@@ -19,14 +19,14 @@ import java.util.function.Consumer;
  * the dialog cancels it too; the button then says the job is stopping, and offers to exit SpacePixels if the job does
  * not stop. For a job that cannot be cancelled, closing the dialog asks whether to exit SpacePixels.
  * <p>
- * Detection runs also show a live view: a small picture of the work under way, at most one new picture every few
+ * Detection and Auto-Tune runs show a live view: a small picture of the work under way, at most one new picture every few
  * seconds, which can be hidden. The text above it stays the authoritative progress.
  */
 public class ProcessingProgressDialog extends JDialog {
 
     /** How long a cancelled job may take to stop before the dialog offers to exit SpacePixels instead. */
     private static final int EXIT_OFFER_DELAY_MILLIS = 15_000;
-    /** At most one new live-view picture per this interval; a stage change is shown at once. */
+    /** At most one new live-view picture per this interval, including when the phase changes. */
     static final long PREVIEW_INTERVAL_NANOS = TimeUnit.SECONDS.toNanos(3);
     /** The picture box and the text width, in logical pixels. */
     private static final int PICTURE_WIDTH = 300;
@@ -58,7 +58,7 @@ public class ProcessingProgressDialog extends JDialog {
     private boolean previewShown = true;
     private Consumer<Boolean> previewPreferenceSaver = shown -> { };
     /** Counts the jobs' preview sinks; a picture from an older sink is dropped. Used on the event thread only. */
-    private long previewGeneration;
+    private volatile long previewGeneration;
     /** Read by the job's thread before it makes a picture: true while a visible live view would show one. */
     private volatile boolean previewWanted;
     /** The pictures of the latest preview that has several, shown in turn; used on the event thread only. */
@@ -347,7 +347,7 @@ public class ProcessingProgressDialog extends JDialog {
         return new RunPreviewSink() {
             @Override
             public boolean wantsPreview(boolean stageChange) {
-                if (!previewWanted) {
+                if (!previewWanted || generation != previewGeneration) {
                     return false;
                 }
                 while (true) {

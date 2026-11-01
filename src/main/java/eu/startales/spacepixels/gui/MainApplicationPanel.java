@@ -13,6 +13,7 @@ import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.detection.RunPreviewSink;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.IterativeDetectionRequest;
 import eu.startales.spacepixels.config.AppConfig;
@@ -244,7 +245,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     return;
                 }
                 setProgressBarWorking();
-                progressDialog.beginPreview(handle.kind() == JobKind.DETECTION || handle.kind() == JobKind.ITERATIVE_DETECTION);
+                progressDialog.beginPreview(handle.kind() == JobKind.DETECTION || handle.kind() == JobKind.ITERATIVE_DETECTION
+                        || handle.kind() == JobKind.AUTO_TUNE);
                 progressDialog.beginDetails(handle.kind() == JobKind.FRAME_PREPARATION);
                 progressDialog.offerCancel(handle.kind().cancellable() ? () -> jobs.cancel() : null);
                 if (texts.indeterminate()) {
@@ -543,6 +545,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
     /** Java preference (node of this package) for the progress dialog's Hide/Show picture choice. */
     static final String LIVE_VIEW_PREFERENCE = "progressDialog.liveView";
+
+    /** Creates the next job's live-view sink on the EDT, shared by tuning and detection commands. */
+    @Override public RunPreviewSink previewSink() { return progressDialog.previewSink(); }
 
     /** Applies the saved Hide/Show picture choice; a change is saved in the background, like the window placement. */
     private void restoreLiveViewPreference() {

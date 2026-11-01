@@ -19,6 +19,9 @@ import eu.startales.spacepixels.jobs.JobContext;
 import eu.startales.spacepixels.jobs.JobOutcome;
 import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.detection.AutoTunerRunner;
+import eu.startales.spacepixels.detection.RunPreviewScope;
+import eu.startales.spacepixels.detection.RunPreviewSink;
+import eu.startales.spacepixels.config.VisualizationSettings;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -39,6 +42,8 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
     private final DetectionConfig baseConfig;
     private final int autoTuneMaxCandidateFrames;
     private final AutoTuneProfile profile;
+    private RunPreviewSink previews;
+    private VisualizationSettings visualization = VisualizationSettings.defaults();
 
     public AutoTuneTask(FitsFileInformation[] filesInfo,
                         DetectionConfig baseConfig,
@@ -52,10 +57,18 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
 
     @Override
     public JobOutcome<AutoTunerResult> run(JobContext context) throws Exception {
-        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled)) {
+        try (CancellationScope cancellation = CancellationScope.open(context::isCancelled);
+             RunPreviewScope preview = previews == null ? null : RunPreviewScope.open(previews)) {
             CancellationScope.check();
             return runCancellable(context);
         }
+    }
+
+    /** Captures the job's live-view destination and immutable rendering choices before admission. */
+    public AutoTuneTask showingPreviews(RunPreviewSink sink, VisualizationSettings settings) {
+        previews = sink;
+        visualization = settings;
+        return this;
     }
 
     private JobOutcome<AutoTunerResult> runCancellable(JobContext context) throws Exception {
@@ -69,7 +82,7 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
                 filesInfo,
                 baseConfig,
                 autoTuneMaxCandidateFrames,
-                context::progress);
+                context::progress, visualization);
 
         LOGGER.info("Candidate pool ready. Passing " + candidateFrames.size() + " frames to AutoTuner.");
 
@@ -81,7 +94,7 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
         context.progress(50, "Starting mathematical tuning algorithms...");
 
         LOGGER.info("Auto-Tuner profile: " + profile);
-        AutoTunerResult result = AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener);
+        AutoTunerResult result = AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener, visualization);
         context.progress(100, "Auto-Tuning complete!");
         return JobOutcome.completed(result);
     }

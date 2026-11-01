@@ -8,6 +8,8 @@
 package eu.startales.spacepixels.detection;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
+import eu.startales.spacepixels.config.VisualizationSettings;
+import io.github.ppissias.jtransient.engine.AutoTuneSnapshot;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.engine.ImageFrame;
@@ -82,6 +84,13 @@ public final class AutoTuneCandidatePoolBuilder {
                                                       DetectionConfig baseConfig,
                                                       int autoTuneMaxCandidateFrames,
                                                       ProgressListener progressListener) throws Exception {
+        return buildCandidatePool(filesInfo, baseConfig, autoTuneMaxCandidateFrames, progressListener,
+                VisualizationSettings.defaults());
+    }
+
+    /** Builds the same pool with the admitted run's rendering settings, only making pictures when requested. */
+    public static List<ImageFrame> buildCandidatePool(FitsFileInformation[] filesInfo, DetectionConfig baseConfig,
+            int autoTuneMaxCandidateFrames, ProgressListener progressListener, VisualizationSettings visualization) throws Exception {
         if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
         }
@@ -89,15 +98,15 @@ public final class AutoTuneCandidatePoolBuilder {
         int candidateLimit = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
         if (filesInfo.length <= candidateLimit) {
             emitProgress(progressListener, 0, "Loading full candidate pool...");
-            return loadFrames(filesInfo, buildSequentialIndices(filesInfo.length), progressListener, 0, 50, "Loading candidate frame");
+            return loadFrames(filesInfo, buildSequentialIndices(filesInfo.length), progressListener, 0, 50, "Loading candidate frame", visualization);
         }
 
         emitProgress(progressListener, 0, "Evaluating frame quality for candidate pool...");
-        List<FrameQualityRecord> frameQualityRecords = scoreFrames(filesInfo, baseConfig, progressListener);
+        List<FrameQualityRecord> frameQualityRecords = scoreFrames(filesInfo, baseConfig, progressListener, visualization);
         List<Integer> selectedIndices = selectCandidateSequenceIndices(frameQualityRecords, candidateLimit);
 
         emitProgress(progressListener, 40, "Loading deterministic candidate pool...");
-        return loadFrames(filesInfo, selectedIndices, progressListener, 40, 50, "Loading candidate frame");
+        return loadFrames(filesInfo, selectedIndices, progressListener, 40, 50, "Loading candidate frame", visualization);
     }
 
     static List<Integer> selectCandidateSequenceIndices(List<FrameQualityRecord> frameQualityRecords, int autoTuneMaxCandidateFrames) {
@@ -139,7 +148,7 @@ public final class AutoTuneCandidatePoolBuilder {
 
     private static List<FrameQualityRecord> scoreFrames(FitsFileInformation[] filesInfo,
                                                         DetectionConfig baseConfig,
-                                                        ProgressListener progressListener) throws Exception {
+                                                        ProgressListener progressListener, VisualizationSettings visualization) throws Exception {
         List<FrameQualityRecord> scoredFrames = new ArrayList<>(filesInfo.length);
 
         for (int i = 0; i < filesInfo.length; i++) {
@@ -165,6 +174,9 @@ public final class AutoTuneCandidatePoolBuilder {
                 }
 
                 scoredFrames.add(new FrameQualityRecord(i, score));
+                offerFrame(pixelData, "Evaluating frame " + (i + 1) + " of " + filesInfo.length
+                        + String.format(java.util.Locale.US, " · noise %.1f · FWHM %.2f px",
+                        metrics.backgroundNoise, metrics.medianFWHM), visualization);
             }
         }
 
@@ -176,7 +188,7 @@ public final class AutoTuneCandidatePoolBuilder {
                                                ProgressListener progressListener,
                                                int startPercent,
                                                int endPercent,
-                                               String progressPrefix) throws Exception {
+                                               String progressPrefix, VisualizationSettings visualization) throws Exception {
         List<Integer> orderedIndices = new ArrayList<>(selectedIndices);
         orderedIndices.sort(Integer::compareTo);
 
@@ -202,11 +214,19 @@ public final class AutoTuneCandidatePoolBuilder {
                         (short[][]) kernel,
                         info.getObservationTimestamp(),
                         info.getExposureDurationMillis()));
+                offerFrame((short[][]) kernel, "Loading candidate " + (i + 1) + " of " + orderedIndices.size()
+                        + " · sequence frame " + (frameIndex + 1), visualization);
             }
         }
 
         frames.sort(Comparator.comparingInt(frame -> frame.sequenceIndex));
         return frames;
+    }
+
+    /** Reuses the loaded pixels while they are owned here; a hidden or absent live view builds nothing. */
+    private static void offerFrame(short[][] pixels, String caption, VisualizationSettings visualization) {
+        RunPreviewScope.offer(false, () -> AutoTuneLiveView.render(new AutoTuneSnapshot(AutoTuneSnapshot.Kind.FRAME,
+                caption, pixels, null, List.of(), List.of()), visualization));
     }
 
     private static int[] allocateBucketCounts(int candidateLimit) {

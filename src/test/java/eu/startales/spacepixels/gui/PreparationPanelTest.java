@@ -87,6 +87,22 @@ public class PreparationPanelTest {
         }
     }
 
+    /** Calibration Browse opens beside the lights, and in the observation session when that folder is set. */
+    @Test public void browseStartsBesideLightsUnlessASessionFolderIsSet() throws Exception {
+        Path session = temporary.newFolder("session").toPath();
+        Path lights = Files.createDirectory(session.resolve("lights"));
+        Path darks = Files.createDirectory(session.resolve("darks"));
+        Path master = Files.createFile(session.resolve("master_dark.fit"));
+        assertEquals(session.toFile().getCanonicalPath(), PreparationPanel.inputBrowseStart(null, null, lights).getCanonicalPath());
+        assertEquals(session.toFile().getCanonicalPath(), PreparationPanel.inputBrowseStart(null, session, lights).getCanonicalPath());
+        assertEquals(darks.toFile().getCanonicalPath(), PreparationPanel.inputBrowseStart(darks, session, lights).getCanonicalPath());
+        assertEquals(master.toFile().getCanonicalPath(), PreparationPanel.inputBrowseStart(master, session, lights).getCanonicalPath());
+        assertEquals(session.toFile().getCanonicalPath(), PreparationPanel.inputBrowseStart(null, session, null).getCanonicalPath());
+        assertNull(PreparationPanel.inputBrowseStart(null, session.resolve("missing"), lights.resolve("missing")));
+        assertEquals(session.toFile().getCanonicalPath(),
+                PreparationPanel.inputBrowseStart(null, session.resolve("missing"), lights).getCanonicalPath());
+    }
+
     /** A camera mode is intentionally unset rather than guessed from a two-dimensional image or extension. */
     @Test public void cameraModeIsInitiallyUnknownWithOnlySirilInstallation() throws Exception {
         ApplicationStorage storage = new ApplicationStorage();
@@ -100,6 +116,9 @@ public class PreparationPanelTest {
                 assertNull(combo(panel, PreparationRequest.Sensor.class).getSelectedItem());
                 assertFalse(checkbox(panel, "Keep working files").isSelected());
                 assertNotNull(field(panel, "Siril installation path"));
+                assertTrue(all(panel).stream().filter(JLabel.class::isInstance).map(JLabel.class::cast)
+                        .anyMatch(label -> label.getText() != null && label.getText().contains("Siril installation folder")
+                                && label.getText().contains("siril-cli.exe")));
                 assertEquals(1, all(panel).stream().filter(c -> c instanceof JTextField f
                         && f.getAccessibleContext().getAccessibleName() != null
                         && f.getAccessibleContext().getAccessibleName().endsWith("installation path")).count());

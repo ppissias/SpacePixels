@@ -69,10 +69,11 @@ public final class RunPreviewScope implements AutoCloseable {
      */
     public static void offer(boolean stageChange, Supplier<RunPreview> maker) {
         RunPreviewSink sink = CURRENT.get();
-        if (sink == null || !sink.wantsPreview(stageChange)) {
+        if (sink == null) {
             return;
         }
         try {
+            if (!sink.wantsPreview(stageChange)) return;
             RunPreview preview = maker.get();
             if (preview != null) {
                 sink.preview(preview);

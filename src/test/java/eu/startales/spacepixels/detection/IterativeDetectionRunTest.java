@@ -206,8 +206,9 @@ public class IterativeDetectionRunTest {
         File source = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "tune", 9).toFile();
         DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
         AppConfig app = new AppConfig();
+        VisualizationSettings tuningVisualization = VisualizationSettings.defaults().withAutoStretchWhiteSigma(29);
         IterativeDetectionRequest request = new IterativeDetectionRequest(source, config, app,
-                VisualizationSettings.defaults(), new IterativeDetectionPlan(5, 3, 8),
+                tuningVisualization, new IterativeDetectionPlan(5, 3, 8),
                 io.github.ppissias.jtransient.engine.AutoTuneProfile.LOW, 5, true, true, 9, null);
         List<String> passSettings = new ArrayList<>();
         List<String> messages = new ArrayList<>();
@@ -218,7 +219,8 @@ public class IterativeDetectionRunTest {
                     assertFalse(messages.isEmpty());
                     progress.onProgressUpdate(10, "run");
                     return completed(output);
-                }, (files, settings, limit, profile, progress) -> {
+                }, (files, settings, limit, profile, progress, visualization) -> {
+                    assertSame("tuning captures the same rendering choices as its passes", tuningVisualization, visualization);
                     tuningCalls.incrementAndGet();
                     assertEquals(5, limit);
                     progress.onProgressUpdate(20, "Auto-Tune: calibrating");

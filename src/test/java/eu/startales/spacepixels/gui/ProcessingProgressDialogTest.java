@@ -164,6 +164,7 @@ public class ProcessingProgressDialogTest {
         SwingUtilities.invokeAndWait(() -> dialog.endPreview());
         assertFalse("nothing is wanted between jobs", first.wantsPreview(true));
         RunPreviewSink second = beginJob(true);
+        assertFalse("a finished job cannot reserve image work during a later job", first.wantsPreview(false));
         first.preview(picture("from the first job"));
         settle();
         assertFalse(hasPicture());

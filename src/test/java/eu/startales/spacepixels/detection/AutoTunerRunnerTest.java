@@ -15,6 +15,28 @@ import eu.startales.spacepixels.util.Cancellation;
 
 /** Verifies direct engine tuning, detached fallback settings and cooperative cancellation. */
 public class AutoTunerRunnerTest {
+    /** The shared runner bridges real engine snapshots to a live sink and still responds to cancellation. */
+    @Test public void liveRunShowsEnginePixelsAndCancellationReachesTheNextLoop() {
+        var cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        var pictures = new java.util.concurrent.atomic.AtomicInteger();
+        RunPreviewSink sink = new RunPreviewSink() {
+            @Override public boolean wantsPreview(boolean change) { return true; }
+            @Override public void preview(RunPreview preview) {
+                assertNotNull(preview.image());
+                assertTrue(preview.image().getWidth() <= 420);
+                assertTrue(preview.caption().contains("Auto-Tune"));
+                pictures.incrementAndGet();
+                cancelled.set(true);
+            }
+        };
+        try (var scope = RunPreviewScope.open(sink); var cancellation = CancellationScope.open(cancelled::get)) {
+            assertThrows(CancellationException.class, () -> AutoTunerRunner.run(noiseFrames(),
+                    new DetectionConfig(), AutoTuneProfile.MEDIUM, null));
+        }
+        assertEquals(1, pictures.get());
+        assertNull(RunPreviewScope.currentSink());
+    }
+
     /** Insufficient frames give an unsuccessful result whose fallback settings are a copy. */
     @Test
     public void unsuccessfulRunReturnsDetachedFallbackSettings() {

@@ -19,6 +19,7 @@ import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
 import java.util.List;
 import eu.startales.spacepixels.util.Cancellation;
 import eu.startales.spacepixels.util.DebugOutput;
+import eu.startales.spacepixels.config.VisualizationSettings;
 
 /**
  * Runs JTransient's calibrated auto-tuner with SpacePixels' engine diagnostics. Cancellation comes from the
@@ -36,8 +37,16 @@ public final class AutoTunerRunner {
                                       DetectionConfig baseConfig,
                                       AutoTuneProfile profile,
                                       TransientEngineProgressListener listener) {
+        return run(candidateFrames, baseConfig, profile, listener, VisualizationSettings.defaults());
+    }
+
+    /** Uses the run's captured rendering choices when a live view is open; headless calls construct no observer. */
+    public static AutoTunerResult run(List<ImageFrame> candidateFrames, DetectionConfig baseConfig,
+            AutoTuneProfile profile, TransientEngineProgressListener listener, VisualizationSettings visualization) {
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
-            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener);
+            RunPreviewSink sink = RunPreviewScope.currentSink();
+            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener,
+                    sink == null ? null : new AutoTuneLiveView(sink, visualization));
         }
     }
 }

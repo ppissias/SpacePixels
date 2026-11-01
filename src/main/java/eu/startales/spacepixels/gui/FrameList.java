@@ -2,6 +2,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import javax.swing.Action;
+import eu.startales.spacepixels.detection.RunPreviewSink;
 
 /** The imported frames and the Overview commands that share the main panel's actions. */
 interface FrameList {
@@ -34,4 +35,7 @@ interface FrameList {
 
     /** The Overview's Auto-Tune action, installed by the settings panel. */
     void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune);
+
+    /** A guarded sink for the next admitted job's live pictures; obtained on the EDT before starting the job. */
+    RunPreviewSink previewSink();
 }

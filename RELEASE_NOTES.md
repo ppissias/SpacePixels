@@ -4,6 +4,8 @@
 
 ### Changed
 
+- **Auto-Tune live view.** Standalone tuning and tuning before iterative passes share detection's optional three-second picture updates. Actual frame checks, trial star masks, artificial-star recovery and noise-control survivors show what the current trial is doing. Regional details keep markers readable; Hide picture stops image work. Calibration settings and results are unchanged.
+
 - **Safe plate-solver shutdown.** Closing waits for the running job's cleanup before exit, including ASTAP termination and sidecar cleanup. An accepted WCS write finishes before closing; Appearance restart retains its existing wait for running work.
 - **FITS header preservation.** Writing a plate solution preserves all HDUs, table/image payloads and tile compression. WCS cards are written to the stored image header and verified after reopening; incomplete files are refused without replacing the original.
 - **Blink region GIF export.** **Select GIF region** pauses Blink for rectangle selection; right-click inside to export the included loop with its current speed, stretch and enabled annotations. Dimensions follow the selected viewport in screen pixels at any zoom and display scale. Export streams frames, reports progress and supports cancellation without replacing an earlier complete file.

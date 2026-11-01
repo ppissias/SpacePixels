@@ -20,6 +20,7 @@ import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
+import java.io.File;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -110,6 +111,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         form.add(help("Calibrate and register individual exposures for SpacePixels. Source files remain untouched."));
         JPanel integrations = section("Siril integration", true);
         siril = new SirilRow(settings.getConfig().sirilExecutablePath);
+        integrations.add(help("Point to the Siril installation folder, or to the siril-cli executable (siril-cli.exe on Windows)."));
         integrations.add(siril);
         integrations.add(help("<i>PixInsight WBPP: use Import Aligned Frames for individual calibrated and registered exposures (FITS or supported XISF).</i>"));
         form.add(integrations);
@@ -632,7 +634,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         JButton browse = new JButton("Browse…");
         browse.setToolTipText(files ? "Choose a folder of calibration exposures or an existing master FITS file." : "Choose the folder for " + title.toLowerCase(java.util.Locale.ROOT) + ".");
         browse.addActionListener(event -> {
-            JFileChooser chooser = WindowSizing.fileChooser(path(field.getText()) == null ? null : path(field.getText()).toFile());
+            JFileChooser chooser = WindowSizing.fileChooser(browseStart(field));
             chooser.setFileSelectionMode(files ? JFileChooser.FILES_AND_DIRECTORIES : JFileChooser.DIRECTORIES_ONLY);
             chooser.setDialogTitle(title);
             if (chooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) field.setText(chooser.getSelectedFile().getAbsolutePath());
@@ -718,6 +720,46 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         return label;
     }
 
+    /**
+     * Directory a Browse dialog opens. An input that already has a file or folder keeps it.
+     * An empty calibration or lights field opens in the observation-session folder, or, when that is empty,
+     * in the folder that contains the lights so neighbouring darks and flats are visible.
+     */
+    private File browseStart(JTextField field) {
+        Path current = path(field.getText());
+        if (field != root && !inputs.containsValue(field)) return current == null ? null : current.toFile();
+        return inputBrowseStart(current, field == root ? null : path(root.getText()),
+                field == root || field == inputs.get(Role.LIGHTS) ? null : path(inputs.get(Role.LIGHTS).getText()));
+    }
+
+    /**
+     * Starting directory for an empty input field. A session folder takes precedence over the lights.
+     * The lights themselves open one level up, beside that folder. A missing path is ignored.
+     */
+    static File inputBrowseStart(Path current, Path session, Path lights) {
+        File chosen = existing(current);
+        if (chosen != null) return chosen;
+        File sessionDirectory = directory(session);
+        if (sessionDirectory != null) return sessionDirectory;
+        File lightsDirectory = directory(lights);
+        if (lightsDirectory == null) return null;
+        File parent = lightsDirectory.getParentFile();
+        return parent != null && parent.isDirectory() ? parent : lightsDirectory;
+    }
+
+    /** An existing file or directory, or null when the path is blank or missing. */
+    private static File existing(Path path) {
+        if (path == null) return null;
+        File file = path.toFile();
+        return file.exists() ? file : null;
+    }
+
+    /** An existing directory, or null for a file, a blank path or a missing path. */
+    private static File directory(Path path) {
+        File file = existing(path);
+        return file != null && file.isDirectory() ? file : null;
+    }
+
     /** Converts an optional path field, retaining invalid text for a later actionable error. */
     private static Path path(String text) {
         if (text == null || text.isBlank()) return null;
@@ -798,9 +840,10 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             setLayout(new BorderLayout(UiStyle.space(6), UiStyle.space(3)));
             setAlignmentX(LEFT_ALIGNMENT);
             path.setText(saved == null ? "" : saved);
-            path.setToolTipText("Choose the installation folder or its command-line executable. Siril "
-                    + SirilInstallation.MINIMUM_VERSION + " or newer is required.");
+            path.setToolTipText("Point to the Siril installation folder, or to the siril-cli executable "
+                    + "(siril-cli.exe on Windows). Siril " + SirilInstallation.MINIMUM_VERSION + " or newer is required.");
             path.getAccessibleContext().setAccessibleName("Siril installation path");
+            path.getAccessibleContext().setAccessibleDescription("Siril installation folder, or the siril-cli executable. On Windows the executable is siril-cli.exe.");
             if (!path.getText().isBlank()) status.setText("Saved path · not checked in this window");
             add(path, BorderLayout.CENTER);
             add(fixedButtons(browse, check), BorderLayout.EAST);
@@ -808,12 +851,12 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
                 try { Desktop.getDesktop().browse(URI.create(SirilInstallation.WEBSITE)); } catch (Exception failure) { message(reason(failure)); }
             });
             add(row(status, download), BorderLayout.SOUTH);
-            browse.setToolTipText("Choose the installation folder, or select the command-line executable directly.");
+            browse.setToolTipText("Choose the Siril installation folder, or the siril-cli executable.");
             check.setToolTipText("Identify the selected command-line tool without processing any images.");
             browse.addActionListener(event -> {
                 JFileChooser chooser = WindowSizing.fileChooser(null);
                 chooser.setFileSelectionMode(JFileChooser.FILES_AND_DIRECTORIES);
-                chooser.setDialogTitle("Siril installation or CLI executable");
+                chooser.setDialogTitle("Siril installation folder or siril-cli");
                 if (chooser.showOpenDialog(PreparationPanel.this) == JFileChooser.APPROVE_OPTION) {
                     path.setText(chooser.getSelectedFile().getAbsolutePath());
                     check();
