@@ -28,6 +28,7 @@ public class WindowMechanicsTest extends MechanicsTestCase {
 
     @Test(timeout = 120_000)
     public void workflowButtonsArePresentAndIdleBeforeImport() {
+        requireButton("Prepare Frames…", true);
         requireButton("Import Aligned Frames…", true);
         requireButton("Convert to Mono", false);
         requireButton("Blink Selected", false);
