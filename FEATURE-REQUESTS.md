@@ -12,9 +12,10 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F12](#f12-newer-flatlaf-features) | Newer FlatLaf features | Proposed; FlatLaf 3.7.2 is in use |
 | [F13](#f13-observing-session-preparation) | Observing-session preparation with Siril | Initial implementation; broader acceptance and follow-ups pending |
 | [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Planned for the next release; not implemented |
-| [F17](#f17-faint-streak-search) | Faint-streak search for streaks and streak tracks | Agreed, enabled by default; no peak gate for faint-only singles; review responses pending confirmation |
-| [F18](#f18-enhanced-stack) | Enhanced stack: a less noisy picture of the session | Agreed, enabled by default; review responses pending confirmation |
-| [F19](#f19-report-folder-organisation) | Report folder organisation: one folder per finding category | Agreed: `field/`, `diagnostics/`, category folders |
+| [F17](#f17-faint-streak-search) | Faint-streak search for streaks and streak tracks | Implemented 2026-11-01 with JTransient ST-6, on by default; awaiting the maintainer's review |
+| [F18](#f18-enhanced-stack) | Enhanced stack: a less noisy picture of the session | Implemented 2026-11-01, on by default; awaiting the maintainer's review |
+| [F19](#f19-report-folder-organisation) | Report folder organisation: one folder per finding category | Implemented 2026-11-01; awaiting the maintainer's review |
+| [F20](#f20-custom-plate-solving) | Custom plate solving, coordinated with JPlateSolve | Deferred; current solvers are blind only |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F02](#f02-session-summary-and-multiple-night-warning) | Session summary and multiple-night warning | Deferred |
 | [F05](#f05-small-star-visibility-in-stretch-previews) | Small-star visibility in stretch previews | Deferred |
@@ -152,6 +153,8 @@ The detection belongs to JTransient: [ST-6](../JTransient/FEATURE-REQUESTS.md#st
 
 **Acceptance.** ST-6's acceptance, plus: the setting saves, reloads and is found by the settings search; with the setting off the report is the same as today; the report labels faint-search findings; a GUI mechanics test covers the checkbox.
 
+**Implementation status (2026-11-01).** Implemented with JTransient ST-6 as agreed, including the review responses. **Faint Streak Search** is a basic setting on the Streak Detection page and is on in the default profile. Cards say which streaks the search found or added to, `report-data.json` gives `faintSearchDetections`, and Diagnostics lists the search's counts. The results on the reference data, including the maintainer's acceptance of the Integral-spacecraft-challenge track, are in [ST-6](../JTransient/FEATURE-REQUESTS.md#st-6-faint-streak-search). The settings GUI mechanics tests pass with the new switch. This entry stays until the maintainer has reviewed the results.
+
 ### F17 detailed review (2026-11-01)
 
 **Assessment.** The agreed boundary is appropriate: JTransient detects faint streaks; SpacePixels configures the run and presents its results. The proposal still needs the contracts below before implementation. The [ST-6 review](../JTransient/FEATURE-REQUESTS.md#st-6-detailed-review-2026-11-01) identifies additional engine issues beyond the already acknowledged single-frame gate. P1 means a correctness or contract issue to resolve; P2 means a specification or validation gap. These are review recommendations, not changes to the maintainer's decisions.
@@ -219,6 +222,8 @@ A stack of the session that shows fainter detail with less noise than the median
 Per-frame scale (transparency) normalisation is left out; reconsider if a dataset with changing transparency shows the need.
 
 **Acceptance.** On the reference datasets, measure noise and synthetic-star signal-to-noise against the median stack. Check outlier removal (hot pixels, satellite trails, moving objects) visually and by count, and measure the run time and memory cost. The FITS must open correctly in an external tool, with its header, orientation and fill handling right. With the setting off, the report is the same as today.
+
+**Implementation status (2026-11-01).** Implemented as decided, including the review responses: pairwise frame noise, a level term per frame, a centre from the valid samples only, 3σ clipping, 1/variance weights, NaN where no frame has data, and a new FITS header. **Enhanced Stack** is on the Report page and on by default. On klangwolke-2 (28 kept frames of 61 megapixels) the stack took about 10 s to build and under 1 s to save; the FITS file is 243 MB. Read back, the file has BITPIX −32, no BZERO or BSCALE, no site cards, and gives the plate solution, `NCOMBINE` and `EXPTOTAL`. The FITS library's default comment on `SIMPLE` gives the time of writing with the computer's time zone, so it is replaced by a neutral comment. On Integral-spacecraft-challenge, reports with the setting on and off have byte-identical `report-data.json`, `detection_config.json`, diagnostics pictures and finding pictures. Only the six pictures of the whole field differ, and the FITS file and the full-size JPEG are added. Not yet done: a check of orientation and WCS in an external program such as Siril or ASTAP.
 
 ### F18 detailed review (2026-11-01)
 
@@ -312,9 +317,24 @@ detections_<date>_<time>/
 
 **Decision (made, 2026-11-01):** "field and diagnostics, category folders".
 
-**Open decision point.** Photometry CSV files in `variable_stars/` as proposed, or a `data/` folder for all machine-readable exports.
+**Decision (made, 2026-11-01):** "CSV files in variable_stars".
 
 **Acceptance.** In a browser, from a copy of the report folder, every picture, animation, poster, frame sheet, lightbox and download works; a link checker finds every local link and image in the HTML. Cancellation leaves no partial folders. The iterative index and the latest-report lookup are unchanged.
+
+**Implementation status (2026-11-01).** Implemented as proposed. `ReportFiles` and `FindingCategory.folder()` decide every location; a writer asks the report context for the file of a link, which creates the folder. Local rescue pictures are now named `local_rescue_<n>_…`. A unit test checks the top level, every local link, picture and frame strip in the HTML, and every animation's metadata, poster and frame sheets. On real Integral-spacecraft-challenge and klangwolke-2 reports a link check found 171 and 269 local links with none missing, no unreferenced file, and only the three entry files at the top. Cancellation removes the whole report folder, subfolders included. Not yet done: the check in a browser.
+
+Two points for the maintainer:
+
+- Saved lookup results (`anomaly_<n>_satchecker_results.json`, `photometry_v<n>_vsx.json` and the track lookups), written when the report's lookup buttons are used through SpacePixels, still go to the top of the report folder. The local lookup server writes only there, a path check against writing outside the report. Moving them into the category folders means changing that check; it is left as is.
+- `field/unclassified_median_background.png` keeps its name, although with the enhanced stack it shows that stack.
+
+## F20. Custom plate solving
+
+**Decision (made)** (2026-11-01): "both JPlateSolve and SpacePixels will do only blind solve"; "Then we can freshly re-evaluate custom solve at a later stage."
+
+This keeps custom/near solving as a separate deferred feature; no new controls or automatic pointing/scale hints are enabled now.
+
+The shared solver proposal is [JPlateSolve JP-15](../JPlateSolve/FEATURE-REQUESTS.md#jp-15-custom-solving-in-jplatesolve-and-spacepixels). Design the application inputs, supported constraints, header-hint policy, fallback behavior and public library contract together before implementation. The removed custom API is not the accepted future design.
 
 ## F01. Slow-mover and per-frame tuning relation
 

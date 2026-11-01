@@ -252,10 +252,12 @@ Supporting groups:
   - `DetectionReportSummary`
   - `ReportData` (stable finding identities and JSON/CSV exports)
   - `AtomicReportFile`
+  - `ReportFiles` (the report folder layout: entry points at the top, pictures in `field`, `diagnostics` and one folder per `FindingCategory`)
+  - `EnhancedStack` and `EnhancedStackFile` (the noise-weighted, clipped mean of the kept frames for the pictures of the whole field, and its 32-bit FITS file)
   - `DetectionReportDocumentWriter`
   - `ReportClientScriptWriter`
 - section writers:
-  - `SessionPictureSectionWriter` (median stack, data area, detections and catalogue layers)
+  - `SessionPictureSectionWriter` (enhanced or median stack, data area, detections and catalogue layers)
   - `NightEquipmentSectionWriter`
   - `PipelineDiagnosticsSectionWriter`
   - `TargetVisualizationSectionWriter`
@@ -476,7 +478,8 @@ and quality-filtered frame choices always come from the prepared model.
 
 Responsibilities:
 
-- generate PNG/GIF assets
+- generate PNG/GIF assets into the report's folders (`ReportFiles`), keeping only the HTML, `report-data.json` and `detection_config.json` at the top
+- build the enhanced stack of the kept frames for the pictures of the whole field, and save it as a FITS file without the observing site
 - build global maps, masks, crops, shape maps, and diagnostic imagery
 - coordinate section writers
 - generate standard `detection_report.html`
@@ -627,6 +630,8 @@ MainApplicationPanel
 ```
 
 An online solve logs in with the account chosen on the Astrometry Config tab. It uploads a temporary copy made by `util.FitsUploadCopy`, named `spacepixels-solve-*.fits`, deleted when the operation completes or fails to start. In every header of that copy the site and observer cards (`FitsUploadCopy.PRIVATE_KEYWORDS`) are blanked, and `CHECKSUM` too where a card was blanked. Pixels and all other cards, the pointing hints included, are copied byte for byte. The anonymous login is one account shared by every anonymous user. `PlateSolveService` keeps one Astrometry.net client for the account in use, made at the first online solve. It replaces (and closes) the client when the key changes, and `ProcessingSession.close` closes it with the session. **Check** (`AstrometryNetAccount.checkLogin`) needs no imported session: it logs in with a short-lived client on a `SwingWorker`, uploads nothing, is cancelled when the panel closes, and ignores its answer if the account changed meanwhile. `PlateSolveTask` words a failed online solve through `AstrometryNetAccount.failureMessage`: a lost connection, a time-out, an unknown key for the account in use, and any other refused login with Astrometry.net's own reason.
+
+Both solver paths are blind. `PlateSolveService` calls `startBlindSolve` for online uploads and does not construct custom coordinate, radius or scale parameters. JPlateSolve validates FITS readability without parsing pointing cards, sends only session/visibility, and uses independent connection, upload and login/poll request limits under one total deadline. ASTAP receives explicit whole-sky and automatic-scale arguments and generates no annotated JPEG; its result never advertises an older JPEG for application cleanup. Custom solving is deferred to JPlateSolve JP-15 / SpacePixels F20. Rejection dialogs omit absent warning text and retain a useful reason when the backend supplies none.
 
 Writing a solution into a frame changes the user's own file:
 - **Safe replacement:** `PlateSolveService` writes the updated frame to a temporary file beside it. It reads the copy back to check the image size and that all of its data is present, and only then replaces the original in one step. A failure leaves the original unchanged.
