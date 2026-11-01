@@ -200,15 +200,21 @@ final class DetectionReportContext {
     /** Original indices of the frames combined into {@link #enhancedStack}, in order; empty without one. */
     final List<Integer> keptFrameIndices;
 
+    /** The enhanced stack drawn for display, made on first use; see {@link #fieldDisplayImage}. */
+    private java.awt.image.BufferedImage enhancedFieldPicture;
+
     /**
-     * The grey display picture of the whole field: the enhanced stack when the report built one, otherwise the median
-     * stack, or {@code fallback} when there is no median stack. Pictures that compare a detection with the reference
-     * the detection used take {@link #masterStackData} directly instead.
+     * The grey display picture of the whole field. With an enhanced stack it is that stack under the automatic asinh
+     * stretch, which brings out faint detail; it is made once and shared, so callers must not draw on it. Otherwise it
+     * is the median stack, or {@code fallback} when there is no median stack, under the report's stretch settings.
+     * Pictures that compare a detection with the reference the detection used take {@link #masterStackData} instead.
      */
-    java.awt.image.BufferedImage fieldDisplayImage(short[][] fallback) {
+    synchronized java.awt.image.BufferedImage fieldDisplayImage(short[][] fallback) {
         if (enhancedStack != null) {
-            return eu.startales.spacepixels.fits.DisplayImageRenderer.createDisplayImage(enhancedStack.pixels,
-                    settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma());
+            if (enhancedFieldPicture == null) {
+                enhancedFieldPicture = eu.startales.spacepixels.fits.DisplayImageRenderer.createAsinhDisplayImage(enhancedStack.pixels);
+            }
+            return enhancedFieldPicture;
         }
         return TrackVisualizationRenderer.createDisplayImage(masterStackData != null ? masterStackData : fallback, settings);
     }

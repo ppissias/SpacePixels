@@ -1159,12 +1159,12 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Display Stretch & Animation"));
         spinAutoBlackSigma = addApplicationDouble(panel, visualizationBindings,
                 "autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
-                "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively.",
+                "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
                 false, () -> visualization.getAutoStretchBlackSigma(), value -> visualization = visualization.withAutoStretchBlackSigma(value),
                 0.0, 10.0, 0.1);
         spinAutoWhiteSigma = addApplicationDouble(panel, visualizationBindings,
                 "autoStretchWhiteSigma", "Auto Stretch White Sigma", "sigma",
-                "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure.",
+                "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
                 false, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value),
                 0.1, 20.0, 0.1);
         spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings,
@@ -1174,7 +1174,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 50, 5000, 10);
         addApplicationCheckbox(panel, visualizationBindings,
                 "enhancedStack", "Enhanced Stack",
-                "Builds a less noisy stack of the kept frames for the report: a mean that leaves out hot pixels, trails and other outliers and gives noisier frames less weight. It is saved as a 32-bit FITS file in the report's enhanced_stack folder and shown in the pictures of the whole field instead of the median stack. Detection still uses the median stack, and the diagnostics and comparison cutouts keep showing it. Needs about 4 bytes of disk per pixel and some extra report time.",
+                "Builds a less noisy stack of the kept frames for the report: a mean that leaves out hot pixels, trails and other outliers and gives noisier frames less weight. It is saved as a linear 32-bit FITS file in the report's enhanced_stack folder and shown in the pictures of the whole field instead of the median stack, with an automatic asinh stretch that brings out faint detail. Detection still uses the median stack, and the diagnostics and comparison cutouts keep showing it. Needs about 4 bytes of disk per pixel and some extra report time.",
                 false, () -> visualization.isEnhancedStack(), value -> visualization = visualization.withEnhancedStack(value));
 
 

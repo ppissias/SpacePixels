@@ -40,6 +40,13 @@ public class EnhancedStackReportTest {
         DetectionReportContext context = context(VisualizationSettings.defaults());
         assertEquals("enhanced stack", context.fieldName());
         assertEquals(6, context.enhancedStack.frames);
+        // The field picture is the stack under the automatic asinh stretch, made once for all the field pictures.
+        java.awt.image.BufferedImage field = context.fieldDisplayImage(null);
+        assertTrue(field == context.fieldDisplayImage(null));
+        var levels = eu.startales.spacepixels.fits.DisplayImageRenderer.asinhLevels(context.enhancedStack.pixels);
+        assertEquals(Math.round(levels.display(context.enhancedStack.pixels[80][80]) * 255),
+                field.getRaster().getSample(80, 80, 0), 1);
+        assertEquals(0, field.getRaster().getSample(0, 0, 0));
         File file = EnhancedStackFile.write(context);
         assertEquals(new File(new File(context.exportDir, "enhanced_stack"), "enhanced_stack.fits"), file);
         try (Fits fits = new Fits(file)) {

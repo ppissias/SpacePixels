@@ -158,7 +158,8 @@ final class SessionPictureSectionWriter {
         String what = context.enhancedStack != null
                 ? "The enhanced stack of the " + context.enhancedStack.frames + " frames kept: a mean that leaves out hot pixels, trails "
                         + "and other outliers and gives noisier frames less weight, so it shows fainter detail with less noise than "
-                        + "the median stack. The detection compared against the median stack, shown under Diagnostics"
+                        + "the median stack. It is drawn with an asinh stretch, which lifts faint structure just above the sky and "
+                        + "compresses bright stars instead of clipping them. The detection compared against the median stack, shown under Diagnostics"
                 : "The median stack of the frames kept";
         report.println("<div class='sp-caption'>" + what
                 + (catalogueLayer != null && transformer != null && transformer.isCorrected() ? "; catalogue positions use the plate solution corrected to the stars" : "")
