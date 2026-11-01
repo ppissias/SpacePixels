@@ -1159,12 +1159,12 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createSectionHeader("Display Stretch & Animation"));
         spinAutoBlackSigma = addApplicationDouble(panel, visualizationBindings,
                 "autoStretchBlackSigma", "Auto Stretch Black Sigma", "sigma",
-                "Controls how far below the image mean the automatic black point is placed when stretching rendered imagery. Higher values darken the background more aggressively. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
+                "Controls how far below the sky median (in robust sky noise) the automatic black point is placed when stretching rendered imagery. Higher values darken the background less aggressively. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
                 false, () -> visualization.getAutoStretchBlackSigma(), value -> visualization = visualization.withAutoStretchBlackSigma(value),
                 0.0, 10.0, 0.1);
         spinAutoWhiteSigma = addApplicationDouble(panel, visualizationBindings,
                 "autoStretchWhiteSigma", "Auto Stretch White Sigma", "sigma",
-                "Controls how far above the image mean the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
+                "Controls how far above the sky median (in robust sky noise) the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
                 false, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value),
                 0.1, 20.0, 0.1);
         spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings,

@@ -9,8 +9,11 @@
  */
 package eu.startales.spacepixels.fits;
 
+import io.github.ppissias.jtransient.core.DataArea;
+
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
+import java.util.List;
 
 /**
  * Generic grayscale display renderer shared by UI previews and report export paths; the stretch sigmas come from the
@@ -28,45 +31,168 @@ public final class DisplayImageRenderer {
         return createDisplayImageAtLevels(imageData, levels[0], levels[1]);
     }
 
+    /**
+     * Robust automatic display levels (black and white points in unsigned ADU) from the valid pixels' sky median and
+     * robust sky noise ({@code 1.4826 * MAD}), excluding out-of-frame padding and registration fill
+     * ({@code stored <= DataArea.FILL_THRESHOLD}).
+     */
     public static double[] displayLevels(short[][] imageData, double blackSigma, double whiteSigma) {
-        int height = imageData.length;
-        int width = imageData[0].length;
-        long sum = 0;
-        for (int y = 0; y < height; y++) {
-            for (int x = 0; x < width; x++) {
-                sum += (imageData[y][x] + 32768);
+        if (imageData == null || imageData.length == 0 || imageData[0].length == 0) {
+            return new double[]{0.0, 0.0};
+        }
+        FrameStats stats = frameStats(imageData);
+        if (!stats.valid) {
+            return new double[]{0.0, 0.0};
+        }
+        double blackPoint = Math.max(0.0, stats.sky - (blackSigma * stats.noise));
+        double whitePoint = stats.noise > 0.0 ? Math.min(stats.actualMax, stats.sky + (whiteSigma * stats.noise)) : stats.actualMax;
+        return new double[]{blackPoint, whitePoint};
+    }
+
+    /**
+     * Shared display levels across a sequence of frame crops: uses the median of the frames' sky medians and the
+     * median of their robust sky noises, bounded by the brightest valid pixel across the sequence.
+     */
+    public static double[] sharedDisplayLevels(List<short[][]> frames, double blackSigma, double whiteSigma) {
+        if (frames == null || frames.isEmpty()) {
+            return new double[]{0.0, 0.0};
+        }
+        float[] skies = new float[frames.size()];
+        float[] noises = new float[frames.size()];
+        int validFrames = 0;
+        int maxActual = 0;
+        for (short[][] frame : frames) {
+            if (frame == null || frame.length == 0 || frame[0].length == 0) {
+                continue;
+            }
+            FrameStats stats = frameStats(frame);
+            if (!stats.valid) {
+                continue;
+            }
+            skies[validFrames] = (float) stats.sky;
+            noises[validFrames] = (float) stats.noise;
+            validFrames++;
+            if (stats.actualMax > maxActual) {
+                maxActual = stats.actualMax;
             }
         }
-        double mean = (double) sum / (width * height);
+        if (validFrames == 0) {
+            return new double[]{0.0, 0.0};
+        }
+        double sky = median(skies, validFrames);
+        double noise = median(noises, validFrames);
+        double blackPoint = Math.max(0.0, sky - (blackSigma * noise));
+        double whitePoint = noise > 0.0 ? Math.min(maxActual, sky + (whiteSigma * noise)) : maxActual;
+        return new double[]{blackPoint, whitePoint};
+    }
 
-        double sumSqDiff = 0;
-        int actualMax = 0;
+    private record FrameStats(boolean valid, double sky, double noise, int actualMax) {
+        static final FrameStats INVALID = new FrameStats(false, 0.0, 0.0, 0);
+    }
+
+    private static FrameStats frameStats(short[][] imageData) {
+        int height = imageData.length;
+        int width = imageData[0].length;
+        int[] counts = new int[65536];
+        long validCount = 0;
+        int actualMin = Integer.MAX_VALUE;
+        int actualMax = Integer.MIN_VALUE;
 
         for (int y = 0; y < height; y++) {
+            short[] row = imageData[y];
             for (int x = 0; x < width; x++) {
-                int val = imageData[y][x] + 32768;
+                short raw = row[x];
+                if (raw <= DataArea.FILL_THRESHOLD) {
+                    continue;
+                }
+                int val = raw + 32768;
+                counts[val]++;
+                validCount++;
+                if (val < actualMin) {
+                    actualMin = val;
+                }
                 if (val > actualMax) {
                     actualMax = val;
                 }
-
-                double diff = val - mean;
-                sumSqDiff += (diff * diff);
             }
         }
-        double variance = sumSqDiff / (width * height);
-        double sigma = Math.sqrt(variance);
 
-        double blackPoint = mean - (blackSigma * sigma);
-        double whitePoint = mean + (whiteSigma * sigma);
-
-        if (blackPoint < 0) {
-            blackPoint = 0;
-        }
-        if (whitePoint > actualMax) {
-            whitePoint = actualMax;
+        if (validCount == 0) {
+            return FrameStats.INVALID;
         }
 
-        return new double[]{blackPoint, whitePoint};
+        long lowRank = (validCount - 1) / 2;
+        long highRank = validCount / 2;
+        long running = 0;
+        int m1 = actualMin;
+        int m2 = actualMin;
+        boolean foundM1 = false;
+        for (int v = actualMin; v <= actualMax; v++) {
+            int c = counts[v];
+            if (c == 0) {
+                continue;
+            }
+            running += c;
+            if (!foundM1 && running > lowRank) {
+                m1 = v;
+                foundM1 = true;
+            }
+            if (running > highRank) {
+                m2 = v;
+                break;
+            }
+        }
+        double sky = 0.5 * (m1 + m2);
+
+        double baseDistance = 0.5 * (m2 - m1);
+        long madRunning = 0;
+        double madLow = 0.0;
+        double madHigh = 0.0;
+        boolean foundMadLow = false;
+        int maxK = Math.max(m1 - actualMin, actualMax - m2);
+        for (int k = 0; k <= maxK; k++) {
+            long c;
+            if (k == 0 && m1 == m2) {
+                c = counts[m1];
+            } else {
+                int left = m1 - k;
+                int right = m2 + k;
+                c = (left >= actualMin ? counts[left] : 0L) + (right <= actualMax ? counts[right] : 0L);
+            }
+            if (c == 0) {
+                continue;
+            }
+            madRunning += c;
+            double dist = baseDistance + k;
+            if (!foundMadLow && madRunning > lowRank) {
+                madLow = dist;
+                foundMadLow = true;
+            }
+            if (madRunning > highRank) {
+                madHigh = dist;
+                break;
+            }
+        }
+        double mad = 0.5 * (madLow + madHigh);
+        double noise = 1.4826 * mad;
+        if (noise == 0.0 && actualMax > actualMin) {
+            double sumSq = 0.0;
+            for (int v = actualMin; v <= actualMax; v++) {
+                int c = counts[v];
+                if (c != 0) {
+                    double diff = v - sky;
+                    sumSq += c * diff * diff;
+                }
+            }
+            noise = Math.sqrt(sumSq / validCount);
+        }
+        return new FrameStats(true, sky, noise, actualMax);
+    }
+
+    /** Maps a normalized value (clamped to 0..1) through the square-root tone curve to an 8-bit grey level (0..255). */
+    public static int sqrtToneCurve(double normalized) {
+        double clamped = Math.max(0.0, Math.min(1.0, normalized));
+        return (int) Math.round(Math.sqrt(clamped) * 255.0);
     }
 
     /** Where the automatic asinh stretch draws the sky median, as a fraction of white. */
@@ -197,28 +323,15 @@ public final class DisplayImageRenderer {
         }
 
         for (int y = 0; y < height; y++) {
+            short[] row = imageData[y];
             for (int x = 0; x < width; x++) {
-                int val = imageData[y][x] + 32768;
-
-                double adjustedVal = val - blackPoint;
-                if (adjustedVal < 0) {
-                    adjustedVal = 0;
+                short raw = row[x];
+                if (raw <= DataArea.FILL_THRESHOLD) {
+                    raster.setSample(x, y, 0, 0);
+                    continue;
                 }
-                if (adjustedVal > range) {
-                    adjustedVal = range;
-                }
-
-                double normalized = adjustedVal / range;
-                double stretched = Math.sqrt(normalized);
-                int displayValue = (int) (stretched * 255.0);
-
-                if (displayValue > 255) {
-                    displayValue = 255;
-                }
-                if (displayValue < 0) {
-                    displayValue = 0;
-                }
-
+                int val = raw + 32768;
+                int displayValue = sqrtToneCurve((val - blackPoint) / range);
                 raster.setSample(x, y, 0, displayValue);
             }
         }

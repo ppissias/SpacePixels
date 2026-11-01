@@ -59,12 +59,12 @@ public final class VisualizationSettings {
         return DEFAULTS;
     }
 
-    /** How far below the image mean, in standard deviations, the automatic black point of the display stretch lies. */
+    /** How far below the sky median, in robust sky noise, the automatic black point of the display stretch lies. */
     public double getAutoStretchBlackSigma() {
         return autoStretchBlackSigma;
     }
 
-    /** How far above the image mean, in standard deviations, the automatic white point of the display stretch lies. */
+    /** How far above the sky median, in robust sky noise, the automatic white point of the display stretch lies. */
     public double getAutoStretchWhiteSigma() {
         return autoStretchWhiteSigma;
     }

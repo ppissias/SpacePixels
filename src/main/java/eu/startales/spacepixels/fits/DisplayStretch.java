@@ -10,12 +10,13 @@
 package eu.startales.spacepixels.fits;
 
 /**
- * The display stretch as a lookup table: the grey level (0 to 255) of every 16-bit value of one channel.
+ * The display stretch as a lookup table: the 16-bit stretched value and 8-bit grey level (0 to 255) of every 16-bit
+ * value of one channel.
  *
  * <p>Every stretch algorithm maps a pixel through a function of its value and of whole-frame statistics (the
  * histogram percentiles, the mean, or the smallest and largest value after each iteration). The histogram holds all
- * of them, so the table gives exactly the grey levels that {@link FitsVisualizationRenderer} draws, while a stretch
- * change costs a pass over 65,536 values instead of over every pixel of every frame.</p>
+ * of them, so the table gives the exact 16-bit values and 8-bit grey levels that {@link FitsVisualizationRenderer}
+ * produces, while a stretch change costs a pass over 65,536 values instead of over every pixel of every frame.</p>
  */
 public final class DisplayStretch {
 
@@ -43,28 +44,39 @@ public final class DisplayStretch {
         return histogram;
     }
 
-    /** Grey level of every value of a channel with this histogram, stretched as the renderer stretches it. */
-    public static byte[] lookupTable(int[] histogram, StretchAlgorithm algorithm, int primary, int secondary) {
+    /** Histogram of one 2D channel, indexed by {@code value - Short.MIN_VALUE}. */
+    public static int[] histogram(short[][] data) {
+        int[] histogram = new int[VALUES];
+        for (short[] row : data) {
+            for (short value : row) {
+                histogram[value - Short.MIN_VALUE]++;
+            }
+        }
+        return histogram;
+    }
+
+    /** Stretched 16-bit FITS value of every input value of a channel with this histogram. */
+    public static short[] stretchedValues(int[] histogram, StretchAlgorithm algorithm, int primary, int secondary) {
         long pixels = 0;
         for (int count : histogram) {
             pixels += count;
         }
-        short[] stretched;
         switch (algorithm) {
             case ENHANCE_HIGH:
-                stretched = enhanceHigh(histogram, primary, secondary);
-                break;
+                return enhanceHigh(histogram, primary, secondary);
             case EXTREME:
-                stretched = extreme(histogram, pixels, primary, secondary);
-                break;
+                return extreme(histogram, pixels, primary, secondary);
             case ASINH:
-                stretched = asinh(histogram, pixels, primary, secondary);
-                break;
+                return asinh(histogram, pixels, primary, secondary);
             case ENHANCE_LOW:
             default:
-                stretched = enhanceLow(histogram, primary, secondary);
-                break;
+                return enhanceLow(histogram, primary, secondary);
         }
+    }
+
+    /** Grey level of every value of a channel with this histogram, stretched as the renderer stretches it. */
+    public static byte[] lookupTable(int[] histogram, StretchAlgorithm algorithm, int primary, int secondary) {
+        short[] stretched = stretchedValues(histogram, algorithm, primary, secondary);
         byte[] table = new byte[VALUES];
         for (int index = 0; index < VALUES; index++) {
             int absValue = stretched[index] + Short.MAX_VALUE + 1;

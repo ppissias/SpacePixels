@@ -49,6 +49,17 @@ final class TrackVisualizationRenderer {
                 settings.getAutoStretchWhiteSigma());
     }
 
+    static double[] sharedDisplayLevels(List<short[][]> frames, VisualizationSettings settings) {
+        return DisplayImageRenderer.sharedDisplayLevels(
+                frames,
+                settings.getAutoStretchBlackSigma(),
+                settings.getAutoStretchWhiteSigma());
+    }
+
+    static BufferedImage createDisplayImageAtLevels(short[][] imageData, double[] levels) {
+        return DisplayImageRenderer.createDisplayImageAtLevels(imageData, levels[0], levels[1]);
+    }
+
     static void saveLosslessPng(BufferedImage image, File outputFile) throws IOException {
         if (image == null) {
             LOGGER.log(Level.WARNING, "Attempted to save a null image. Skipping.");

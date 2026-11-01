@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.report;
 
+import eu.startales.spacepixels.fits.DisplayImageRenderer;
+import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
@@ -187,10 +189,15 @@ final class DeepStackReportSectionWriter {
 
         if (!context.rawFrames.isEmpty()) {
             List<Integer> sampledIndices = context.sampleFrames(new HashSet<>(), 10);
-            List<BufferedImage> gifFrames = new ArrayList<>();
+            List<short[][]> frameCrops = new ArrayList<>(sampledIndices.size());
             for (int frameIndex : sampledIndices) {
-                short[][] frameData = TrackVisualizationRenderer.robustEdgeAwareCrop(context.rawFrames.get(frameIndex), cx, cy, cropSize, cropSize);
-                BufferedImage image = TrackVisualizationRenderer.createDisplayImage(frameData, context.settings);
+                frameCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(context.rawFrames.get(frameIndex), cx, cy, cropSize, cropSize));
+            }
+            double[] levels = TrackVisualizationRenderer.sharedDisplayLevels(frameCrops, context.settings);
+            List<BufferedImage> gifFrames = new ArrayList<>(sampledIndices.size());
+            for (int i = 0; i < sampledIndices.size(); i++) {
+                int frameIndex = sampledIndices.get(i);
+                BufferedImage image = TrackVisualizationRenderer.createDisplayImageAtLevels(frameCrops.get(i), levels);
                 var graphics = image.createGraphics(); graphics.setColor(Color.WHITE);
                 graphics.drawString(TrackVisualizationRenderer.frameLabel(context, frameIndex), 8, 16); graphics.dispose();
                 gifFrames.add(image);
@@ -419,12 +426,21 @@ final class DeepStackReportSectionWriter {
         BufferedImage rgbMap = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 
         int[][] diff = new int[height][width];
+        boolean[][] valid = new boolean[height][width];
         long sum = 0;
+        long validCount = 0;
         int maxDiff = 0;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                int slowMoverValue = slowMover[y][x] + 32768;
-                int masterValue = master[y][x] + 32768;
+                short rawSlowMover = slowMover[y][x];
+                short rawMaster = master[y][x];
+                if (rawSlowMover <= DataArea.FILL_THRESHOLD || rawMaster <= DataArea.FILL_THRESHOLD) {
+                    continue;
+                }
+                valid[y][x] = true;
+                validCount++;
+                int slowMoverValue = rawSlowMover + 32768;
+                int masterValue = rawMaster + 32768;
                 int delta = Math.max(0, slowMoverValue - masterValue);
                 diff[y][x] = delta;
                 sum += delta;
@@ -433,16 +449,22 @@ final class DeepStackReportSectionWriter {
                 }
             }
         }
+        if (validCount == 0) {
+            return rgbMap;
+        }
 
-        double mean = (double) sum / (width * height);
+        double mean = (double) sum / validCount;
         double sumSq = 0.0;
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
+                if (!valid[y][x]) {
+                    continue;
+                }
                 double delta = diff[y][x] - mean;
                 sumSq += delta * delta;
             }
         }
-        double stdDev = Math.sqrt(sumSq / (width * height));
+        double stdDev = Math.sqrt(sumSq / validCount);
         double threshold = mean + (2.0 * stdDev);
         double range = maxDiff - threshold;
         if (range <= 0.0) {
@@ -451,14 +473,10 @@ final class DeepStackReportSectionWriter {
 
         for (int y = 0; y < height; y++) {
             for (int x = 0; x < width; x++) {
-                if (diff[y][x] <= threshold) {
+                if (!valid[y][x] || diff[y][x] <= threshold) {
                     continue;
                 }
-                double intensity = Math.sqrt((diff[y][x] - threshold) / range);
-                if (intensity > 1.0) {
-                    intensity = 1.0;
-                }
-                int red = (int) Math.min(255, intensity * 255);
+                int red = DisplayImageRenderer.sqrtToneCurve((diff[y][x] - threshold) / range);
                 rgbMap.setRGB(x, y, (255 << 24) | (red << 16));
             }
         }

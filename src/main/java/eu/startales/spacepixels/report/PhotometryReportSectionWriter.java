@@ -10,8 +10,10 @@
 package eu.startales.spacepixels.report;
 import eu.startales.spacepixels.util.Statistics;
 import eu.startales.spacepixels.util.SkyMath;
+import eu.startales.spacepixels.fits.DisplayImageRenderer;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.core.PixelEncoding;
 import io.github.ppissias.jtransient.photometry.PhotometryFlags;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
@@ -1433,7 +1435,9 @@ public final class PhotometryReportSectionWriter {
         double faintSky = localSky(faint);
         double white = brightSky;
         for (short[] row : bright) for (short value : row) {
-            white = Math.max(white, PixelEncoding.toShiftedPositiveInt(value));
+            if (value > DataArea.FILL_THRESHOLD) {
+                white = Math.max(white, PixelEncoding.toShiftedPositiveInt(value));
+            }
         }
         double span = Math.max(1.0, white - brightSky);
         // The ensemble model is m_observed = m_star + Z; convert its difference back to a flux multiplier.
@@ -1448,10 +1452,19 @@ public final class PhotometryReportSectionWriter {
     private static double localSky(short[][] crop) {
         int[] values = new int[crop.length * crop[0].length];
         int count = 0;
-        for (short[] row : crop) for (short value : row) values[count++] = PixelEncoding.toShiftedPositiveInt(value);
-        Arrays.sort(values);
-        int middle = values.length / 2;
-        return values.length % 2 == 0 ? 0.5 * (values[middle - 1] + values[middle]) : values[middle];
+        for (short[] row : crop) {
+            for (short value : row) {
+                if (value > DataArea.FILL_THRESHOLD) {
+                    values[count++] = PixelEncoding.toShiftedPositiveInt(value);
+                }
+            }
+        }
+        if (count == 0) {
+            return 0.0;
+        }
+        Arrays.sort(values, 0, count);
+        int middle = count / 2;
+        return count % 2 == 0 ? 0.5 * (values[middle - 1] + values[middle]) : values[middle];
     }
 
     private static short[][] rawFrame(DetectionReportContext context, PipelineTelemetry.PhotometryFrameStat frame) {
@@ -1462,16 +1475,20 @@ public final class PhotometryReportSectionWriter {
         return context.rawFrames.get(index);
     }
 
-    /** Renders sky-subtracted, transparency-scaled signal with the shared ADU span and existing square-root curve. */
+    /** Renders sky-subtracted, transparency-scaled signal with the shared ADU span and shared square-root curve. */
     private static BufferedImage sharedStretch(short[][] crop, double black, double span, double fluxScale) {
         int h = crop.length;
         int w = crop[0].length;
         BufferedImage image = new BufferedImage(w, h, BufferedImage.TYPE_BYTE_GRAY);
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
-                double t = (PixelEncoding.toShiftedPositiveInt(crop[y][x]) - black) * fluxScale / span;
-                t = Math.sqrt(Math.max(0.0, Math.min(1.0, t)));
-                int g = (int) Math.round(255 * t);
+                short raw = crop[y][x];
+                if (raw <= DataArea.FILL_THRESHOLD) {
+                    image.getRaster().setSample(x, y, 0, 0);
+                    continue;
+                }
+                double t = (PixelEncoding.toShiftedPositiveInt(raw) - black) * fluxScale / span;
+                int g = DisplayImageRenderer.sqrtToneCurve(t);
                 image.getRaster().setSample(x, y, 0, g);
             }
         }

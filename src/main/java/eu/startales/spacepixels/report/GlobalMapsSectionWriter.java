@@ -153,10 +153,11 @@ final class GlobalMapsSectionWriter {
             return;
         }
 
-        BufferedImage transientMap = ReportMaps.createGlobalTransientMap(reportContext.fieldDisplayImage(backgroundData), allTransients, reportContext.settings);
+        BufferedImage fieldDisplay = reportContext.fieldDisplayImage(backgroundData);
+        BufferedImage transientMap = ReportMaps.createGlobalTransientMap(fieldDisplay, allTransients, reportContext.settings);
         TrackVisualizationRenderer.saveLosslessPng(transientMap, reportContext.file(TRANSIENT_MAP));
 
-        BufferedImage rainbowMap = ReportMaps.createRainbowClusterMap(backgroundData, allTransients, reportContext.settings);
+        BufferedImage rainbowMap = ReportMaps.createRainbowClusterMap(fieldDisplay, allTransients, reportContext.settings);
         TrackVisualizationRenderer.saveLosslessPng(rainbowMap, reportContext.file(CLUSTER_MAP));
 
         report.println("<div class='panel'>");

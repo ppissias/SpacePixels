@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.report;
 
+import eu.startales.spacepixels.fits.DisplayImageRenderer;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.core.CameraFixedRejector;
@@ -429,40 +430,14 @@ final class UnclassifiedTransientSectionWriter {
     }
 
     /**
-     * Stretches all frames of a strip with the black and white points of the detection frame (mean − black σ to
-     * mean + white σ, square-root curve, as the other report images), so a blank neighbouring frame cannot flatten
-     * the contrast and brightness changes between frames stay visible.
+     * Stretches all frames of a strip with the black and white points of the detection frame (sky median − black σ
+     * to sky median + white σ, square-root curve, as the other report images), so a blank neighbouring frame cannot
+     * flatten the contrast and brightness changes between frames stay visible.
      */
     static BufferedImage stretchStrip(short[][] strip, int detectionRow, int frameHeight, double blackSigma, double whiteSigma) {
-        int width = strip[0].length;
-        double sum = 0;
-        double sumSq = 0;
-        int max = 0;
-        int n = 0;
-        for (int row = detectionRow; row < detectionRow + frameHeight; row++) {
-            for (int column = 0; column < width; column++) {
-                int value = strip[row][column] + 32768;
-                sum += value;
-                sumSq += (double) value * value;
-                max = Math.max(max, value);
-                n++;
-            }
-        }
-        double mean = sum / n;
-        double sigma = Math.sqrt(Math.max(0, sumSq / n - mean * mean));
-        double black = Math.max(0, mean - blackSigma * sigma);
-        double white = Math.min(max, mean + whiteSigma * sigma);
-        double range = white - black > 0 ? white - black : 1.0;
-
-        BufferedImage image = new BufferedImage(width, strip.length, BufferedImage.TYPE_BYTE_GRAY);
-        java.awt.image.WritableRaster raster = image.getRaster();
-        for (int row = 0; row < strip.length; row++) {
-            for (int column = 0; column < width; column++) {
-                double normalized = Math.max(0, Math.min(range, strip[row][column] + 32768 - black)) / range;
-                raster.setSample(column, row, 0, (int) (Math.sqrt(normalized) * 255.0));
-            }
-        }
-        return image;
+        short[][] detectionFrame = Arrays.copyOfRange(strip, detectionRow, detectionRow + frameHeight);
+        double[] levels = DisplayImageRenderer.displayLevels(detectionFrame, blackSigma, whiteSigma);
+        return DisplayImageRenderer.createDisplayImageAtLevels(strip, levels[0], levels[1]);
     }
 
     private static BufferedImage createComposite(BufferedImage background, List<Marker> markers, int radius) {

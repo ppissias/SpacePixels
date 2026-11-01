@@ -557,8 +557,13 @@ final class ReportMaps {
     // --- NEW: RAINBOW CLUSTER MAP RENDERER ---
     static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<DetectedObject>> allTransients,
                                                  VisualizationSettings settings) {
-        int imgWidth = backgroundData[0].length;
-        int imgHeight = backgroundData.length;
+        return createRainbowClusterMap(TrackVisualizationRenderer.createDisplayImage(backgroundData, settings), allTransients, settings);
+    }
+
+    static BufferedImage createRainbowClusterMap(BufferedImage grayBg, List<List<DetectedObject>> allTransients,
+                                                 VisualizationSettings settings) {
+        int imgWidth = grayBg.getWidth();
+        int imgHeight = grayBg.getHeight();
 
         int minX = imgWidth, maxX = 0;
         int minY = imgHeight, maxY = 0;
@@ -601,8 +606,8 @@ final class ReportMaps {
         int scaledH = (int) Math.round(cropH * scale);
 
         // Extract and softly scale the background
-        short[][] croppedBg = robustEdgeAwareCrop(backgroundData, minX + (cropW / 2), minY + (cropH / 2), cropW, cropH);
-        BufferedImage grayBg = createDisplayImage(croppedBg, settings);
+        // Crop and scale a copy of the field display image without mutating it.
+
 
         BufferedImage rgbMap = new BufferedImage(scaledW, scaledH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
@@ -610,7 +615,7 @@ final class ReportMaps {
         g2d.setColor(Color.BLACK);
         g2d.fillRect(0, 0, scaledW, scaledH);
         g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.2f));
-        g2d.drawImage(grayBg, 0, 0, scaledW, scaledH, null); // Natively downscales the background
+        g2d.drawImage(grayBg, 0, 0, scaledW, scaledH, minX, minY, maxX + 1, maxY + 1, null);
         g2d.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 1.0f));
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 

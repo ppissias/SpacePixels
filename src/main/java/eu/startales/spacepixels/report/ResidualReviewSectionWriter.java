@@ -363,18 +363,34 @@ final class ResidualReviewSectionWriter {
             return false;
         }
         List<Integer> frames = context.sampleFrames(mandatory, COMMON_MOTION_GIF_FRAMES);
+        List<double[]> sourceLevels = new ArrayList<>(sources.size());
+        for (List<DetectedObject> source : sources) {
+            if (source.isEmpty()) {
+                sourceLevels.add(null);
+                continue;
+            }
+            int cx = (int) Math.round(mean(source, true));
+            int cy = (int) Math.round(mean(source, false));
+            List<short[][]> crops = new ArrayList<>(frames.size());
+            for (int frameIndex : frames) {
+                crops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
+                        context.rawFrames.get(frameIndex), cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL));
+            }
+            sourceLevels.add(TrackVisualizationRenderer.sharedDisplayLevels(crops, context.settings));
+        }
         List<BufferedImage> gifFrames = new ArrayList<>();
         for (int frameIndex : frames) {
             List<BufferedImage> panels = new ArrayList<>();
             int index = 1;
             boolean first = true;
-            for (List<DetectedObject> source : sources) {
+            for (int s = 0; s < sources.size(); s++) {
+                List<DetectedObject> source = sources.get(s);
                 if (source.isEmpty()) {
                     continue;
                 }
                 int cx = (int) Math.round(mean(source, true));
                 int cy = (int) Math.round(mean(source, false));
-                BufferedImage panel = croppedDisplay(context.rawFrames.get(frameIndex), cx, cy, context.settings);
+                BufferedImage panel = croppedDisplay(context.rawFrames.get(frameIndex), cx, cy, sourceLevels.get(s));
                 Graphics2D g2d = panel.createGraphics();
                 g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
                 DetectedObject hit = pointOnFrame(source, frameIndex);
@@ -473,7 +489,15 @@ final class ResidualReviewSectionWriter {
     /** A colour copy of the stretched crop: drawing on the grayscale display image would turn every marker gray. */
     private static BufferedImage croppedDisplay(short[][] image, int cx, int cy, VisualizationSettings settings) {
         short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(image, cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL);
-        BufferedImage gray = TrackVisualizationRenderer.createDisplayImage(crop, settings);
+        return toRgbPanel(TrackVisualizationRenderer.createDisplayImage(crop, settings));
+    }
+
+    private static BufferedImage croppedDisplay(short[][] image, int cx, int cy, double[] levels) {
+        short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(image, cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL);
+        return toRgbPanel(TrackVisualizationRenderer.createDisplayImageAtLevels(crop, levels));
+    }
+
+    private static BufferedImage toRgbPanel(BufferedImage gray) {
         BufferedImage panel = new BufferedImage(gray.getWidth(), gray.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = panel.createGraphics();
         g2d.drawImage(gray, 0, 0, null);
@@ -597,6 +621,14 @@ final class ResidualReviewSectionWriter {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
             Map<Integer, DetectedObject> pointByFrame = buildPointByFrameMap(track);
             List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
+            List<short[][]> rescueCrops = new ArrayList<>(sampledIndices.size());
+            for (int frameIndex : sampledIndices) {
+                rescueCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
+                        context.rawFrames.get(frameIndex),
+                        cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                        cropBounds.trackBoxWidth, cropBounds.trackBoxHeight));
+            }
+            double[] rescueLevels = TrackVisualizationRenderer.sharedDisplayLevels(rescueCrops, context.settings);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 DetectedObject detectedPoint = pointByFrame.get(frameIndex);
@@ -609,7 +641,8 @@ final class ResidualReviewSectionWriter {
                         LOCAL_RESCUE_COLOR,
                         pointLabel,
                         TrackVisualizationRenderer.frameLabel(context, frameIndex),
-                        true);
+                        true,
+                        rescueLevels);
                 contextFrames.add(frameImage);
             }
             TrackVisualizationRenderer.saveAnimatedGif(contextFrames, context.file(contextGifFileName), context.settings, context.animations);
@@ -717,6 +750,14 @@ final class ResidualReviewSectionWriter {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
             Map<Integer, DetectedObject> pointByFrame = buildPointByFrameMap(track);
             List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
+            List<short[][]> clusterCrops = new ArrayList<>(sampledIndices.size());
+            for (int frameIndex : sampledIndices) {
+                clusterCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
+                        context.rawFrames.get(frameIndex),
+                        cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                        cropBounds.trackBoxWidth, cropBounds.trackBoxHeight));
+            }
+            double[] clusterLevels = TrackVisualizationRenderer.sharedDisplayLevels(clusterCrops, context.settings);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 DetectedObject detectedPoint = pointByFrame.get(frameIndex);
@@ -729,7 +770,8 @@ final class ResidualReviewSectionWriter {
                         LOCAL_ACTIVITY_COLOR,
                         pointLabel,
                         TrackVisualizationRenderer.frameLabel(context, frameIndex),
-                        true);
+                        true,
+                        clusterLevels);
                 contextFrames.add(frameImage);
             }
             TrackVisualizationRenderer.saveAnimatedGif(contextFrames, context.file(contextGifFileName), context.settings, context.animations);

@@ -16,6 +16,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import eu.startales.spacepixels.fits.DisplayImageRenderer;
+import io.github.ppissias.jtransient.core.DataArea;
 
 /**
  * Thumbnails for the progress dialog's live view: small, detached copies that never change the pipeline's pixels.
@@ -41,8 +42,10 @@ public final class PreviewThumbnails {
         int reducedHeight = (height + block - 1) / block;
         short[][] reduced = new short[reducedHeight][reducedWidth];
         long[] sums = new long[reducedWidth];
+        long[] counts = new long[reducedWidth];
         for (int reducedY = 0; reducedY < reducedHeight; reducedY++) {
             java.util.Arrays.fill(sums, 0);
+            java.util.Arrays.fill(counts, 0);
             int firstRow = reducedY * block;
             int lastRow = Math.min(height, firstRow + block);
             for (int y = firstRow; y < lastRow; y++) {
@@ -50,15 +53,22 @@ public final class PreviewThumbnails {
                 for (int reducedX = 0; reducedX < reducedWidth; reducedX++) {
                     int lastColumn = Math.min(width, (reducedX + 1) * block);
                     long sum = 0;
+                    long count = 0;
                     for (int x = reducedX * block; x < lastColumn; x++) {
-                        sum += row[x] + 32768;
+                        short raw = row[x];
+                        if (raw > DataArea.FILL_THRESHOLD) {
+                            sum += raw + 32768;
+                            count++;
+                        }
                     }
                     sums[reducedX] += sum;
+                    counts[reducedX] += count;
                 }
             }
             for (int reducedX = 0; reducedX < reducedWidth; reducedX++) {
-                long count = (long) (lastRow - firstRow) * (Math.min(width, (reducedX + 1) * block) - reducedX * block);
-                reduced[reducedY][reducedX] = (short) (sums[reducedX] / count - 32768);
+                reduced[reducedY][reducedX] = counts[reducedX] > 0
+                        ? (short) (sums[reducedX] / counts[reducedX] - 32768)
+                        : Short.MIN_VALUE;
             }
         }
         double[] levels = DisplayImageRenderer.displayLevels(sample(pixels), blackSigma, whiteSigma);
