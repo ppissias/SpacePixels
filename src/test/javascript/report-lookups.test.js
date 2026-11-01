@@ -90,3 +90,38 @@ test('inspector filters compose frame and sigma limits', () => {
   assert.equal(matchesMarker({peak: '12', frame: '3'}, 10, 4), false);
   assert.equal(matchesMarker({peak: '8', frame: '3'}, 10, 0), false);
 });
+
+test('local Stellarium button posts directly to 127.0.0.1:8090 and reports status', async () => {
+  const c = client([{}]);
+  const statusEl = {style: {}, innerHTML: ''};
+  const attributes = {
+    'data-time': '1768514400000',
+    'data-utc': '2026-01-15 22:00:00 UTC',
+    'data-ra': '83.822080',
+    'data-dec': '-5.391110',
+    'data-fov': '2.0000',
+    'data-lat': '37.98380',
+    'data-lng': '23.72750',
+    'data-elev': '120.0'
+  };
+  const button = {
+    textContent: 'Stellarium Local',
+    disabled: false,
+    getAttribute: k => attributes[k] || null,
+    setAttribute: (k, v) => { attributes[k] = v; },
+    closest: () => ({querySelector: () => statusEl})
+  };
+  const result = await c.api.openLocalStellarium(button);
+  assert.equal(result.ok, true);
+  assert.equal(c.requests.length, 4);
+  assert.equal(c.requests[0], 'http://127.0.0.1:8090/api/location/setlocationfields');
+  assert.equal(c.requests[1], 'http://127.0.0.1:8090/api/main/time');
+  assert.equal(c.requests[2], 'http://127.0.0.1:8090/api/main/view');
+  assert.equal(c.requests[3], 'http://127.0.0.1:8090/api/main/fov');
+  assert.match(statusEl.innerHTML, /Slewed local Stellarium to 2026-01-15 22:00:00 UTC/);
+
+  const failing = client([new Error('Connection refused')]);
+  const failResult = await failing.api.openLocalStellarium(button);
+  assert.equal(failResult.ok, false);
+  assert.match(statusEl.innerHTML, /Could not connect to local Stellarium on port 8090/);
+});

@@ -10,6 +10,9 @@ import eu.startales.spacepixels.report.DetectionReportAstrometry;
  */
 public final class SkyViewerHtmlBuilder {
 
+    public static final String LOCAL_STELLARIUM_MANUAL_URL =
+            "https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md#annex-local-stellarium-integration";
+
     private SkyViewerHtmlBuilder() {
     }
 
@@ -82,7 +85,20 @@ public final class SkyViewerHtmlBuilder {
         html.append("<a class='id-link' href='")
                 .append(buildStellariumWebUrl(observerSite, queryTarget.timestampMillis, skyCoordinate, wideFovDegrees))
                 .append("' target='_blank' rel='noopener noreferrer'>Stellarium Web Wide (RA/Dec)</a>");
+        html.append(buildLocalStellariumButtonHtml(
+                "Stellarium Local",
+                observerSite,
+                queryTarget.timestampMillis,
+                skyCoordinate,
+                tightFovDegrees));
+        html.append(buildLocalStellariumButtonHtml(
+                "Stellarium Local Wide",
+                observerSite,
+                queryTarget.timestampMillis,
+                skyCoordinate,
+                wideFovDegrees));
         html.append("</div>");
+        html.append("<div class='astro-note stellarium-local-status' style='display:none; margin-top: 6px;'></div>");
 
         html.append("<div class='astro-note' style='margin-top: 6px;'>")
                 .append(horizontalCoordinate != null
@@ -104,10 +120,34 @@ public final class SkyViewerHtmlBuilder {
         if (preferredTightFovDegrees != null && Double.isFinite(preferredTightFovDegrees) && preferredTightFovDegrees > 0.0d) {
             html.append(" The tight Stellarium view matches the displayed crop FOV when WCS is available.");
         }
-        html.append(" Stellarium Web may display browser-local time even when the observing site is elsewhere.");
+        html.append(" Stellarium Web may display browser-local time even when the observing site is elsewhere.")
+                .append(" <strong>Stellarium Local</strong> slews a running desktop Stellarium installation via its Remote Control plugin (see the <a class='live-link-inline' href='")
+                .append(LOCAL_STELLARIUM_MANUAL_URL)
+                .append("' target='_blank' rel='noopener noreferrer'>setup instructions in the SpacePixels manual</a>).");
         html.append("</div>");
         html.append("</div>");
         return html.toString();
+    }
+
+    private static String buildLocalStellariumButtonHtml(String label,
+                                                         DetectionReportAstrometry.ObserverSite observerSite,
+                                                         long timestampMillis,
+                                                         WcsCoordinateTransformer.SkyCoordinate skyCoordinate,
+                                                         double fovDegrees) {
+        StringBuilder button = new StringBuilder();
+        button.append("<button type='button' class='id-link stellarium-local-link'")
+                .append(" data-time='").append(timestampMillis).append("'")
+                .append(" data-utc='").append(DetectionReportAstrometry.escapeHtml(DetectionReportAstrometry.formatUtcTimestamp(timestampMillis))).append("'")
+                .append(" data-ra='").append(DetectionReportAstrometry.formatDecimal(skyCoordinate.getRaDegrees(), 6)).append("'")
+                .append(" data-dec='").append(DetectionReportAstrometry.formatDecimal(skyCoordinate.getDecDegrees(), 6)).append("'")
+                .append(" data-fov='").append(DetectionReportAstrometry.formatDecimal(fovDegrees, 4)).append("'");
+        if (observerSite != null) {
+            button.append(" data-lat='").append(DetectionReportAstrometry.formatDecimal(observerSite.latitudeDeg, 5)).append("'")
+                    .append(" data-lng='").append(DetectionReportAstrometry.formatDecimal(observerSite.longitudeDeg, 5)).append("'")
+                    .append(" data-elev='").append(DetectionReportAstrometry.formatDecimal(observerSite.altitudeMeters, 1)).append("'");
+        }
+        button.append(">").append(DetectionReportAstrometry.escapeHtml(label)).append("</button>");
+        return button.toString();
     }
 
     private static String buildStellariumWebUrl(DetectionReportAstrometry.ObserverSite observerSite,

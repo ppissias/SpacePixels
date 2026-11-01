@@ -363,7 +363,7 @@ When one frame is plate-solved, every track card shows the sky position and butt
 - **Render JPL Results Here**: the JPL Small-Body Identification service for the exact field of the object.
 - **Render JPL NEO Recovery Results Here**: a wider JPL search for fast near-Earth objects, which JPL's exact search can miss.
 - **SatChecker** (on streaks): satellites that crossed the field at that time.
-- **Stellarium Web**: the sky at that time and place, for context.
+- **Stellarium Web** and **Stellarium Local**: the sky at that time and place, for context (see [Annex: Local Stellarium integration](#annex-local-stellarium-integration)).
 
 The buttons that say **Here** show the answer inside the report. They need SpacePixels to be running (it fetches the answer for the report), and the answer is saved into the report, so it is still there when you open the report later, also without SpacePixels. The other buttons open the service in your browser. JPL can take up to a minute to answer.
 
@@ -731,3 +731,21 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 **Colour frames.** Detection works on monochrome data; accept the conversion offer after import, or click **Convert to Mono** later, then import the generated mono folder.
 
 **Signed 16-bit frames, or pixel values below zero.** SpacePixels reads 16-bit frames as unsigned values (`BZERO` 32768). Frames stored as signed 16 bit (`BZERO` 0) or with other scaling would be read at the wrong brightness level, so import offers to convert them into a new folder. When the conversion finds pixels below zero (frames bias- or dark-subtracted without a pedestal, in signed 16 bit or 32 bit), it asks how to store them. **Add an Offset** (recommended) adds one common offset before the sequence-wide linear scale, keeps normal negative values and leaves registration padding at 0; extreme values follow the separate outlier choice; the report takes the offset off again for the sky brightness. **Set to 0** clips negative values before the common linear conversion and cuts off the low side of the noise; when the sky itself is near zero, most of each frame becomes 0, every frame then looks like a failed registration and detection fails.
+
+---
+
+## Annex: Local Stellarium integration
+
+Beside the **Stellarium Web** links, every plate-solved finding in the report has **Stellarium Local** and **Stellarium Local Wide** buttons. Clicking either button slews a running desktop [Stellarium](https://stellarium.org/) installation on your computer to the detection's exact J2000 sky coordinates, UTC timestamp (paused), field of view, and—when available—observing site location.
+
+To let SpacePixels and its reports control your local Stellarium window, enable Stellarium's built-in **Remote Control** plugin once:
+
+1. Start **Stellarium** and open the **Configuration** window (**F2**), then select the **Plugins** tab and choose **Remote Control** in the list on the left. Tick **Load at startup** at the bottom. If it was not ticked before, restart Stellarium once so the plugin loads, then open **F2 → Plugins → Remote Control** again and click **configure**:
+
+   ![Enabling the Remote Control plugin in Stellarium](docs/images/manual/stellarium-remote-control-plugin.jpg)
+
+2. In the **Remote Control Plug-in Configuration** window, tick **Server enabled** and **Enable automatically on startup**, keep **Port Number** at `8090` (with **Access requires authentication** unticked), and click **Save settings**:
+
+   ![Configuring the Remote Control server on port 8090 in Stellarium](docs/images/manual/stellarium-remote-control-config.png)
+
+Once enabled, keep Stellarium open while reviewing a detection report and click **Stellarium Local** (crop FOV) or **Stellarium Local Wide** on any finding card to jump directly to that sky position and moment in Stellarium.

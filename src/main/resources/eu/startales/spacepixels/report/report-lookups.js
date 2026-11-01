@@ -2,6 +2,8 @@
 (function () {
   const REPORT_PROXY_BASE_URL = __SPACEPIXELS_PROXY_URL__;
   const REPORT_PROXY_FETCH_URL = REPORT_PROXY_BASE_URL + '/api/report/fetch';
+  const STELLARIUM_DIRECT_BASE_URL = 'http://127.0.0.1:8090';
+  const STELLARIUM_MANUAL_URL = 'https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md#annex-local-stellarium-integration';
   const PERSISTED_LOOKUP_CACHE_SCRIPT_ID = __SPACEPIXELS_CACHE_ID__;
   const JPL_MAX_RENDER_ROWS = 250;
   const liveLookupCache = new Map();
@@ -531,6 +533,7 @@
       identifyAllVsx(identifyAll);
       return;
     }
+    const stellariumButton = event.target.closest('.stellarium-local-link'); if (stellariumButton) { event.preventDefault(); openLocalStellarium(stellariumButton); return; }
     const button = event.target.closest('.render-live-link');
     if (!button) {
       return;
@@ -539,7 +542,81 @@
     loadLiveLookup(button);
   });
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = {loadLiveLookup, identifyAllVsx};
+  function updateStellariumStatus(button, ok, htmlMessage) {
+    const container = button.closest('.astro-note');
+    const status = container ? container.querySelector('.stellarium-local-status') : null;
+    if (!status) return;
+    status.style.display = 'block';
+    status.style.color = ok ? '#8fd19e' : '#d0a050';
+    status.innerHTML = htmlMessage;
+  }
+
+  function slewStellariumDirect(timeMillis, raDeg, decDeg, fovDeg, lat, lng, elev) {
+    const jd = (Number(timeMillis) / 86400000.0) + 2440587.5;
+    const raRad = Number(raDeg) * Math.PI / 180.0;
+    const decRad = Number(decDeg) * Math.PI / 180.0;
+    const x = Math.cos(decRad) * Math.cos(raRad);
+    const y = Math.cos(decRad) * Math.sin(raRad);
+    const z = Math.sin(decRad);
+    const j2000 = '[' + x.toFixed(8) + ',' + y.toFixed(8) + ',' + z.toFixed(8) + ']';
+    const postForm = function (path, body) {
+      return fetch(STELLARIUM_DIRECT_BASE_URL + path, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: body
+      });
+    };
+    let chain = Promise.resolve();
+    if (lat !== null && lat !== '' && lng !== null && lng !== '') {
+      const alt = (elev !== null && elev !== '') ? elev : '0.0';
+      chain = chain.then(function () {
+        return postForm('/api/location/setlocationfields',
+          'latitude=' + encodeURIComponent(lat) + '&longitude=' + encodeURIComponent(lng)
+          + '&altitude=' + encodeURIComponent(alt) + '&name=SpacePixels+Observation+Site&planet=Earth');
+      });
+    }
+    return chain
+      .then(function () { return postForm('/api/main/time', 'time=' + jd.toFixed(8) + '&timerate=0'); })
+      .then(function () { return postForm('/api/main/view', 'j2000=' + encodeURIComponent(j2000)); })
+      .then(function () { return postForm('/api/main/fov', 'fov=' + encodeURIComponent(fovDeg)); });
+  }
+
+  function openLocalStellarium(button) {
+    const timeMillis = button.getAttribute('data-time');
+    const utcLabel = button.getAttribute('data-utc') || '';
+    const raDeg = button.getAttribute('data-ra');
+    const decDeg = button.getAttribute('data-dec');
+    const fovDeg = button.getAttribute('data-fov');
+    const lat = button.getAttribute('data-lat');
+    const lng = button.getAttribute('data-lng');
+    const elev = button.getAttribute('data-elev');
+    if (!timeMillis || !raDeg || !decDeg || !fovDeg) return Promise.resolve();
+
+    const originalLabel = button.getAttribute('data-original-label') || button.textContent;
+    button.setAttribute('data-original-label', originalLabel);
+    button.disabled = true;
+    button.textContent = 'Opening...';
+
+    const failHtml = "Could not connect to local Stellarium on port 8090. Ensure Stellarium is running with the Remote Control plugin enabled (see the <a class='live-link-inline' href='"
+      + STELLARIUM_MANUAL_URL + "' target='_blank' rel='noopener noreferrer'>setup instructions in the SpacePixels manual</a>).";
+
+    return slewStellariumDirect(timeMillis, raDeg, decDeg, fovDeg, lat, lng, elev)
+      .then(function () {
+        updateStellariumStatus(button, true, 'Slewed local Stellarium to ' + escapeHtml(utcLabel) + ' (FOV ' + escapeHtml(fovDeg) + '&deg;).');
+        return { ok: true };
+      })
+      .catch(function () {
+        updateStellariumStatus(button, false, failHtml);
+        return { ok: false };
+      })
+      .finally(function () {
+        button.disabled = false;
+        button.textContent = originalLabel;
+      });
+  }
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = {loadLiveLookup, identifyAllVsx, openLocalStellarium};
   seedButtonRenderOrder();
   SpacePixelsCatalogueComparison.initialize(document);
   seedPersistedLookupResults();

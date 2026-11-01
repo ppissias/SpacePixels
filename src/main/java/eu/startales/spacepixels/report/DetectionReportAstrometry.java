@@ -73,7 +73,7 @@ public final class DetectionReportAstrometry {
         private final String skybotObserverSource;
         private final long sessionMidpointTimestampMillis;
 
-        Context(FitsFileInformation[] fitsFiles,
+        public Context(FitsFileInformation[] fitsFiles,
                 WcsSolutionResolver.ResolvedWcsSolution wcsSolution,
                 ObserverSite observerSite,
                 String skybotObserverCode,
