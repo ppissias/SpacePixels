@@ -69,6 +69,57 @@ public final class DisplayImageRenderer {
         return new double[]{blackPoint, whitePoint};
     }
 
+    /**
+     * The same automatic stretch for a floating-point image in physical ADU (the 16-bit images' shifted values), such as
+     * the enhanced stack. Only finite pixels count towards the levels; NaN (no data) is drawn black. No conversion to
+     * 16 bits takes place.
+     */
+    public static BufferedImage createDisplayImage(float[][] imageData, double blackSigma, double whiteSigma) {
+        int height = imageData.length, width = imageData[0].length;
+        double sum = 0;
+        long count = 0;
+        double max = 0;
+        for (float[] row : imageData) {
+            for (float value : row) {
+                if (Float.isFinite(value)) {
+                    sum += value;
+                    count++;
+                    max = Math.max(max, value);
+                }
+            }
+        }
+        double mean = count > 0 ? sum / count : 0;
+        double sumSqDiff = 0;
+        for (float[] row : imageData) {
+            for (float value : row) {
+                if (Float.isFinite(value)) {
+                    sumSqDiff += (value - mean) * (value - mean);
+                }
+            }
+        }
+        double sigma = count > 0 ? Math.sqrt(sumSqDiff / count) : 0;
+        double blackPoint = Math.max(0, mean - blackSigma * sigma);
+        double whitePoint = Math.min(max, mean + whiteSigma * sigma);
+        double range = whitePoint - blackPoint;
+        if (range <= 0) {
+            range = 1.0;
+        }
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+        WritableRaster raster = image.getRaster();
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                float value = imageData[y][x];
+                if (!Float.isFinite(value)) {
+                    raster.setSample(x, y, 0, 0);
+                    continue;
+                }
+                double normalized = Math.max(0, Math.min(range, value - blackPoint)) / range;
+                raster.setSample(x, y, 0, Math.max(0, Math.min(255, (int) (Math.sqrt(normalized) * 255.0))));
+            }
+        }
+        return image;
+    }
+
     /** Fixed display levels for comparisons in which brightness changes must stay visible. */
     public static BufferedImage createDisplayImageAtLevels(short[][] imageData, double blackPoint, double whitePoint) {
         int height = imageData.length, width = imageData[0].length;

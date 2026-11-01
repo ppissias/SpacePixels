@@ -98,10 +98,10 @@ public class UnclassifiedTransientSectionWriterTest {
         UnclassifiedTransientSectionWriter.writeSection(
                 new PrintWriter(html), context, allTransients, unclassified);
 
-        assertTrue(new File(exportDirectory, "unclassified_median_background.png").isFile());
-        assertTrue(new File(exportDirectory, "unclassified_transients.png").isFile());
-        BufferedImage background = ImageIO.read(new File(exportDirectory, "unclassified_median_background.png"));
-        BufferedImage composite = ImageIO.read(new File(exportDirectory, "unclassified_transients.png"));
+        assertTrue(new File(exportDirectory, "field/unclassified_median_background.png").isFile());
+        assertTrue(new File(exportDirectory, "field/unclassified_transients.png").isFile());
+        BufferedImage background = ImageIO.read(new File(exportDirectory, "field/unclassified_median_background.png"));
+        BufferedImage composite = ImageIO.read(new File(exportDirectory, "field/unclassified_transients.png"));
         assertTrue(background.getRGB(35, 32) != composite.getRGB(35, 32));
         assertTrue(html.toString().contains("Unclassified Transient Inspector"));
         assertTrue(html.toString().contains("<svg"));

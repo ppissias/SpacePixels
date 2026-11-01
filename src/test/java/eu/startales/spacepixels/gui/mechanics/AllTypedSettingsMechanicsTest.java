@@ -48,7 +48,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("78 engine fields, 11 application fields and the rejection preset", 90, inputs.size());
+        assertEquals("79 engine fields, 12 application fields and the rejection preset", 92, inputs.size());
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
             assertNotNull(setting.id(), controls.get(setting.id()));
             assertEquals(setting.expert(), controls.get(setting.id()).expert());
@@ -61,6 +61,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
                 Map.entry("autoStretchBlackSigma", false),
                 Map.entry("autoStretchWhiteSigma", false),
                 Map.entry("gifBlinkSpeedMs", false),
+                Map.entry("enhancedStack", false),
                 Map.entry("streakLineScaleFactor", true),
                 Map.entry("streakCentroidBoxRadius", true),
                 Map.entry("pointSourceMinBoxRadius", true),

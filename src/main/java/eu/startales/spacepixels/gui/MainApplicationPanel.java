@@ -120,7 +120,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 }
             });
     private final CommandAction previewAction = new CommandAction("Preview Frame",
-            "Run the extraction engine on the selected frame to preview detected sources and streaks with the current settings (Ctrl+P).",
+            "Run the extraction engine on the selected frame to preview detected sources and streaks with the current settings (Ctrl+P). "
+                    + "Shows the normal extraction only, without the faint-streak search.",
             CommandAvailability.Command.PREVIEW, this::commandFacts, this::previewSelectedFrame);
     private final CommandAction blinkAction = new CommandAction(BLINK_SELECTED,
             "Animate the selected frames in a new window for manual visual inspection (Ctrl+B).",
@@ -149,7 +150,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     + "Runs in the background;<br>the star depth is set in the Astrometry Config tab.</html>",
             CommandAvailability.Command.SKY_CATALOGUE, this::commandFacts, this::onSkyCatalogueButton);
     private final CommandAction inspectionAction = new CommandAction("Manual Transient Inspection",
-            "Extract purified transients from all frames against the master background and navigate through them using arrow keys.",
+            "Extract purified transients from all frames against the master background and navigate through them using arrow keys. "
+                    + "Uses the normal extraction only, without the faint-streak search.",
             CommandAvailability.Command.INSPECTION, this::commandFacts, this::startTransientInspection);
     private final CommandAction iterativeAction = new CommandAction("Detect Iteratively (large datasets)",
             "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.",

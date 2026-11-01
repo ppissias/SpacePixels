@@ -44,6 +44,28 @@ public class SpacePixelsDetectionProfileIOTest {
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 
+    /** A profile saved before the faint-streak search gets it on; a saved choice to switch it off survives. */
+    @Test
+    public void faintStreakSearchDefaultsOnForOldProfilesAndKeepsAnExplicitChoice() throws Exception {
+        SpacePixelsDetectionProfile old = SpacePixelsDetectionProfileIO.load(new StringReader("{\"detectionSigmaMultiplier\":6.5}"));
+        assertTrue(old.getDetectionConfig().enableFaintStreakSearch);
+
+        DetectionConfig config = new DetectionConfig();
+        config.enableFaintStreakSearch = false;
+        StringWriter writer = new StringWriter();
+        SpacePixelsDetectionProfileIO.write(writer, new SpacePixelsDetectionProfile(config, 30));
+        assertTrue(writer.toString().contains("\"enableFaintStreakSearch\": false"));
+        assertFalse(SpacePixelsDetectionProfileIO.load(new StringReader(writer.toString())).getDetectionConfig().enableFaintStreakSearch);
+    }
+
+    /** The shipped default profile switches the faint-streak search on explicitly. */
+    @Test
+    public void defaultProfileSwitchesTheFaintStreakSearchOn() throws Exception {
+        String json = Files.readString(new File("src/dist/config/default_detection_profile.json").toPath(), StandardCharsets.UTF_8);
+        assertTrue(json.contains("\"enableFaintStreakSearch\": true"));
+        assertTrue(SpacePixelsDetectionProfileIO.load(new StringReader(json)).getDetectionConfig().enableFaintStreakSearch);
+    }
+
     @Test
     public void writeAndLoadRoundTripPreservesAutoTuneMaxCandidateFrames() throws Exception {
         DetectionConfig config = new DetectionConfig();

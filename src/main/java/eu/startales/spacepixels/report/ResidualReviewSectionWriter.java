@@ -14,7 +14,6 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -146,8 +145,8 @@ final class ResidualReviewSectionWriter {
                                              int groupNumber) throws IOException {
         Color color = COMMON_MOTION_COLORS[(groupNumber - 1) % COMMON_MOTION_COLORS.length];
         List<List<DetectedObject>> pictured = List.of(group.points);
-        String trailName = "camera_fixed_" + groupNumber + "_trail.png";
-        String gifName = "camera_fixed_" + groupNumber + ".gif";
+        String trailName = ReportFiles.link(FindingCategory.CAMERA_FIXED, "camera_fixed_" + groupNumber + "_trail.png");
+        String gifName = ReportFiles.link(FindingCategory.CAMERA_FIXED, "camera_fixed_" + groupNumber + ".gif");
         boolean trail = background != null && writeCommonMotionTrail(context, background, pictured, color, trailName);
         boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
         double spread = 0;
@@ -241,8 +240,8 @@ final class ResidualReviewSectionWriter {
         }
         g2d.dispose();
 
-        String fileName = "common_motion_field.png";
-        TrackVisualizationRenderer.saveLosslessPng(map, new File(context.exportDir, fileName));
+        String fileName = ReportFiles.link(FindingCategory.COMMON_MOTION, "common_motion_field.png");
+        TrackVisualizationRenderer.saveLosslessPng(map, context.file(fileName));
         report.println("<div class='image-container'>");
         report.println("<div><a href='" + fileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + fileName
                 + "' alt='Common motion field' /></a><br/><center><small>Shared motion across the field</small></center></div>");
@@ -266,8 +265,8 @@ final class ResidualReviewSectionWriter {
         Color color = COMMON_MOTION_COLORS[(groupNumber - 1) % COMMON_MOTION_COLORS.length];
         int shown = Math.min(COMMON_MOTION_SHOWN_SOURCES, group.sources.size());
         List<List<DetectedObject>> pictured = group.sources.subList(0, shown);
-        String trailName = "common_motion_" + groupNumber + "_trail.png";
-        String gifName = "common_motion_" + groupNumber + ".gif";
+        String trailName = ReportFiles.link(FindingCategory.COMMON_MOTION, "common_motion_" + groupNumber + "_trail.png");
+        String gifName = ReportFiles.link(FindingCategory.COMMON_MOTION, "common_motion_" + groupNumber + ".gif");
         boolean trail = background != null && writeCommonMotionTrail(context, background, pictured, color, trailName);
         boolean gif = !context.rawFrames.isEmpty() && writeCommonMotionGif(context, pictured, color, gifName);
 
@@ -344,7 +343,7 @@ final class ResidualReviewSectionWriter {
         if (panels.isEmpty()) {
             return false;
         }
-        TrackVisualizationRenderer.saveLosslessPng(stitch(panels), new File(context.exportDir, fileName));
+        TrackVisualizationRenderer.saveLosslessPng(stitch(panels), context.file(fileName));
         return true;
     }
 
@@ -408,7 +407,7 @@ final class ResidualReviewSectionWriter {
         if (gifFrames.isEmpty()) {
             return false;
         }
-        TrackVisualizationRenderer.saveAnimatedGif(gifFrames, new File(context.exportDir, fileName), context.settings, context.animations);
+        TrackVisualizationRenderer.saveAnimatedGif(gifFrames, context.file(fileName), context.settings, context.animations);
         return true;
     }
 
@@ -555,11 +554,11 @@ final class ResidualReviewSectionWriter {
         Track track = buildResidualTrack(candidate.points);
         TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(140, context.settings.getTrackCropPadding() / 2));
 
-        String prefix = "micro_drift_" + counter;
-        String backgroundFileName = prefix + "_background.png";
-        String trailFileName = prefix + "_trail.png";
-        String shapeFileName = prefix + "_shape.png";
-        String contextGifFileName = prefix + "_context.gif";
+        String prefix = "local_rescue_" + counter;
+        String backgroundFileName = ReportFiles.link(FindingCategory.LOCAL_RESCUE, prefix + "_background.png");
+        String trailFileName = ReportFiles.link(FindingCategory.LOCAL_RESCUE, prefix + "_trail.png");
+        String shapeFileName = ReportFiles.link(FindingCategory.LOCAL_RESCUE, prefix + "_shape.png");
+        String contextGifFileName = ReportFiles.link(FindingCategory.LOCAL_RESCUE, prefix + "_context.gif");
 
         short[][] backgroundSource = resolveBackgroundSource(referenceBackground, context.rawFrames, track);
 
@@ -572,7 +571,7 @@ final class ResidualReviewSectionWriter {
                     cropBounds.trackBoxHeight);
             TrackVisualizationRenderer.saveLosslessPng(
                     TrackVisualizationRenderer.createDisplayImage(croppedBackground, context.settings),
-                    new File(context.exportDir, backgroundFileName));
+                    context.file(backgroundFileName));
 
             BufferedImage trailImage = createMicroDriftTrailImage(
                     track,
@@ -582,7 +581,7 @@ final class ResidualReviewSectionWriter {
                     cropBounds.startX,
                     cropBounds.startY,
                     context.settings);
-            TrackVisualizationRenderer.saveLosslessPng(trailImage, new File(context.exportDir, trailFileName));
+            TrackVisualizationRenderer.saveLosslessPng(trailImage, context.file(trailFileName));
         }
 
         BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
@@ -591,7 +590,7 @@ final class ResidualReviewSectionWriter {
                 cropBounds.trackBoxHeight,
                 cropBounds.startX,
                 cropBounds.startY);
-        TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
+        TrackVisualizationRenderer.saveLosslessPng(shapeImage, context.file(shapeFileName));
 
         if (!context.rawFrames.isEmpty()) {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
@@ -612,7 +611,7 @@ final class ResidualReviewSectionWriter {
                         true);
                 contextFrames.add(frameImage);
             }
-            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings, context.animations);
+            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, context.file(contextGifFileName), context.settings, context.animations);
         }
 
         String candidateBadge = buildLocalRescueBadge(candidate.kind);
@@ -675,10 +674,10 @@ final class ResidualReviewSectionWriter {
         TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(180, context.settings.getTrackCropPadding() / 2));
 
         String prefix = "local_activity_" + counter;
-        String backgroundFileName = prefix + "_background.png";
-        String trailFileName = prefix + "_trail.png";
-        String shapeFileName = prefix + "_shape.png";
-        String contextGifFileName = prefix + "_context.gif";
+        String backgroundFileName = ReportFiles.link(FindingCategory.LOCAL_ACTIVITY, prefix + "_background.png");
+        String trailFileName = ReportFiles.link(FindingCategory.LOCAL_ACTIVITY, prefix + "_trail.png");
+        String shapeFileName = ReportFiles.link(FindingCategory.LOCAL_ACTIVITY, prefix + "_shape.png");
+        String contextGifFileName = ReportFiles.link(FindingCategory.LOCAL_ACTIVITY, prefix + "_context.gif");
 
         short[][] backgroundSource = resolveBackgroundSource(referenceBackground, context.rawFrames, track);
 
@@ -691,7 +690,7 @@ final class ResidualReviewSectionWriter {
                     cropBounds.trackBoxHeight);
             TrackVisualizationRenderer.saveLosslessPng(
                     TrackVisualizationRenderer.createDisplayImage(croppedBackground, context.settings),
-                    new File(context.exportDir, backgroundFileName));
+                    context.file(backgroundFileName));
 
             BufferedImage trailImage = createMicroDriftTrailImage(
                     track,
@@ -701,7 +700,7 @@ final class ResidualReviewSectionWriter {
                     cropBounds.startX,
                     cropBounds.startY,
                     context.settings);
-            TrackVisualizationRenderer.saveLosslessPng(trailImage, new File(context.exportDir, trailFileName));
+            TrackVisualizationRenderer.saveLosslessPng(trailImage, context.file(trailFileName));
         }
 
         BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
@@ -710,7 +709,7 @@ final class ResidualReviewSectionWriter {
                 cropBounds.trackBoxHeight,
                 cropBounds.startX,
                 cropBounds.startY);
-        TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
+        TrackVisualizationRenderer.saveLosslessPng(shapeImage, context.file(shapeFileName));
 
         if (!context.rawFrames.isEmpty()) {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
@@ -731,7 +730,7 @@ final class ResidualReviewSectionWriter {
                         true);
                 contextFrames.add(frameImage);
             }
-            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, new File(context.exportDir, contextGifFileName), context.settings, context.animations);
+            TrackVisualizationRenderer.saveAnimatedGif(contextFrames, context.file(contextGifFileName), context.settings, context.animations);
         }
 
         ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;

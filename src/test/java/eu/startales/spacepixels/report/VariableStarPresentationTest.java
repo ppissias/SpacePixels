@@ -105,7 +105,7 @@ public class VariableStarPresentationTest {
             var overlay = VariableStarOverlay.from(result, files, null, null);
             assertEquals("V64", overlay.getCandidates().get(63).label);
             for (String name : List.of("photometry_stars.csv", "photometry_lightcurves.csv", "photometry_frames.csv")) {
-                String contents = Files.readString(new File(output, name).toPath());
+                String contents = Files.readString(new File(output, "variable_stars/" + name).toPath());
                 if (csv.containsKey(name)) assertEquals("Presentation must not change CSV measurements or labels", csv.get(name), contents);
                 csv.put(name, contents);
             }

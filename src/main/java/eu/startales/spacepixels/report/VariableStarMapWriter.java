@@ -22,8 +22,8 @@ import java.util.Locale;
 
 /** Candidate positions on the median stack, with an offline full-resolution light-curve map. */
 final class VariableStarMapWriter {
-    static final String PREVIEW_FILE = "photometry_candidate_map.svg";
-    static final String FULL_SIZE_FILE = "photometry_candidate_map_full.svg";
+    static final String PREVIEW_FILE = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_candidate_map.svg");
+    static final String FULL_SIZE_FILE = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_candidate_map_full.svg");
     private static final int HEADER_HEIGHT = 100;
 
     private VariableStarMapWriter() { }
@@ -38,16 +38,16 @@ final class VariableStarMapWriter {
         }
         int width = stack[0].length, height = stack.length;
         List<String> names = candidates.stream().map(star -> candidateName(context, star)).toList();
-        BufferedImage display = TrackVisualizationRenderer.createDisplayImage(stack, context.settings);
-        writeMap(new File(context.exportDir, FULL_SIZE_FILE), display, width, height, analysis, candidates, names, true);
+        BufferedImage display = context.fieldDisplayImage(stack);
+        writeMap(context.file(FULL_SIZE_FILE), display, width, height, analysis, candidates, names, true);
         double scale = Math.min(1.0, 1800.0 / width);
         BufferedImage preview = SessionPictureSectionWriter.downscale(display,
                 Math.max(1, (int) Math.round(width * scale)), Math.max(1, (int) Math.round(height * scale)));
-        writeMap(new File(context.exportDir, PREVIEW_FILE), preview, width, height, analysis, candidates, names, false);
+        writeMap(context.file(PREVIEW_FILE), preview, width, height, analysis, candidates, names, false);
 
         report.println("<div class='variable-candidate-map' style='margin:16px 0;'>");
         report.println("<h3>Variable candidates across the field</h3>");
-        report.println("<p class='compact-note'>The median stack with all " + candidates.size()
+        report.println("<p class='compact-note'>The " + context.fieldName() + " with all " + candidates.size()
                 + " reported candidates circled. Labels prefer a VSX name, then a catalogue star name or Gaia DR3 designation; otherwise they use the table's V number. "
                 + "<span style='color:" + PhotometrySvgChart.SERIES_BLUE + ";'>Blue: high confidence.</span> "
                 + "<span style='color:" + PhotometrySvgChart.SERIES_ORANGE + ";'>Orange: possible.</span> "
@@ -55,7 +55,7 @@ final class VariableStarMapWriter {
         report.println("<a href='" + FULL_SIZE_FILE + "' target='_blank' rel='noopener'><img loading='lazy' decoding='async' src='"
                 + PREVIEW_FILE + "' width='" + width + "' height='" + height
                 + "' style='display:block;max-width:100%;height:auto;border-radius:6px;' "
-                + "alt='Median stack with variable-star candidates circled and labelled by catalogue name or V number' /></a>");
+                + "alt='" + (context.enhancedStack != null ? "Enhanced" : "Median") + " stack with variable-star candidates circled and labelled by catalogue name or V number' /></a>");
         report.println("<p class='compact-note'><a href='" + FULL_SIZE_FILE + "' target='_blank' rel='noopener'>Open full-size candidate map and light curves</a>. "
                 + "The transparent mini curves show only the curve and observed Δmag in mag, without axes. Brighter is up; each curve has its own scale. "
                 + "Only unflagged measurements are plotted, with gaps left open. Hover for the V number and catalogue name. "

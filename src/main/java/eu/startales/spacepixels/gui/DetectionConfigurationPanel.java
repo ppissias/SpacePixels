@@ -939,6 +939,7 @@ public class DetectionConfigurationPanel extends JPanel {
         panel.add(createTabIntro("Settings for streak detection."));
 
         panel.add(createSectionHeader("Common Settings"));
+        addTypedCheckbox(panel, StreakDetectionSettings.ENABLE_FAINT_STREAK_SEARCH);
         spinSingleStreakMinPeakSigma = addTypedDouble(panel, StreakDetectionSettings.SINGLE_STREAK_MIN_PEAK_SIGMA, 0.0, 50.0, 0.1);
 
         panel.add(Box.createVerticalStrut(10));
@@ -1171,6 +1172,10 @@ public class DetectionConfigurationPanel extends JPanel {
                 "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.",
                 false, () -> visualization.getGifBlinkSpeedMs(), value -> visualization = visualization.withGifBlinkSpeedMs(value),
                 50, 5000, 10);
+        addApplicationCheckbox(panel, visualizationBindings,
+                "enhancedStack", "Enhanced Stack",
+                "Builds a less noisy stack of the kept frames for the report: a mean that leaves out hot pixels, trails and other outliers and gives noisier frames less weight. It is saved as a 32-bit FITS file in the report's enhanced_stack folder and shown in the pictures of the whole field instead of the median stack. Detection still uses the median stack, and the diagnostics and comparison cutouts keep showing it. Needs about 4 bytes of disk per pixel and some extra report time.",
+                false, () -> visualization.isEnhancedStack(), value -> visualization = visualization.withEnhancedStack(value));
 
 
         panel.add(Box.createVerticalStrut(10));
@@ -1426,6 +1431,19 @@ public class DetectionConfigurationPanel extends JPanel {
                 id, title, unit, description, expert, Integer.class, getter, setter,
                 () -> ((Number) input.getValue()).intValue(),
                 value -> setSpinnerValueClamped(input, value.intValue())), input);
+        return input;
+    }
+
+    /** Binds an application switch without adding an engine setting. */
+    private JCheckBox addApplicationCheckbox(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            String id, String title, String description, boolean expert,
+            java.util.function.Supplier<Boolean> getter, java.util.function.Consumer<Boolean> setter) {
+        JCheckBox input = new JCheckBox();
+        input.setSelected(getter.get());
+        UiStyle.inputWidth(input, 80);
+        addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
+                id, title, "", description, expert, Boolean.class, getter, setter,
+                input::isSelected, input::setSelected), input);
         return input;
     }
 

@@ -64,6 +64,22 @@ public enum FindingCategory {
     /** Whether representative JSON coordinates use the group centroid rather than the first measured point. */
     public boolean usesCentroid() { return centroid; }
 
+    /** Returns the report subfolder holding this category's pictures and data files (see {@link ReportFiles}). */
+    public String folder() {
+        return switch (this) {
+            case MOVING_TARGET -> "moving_targets";
+            case STREAK_TRACK -> "streak_tracks";
+            case SINGLE_STREAK -> "single_streaks";
+            case ANOMALY -> "anomalies";
+            case SLOW_MOVER -> "slow_movers";
+            case LOCAL_RESCUE -> "local_rescue";
+            case LOCAL_ACTIVITY -> "local_activity";
+            case VARIABLE_STAR -> "variable_stars";
+            case CAMERA_FIXED -> "camera_fixed";
+            case COMMON_MOTION -> "common_motion";
+        };
+    }
+
     /** Whether this category belongs on the combined detection map rather than only an artifact section. */
     public boolean onDetectionMap() { return this != COMMON_MOTION && this != CAMERA_FIXED; }
 

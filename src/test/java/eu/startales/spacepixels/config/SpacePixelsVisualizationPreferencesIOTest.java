@@ -8,6 +8,7 @@ import java.io.StringWriter;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 
 /**
@@ -58,13 +59,24 @@ public class SpacePixelsVisualizationPreferencesIOTest {
     }
 
     /** The file holds the eight values the settings page edits, under the names older files use. */
+    /** A file saved before the enhanced stack existed gets it on; a saved choice to switch it off survives. */
+    @Test
+    public void enhancedStackDefaultsOnAndKeepsAnExplicitChoice() throws Exception {
+        SpacePixelsVisualizationPreferences old = SpacePixelsVisualizationPreferencesIO.load(new StringReader("{\"gifBlinkSpeedMs\": 180}"));
+        assertTrue(old.applyTo(VisualizationSettings.defaults()).isEnhancedStack());
+        StringWriter writer = new StringWriter();
+        SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.of(VisualizationSettings.defaults().withEnhancedStack(false)));
+        SpacePixelsVisualizationPreferences reloaded = SpacePixelsVisualizationPreferencesIO.load(new StringReader(writer.toString()));
+        assertFalse(reloaded.applyTo(VisualizationSettings.defaults()).isEnhancedStack());
+    }
+
     @Test
     public void savedFormKeepsItsFieldNames() {
         StringWriter writer = new StringWriter();
         SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.of(VisualizationSettings.defaults()));
 
         assertEquals(List.of("streakLineScaleFactor", "streakCentroidBoxRadius", "pointSourceMinBoxRadius", "dynamicBoxPadding",
-                        "autoStretchBlackSigma", "autoStretchWhiteSigma", "gifBlinkSpeedMs", "trackCropPadding"),
+                        "autoStretchBlackSigma", "autoStretchWhiteSigma", "gifBlinkSpeedMs", "trackCropPadding", "enhancedStack"),
                 List.copyOf(JsonParser.parseString(writer.toString()).getAsJsonObject().keySet()));
     }
 

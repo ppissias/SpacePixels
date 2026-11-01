@@ -12,7 +12,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -79,12 +78,12 @@ final class AnomalySectionWriter {
         }
         List<BufferedImage> animation = new ArrayList<>();
         report.println("<div class='anomaly-visuals'><div class='anomaly-comparison' role='group' aria-label='Before, event and after comparison'>");
-        writeComparisonFrame(report, context, point, bounds, levels, before, "Before", prefix + "_before.png", animation);
-        writeComparisonFrame(report, context, point, bounds, levels, point.sourceFrameIndex, "Event", prefix + "_detection.png", animation);
-        writeComparisonFrame(report, context, point, bounds, levels, after, "After", prefix + "_after.png", animation);
+        writeComparisonFrame(report, context, point, bounds, levels, before, "Before", ReportFiles.link(FindingCategory.ANOMALY, prefix + "_before.png"), animation);
+        writeComparisonFrame(report, context, point, bounds, levels, point.sourceFrameIndex, "Event", ReportFiles.link(FindingCategory.ANOMALY, prefix + "_detection.png"), animation);
+        writeComparisonFrame(report, context, point, bounds, levels, after, "After", ReportFiles.link(FindingCategory.ANOMALY, prefix + "_after.png"), animation);
         report.println("</div>");
-        String gif = prefix + "_context.gif";
-        TrackVisualizationRenderer.saveAnimatedGif(animation, new File(context.exportDir, gif), context.settings, context.animations);
+        String gif = ReportFiles.link(FindingCategory.ANOMALY, prefix + "_context.gif");
+        TrackVisualizationRenderer.saveAnimatedGif(animation, context.file(gif), context.settings, context.animations);
         report.println("<figure class='anomaly-blink'><a href='" + gif + "' target='_blank'>"
                 + "<img loading='lazy' decoding='async' src='" + gif + "' alt='Blink comparison of the event and available neighbouring frames' /></a>"
                 + "<figcaption>Blink comparison &middot; <a href='" + gif + "' target='_blank'>Open GIF</a></figcaption></figure></div>");
@@ -190,7 +189,7 @@ final class AnomalySectionWriter {
             BufferedImage crop = TrackVisualizationRenderer.createStarCentricHighlightedFrame(context.rawFrames.get(index),
                     bounds, point, context.settings, event ? EVENT_COLOR : Color.WHITE, null, null, true, levels);
             BufferedImage labelled = labelFrame(crop, role + " · Frame " + (index + 1), frameTimestamp(context, point, index), event);
-            TrackVisualizationRenderer.saveLosslessPng(labelled, new File(context.exportDir, filename));
+            TrackVisualizationRenderer.saveLosslessPng(labelled, context.file(filename));
             animation.add(labelled);
             report.println("<a href='" + filename + "' target='_blank'><img loading='lazy' decoding='async' src='" + filename
                     + "' alt='" + role + ", frame " + (index + 1) + ", " + timestamp(frameTimestamp(context, point, index)) + "' /></a>");
@@ -230,18 +229,18 @@ final class AnomalySectionWriter {
                 anomaly.type, point.peakSigma, point.integratedSigma, point.totalFlux, (int) point.pixelArea, point.elongation);
         report.println("<ul class='source-list'>" + DetectionReportAstrometry.buildSourceCoordinateListEntry(
                 point.sourceFilename, context.astrometryContext, point.x, point.y, metrics) + "</ul>");
-        String shape = prefix + "_shape.png";
+        String shape = ReportFiles.link(FindingCategory.ANOMALY, prefix + "_shape.png");
         TrackVisualizationRenderer.saveLosslessPng(TrackVisualizationRenderer.createSingleStreakShapeImage(
                 Collections.singletonList(point), bounds.trackBoxWidth, bounds.trackBoxHeight, bounds.startX, bounds.startY, false),
-                new File(context.exportDir, shape));
+                context.file(shape));
         report.println("<div class='image-container anomaly-diagnostics'>");
         diagnosticImage(report, shape, "Detected footprint");
         if (context.masterStackData != null && context.masterVetoMask != null) {
-            String mask = prefix + "_master_mask.png";
+            String mask = ReportFiles.link(FindingCategory.ANOMALY, prefix + "_master_mask.png");
             TrackVisualizationRenderer.saveLosslessPng(ReportMaps.createCroppedMaskOverlay(
                     context.masterStackData, context.masterVetoMask, bounds.fixedCenterX, bounds.fixedCenterY,
                     bounds.trackBoxWidth, bounds.trackBoxHeight, point, new Color(255, 32, 32), context.settings),
-                    new File(context.exportDir, mask));
+                    context.file(mask));
             diagnosticImage(report, mask, "Master star-mask overlap");
         }
         report.println("</div>");

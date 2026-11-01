@@ -51,6 +51,15 @@ public final class ReportExporter {
         File exportDir = reportContext.exportDir;
         ReportProgress progress = reportContext.progress;
         reportContext.data.writeJson(exportDir);
+        if (reportContext.enhancedStack != null) {
+            progress.step(2, 3, "saving the enhanced stack");
+            try {
+                EnhancedStackFile.write(reportContext);
+            } catch (IOException failure) {
+                java.util.logging.Logger.getLogger(ReportExporter.class.getName()).warning(
+                        "The enhanced stack file was not written: " + failure.getMessage());
+            }
+        }
 
         File reportFile = new File(exportDir, REPORT_FILE_NAME);
 
@@ -68,7 +77,7 @@ public final class ReportExporter {
             // Results first: overview, moving objects, slow movers, residual review, maps, inspector, variable stars,
             // then the likely artifacts, folded. The shares of the bar follow the time each step took on a 33-frame
             // 61-megapixel session.
-            progress.step(2, 16, "measuring the field depth and the night");
+            progress.step(3, 16, "measuring the field depth and the night");
             FieldDepth fieldDepth = FieldDepth.measure(reportContext, reportContext.pipelineTelemetry);
             NightEquipment nightEquipment = NightEquipment.measure(reportContext, reportContext.pipelineTelemetry, reportContext.masterStars);
             DebugOutput.printf(Locale.US, "Night & Equipment measured in %.1f s%n", nightEquipment.millis / 1000.0);

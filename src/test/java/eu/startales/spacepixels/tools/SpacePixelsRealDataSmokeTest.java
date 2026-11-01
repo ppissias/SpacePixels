@@ -146,13 +146,13 @@ public class SpacePixelsRealDataSmokeTest {
         for (Path image : images) assertNotNull("Unreadable report image " + image.getFileName(), ImageIO.read(image.toFile()));
         if (photometry) {
             for (String csv : List.of("photometry_stars.csv", "photometry_lightcurves.csv", "photometry_frames.csv")) {
-                assertTrue(csv, Files.size(output.resolve(csv)) > 0);
+                assertTrue(csv, Files.size(output.resolve("variable_stars").resolve(csv)) > 0);
             }
             var analysis = result.getPipelineResult().variableStarAnalysis;
             assertEquals("All measured stars exported", analysis.stars.size() + 1,
-                    Files.readAllLines(output.resolve("photometry_stars.csv")).size());
+                    Files.readAllLines(output.resolve("variable_stars/photometry_stars.csv")).size());
             assertEquals("Per-frame photometry exported", analysis.frames.size() + 1,
-                    Files.readAllLines(output.resolve("photometry_frames.csv")).size());
+                    Files.readAllLines(output.resolve("variable_stars/photometry_frames.csv")).size());
         }
     }
 }

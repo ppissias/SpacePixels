@@ -78,19 +78,19 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("pure power-law stretch from zero"));
         assertTrue(html.contains("Scatter ratio"));
         assertTrue(html.contains("Variable candidates across the field"));
-        assertTrue(html.contains("href='photometry_candidate_map_full.svg' target='_blank'"));
+        assertTrue(html.contains("href='variable_stars/photometry_candidate_map_full.svg' target='_blank'"));
         assertTrue(html.contains("Local sky backgrounds are matched"));
         assertTrue(html.contains("ensemble zero-point difference"));
         assertFalse(html.contains("Nearby comparison stars do not share the pattern"));
         assertFalse(html.contains("jumpiness"));
         assertFalse(html.contains("Tilt X"));
-        assertTrue(new File(exportDir, "photometry_stars.csv").isFile());
-        assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
-        assertTrue(new File(exportDir, "photometry_frames.csv").isFile());
-        assertTrue(new File(exportDir, "photometry_v1_brightest.png").isFile());
-        assertTrue(new File(exportDir, "photometry_candidate_map.svg").isFile());
-        assertTrue(new File(exportDir, "photometry_candidate_map_full.svg").isFile());
-        assertEquals(FRAMES + 1, Files.readAllLines(new File(exportDir, "photometry_frames.csv").toPath()).size());
+        assertTrue(new File(exportDir, "variable_stars/photometry_stars.csv").isFile());
+        assertTrue(new File(exportDir, "variable_stars/photometry_lightcurves.csv").isFile());
+        assertTrue(new File(exportDir, "variable_stars/photometry_frames.csv").isFile());
+        assertTrue(new File(exportDir, "variable_stars/photometry_v1_brightest.png").isFile());
+        assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map.svg").isFile());
+        assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map_full.svg").isFile());
+        assertEquals(FRAMES + 1, Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath()).size());
 
         // Optional: keep a standalone page for visual review.
         String previewDir = System.getenv("SPACEPIXELS_PHOTOMETRY_PREVIEW_DIR");
@@ -124,9 +124,9 @@ public class PhotometryReportSectionWriterTest {
         assertFalse(html.contains("Variable Stars: Session Diagnostics"));
         assertFalse(html.contains("Variable Stars: Candidates"));
         assertFalse(html.contains("Variable Stars: Per-Frame Measurements"));
-        assertTrue(new File(exportDir, "photometry_stars.csv").isFile());
-        assertTrue(new File(exportDir, "photometry_lightcurves.csv").isFile());
-        assertEquals(2, Files.readAllLines(new File(exportDir, "photometry_frames.csv").toPath()).size());
+        assertTrue(new File(exportDir, "variable_stars/photometry_stars.csv").isFile());
+        assertTrue(new File(exportDir, "variable_stars/photometry_lightcurves.csv").isFile());
+        assertEquals(2, Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath()).size());
     }
 
     @Test

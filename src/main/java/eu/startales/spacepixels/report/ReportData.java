@@ -12,9 +12,14 @@ import java.util.*;
 
 /** Shared report identities and frame selection; never mutates the engine result. */
 final class ReportData {
-    /** One export finding with stable compatibility IDs/text; category semantics resolve through its ID. */
+    /**
+     * One export finding with stable compatibility IDs/text; category semantics resolve through its ID.
+     * {@code faintSearchDetections} counts the finding's detections from the faint-streak search, null when none (so
+     * the field is absent from the JSON).
+     */
     record Finding(String id, String category, String anchor, double x, double y,
-                   Double raDegrees, Double decDegrees, List<Integer> frames, Integer starId, String tier) {
+                   Double raDegrees, Double decDegrees, List<Integer> frames, Integer starId, String tier,
+                   Integer faintSearchDetections) {
         /** Resolves category behavior without parsing a display label or creating another identity. */
         FindingCategory categoryDescriptor() { return FindingCategory.fromId(id); }
     }
@@ -71,7 +76,7 @@ final class ReportData {
                     add(output, context, FindingCategory.VARIABLE_STAR.id(number), star.x, star.y, List.of(), star.id, star.tier.name());
                     Finding f = output.remove(output.size() - 1);
                     output.add(new Finding(f.id, f.category, FindingCategory.VARIABLE_STAR.anchor(number, presentation.hasCard(star)),
-                            f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier));
+                            f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier, f.faintSearchDetections));
                 }
             }
         }
@@ -120,9 +125,10 @@ final class ReportData {
             }
         }
         List<Integer> frames = points.stream().map(p -> p.sourceFrameIndex + 1).distinct().sorted().toList();
+        int faint = (int) points.stream().filter(p -> p.fromFaintStreakSearch).count();
         FindingCategory category = FindingCategory.fromId(id);
         out.add(new Finding(id, category.label(), category.anchor(category.number(id)),
-                x, y, ra, dec, frames, starId, tier));
+                x, y, ra, dec, frames, starId, tier, faint > 0 ? faint : null));
     }
 
     Finding variable(int starId) { return variablesByStar.get(starId); }

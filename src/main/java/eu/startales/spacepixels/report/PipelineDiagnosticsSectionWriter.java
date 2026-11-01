@@ -34,6 +34,11 @@ import eu.startales.spacepixels.util.Statistics;
 final class PipelineDiagnosticsSectionWriter {
 
     private static final Logger LOGGER = Logger.getLogger(PipelineDiagnosticsSectionWriter.class.getName());
+    /** The diagnostics pictures (F19); they show the median stack the detection used. */
+    static final String MASTER_STACK = ReportFiles.link(ReportFiles.DIAGNOSTICS, "master_stack.png");
+    private static final String MASK_OVERLAY = ReportFiles.link(ReportFiles.DIAGNOSTICS, "master_mask_overlay.png");
+    private static final String DRIFT_MAP = ReportFiles.link(ReportFiles.DIAGNOSTICS, "dither_drift_map.png");
+    private static final String CORNERS = ReportFiles.link(ReportFiles.DIAGNOSTICS, "dither_corners_sampled.gif");
 
     private PipelineDiagnosticsSectionWriter() {
     }
@@ -343,6 +348,40 @@ final class PipelineDiagnosticsSectionWriter {
                 writeTimingRow(report, "Faint streak fragment assembly (included in tracking)",
                         telemetry.trackerTelemetry.faintStreakFragmentTimeMs, telemetry.processingTimeMs, true);
             }
+        }
+        report.println("</tbody></table>");
+        writeFaintStreakSearch(report, telemetry.faintStreakSearchTelemetry);
+    }
+
+    /**
+     * What the faint-streak search did: its smoothing width and the counts of its streak-shaped objects through each
+     * step. Nothing when the search was off. The counts follow one population; the track counts describe the result.
+     */
+    static void writeFaintStreakSearch(PrintWriter report, io.github.ppissias.jtransient.telemetry.FaintStreakSearchTelemetry f) {
+        if (f == null) {
+            return;
+        }
+        report.println("<h3 id='faint-streak-search'>Faint Streak Search</h3>");
+        report.printf(Locale.US, "<p class='astro-note'>Every kept frame was searched a second time, on a copy smoothed with a "
+                        + "Gaussian of sigma %.2f px (%s). Only streak-shaped objects count. Their measurements, including peak "
+                        + "sigma, are made on the smoothed frame. Normal streaks keep their tracks; the search's streaks can only "
+                        + "extend or join them or form new ones.</p>%n", f.smoothingSigma,
+                f.widthFromStars ? "from the star size of " + f.widthFrames + " frames" : "no star size was measured, so a fixed width");
+        report.println("<table><thead><tr><th>Step</th><th>Objects</th></tr></thead><tbody>");
+        String[][] rows = {
+                {"Streak-shaped objects on the smoothed frames", String.valueOf(f.extractedStreaks)},
+                {"Removed by the star mask of the smoothed median stack", String.valueOf(f.removedByStarMask)},
+                {"Dropped as the same piece of trail as a normal streak", String.valueOf(f.duplicatesOfNormalStreaks)},
+                {"Linked", String.valueOf(f.linkedCandidates)},
+                {"In streak tracks or single-frame streaks", String.valueOf(f.detectionsInTracks)},
+                {"Discarded (in no streak; no other result receives them)", String.valueOf(f.discarded)},
+                {"Single-frame candidates rejected as double-star shapes", String.valueOf(f.rejectedBinaryStarShape)},
+                {"Streak findings with faint-search detections (found only by the search)",
+                        f.tracksWithFaintDetections + " (" + f.faintOnlyTracks + ")"},
+                {"Anomalies that joined such a streak", String.valueOf(f.anomaliesJoined)},
+        };
+        for (String[] row : rows) {
+            report.printf("<tr><td>%s</td><td>%s</td></tr>%n", ReportFormat.escapeHtml(row[0]), row[1]);
         }
         report.println("</tbody></table>");
     }
@@ -661,14 +700,14 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("</div>");
         if (hasMasterShieldDiagnostics) {
             BufferedImage masterImg = TrackVisualizationRenderer.createDisplayImage(reportContext.masterStackData, reportContext.settings);
-            TrackVisualizationRenderer.saveLosslessPng(masterImg, new File(reportContext.exportDir, "master_stack.png"));
+            TrackVisualizationRenderer.saveLosslessPng(masterImg, reportContext.file(MASTER_STACK));
 
             BufferedImage masterMaskImg = ReportMaps.createMasterMaskOverlay(reportContext.masterStackData, reportContext.masterVetoMask);
-            TrackVisualizationRenderer.saveLosslessPng(masterMaskImg, new File(reportContext.exportDir, "master_mask_overlay.png"));
+            TrackVisualizationRenderer.saveLosslessPng(masterMaskImg, reportContext.file(MASK_OVERLAY));
 
             report.println("<div class='image-container'>");
-            report.println("<div><a href='master_stack.png' target='_blank'><img loading='lazy' decoding='async' src='master_stack.png' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Median stack</small></center></div>");
-            report.println("<div><a href='master_mask_overlay.png' target='_blank'><img loading='lazy' decoding='async' src='master_mask_overlay.png' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Star mask (red)</small></center></div>");
+            report.println("<div><a href='" + MASTER_STACK + "' target='_blank'><img loading='lazy' decoding='async' src='" + MASTER_STACK + "' style='max-width: 400px;' alt='Master Stack' /></a><br/><center><small>Median stack</small></center></div>");
+            report.println("<div><a href='" + MASK_OVERLAY + "' target='_blank'><img loading='lazy' decoding='async' src='" + MASK_OVERLAY + "' style='max-width: 400px;' alt='Mask Overlay' /></a><br/><center><small>Star mask (red)</small></center></div>");
             report.println("</div>");
         } else {
             report.println("<div class='astro-note'>Preview images were not produced for this run, so the master shield and veto-mask links are omitted.</div>");
@@ -708,10 +747,9 @@ final class PipelineDiagnosticsSectionWriter {
         }
 
         BufferedImage driftImg = ReportMaps.createDriftMap(driftPoints, 300);
-        TrackVisualizationRenderer.saveLosslessPng(driftImg, new File(reportContext.exportDir, "dither_drift_map.png"));
+        TrackVisualizationRenderer.saveLosslessPng(driftImg, reportContext.file(DRIFT_MAP));
 
-        String cornerGifFile = "dither_corners_sampled.gif";
-        GifSequenceWriter.saveAnimatedGif(cornerFrames, new File(reportContext.exportDir, cornerGifFile), reportContext.settings.getGifBlinkSpeedMs(), reportContext.animations);
+        GifSequenceWriter.saveAnimatedGif(cornerFrames, reportContext.file(CORNERS), reportContext.settings.getGifBlinkSpeedMs(), reportContext.animations);
 
         report.println("<div class='panel'>");
         report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");
@@ -730,8 +768,8 @@ final class PipelineDiagnosticsSectionWriter {
                     + ReportFormat.escapeHtml(frames.toString()) + ".</div>");
         }
         report.println("<div class='image-container'>");
-        report.println("<div><a href='dither_drift_map.png' target='_blank'><img loading='lazy' decoding='async' src='dither_drift_map.png' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
-        report.println("<div><a href='" + cornerGifFile + "' target='_blank'><img loading='lazy' decoding='async' src='" + cornerGifFile + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
+        report.println("<div><a href='" + DRIFT_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + DRIFT_MAP + "' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
+        report.println("<div><a href='" + CORNERS + "' target='_blank'><img loading='lazy' decoding='async' src='" + CORNERS + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
         report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: #333; padding: 10px;'>");
         report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
         for (int i = 0; i < driftPoints.size(); i++) {

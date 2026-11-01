@@ -120,6 +120,46 @@ public final class WcsCoordinateTransformer {
         return corrected;
     }
 
+    /**
+     * The header cards of the solution as it was read: CTYPE, CRPIX, CRVAL, CD and any SIP terms, in insertion order.
+     * A fitted correction ({@link #isCorrected()}) has no standard card form and is not included.
+     */
+    public java.util.LinkedHashMap<String, Object> nominalHeaderCards() {
+        java.util.LinkedHashMap<String, Object> cards = new java.util.LinkedHashMap<>();
+        boolean sip = sipA != null && sipB != null;
+        cards.put("CTYPE1", sip ? "RA---TAN-SIP" : "RA---TAN");
+        cards.put("CTYPE2", sip ? "DEC--TAN-SIP" : "DEC--TAN");
+        cards.put("CRPIX1", crpix1);
+        cards.put("CRPIX2", crpix2);
+        cards.put("CRVAL1", Math.toDegrees(crval1Rad));
+        cards.put("CRVAL2", Math.toDegrees(crval2Rad));
+        cards.put("CD1_1", cd11);
+        cards.put("CD1_2", cd12);
+        cards.put("CD2_1", cd21);
+        cards.put("CD2_2", cd22);
+        if (sip) {
+            addSip(cards, "A", sipA);
+            addSip(cards, "B", sipB);
+            if (sipAp != null && sipBp != null) {
+                addSip(cards, "AP", sipAp);
+                addSip(cards, "BP", sipBp);
+            }
+        }
+        return cards;
+    }
+
+    private static void addSip(java.util.Map<String, Object> cards, String prefix, double[][] coefficients) {
+        int order = coefficients.length - 1;
+        cards.put(prefix + "_ORDER", order);
+        for (int p = 0; p <= order; p++) {
+            for (int q = 0; p + q <= order; q++) {
+                if (coefficients[p][q] != 0) {
+                    cards.put(prefix + "_" + p + "_" + q, coefficients[p][q]);
+                }
+            }
+        }
+    }
+
     /** Identifies the header solution, so a correction is applied only to the solution it was fitted to. */
     public String solutionKey() {
         return String.format(Locale.US, "%.4f,%.4f,%.9f,%.9f,%.10e,%.10e,%.10e,%.10e,%s", crpix1, crpix2,

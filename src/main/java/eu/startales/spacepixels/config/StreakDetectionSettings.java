@@ -4,6 +4,11 @@ import java.util.List;
 
 /** Typed definitions for the existing streak detection controls; hidden engine fields remain unbound. */
 public final class StreakDetectionSettings {
+    public static final DetectionSetting<Boolean> ENABLE_FAINT_STREAK_SEARCH = new DetectionSetting<>(
+            "enableFaintStreakSearch", "Faint Streak Search", "",
+            "Searches every frame a second time, on a copy smoothed to the size of the stars, for streaks too faint for the normal detection. Its streaks extend or join the normal streak tracks or form new ones, and a streak it finds in only one frame needs no peak sigma. Normal streaks keep their tracks, and no other result changes, except that anomalies on such a streak's path join it. Each frame is searched twice, so detection takes longer.",
+            false, Boolean.class, config -> config.enableFaintStreakSearch,
+            (config, value) -> config.enableFaintStreakSearch = value);
     public static final DetectionSetting<Double> SINGLE_STREAK_MIN_PEAK_SIGMA = new DetectionSetting<>(
             "singleStreakMinPeakSigma", "Single Streak Min Peak Sigma", "sigma",
             "Minimum peak signal-to-noise required for a streak seen in only one frame. Helps reject elongated noise and interpolation artifacts.",
@@ -45,6 +50,6 @@ public final class StreakDetectionSettings {
 
     /** Returns the immutable definitions in the existing page order. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(SINGLE_STREAK_MIN_PEAK_SIGMA, STREAK_MIN_ELONGATION, STREAK_MIN_PIXELS, ANGLE_TOLERANCE_DEGREES, STREAK_TIME_CONSISTENCY_TOLERANCE, ENABLE_FAINT_STREAK_FRAGMENTS, FAINT_STREAK_LINE_TOLERANCE);
+        return List.of(ENABLE_FAINT_STREAK_SEARCH, SINGLE_STREAK_MIN_PEAK_SIGMA, STREAK_MIN_ELONGATION, STREAK_MIN_PIXELS, ANGLE_TOLERANCE_DEGREES, STREAK_TIME_CONSISTENCY_TOLERANCE, ENABLE_FAINT_STREAK_FRAGMENTS, FAINT_STREAK_LINE_TOLERANCE);
     }
 }

@@ -73,8 +73,8 @@ public class TargetVisualizationSectionWriterTest {
             try (PrintWriter writer = new PrintWriter(new StringWriter())) {
                 TargetVisualizationSectionWriter.writeSection(writer, context);
             }
-            List<BufferedImage> narrow = readGifFrames(new File(context.exportDir, "moving_track_1_clean_narrow.gif"));
-            List<BufferedImage> wide = readGifFrames(new File(context.exportDir, "moving_track_1_clean_wide.gif"));
+            List<BufferedImage> narrow = readGifFrames(new File(context.exportDir, "moving_targets/moving_track_1_clean_narrow.gif"));
+            List<BufferedImage> wide = readGifFrames(new File(context.exportDir, "moving_targets/moving_track_1_clean_wide.gif"));
             assertEquals(3, wide.size());
             assertTrue("the fixture exceeds the output cap", Math.max(narrow.get(0).getWidth(), narrow.get(0).getHeight()) > 1000);
             for (int frame = 0; frame < 3; frame++) {
@@ -200,14 +200,14 @@ public class TargetVisualizationSectionWriterTest {
         assertTrue("Must contain download-controls container", html.contains("<div class='download-controls'"));
         assertTrue("Must contain 'Download animation:' label", html.contains("<strong style='color: #ccc;'>Download animation:</strong>"));
         assertTrue("Must contain Narrow download link",
-                html.contains("<a class='id-link' href='moving_track_1_clean_narrow.gif' download='moving_track_1_clean_narrow.gif' target='_blank'>Narrow</a>"));
+                html.contains("<a class='id-link' href='moving_targets/moving_track_1_clean_narrow.gif' download='moving_track_1_clean_narrow.gif' target='_blank'>Narrow</a>"));
         assertTrue("Must contain Wide download link",
-                html.contains("<a class='id-link' href='moving_track_1_clean_wide.gif' download='moving_track_1_clean_wide.gif' target='_blank'>Wide</a>"));
+                html.contains("<a class='id-link' href='moving_targets/moving_track_1_clean_wide.gif' download='moving_track_1_clean_wide.gif' target='_blank'>Wide</a>"));
 
         // 2. Verify clean GIF files exist on disk
-        File narrowGifFile = new File(exportDir, "moving_track_1_clean_narrow.gif");
-        File wideGifFile = new File(exportDir, "moving_track_1_clean_wide.gif");
-        File starCentricGifFile = new File(exportDir, "moving_track_1_star_centric.gif");
+        File narrowGifFile = new File(exportDir, "moving_targets/moving_track_1_clean_narrow.gif");
+        File wideGifFile = new File(exportDir, "moving_targets/moving_track_1_clean_wide.gif");
+        File starCentricGifFile = new File(exportDir, "moving_targets/moving_track_1_star_centric.gif");
 
         assertTrue("Narrow clean GIF must exist on disk", narrowGifFile.isFile());
         assertTrue("Wide clean GIF must exist on disk", wideGifFile.isFile());

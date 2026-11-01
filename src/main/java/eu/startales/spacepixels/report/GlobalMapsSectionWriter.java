@@ -6,7 +6,6 @@ import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
@@ -16,6 +15,10 @@ import java.util.List;
  * the low-level map renderers but keeping the HTML/export orchestration out of the main generator.
  */
 final class GlobalMapsSectionWriter {
+    private static final String TRACK_MAP = ReportFiles.link(ReportFiles.FIELD, "global_track_map.png");
+    private static final String MAP_BACKGROUND = ReportFiles.link(ReportFiles.FIELD, "report_map_background.png");
+    private static final String TRANSIENT_MAP = ReportFiles.link(ReportFiles.FIELD, "global_transient_map.png");
+    private static final String CLUSTER_MAP = ReportFiles.link(ReportFiles.FIELD, "rainbow_cluster_map.png");
 
     private GlobalMapsSectionWriter() {
     }
@@ -62,12 +65,12 @@ final class GlobalMapsSectionWriter {
                 reportContext.astrometryContext != null ? reportContext.astrometryContext.getTransformer() : null);
         paintVariableCandidates(globalMap, reportContext.data);
         DataAreaPresentation.paint(globalMap, reportContext.dataArea);
-        TrackVisualizationRenderer.saveLosslessPng(globalMap, new File(reportContext.exportDir, "global_track_map.png"));
+        TrackVisualizationRenderer.saveLosslessPng(globalMap, reportContext.file(TRACK_MAP));
 
         report.println("<div class='panel'>");
         report.println("<h2>Map of All Detections</h2>");
         report.println("<p class='section-lede'>");
-        report.println("Every classified track and single-frame event over the median stack. " +
+        report.println("Every classified track and single-frame event over the " + reportContext.fieldName() + ". " +
                 "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>LR#</strong> for local rescue candidates). " +
                 "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>. " +
                 "Measured variable-star candidates are circled in magenta as <strong>V#</strong>. Common-motion groups and unclassified detections are in their own sections."
@@ -78,8 +81,8 @@ final class GlobalMapsSectionWriter {
         int width = globalMap.getWidth(), height = globalMap.getHeight();
         int displayWidth = Math.min(1800, width);
         TrackVisualizationRenderer.saveLosslessPng(SessionPictureSectionWriter.downscale(
-                TrackVisualizationRenderer.createDisplayImage(backgroundData, reportContext.settings), displayWidth,
-                Math.max(1, (int) Math.round(height * displayWidth / (double) width))), new File(reportContext.exportDir, "report_map_background.png"));
+                reportContext.fieldDisplayImage(backgroundData), displayWidth,
+                Math.max(1, (int) Math.round(height * displayWidth / (double) width))), reportContext.file(MAP_BACKGROUND));
         report.println("<div class='report-map'><div class='map-category-controls'>");
         java.util.Map<String, String> categories = new java.util.LinkedHashMap<>();
         for (var finding : reportContext.data.findings) {
@@ -90,7 +93,7 @@ final class GlobalMapsSectionWriter {
         String catalogueLayer = sessionCatalogue.catalogue != null && reportContext.astrometryContext != null && reportContext.astrometryContext.getTransformer() != null
                 ? SessionPictureSectionWriter.catalogueLayer(sessionCatalogue.catalogue, reportContext.astrometryContext.getTransformer(), width, height) : null;
         if (catalogueLayer != null) report.println("<button class='id-link' type='button' data-report-category='catalogue' aria-pressed='false'>Catalogue</button>");
-        report.println("</div><div class='report-map-stage'><img loading='lazy' decoding='async' src='report_map_background.png' alt='Median stack with selectable detection layers' />");
+        report.println("</div><div class='report-map-stage'><img loading='lazy' decoding='async' src='" + MAP_BACKGROUND + "' alt='" + (reportContext.enhancedStack != null ? "Enhanced" : "Median") + " stack with selectable detection layers' />");
         String area = SessionPictureSectionWriter.areaLayer(reportContext, width, height);
         if (area != null) report.println(area);
         String detections = SessionPictureSectionWriter.detectionsLayer(reportContext, localRescueTracks, width, height);
@@ -99,7 +102,7 @@ final class GlobalMapsSectionWriter {
         if (variables != null) report.println(variables);
         if (catalogueLayer != null) report.println(catalogueLayer.replace("data-layer='catalogue'", "data-layer='catalogue' data-category='catalogue'"));
         report.println("</div></div>");
-        report.println("<p class='astro-note'>Click a detection marker to open its card. <a href='global_track_map.png' target='_blank'>Open full-size map</a></p>");
+        report.println("<p class='astro-note'>Click a detection marker to open its card. <a href='" + TRACK_MAP + "' target='_blank'>Open full-size map</a></p>");
         report.println("</div>");
     }
 
@@ -150,11 +153,11 @@ final class GlobalMapsSectionWriter {
             return;
         }
 
-        BufferedImage transientMap = ReportMaps.createGlobalTransientMap(backgroundData, allTransients, reportContext.settings);
-        TrackVisualizationRenderer.saveLosslessPng(transientMap, new File(reportContext.exportDir, "global_transient_map.png"));
+        BufferedImage transientMap = ReportMaps.createGlobalTransientMap(reportContext.fieldDisplayImage(backgroundData), allTransients, reportContext.settings);
+        TrackVisualizationRenderer.saveLosslessPng(transientMap, reportContext.file(TRANSIENT_MAP));
 
         BufferedImage rainbowMap = ReportMaps.createRainbowClusterMap(backgroundData, allTransients, reportContext.settings);
-        TrackVisualizationRenderer.saveLosslessPng(rainbowMap, new File(reportContext.exportDir, "rainbow_cluster_map.png"));
+        TrackVisualizationRenderer.saveLosslessPng(rainbowMap, reportContext.file(CLUSTER_MAP));
 
         report.println("<div class='panel'>");
         report.println("<h2>Time Maps of Everything That Survived the Star Mask</h2>");
@@ -164,12 +167,12 @@ final class GlobalMapsSectionWriter {
         report.println("<div style='flex: 1; min-width: 400px;'>");
         report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Exact Footprint Map</h4>");
         report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>The exact pixels of every detection, objects and streaks, at full resolution.</p>");
-        report.println("<a href='global_transient_map.png' target='_blank'><img loading='lazy' decoding='async' src='global_transient_map.png' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a>");
+        report.println("<a href='" + TRANSIENT_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + TRANSIENT_MAP + "' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a>");
         report.println("<div style='display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:#aaa;'><span>Start</span><span style='flex:0 0 220px; height:12px; border-radius:3px; background:linear-gradient(90deg, hsl(240,100%,50%), hsl(180,100%,50%), hsl(120,100%,50%), hsl(60,100%,50%), hsl(0,100%,50%));'></span><span>End</span></div></div>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
         report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
         report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Every non-star detection, including streak pieces, as a dot at its centre. Dots of one colour are the same frame, so a line of one colour is often a streak. A rainbow chain changed frame as it moved. Cropped around the activity, downscaled and dilated so close neighbours merge. Linking a piece onto a streak does not remove it from this map.</p>");
-        report.println("<div style='overflow-x: auto;'><a href='rainbow_cluster_map.png' target='_blank'><img loading='lazy' decoding='async' src='rainbow_cluster_map.png' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
+        report.println("<div style='overflow-x: auto;'><a href='" + CLUSTER_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + CLUSTER_MAP + "' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
         report.println("</div>");
         report.println("</div>");
     }

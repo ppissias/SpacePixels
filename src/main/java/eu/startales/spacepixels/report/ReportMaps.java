@@ -262,7 +262,7 @@ final class ReportMaps {
                                               List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters,
                                               List<DetectedObject> deepStackCandidates, DetectionReportContext context) {
         VisualizationSettings settings = context.settings;
-        BufferedImage grayBg = createDisplayImage(backgroundData, settings);
+        BufferedImage grayBg = context.fieldDisplayImage(backgroundData);
         BufferedImage rgbMap = new BufferedImage(grayBg.getWidth(), grayBg.getHeight(), BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
         g2d.drawImage(grayBg, 0, 0, null);
@@ -502,11 +502,11 @@ final class ReportMaps {
     }
 
     // --- GLOBAL TRANSIENT MAP RENDERER ---
-    static BufferedImage createGlobalTransientMap(short[][] backgroundData, List<List<DetectedObject>> allTransients, VisualizationSettings settings) {
-        int width = backgroundData[0].length;
-        int height = backgroundData.length;
+    /** The transient map over the field picture {@code grayBg} (see {@link DetectionReportContext#fieldDisplayImage}). */
+    static BufferedImage createGlobalTransientMap(BufferedImage grayBg, List<List<DetectedObject>> allTransients, VisualizationSettings settings) {
+        int width = grayBg.getWidth();
+        int height = grayBg.getHeight();
 
-        BufferedImage grayBg = createDisplayImage(backgroundData, settings);
         BufferedImage rgbMap = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
 

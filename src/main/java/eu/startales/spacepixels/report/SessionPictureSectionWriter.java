@@ -45,8 +45,10 @@ final class SessionPictureSectionWriter {
 
     private static final Logger LOGGER = Logger.getLogger(SessionPictureSectionWriter.class.getName());
 
-    static final String STACK_FILE = "session_stack.jpg";
-    static final String MASK_FILE = "session_star_mask.png";
+    static final String STACK_FILE = ReportFiles.link(ReportFiles.FIELD, "session_stack.jpg");
+    static final String MASK_FILE = ReportFiles.link(ReportFiles.FIELD, "session_star_mask.png");
+    /** The full-size picture of the enhanced stack; without one, the full-size link opens the diagnostics' median stack. */
+    static final String ENHANCED_FULL_FILE = ReportFiles.link(ReportFiles.FIELD, "enhanced_stack_full.jpg");
     /** The width of the picture files; the stack at full size stays in the diagnostics. */
     private static final int PICTURE_WIDTH = 1800;
     private static final Color MASK_COLOR = new Color(255, 70, 70);
@@ -86,12 +88,15 @@ final class SessionPictureSectionWriter {
         int pictureHeight = Math.max(1, (int) Math.round(height * scale));
         boolean hasMask;
         try {
-            writeJpeg(downscale(TrackVisualizationRenderer.createDisplayImage(stack, context.settings), pictureWidth, pictureHeight),
-                    new File(context.exportDir, STACK_FILE));
+            BufferedImage field = context.fieldDisplayImage(stack);
+            writeJpeg(downscale(field, pictureWidth, pictureHeight), context.file(STACK_FILE));
+            if (context.enhancedStack != null) {
+                writeJpeg(field, context.file(ENHANCED_FULL_FILE));
+            }
             hasMask = context.masterVetoMask != null && context.masterVetoMask.length == height;
             if (hasMask) {
                 ImageIO.write(maskLayer(context.masterVetoMask, width, height, pictureWidth, pictureHeight), "png",
-                        new File(context.exportDir, MASK_FILE));
+                        context.file(MASK_FILE));
             }
         } catch (IOException | RuntimeException e) {
             report.println("<div class='astro-note'>The session picture could not be written: "
@@ -120,17 +125,19 @@ final class SessionPictureSectionWriter {
                 "Tracks and single-frame events, named as on the detection map."));
         report.println(button("variables", "Detected variables", variables != null, variables != null,
                 "Measured variable-star candidates V1, V2 and so on; click a label for the candidate."));
-        report.println("<a class='sp-full' href='master_stack.png' target='_blank'>Full size</a>");
+        String fullSize = context.enhancedStack != null ? ENHANCED_FULL_FILE : PipelineDiagnosticsSectionWriter.MASTER_STACK;
+        report.println("<a class='sp-full' href='" + fullSize + "' target='_blank'>Full size</a>");
         report.println("</div>");
-        report.println("<p class='sp-caption sp-help'>Click the layer buttons to show or hide overlays on the median stack. "
+        report.println("<p class='sp-caption sp-help'>Click the layer buttons to show or hide overlays on the " + context.fieldName() + ". "
                 + "Click a detection category below to show or hide that class; click a label on the picture to open its finding.</p>");
         if (detections != null || variables != null) {
             report.println(GlobalMapsSectionWriter.detectionLegendHtml(context, localRescueTracks, true));
             report.println("<div class='sp-caption'>Labels use a class and an object number: for example, A12 is single-frame anomaly 12.</div>");
         }
         report.println("<div class='sp-frame' data-mask-hover='off'>");
-        report.println("<a href='master_stack.png' target='_blank'><img loading='eager' decoding='async' class='sp-base' src='" + STACK_FILE
-                + "' width='" + pictureWidth + "' height='" + pictureHeight + "' alt='Median stack of the session' /></a>");
+        report.println("<a href='" + fullSize + "' target='_blank'><img loading='eager' decoding='async' class='sp-base' src='" + STACK_FILE
+                + "' width='" + pictureWidth + "' height='" + pictureHeight + "' alt='" + (context.enhancedStack != null
+                ? "Enhanced stack" : "Median stack") + " of the session' /></a>");
         if (hasMask) {
             report.println("<img loading='lazy' decoding='async' class='sp-layer' data-layer='mask' src='" + MASK_FILE + "' alt='' style='display:none;' />");
         }
@@ -148,9 +155,23 @@ final class SessionPictureSectionWriter {
         if (detections != null || variables != null) {
             report.println(GlobalMapsSectionWriter.detectionLegendHtml(context, localRescueTracks));
         }
-        report.println("<div class='sp-caption'>The median stack of the frames kept"
+        String what = context.enhancedStack != null
+                ? "The enhanced stack of the " + context.enhancedStack.frames + " frames kept: a mean that leaves out hot pixels, trails "
+                        + "and other outliers and gives noisier frames less weight, so it shows fainter detail with less noise than "
+                        + "the median stack. The detection compared against the median stack, shown under Diagnostics"
+                : "The median stack of the frames kept";
+        report.println("<div class='sp-caption'>" + what
                 + (catalogueLayer != null && transformer != null && transformer.isCorrected() ? "; catalogue positions use the plate solution corrected to the stars" : "")
                 + ". Click the picture for the full-size stack.</div>");
+        File fits = EnhancedStackFile.in(context.exportDir);
+        if (context.enhancedStack != null && fits.isFile()) {
+            report.println("<div class='sp-caption'>The enhanced stack as a 32-bit FITS file, linear, for further processing: <a href='"
+                    + EnhancedStackFile.LINK + "'>" + EnhancedStackFile.LINK + "</a> (" + String.format(java.util.Locale.US, "%.0f MB", fits.length() / 1e6) + ").</div>");
+        } else if (context.enhancedStack != null || context.enhancedStackProblem != null) {
+            report.println("<div class='sp-caption'>The enhanced stack " + (context.enhancedStack == null
+                    ? "could not be built (" + ReportFormat.escapeHtml(context.enhancedStackProblem) + "); the pictures of the field show the median stack."
+                    : "file could not be written.") + "</div>");
+        }
         if (area != null && !context.dataAreaText.isEmpty()) {
             report.println("<div class='sp-caption'>" + ReportFormat.escapeHtml(context.dataAreaText)
                     + " It is outlined in blue.</div>");

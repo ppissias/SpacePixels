@@ -26,8 +26,8 @@ import java.util.Set;
 
 final class UnclassifiedTransientSectionWriter {
 
-    private static final String BACKGROUND_FILE = "unclassified_median_background.png";
-    private static final String COMPOSITE_FILE = "unclassified_transients.png";
+    private static final String BACKGROUND_FILE = ReportFiles.link(ReportFiles.FIELD, "unclassified_median_background.png");
+    private static final String COMPOSITE_FILE = ReportFiles.link(ReportFiles.FIELD, "unclassified_transients.png");
     private static final int INSPECTION_SIZE = 80;
     /** Folder of the per-detection frame strips used by the cutout animation. */
     private static final String FRAMES_DIR = "unclassified_frames";
@@ -151,9 +151,9 @@ final class UnclassifiedTransientSectionWriter {
         int height = background.getHeight();
         int markerRadius = Math.max(7, Math.min(28, Math.round(width / 160.0f)));
         List<Marker> markers = collectMarkers(remaining, width, height);
-        TrackVisualizationRenderer.saveLosslessPng(background, new File(context.exportDir, BACKGROUND_FILE));
+        TrackVisualizationRenderer.saveLosslessPng(background, context.file(BACKGROUND_FILE));
         TrackVisualizationRenderer.saveLosslessPng(createComposite(background, markers, markerRadius),
-                new File(context.exportDir, COMPOSITE_FILE));
+                context.file(COMPOSITE_FILE));
         int animatedCount = writeFrameStrips(context, markers, width, height, rejectedFrames);
         java.util.TreeSet<Integer> frameNumbers = new java.util.TreeSet<>();
         for (Marker marker : markers) frameNumbers.add(marker.sourceFrame() + 1);
@@ -189,7 +189,7 @@ final class UnclassifiedTransientSectionWriter {
         report.println("<div class='unclassified-map-column'>");
         report.println("<div class='unclassified-map' id='unclassified-map'>");
         report.println("<img loading='lazy' decoding='async' id='unclassified-background' src='" + BACKGROUND_FILE + "' width='" + width
-                + "' height='" + height + "' alt='Subdued " + (medianAvailable ? "median stack" : "first frame") + "' />");
+                + "' height='" + height + "' alt='Subdued " + (medianAvailable ? context.fieldName() : "first frame") + "' />");
         report.println("<svg viewBox='0 0 " + width + " " + height
                 + "' preserveAspectRatio='none' role='img' aria-label='Time-colored unclassified transient markers'>");
         for (Marker marker : markers) {
@@ -303,7 +303,7 @@ final class UnclassifiedTransientSectionWriter {
     }
 
     private static BufferedImage createMutedBackground(short[][] imageData, DetectionReportContext context) {
-        BufferedImage gray = TrackVisualizationRenderer.createDisplayImage(imageData, context.settings);
+        BufferedImage gray = context.fieldDisplayImage(imageData);
         BufferedImage muted = new BufferedImage(gray.getWidth(), gray.getHeight(), BufferedImage.TYPE_INT_RGB);
         for (int row = 0; row < gray.getHeight(); row++) {
             for (int column = 0; column < gray.getWidth(); column++) {
@@ -391,11 +391,11 @@ final class UnclassifiedTransientSectionWriter {
             if (!usable) {
                 continue;
             }
-            String fileName = FRAMES_DIR + "/U" + marker.id + ".png";
+            String fileName = ReportFiles.link(FRAMES_DIR, "U" + marker.id + ".png");
             TrackVisualizationRenderer.saveLosslessPng(
                     stretchStrip(strip, detectionPosition * cropHeight, cropHeight,
                             context.settings.getAutoStretchBlackSigma(), context.settings.getAutoStretchWhiteSigma()),
-                    new File(context.exportDir, fileName));
+                    context.file(fileName));
             marker.stripFile = fileName;
             marker.stripFrames = frames;
             marker.stripDetectionPosition = detectionPosition;

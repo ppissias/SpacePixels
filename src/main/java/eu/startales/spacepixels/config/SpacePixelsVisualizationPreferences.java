@@ -22,6 +22,7 @@ public class SpacePixelsVisualizationPreferences {
     public double autoStretchWhiteSigma = DEFAULTS.getAutoStretchWhiteSigma();
     public int gifBlinkSpeedMs = DEFAULTS.getGifBlinkSpeedMs();
     public int trackCropPadding = DEFAULTS.getTrackCropPadding();
+    public boolean enhancedStack = DEFAULTS.isEnhancedStack();
 
     /** The saved form of {@code settings}. */
     public static SpacePixelsVisualizationPreferences of(VisualizationSettings settings) {
@@ -34,6 +35,7 @@ public class SpacePixelsVisualizationPreferences {
         preferences.autoStretchWhiteSigma = settings.getAutoStretchWhiteSigma();
         preferences.gifBlinkSpeedMs = settings.getGifBlinkSpeedMs();
         preferences.trackCropPadding = settings.getTrackCropPadding();
+        preferences.enhancedStack = settings.isEnhancedStack();
         return preferences;
     }
 
@@ -46,6 +48,7 @@ public class SpacePixelsVisualizationPreferences {
                 .withAutoStretchBlackSigma(autoStretchBlackSigma)
                 .withAutoStretchWhiteSigma(autoStretchWhiteSigma)
                 .withGifBlinkSpeedMs(gifBlinkSpeedMs)
-                .withTrackCropPadding(trackCropPadding);
+                .withTrackCropPadding(trackCropPadding)
+                .withEnhancedStack(enhancedStack);
     }
 }

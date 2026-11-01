@@ -10,6 +10,7 @@
   "enableBinaryStarLikeStreakShapeVeto": true,
   "enableFaintStreakFragments": true,
   "faintStreakLineTolerance": 2.0,
+  "enableFaintStreakSearch": true,
   "masterSigmaMultiplier": 2.25,
   "masterMinDetectionPixels": 3,
   "masterGrowSigmaMultiplier": 0.0,

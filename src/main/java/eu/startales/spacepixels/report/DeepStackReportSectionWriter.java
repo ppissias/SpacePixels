@@ -8,7 +8,6 @@ import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -129,29 +128,29 @@ final class DeepStackReportSectionWriter {
         Double resolvedAuxiliaryMaskOverlap = candidateDiagnostics != null ? candidateDiagnostics.medianMaskOverlapFraction : null;
 
         String prefix = "slow_mover_" + candidateNumber;
-        String primaryStackFileName = prefix + "_maximum_stack.png";
+        String primaryStackFileName = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_maximum_stack.png");
         String masterFileName = null;
-        String auxiliaryMaskFileName = prefix + "_median_mask.png";
-        String diffFileName = prefix + "_diff.png";
-        String gifFileName = prefix + "_anim.gif";
-        String shapeFileName = prefix + "_shape.png";
+        String auxiliaryMaskFileName = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_median_mask.png");
+        String diffFileName = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_diff.png");
+        String gifFileName = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_anim.gif");
+        String shapeFileName = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_shape.png");
 
         short[][] croppedPrimaryData = null;
         if (context.slowMoverStackData != null) {
             croppedPrimaryData = TrackVisualizationRenderer.robustEdgeAwareCrop(context.slowMoverStackData, cx, cy, cropSize, cropSize);
             BufferedImage primaryImage = TrackVisualizationRenderer.createDisplayImage(croppedPrimaryData, context.settings);
-            TrackVisualizationRenderer.saveLosslessPng(primaryImage, new File(context.exportDir, primaryStackFileName));
+            TrackVisualizationRenderer.saveLosslessPng(primaryImage, context.file(primaryStackFileName));
         }
 
         if (context.masterStackData != null) {
-            masterFileName = prefix + "_sm_stack_master_stack.png";
+            masterFileName = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_sm_stack_master_stack.png");
             short[][] croppedMasterData = TrackVisualizationRenderer.robustEdgeAwareCrop(context.masterStackData, cx, cy, cropSize, cropSize);
             BufferedImage masterImage = TrackVisualizationRenderer.createDisplayImage(croppedMasterData, context.settings);
-            TrackVisualizationRenderer.saveLosslessPng(masterImage, new File(context.exportDir, masterFileName));
+            TrackVisualizationRenderer.saveLosslessPng(masterImage, context.file(masterFileName));
 
             if (croppedPrimaryData != null) {
                 BufferedImage diffImage = createSlowMoverDifferenceMap(croppedPrimaryData, croppedMasterData);
-                TrackVisualizationRenderer.saveLosslessPng(diffImage, new File(context.exportDir, diffFileName));
+                TrackVisualizationRenderer.saveLosslessPng(diffImage, context.file(diffFileName));
             }
         }
 
@@ -166,7 +165,7 @@ final class DeepStackReportSectionWriter {
                     detection,
                     AUXILIARY_MASK_COLOR,
                     context.settings);
-            TrackVisualizationRenderer.saveLosslessPng(maskImage, new File(context.exportDir, auxiliaryMaskFileName));
+            TrackVisualizationRenderer.saveLosslessPng(maskImage, context.file(auxiliaryMaskFileName));
         }
 
         if (context.slowMoverMedianVetoMask != null && maskReferenceData != null && resolvedAuxiliaryMaskOverlap == null) {
@@ -184,7 +183,7 @@ final class DeepStackReportSectionWriter {
                 startX,
                 startY,
                 false);
-        TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
+        TrackVisualizationRenderer.saveLosslessPng(shapeImage, context.file(shapeFileName));
 
         if (!context.rawFrames.isEmpty()) {
             List<Integer> sampledIndices = context.sampleFrames(new HashSet<>(), 10);
@@ -196,7 +195,7 @@ final class DeepStackReportSectionWriter {
                 graphics.drawString(TrackVisualizationRenderer.frameLabel(context, frameIndex), 8, 16); graphics.dispose();
                 gifFrames.add(image);
             }
-            GifSequenceWriter.saveAnimatedGif(gifFrames, new File(context.exportDir, gifFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+            GifSequenceWriter.saveAnimatedGif(gifFrames, context.file(gifFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
         }
 
         report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");

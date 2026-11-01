@@ -10,7 +10,6 @@ import java.awt.Color;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.time.Instant;
@@ -91,7 +90,7 @@ final class TargetVisualizationSectionWriter {
                     : "";
 
             report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.SINGLE_STREAK, counter) + "'>");
-            report.println("<div class='detection-title'>Single Streak Event " + FindingCategory.SINGLE_STREAK.id(counter) + partBadge + "</div>");
+            report.println("<div class='detection-title'>Single Streak Event " + FindingCategory.SINGLE_STREAK.id(counter) + partBadge + faintSearchBadge(track) + "</div>");
             report.print(buildSingleFrameEventSummaryHtml(track, context.fitsFiles));
 
             short[][] croppedData = TrackVisualizationRenderer.robustEdgeAwareCrop(
@@ -101,10 +100,10 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
             BufferedImage streakImage = TrackVisualizationRenderer.createDisplayImage(croppedData, context.settings);
-            String streakFileName = "single_streak_" + counter + ".png";
-            TrackVisualizationRenderer.saveLosslessPng(streakImage, new File(context.exportDir, streakFileName));
+            String streakFileName = ReportFiles.link(FindingCategory.SINGLE_STREAK, "single_streak_" + counter + ".png");
+            TrackVisualizationRenderer.saveLosslessPng(streakImage, context.file(streakFileName));
 
-            String shapeFileName = "single_streak_" + counter + "_shape.png";
+            String shapeFileName = ReportFiles.link(FindingCategory.SINGLE_STREAK, "single_streak_" + counter + "_shape.png");
             BufferedImage streakShapeImage = TrackVisualizationRenderer.createSingleStreakShapeImage(
                     track.points,
                     cropBounds.trackBoxWidth,
@@ -112,7 +111,7 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.startX,
                     cropBounds.startY,
                     false);
-            TrackVisualizationRenderer.saveLosslessPng(streakShapeImage, new File(context.exportDir, shapeFileName));
+            TrackVisualizationRenderer.saveLosslessPng(streakShapeImage, context.file(shapeFileName));
 
             report.println("<div class='image-container'>");
             report.println(footprintFigure(streakFileName, shapeFileName));
@@ -154,20 +153,20 @@ final class TargetVisualizationSectionWriter {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
             List<DetectedObject> framePoints = uniqueFramePoints(track);
 
-            String shapeFileName = "streak_track_" + counter + "_shape.png";
+            String shapeFileName = ReportFiles.link(FindingCategory.STREAK_TRACK, "streak_track_" + counter + "_shape.png");
             BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
                     track,
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight,
                     cropBounds.startX,
                     cropBounds.startY);
-            TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
+            TrackVisualizationRenderer.saveLosslessPng(shapeImage, context.file(shapeFileName));
 
-            String starFileName = "streak_track_" + counter + "_star_centric.gif";
+            String starFileName = ReportFiles.link(FindingCategory.STREAK_TRACK, "streak_track_" + counter + "_star_centric.gif");
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE,
                     null, TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
-                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+                    context.file(starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             SkyOrientationOverlay streakTrackOverlay = buildSkyOrientationOverlay(
                     context.astrometryContext,
                     cropBounds.fixedCenterX,
@@ -177,7 +176,7 @@ final class TargetVisualizationSectionWriter {
 
             report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: #ffcc33;'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-            report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + "</div>");
+            report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + faintSearchBadge(track) + "</div>");
             report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
             report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, context.fitsFiles));
 
@@ -224,19 +223,19 @@ final class TargetVisualizationSectionWriter {
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
             List<DetectedObject> framePoints = uniqueFramePoints(track);
 
-            String shapeFileName = "moving_track_" + counter + "_shape.png";
+            String shapeFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_shape.png");
             BufferedImage shapeImage = TrackVisualizationRenderer.createTrackShapeImage(
                     track,
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight,
                     cropBounds.startX,
                     cropBounds.startY);
-            TrackVisualizationRenderer.saveLosslessPng(shapeImage, new File(context.exportDir, shapeFileName));
+            TrackVisualizationRenderer.saveLosslessPng(shapeImage, context.file(shapeFileName));
 
-            String objectFileName = "moving_track_" + counter + "_object_centric.gif";
-            String starFileName = "moving_track_" + counter + "_star_centric.gif";
-            String cleanNarrowFileName = "moving_track_" + counter + "_clean_narrow.gif";
-            String cleanWideFileName = "moving_track_" + counter + "_clean_wide.gif";
+            String objectFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_object_centric.gif");
+            String starFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_star_centric.gif");
+            String cleanNarrowFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_clean_narrow.gif");
+            String cleanWideFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_clean_wide.gif");
 
             int[] frameDims = extractFrameDimensions(context);
             int[] wideDimensions = computeWideSourceDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
@@ -244,18 +243,18 @@ final class TargetVisualizationSectionWriter {
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
                     context.settings.getTrackObjectCentricCropSize(), context.settings.getTrackObjectCentricCropSize(), context.settings)).iterator(),
-                    new File(context.exportDir, objectFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+                    context.file(objectFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE, null,
                     TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false)).iterator(),
-                    new File(context.exportDir, starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+                    context.file(starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
                     cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, context.settings)).iterator(),
-                    new File(context.exportDir, cleanNarrowFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+                    context.file(cleanNarrowFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> createWideDownloadFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, wideDimensions, context.settings)).iterator(),
-                    new File(context.exportDir, cleanWideFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
+                    context.file(cleanWideFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);
             SkyOrientationOverlay movingObjectOverlay = meanCenter != null
@@ -301,8 +300,8 @@ final class TargetVisualizationSectionWriter {
 
             report.println("<div class='download-controls' style='margin-top: 8px; margin-bottom: 16px;'>");
             report.println("<strong style='color: #ccc;'>Download animation:</strong> <a class='id-link' href='"
-                    + cleanNarrowFileName + "' download='" + cleanNarrowFileName + "' target='_blank'>Narrow</a> <a class='id-link' href='"
-                    + cleanWideFileName + "' download='" + cleanWideFileName + "' target='_blank'>Wide</a>");
+                    + cleanNarrowFileName + "' download='" + ReportFiles.name(cleanNarrowFileName) + "' target='_blank'>Narrow</a> <a class='id-link' href='"
+                    + cleanWideFileName + "' download='" + ReportFiles.name(cleanWideFileName) + "' target='_blank'>Wide</a>");
             report.println("</div>");
 
             report.println("<div style='margin-bottom: 20px;'>");
@@ -325,8 +324,8 @@ final class TargetVisualizationSectionWriter {
                         tightCropSize,
                         tightCropSize);
                 BufferedImage tightImage = TrackVisualizationRenderer.createDisplayImage(tightCropData, context.settings);
-                String tightFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_tight.png";
-                TrackVisualizationRenderer.saveLosslessPng(tightImage, new File(context.exportDir, tightFileName));
+                String tightFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_pt_" + (i + 1) + "_tight.png");
+                TrackVisualizationRenderer.saveLosslessPng(tightImage, context.file(tightFileName));
                 report.println("<div><a href='" + tightFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + tightFileName + "' alt='Pt " + (i + 1) + "' style='max-width: none; min-width: 50px;' /></a><br/><center><small>[" + (i + 1) + "]</small></center></div>");
 
                 int startX = (int) Math.round(point.x) - (tightCropSize / 2);
@@ -338,8 +337,8 @@ final class TargetVisualizationSectionWriter {
                         startX,
                         startY,
                         false);
-                String tightShapeFileName = "moving_track_" + counter + "_pt_" + (i + 1) + "_shape.png";
-                TrackVisualizationRenderer.saveLosslessPng(tightShapeImage, new File(context.exportDir, tightShapeFileName));
+                String tightShapeFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_pt_" + (i + 1) + "_shape.png");
+                TrackVisualizationRenderer.saveLosslessPng(tightShapeImage, context.file(tightShapeFileName));
 
                 shapeEvolutionHtml.append("<div><a href='")
                         .append(tightShapeFileName)
@@ -378,7 +377,29 @@ final class TargetVisualizationSectionWriter {
                 (int) detection.pixelArea,
                 detection.elongation,
                 formatAxisAngleDegrees(detection.angle),
-                detection.peakSigma);
+                detection.peakSigma)
+                + (detection.fromFaintStreakSearch ? " (faint-streak search: measured on the smoothed frame)" : "");
+    }
+
+    /**
+     * States what the faint-streak search contributed to a streak finding: found it (every detection is its own) or
+     * includes some of its detections. Empty when it contributed nothing. It claims nothing about a run without it.
+     */
+    static String faintSearchBadge(Track track) {
+        int faint = 0;
+        for (DetectedObject point : track.points) {
+            if (point != null && point.fromFaintStreakSearch) {
+                faint++;
+            }
+        }
+        if (faint == 0) {
+            return "";
+        }
+        String text = faint == track.points.size() ? "Found by the faint-streak search"
+                : "Includes " + faint + (faint == 1 ? " detection" : " detections") + " from the faint-streak search";
+        return " <span title='Found on frames smoothed to the size of the stars; the measurements of these detections are made on the smoothed frame' "
+                + "style='background: #4b3b7a; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
+                + text + "</span>";
     }
 
     private static String buildMovingTrackMetricsText(DetectedObject detection) {

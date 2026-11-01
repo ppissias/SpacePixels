@@ -73,8 +73,9 @@ public class ReportExportConsistencyTest {
         while (matcher.find()) assertTrue("Missing target: " + matcher.group(1), ids.contains(matcher.group(1)));
         JsonObject data = JsonParser.parseString(Files.readString(new File(included, "report-data.json").toPath())).getAsJsonObject();
         for (var finding : data.getAsJsonArray("findings")) assertTrue(ids.contains(finding.getAsJsonObject().get("anchor").getAsString()));
-        assertTrue(Files.readString(new File(included, "photometry_stars.csv").toPath()).contains(",candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec"));
-        assertTrue(new File(included, "moving_track_1_star_centric.gif.poster.png").isFile());
+        assertTrue(Files.readString(new File(included, "variable_stars/photometry_stars.csv").toPath()).contains(",candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec"));
+        assertTrue(new File(included, "moving_targets/moving_track_1_star_centric.gif.poster.png").isFile());
+        assertReportFilesResolve(included);
         File excluded = temporary.newFolder("excluded");
         ReportExporter.export(new ReportRequest(result, frames, files, excluded, config, runContext(files), new ReportInclusion(true, false, false, false, false, false, false), null));
         html = Files.readString(new File(excluded, "detection_report.html").toPath());
@@ -100,7 +101,7 @@ public class ReportExportConsistencyTest {
         assertTrue(html.contains("Map of All Detections"));
         assertTrue(html.contains("data-report-category='V'"));
         assertTrue(html.contains("href='#variable-v1'"));
-        assertTrue(new File(variablesOnly, "global_track_map.png").isFile());
+        assertTrue(new File(variablesOnly, "field/global_track_map.png").isFile());
         assertEquals(measurements, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(analysis));
     }
     @Test public void localRescueAndCommonMotionCanBeOmittedIndependentlyWithoutGeneratingTheirAssets() throws Exception {
@@ -153,22 +154,62 @@ public class ReportExportConsistencyTest {
             assertEquals(motion, html.contains("id='finding-cm1'"));
             assertEquals(rescue, data.contains("\"id\": \"LR1\""));
             assertEquals(motion, data.contains("\"id\": \"CM1\""));
+            // Each category's pictures are in its own folder, which exists only when the category has pictures.
             var names = Arrays.asList(Objects.requireNonNull(export.list()));
-            assertEquals(rescue, names.stream().anyMatch(n -> n.startsWith("micro_drift_")));
-            assertEquals(motion, names.stream().anyMatch(n -> n.startsWith("common_motion_")));
-            assertEquals(rescue, new File(export, "micro_drift_1_context.gif").isFile());
-            assertEquals(motion, new File(export, "common_motion_1.gif").isFile());
+            assertEquals(rescue, names.contains("local_rescue"));
+            assertEquals(motion, names.contains("common_motion"));
+            assertFalse(names.stream().anyMatch(n -> n.startsWith("micro_drift_") || n.startsWith("local_rescue_") || n.startsWith("common_motion_")));
+            assertEquals(rescue, new File(export, "local_rescue/local_rescue_1_context.gif").isFile());
+            assertEquals(motion, new File(export, "common_motion/common_motion_1.gif").isFile());
             // Common motion is folded under Likely Artifacts after the results; local rescue stays with the results.
             int artifacts = html.indexOf("<details class='report-group' id='likely-artifacts'>");
             assertEquals(motion, artifacts >= 0);
             assertEquals(motion, html.contains("href='#likely-artifacts'"));
             if (motion) {
                 assertTrue(html.indexOf("id='finding-cm1'") > artifacts);
-                assertTrue(hasColour(new File(export, "common_motion_1_trail.png")));
+                assertTrue(hasColour(new File(export, "common_motion/common_motion_1_trail.png")));
             }
             if (rescue && motion) assertTrue(html.indexOf("id='finding-lr1'") < artifacts);
+            assertReportFilesResolve(export);
         }
         assertEquals(original, new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(residual));
+    }
+
+    /**
+     * The report folder layout (F19): only the entry points and known folders at the top; every local link, picture and
+     * frame strip in the HTML names an existing file, and every animation has its metadata, poster and frame sheets
+     * beside it.
+     */
+    private static void assertReportFilesResolve(File report) throws IOException {
+        Set<String> folders = new HashSet<>(List.of(ReportFiles.FIELD, ReportFiles.DIAGNOSTICS, EnhancedStackFile.FOLDER, "unclassified_frames"));
+        for (FindingCategory category : FindingCategory.values()) folders.add(category.folder());
+        for (File entry : Objects.requireNonNull(report.listFiles())) {
+            if (entry.isDirectory()) assertTrue("Unknown folder " + entry.getName(), folders.contains(entry.getName()));
+            else assertTrue("Unexpected top-level file " + entry.getName(),
+                    List.of("detection_report.html", "report-data.json", "detection_config.json").contains(entry.getName()));
+        }
+        String html = Files.readString(new File(report, "detection_report.html").toPath());
+        var matcher = Pattern.compile("(?:src|href|data-strip)=['\"]([^'\"#][^'\"]*)['\"]").matcher(html);
+        int local = 0;
+        while (matcher.find()) {
+            String link = matcher.group(1);
+            if (link.matches("^(?:https?:|data:|javascript:|mailto:).*")) continue;
+            local++;
+            assertTrue("Missing " + link, new File(report, link.split("[?#]")[0]).isFile());
+        }
+        assertTrue(local > 0);
+        int start = html.indexOf("<script type='application/json' id='report-animations-data'>");
+        JsonObject animations = JsonParser.parseString(html.substring(html.indexOf('>', start) + 1,
+                html.indexOf("</script>", start))).getAsJsonObject();
+        matcher = Pattern.compile("src='([^']+\\.gif)'").matcher(html);
+        while (matcher.find()) {
+            File gif = new File(report, matcher.group(1));
+            assertTrue("Animation metadata for " + gif.getName(), animations.has(gif.getName()));
+            assertTrue(new File(gif.getParentFile(), gif.getName() + ".poster.png").isFile());
+            for (var sheet : animations.getAsJsonObject(gif.getName()).getAsJsonArray("sheets")) {
+                assertTrue("Frame sheet " + sheet.getAsString(), new File(gif.getParentFile(), sheet.getAsString()).isFile());
+            }
+        }
     }
 
     private static boolean hasColour(File png) throws IOException {

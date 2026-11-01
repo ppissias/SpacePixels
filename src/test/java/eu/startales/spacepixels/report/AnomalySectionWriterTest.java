@@ -117,7 +117,7 @@ public class AnomalySectionWriterTest {
         assertFalse(html.contains("After, frame 4"));
         int commonColor = -1;
         for (String name : List.of("before", "detection", "after")) {
-            var image = ImageIO.read(new File(context.exportDir, "anomaly_1_" + name + ".png"));
+            var image = ImageIO.read(new File(context.exportDir, "anomalies/anomaly_1_" + name + ".png"));
             int color = image.getRGB((image.getWidth() - bounds.trackBoxWidth) / 2 + 10, 48 + 10);
             if (commonColor == -1) commonColor = color;
             else assertEquals("Identical raw values must look identical in the comparison", commonColor, color);
@@ -131,12 +131,12 @@ public class AnomalySectionWriterTest {
         assertEquals(measurements, new Gson().toJson(context.anomalies));
         assertEquals(pixels, new Gson().toJson(context.rawFrames));
         assertEquals(List.of(1, 3), context.data.rejectedFrames.stream().sorted().toList());
-        try (var input = ImageIO.createImageInputStream(new File(context.exportDir, "anomaly_1_context.gif"))) {
+        try (var input = ImageIO.createImageInputStream(new File(context.exportDir, "anomalies/anomaly_1_context.gif"))) {
             var reader = ImageIO.getImageReadersByFormatName("gif").next();
             try { reader.setInput(input); assertEquals(3, reader.getNumImages(true)); }
             finally { reader.dispose(); }
         }
-        assertTrue(new File(context.exportDir, "anomaly_1_context.gif.poster.png").isFile());
+        assertTrue(new File(context.exportDir, "anomalies/anomaly_1_context.gif.poster.png").isFile());
     }
 
     @Test public void sequenceEdgesAndSingleFrameReportsLabelMissingNeighbours() throws Exception {

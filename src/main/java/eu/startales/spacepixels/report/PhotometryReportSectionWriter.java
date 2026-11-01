@@ -20,7 +20,6 @@ import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 
 import java.awt.image.BufferedImage;
-import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
@@ -39,6 +38,10 @@ import eu.startales.spacepixels.report.lookup.ReportLookupUpstreamClient;
  */
 public final class PhotometryReportSectionWriter {
 
+    /** The CSV exports, in the variable-star folder (F19). */
+    static final String STARS_CSV = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_stars.csv");
+    static final String LIGHT_CURVES_CSV = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_lightcurves.csv");
+    static final String FRAMES_CSV = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_frames.csv");
     /** Most candidate cards rendered with charts and cutouts; the rest are listed in the table. */
     private static final int COMPARISON_STARS = 3;
     private static final double COMPARISON_MAG_WINDOW = 0.5;
@@ -163,9 +166,9 @@ public final class PhotometryReportSectionWriter {
         report.println("<p class='section-lede'>Differential photometry measures the brightness of isolated stars in frames that passed quality control. "
                 + "Each star is compared with an ensemble of measured stars to correct for transparency changes shared across the field. "
                 + "A star is reported as a variable candidate when its brightness scatter and the coherence of its changes between successive frames stand out relative to stars of similar brightness, and it meets the checks shown on its card. "
-                + "<a href='photometry_stars.csv' target='_blank'>[All stars CSV]</a> "
-                + "<a href='photometry_lightcurves.csv' target='_blank'>[Candidate light curves CSV]</a> "
-                + "<a href='photometry_frames.csv' target='_blank'>[Per-frame CSV]</a></p>");
+                + "<a href='" + STARS_CSV + "' target='_blank'>[All stars CSV]</a> "
+                + "<a href='" + LIGHT_CURVES_CSV + "' target='_blank'>[Candidate light curves CSV]</a> "
+                + "<a href='" + FRAMES_CSV + "' target='_blank'>[Per-frame CSV]</a></p>");
 
         report.println("<div class='flex-container'>");
         report.println("<div class='metric-box'" + tipAttr("Result of the checks for photometric suitability. Ready: no evidence of nonlinearity found. Limited: only amplitudes of at least "
@@ -1403,10 +1406,10 @@ public final class PhotometryReportSectionWriter {
         PipelineTelemetry.PhotometryFrameStat f = analysis.frames.get(faintest);
         MatchedCutouts images = matchedCutouts(brightCrop, faintCrop, b.zeroPoint, f.zeroPoint);
 
-        String brightName = "photometry_v" + number + "_brightest.png";
-        String faintName = "photometry_v" + number + "_faintest.png";
-        TrackVisualizationRenderer.saveLosslessPng(images.brightest(), new File(context.exportDir, brightName));
-        TrackVisualizationRenderer.saveLosslessPng(images.faintest(), new File(context.exportDir, faintName));
+        String brightName = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_v" + number + "_brightest.png");
+        String faintName = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_v" + number + "_faintest.png");
+        TrackVisualizationRenderer.saveLosslessPng(images.brightest(), context.file(brightName));
+        TrackVisualizationRenderer.saveLosslessPng(images.faintest(), context.file(faintName));
 
         return "<div style='display:flex; gap:12px;'>"
                 + cutoutHtml(brightName, String.format(Locale.US, "Brightest: frame %d (%s mag)", b.frameIndex + 1, formatMag(star.deltaMag[brightest], 3)))
@@ -1550,11 +1553,10 @@ public final class PhotometryReportSectionWriter {
     // =================================================================
 
     private static void writeCsvExports(DetectionReportContext context, VariableStarAnalysis analysis) throws IOException {
-        File exportDir = context.exportDir;
         Map<Integer, String> labels = new LinkedHashMap<>();
         var presentation = context.variablePresentation(analysis);
         for (StarLightCurve star : presentation.identities) labels.put(star.id, presentation.label(star));
-        try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_stars.csv"))) {
+        try (AtomicReportFile output = new AtomicReportFile(context.file(STARS_CSV))) {
             PrintWriter csv = output.writer();
             csv.println("star_id,x,y,mean_inst_mag,tier,usable_frames,scatter,expected_scatter,excess_scatter,scatter_z,stetson_j,stetson_j_z,amplitude,failed_gates,not_scored_reason,candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec");
             for (StarLightCurve s : analysis.stars) {
@@ -1566,7 +1568,7 @@ public final class PhotometryReportSectionWriter {
             output.commit();
         }
 
-        try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_lightcurves.csv"))) {
+        try (AtomicReportFile output = new AtomicReportFile(context.file(LIGHT_CURVES_CSV))) {
             PrintWriter csv = output.writer();
             csv.println("star_id,tier,frame_index,filename,julian_date,delta_mag,mag_error,flags,candidate_label");
             for (StarLightCurve s : analysis.candidates) {
@@ -1579,7 +1581,7 @@ public final class PhotometryReportSectionWriter {
             output.commit();
         }
 
-        try (AtomicReportFile output = new AtomicReportFile(new File(exportDir, "photometry_frames.csv"))) {
+        try (AtomicReportFile output = new AtomicReportFile(context.file(FRAMES_CSV))) {
             PrintWriter csv = output.writer();
             csv.println("frame_index,filename,julian_date,used,exclusion_reason,fwhm,aperture_radius,sky,offset_x,offset_y,registration_spread,"
                     + "sky_at_zero_fraction,shape_status,linear_limit_mag,linear_range_mag,concentration_reference,zero_point,plane_x,plane_y,"

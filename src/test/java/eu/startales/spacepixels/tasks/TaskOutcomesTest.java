@@ -143,8 +143,8 @@ public class TaskOutcomesTest {
             assertEquals(VariableStarReportOptions.DEFAULT_MAX_CANDIDATE_CARDS,
                     recordedProfile(nextReport).get("variableStarMaxCandidateCards").getAsInt());
             assertFalse("the stretch of each run's master stack picture differs", java.util.Arrays.equals(
-                    java.nio.file.Files.readAllBytes(new File(firstReport.getParentFile(), "master_stack.png").toPath()),
-                    java.nio.file.Files.readAllBytes(new File(nextReport.getParentFile(), "master_stack.png").toPath())));
+                    java.nio.file.Files.readAllBytes(new File(firstReport.getParentFile(), "diagnostics/master_stack.png").toPath()),
+                    java.nio.file.Files.readAllBytes(new File(nextReport.getParentFile(), "diagnostics/master_stack.png").toPath())));
         }
     }
 

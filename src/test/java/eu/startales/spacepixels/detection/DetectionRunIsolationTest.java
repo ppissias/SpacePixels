@@ -74,7 +74,7 @@ public class DetectionRunIsolationTest {
     private static void assertStretchedWith(SpacePixelsPipelineResult run, double black, double white)
             throws java.io.IOException {
         var expected = DisplayImageRenderer.createDisplayImage(run.getPipelineResult().masterStackData, black, white);
-        var actual = javax.imageio.ImageIO.read(new File(run.getExportDirectory(), "master_stack.png"));
+        var actual = javax.imageio.ImageIO.read(new File(run.getExportDirectory(), "diagnostics/master_stack.png"));
         assertArrayEquals(expected.getRGB(0, 0, expected.getWidth(), expected.getHeight(), null, 0, expected.getWidth()),
                 actual.getRGB(0, 0, actual.getWidth(), actual.getHeight(), null, 0, actual.getWidth()));
     }

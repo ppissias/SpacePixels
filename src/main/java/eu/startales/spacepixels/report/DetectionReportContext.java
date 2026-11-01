@@ -61,6 +61,10 @@ final class DetectionReportContext {
     final List<Track> localRescueTracks;
     final DetectionReportSummary summary;
     final AnimationRegistry animations;
+    /** The enhanced stack of the kept frames (F18), or null when switched off, impossible or failed. */
+    final EnhancedStack enhancedStack;
+    /** Why the enhanced stack is missing although it was switched on, or null. */
+    final String enhancedStackProblem;
     private VariableStarPresentation variablePresentation;
 
     /** Builds every shared report input and model before a section can use the context. */
@@ -155,6 +159,72 @@ final class DetectionReportContext {
         this.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
         this.animations = new AnimationRegistry();
         this.data = ReportData.create(this, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
+        EnhancedStack stack = null;
+        String problem = null;
+        if (settings.isEnhancedStack() && !result.tooFewFrames && masterStackData != null && !rawFrames.isEmpty()) {
+            List<short[][]> kept = new ArrayList<>();
+            List<Integer> keptIndices = new ArrayList<>();
+            for (int i = 0; i < rawFrames.size(); i++) {
+                if (!data.rejectedFrames.contains(i)) {
+                    kept.add(rawFrames.get(i));
+                    keptIndices.add(i);
+                }
+            }
+            progress.step(1, 2, "building the enhanced stack");
+            try {
+                stack = EnhancedStack.build(kept, masterStackData, dataArea,
+                        () -> progress.step(1, 2, "building the enhanced stack"));
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new java.util.concurrent.CancellationException("The enhanced stack was interrupted");
+            } catch (OutOfMemoryError tooLarge) {
+                problem = "not enough memory for the enhanced stack";
+            } catch (RuntimeException failure) {
+                if (eu.startales.spacepixels.util.Cancellation.isCancellation(failure)) {
+                    throw failure;
+                }
+                problem = String.valueOf(failure.getMessage());
+            }
+            this.keptFrameIndices = List.copyOf(keptIndices);
+        } else {
+            this.keptFrameIndices = List.of();
+        }
+        this.enhancedStack = stack;
+        this.enhancedStackProblem = problem;
+        if (problem != null) {
+            java.util.logging.Logger.getLogger(DetectionReportContext.class.getName()).warning(
+                    "The enhanced stack was not built (" + problem + "); the field pictures show the median stack.");
+        }
+    }
+
+    /** Original indices of the frames combined into {@link #enhancedStack}, in order; empty without one. */
+    final List<Integer> keptFrameIndices;
+
+    /**
+     * The grey display picture of the whole field: the enhanced stack when the report built one, otherwise the median
+     * stack, or {@code fallback} when there is no median stack. Pictures that compare a detection with the reference
+     * the detection used take {@link #masterStackData} directly instead.
+     */
+    java.awt.image.BufferedImage fieldDisplayImage(short[][] fallback) {
+        if (enhancedStack != null) {
+            return eu.startales.spacepixels.fits.DisplayImageRenderer.createDisplayImage(enhancedStack.pixels,
+                    settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma());
+        }
+        return TrackVisualizationRenderer.createDisplayImage(masterStackData != null ? masterStackData : fallback, settings);
+    }
+
+    /**
+     * The file a report link names (see {@link ReportFiles}), with its folder created.
+     *
+     * @throws java.io.IOException when the folder cannot be created
+     */
+    File file(String link) throws java.io.IOException {
+        return ReportFiles.file(exportDir, link);
+    }
+
+    /** What the pictures of the whole field show, for captions: "enhanced stack" or "median stack". */
+    String fieldName() {
+        return enhancedStack != null ? "enhanced stack" : "median stack";
     }
 
     /** Caches the presentation of this run's variable-star analysis for cards, maps and identities. */

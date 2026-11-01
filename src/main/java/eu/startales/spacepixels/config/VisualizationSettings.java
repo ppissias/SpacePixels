@@ -34,6 +34,7 @@ public final class VisualizationSettings {
     private final int pointSourceMinBoxRadius;
     private final int dynamicBoxPadding;
     private final int maxAnimatedMarkers;
+    private final boolean enhancedStack;
     private final VariableStarReportOptions variableStarReportOptions;
 
     private VisualizationSettings(Values values) {
@@ -49,6 +50,7 @@ public final class VisualizationSettings {
         pointSourceMinBoxRadius = values.pointSourceMinBoxRadius;
         dynamicBoxPadding = values.dynamicBoxPadding;
         maxAnimatedMarkers = values.maxAnimatedMarkers;
+        enhancedStack = values.enhancedStack;
         variableStarReportOptions = Objects.requireNonNull(values.variableStarReportOptions, "variableStarReportOptions");
     }
 
@@ -120,6 +122,15 @@ public final class VisualizationSettings {
         return maxAnimatedMarkers;
     }
 
+    /**
+     * Whether a report builds the enhanced stack: a noise-clipped, noise-weighted mean of the kept frames, written as a
+     * 32-bit FITS file and used for the pictures of the whole field instead of the median stack. It changes no detection
+     * result.
+     */
+    public boolean isEnhancedStack() {
+        return enhancedStack;
+    }
+
     /** How the report presents variable-star candidates. */
     public VariableStarReportOptions getVariableStarReportOptions() {
         return variableStarReportOptions;
@@ -185,6 +196,11 @@ public final class VisualizationSettings {
         return with(values -> values.maxAnimatedMarkers = markers);
     }
 
+    /** A copy that builds the enhanced stack, or not ({@link #isEnhancedStack()}). */
+    public VisualizationSettings withEnhancedStack(boolean enabled) {
+        return with(values -> values.enhancedStack = enabled);
+    }
+
     /**
      * A copy with this variable-star presentation.
      *
@@ -222,6 +238,7 @@ public final class VisualizationSettings {
                 && pointSourceMinBoxRadius == that.pointSourceMinBoxRadius
                 && dynamicBoxPadding == that.dynamicBoxPadding
                 && maxAnimatedMarkers == that.maxAnimatedMarkers
+                && enhancedStack == that.enhancedStack
                 && variableStarReportOptions.equals(that.variableStarReportOptions);
     }
 
@@ -229,7 +246,7 @@ public final class VisualizationSettings {
     public int hashCode() {
         return Objects.hash(autoStretchBlackSigma, autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding,
                 trackObjectCentricCropSize, targetCircleRadius, targetCircleStrokeWidth, streakLineScaleFactor,
-                streakCentroidBoxRadius, pointSourceMinBoxRadius, dynamicBoxPadding, maxAnimatedMarkers,
+                streakCentroidBoxRadius, pointSourceMinBoxRadius, dynamicBoxPadding, maxAnimatedMarkers, enhancedStack,
                 variableStarReportOptions);
     }
 
@@ -247,6 +264,7 @@ public final class VisualizationSettings {
                 + ", pointSourceMinBoxRadius=" + pointSourceMinBoxRadius
                 + ", dynamicBoxPadding=" + dynamicBoxPadding
                 + ", maxAnimatedMarkers=" + maxAnimatedMarkers
+                + ", enhancedStack=" + enhancedStack
                 + ", variableStarReportOptions=" + variableStarReportOptions + "]";
     }
 
@@ -264,6 +282,7 @@ public final class VisualizationSettings {
         int pointSourceMinBoxRadius = 10;
         int dynamicBoxPadding = 5;
         int maxAnimatedMarkers = 500;
+        boolean enhancedStack = true;
         VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
 
         /** The built-in values. */
@@ -284,6 +303,7 @@ public final class VisualizationSettings {
             pointSourceMinBoxRadius = settings.pointSourceMinBoxRadius;
             dynamicBoxPadding = settings.dynamicBoxPadding;
             maxAnimatedMarkers = settings.maxAnimatedMarkers;
+            enhancedStack = settings.enhancedStack;
             variableStarReportOptions = settings.variableStarReportOptions;
         }
     }
