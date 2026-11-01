@@ -116,7 +116,7 @@ test('local Stellarium button posts directly to 127.0.0.1:8090 and reports statu
   assert.equal(c.requests.length, 4);
   assert.equal(c.requests[0], 'http://127.0.0.1:8090/api/location/setlocationfields');
   assert.equal(c.requests[1], 'http://127.0.0.1:8090/api/main/time');
-  assert.equal(c.requests[2], 'http://127.0.0.1:8090/api/main/view');
+  assert.equal(c.requests[2], 'http://127.0.0.1:8090/api/main/focus');
   assert.equal(c.requests[3], 'http://127.0.0.1:8090/api/main/fov');
   assert.match(statusEl.innerHTML, /Slewed local Stellarium to 2026-01-15 22:00:00 UTC/);
 

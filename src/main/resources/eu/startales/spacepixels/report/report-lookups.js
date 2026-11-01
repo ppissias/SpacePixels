@@ -578,7 +578,7 @@
     }
     return chain
       .then(function () { return postForm('/api/main/time', 'time=' + jd.toFixed(8) + '&timerate=0'); })
-      .then(function () { return postForm('/api/main/view', 'j2000=' + encodeURIComponent(j2000)); })
+      .then(function () { return postForm('/api/main/focus', 'position=' + encodeURIComponent(j2000)); })
       .then(function () { return postForm('/api/main/fov', 'fov=' + encodeURIComponent(fovDeg)); });
   }
 
