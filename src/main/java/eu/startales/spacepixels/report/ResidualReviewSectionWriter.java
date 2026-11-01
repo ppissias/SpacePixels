@@ -552,7 +552,8 @@ final class ResidualReviewSectionWriter {
                                                        ResidualTransientAnalysis.LocalRescueCandidate candidate,
                                                        int counter) throws IOException {
         Track track = buildResidualTrack(candidate.points);
-        TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(140, context.settings.getTrackCropPadding() / 2));
+        TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(140, context.settings.getTrackCropPadding() / 2),
+                context.frameDimensions());
 
         String prefix = "local_rescue_" + counter;
         String backgroundFileName = ReportFiles.link(FindingCategory.LOCAL_RESCUE, prefix + "_background.png");
@@ -671,7 +672,8 @@ final class ResidualReviewSectionWriter {
                                                        ResidualTransientAnalysis.LocalActivityCluster cluster,
                                                        int counter) throws IOException {
         Track track = buildResidualTrack(cluster.points);
-        TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(180, context.settings.getTrackCropPadding() / 2));
+        TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, Math.max(180, context.settings.getTrackCropPadding() / 2),
+                context.frameDimensions());
 
         String prefix = "local_activity_" + counter;
         String backgroundFileName = ReportFiles.link(FindingCategory.LOCAL_ACTIVITY, prefix + "_background.png");

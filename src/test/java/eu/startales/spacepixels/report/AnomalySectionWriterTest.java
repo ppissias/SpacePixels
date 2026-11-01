@@ -107,7 +107,7 @@ public class AnomalySectionWriterTest {
         var context = context(5, 2, AnomalyType.INTEGRATED_SIGMA, List.of(), 0, 3, telemetry);
         String measurements = new Gson().toJson(context.anomalies);
         var point = context.anomalies.get(0).object;
-        var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
+        var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding(), context.frameDimensions());
         for (short[][] frame : context.rawFrames) frame[bounds.startY + 10][bounds.startX + 10] = (short) (1500 - 32768);
         String pixels = new Gson().toJson(context.rawFrames);
         String html = render(context);

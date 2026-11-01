@@ -219,6 +219,25 @@ final class DetectionReportContext {
         return TrackVisualizationRenderer.createDisplayImage(masterStackData != null ? masterStackData : fallback, settings);
     }
 
+    /** Width and height of the frames, from the first frame in memory or else the frame files; zero when unknown. */
+    int[] frameDimensions() {
+        if (rawFrames != null) {
+            for (short[][] frame : rawFrames) {
+                if (frame != null && frame.length > 0 && frame[0] != null && frame[0].length > 0) {
+                    return new int[]{frame[0].length, frame.length};
+                }
+            }
+        }
+        if (fitsFiles != null) {
+            for (FitsFileInformation fits : fitsFiles) {
+                if (fits != null && fits.getSizeWidth() > 0 && fits.getSizeHeight() > 0) {
+                    return new int[]{fits.getSizeWidth(), fits.getSizeHeight()};
+                }
+            }
+        }
+        return new int[]{0, 0};
+    }
+
     /**
      * The file a report link names (see {@link ReportFiles}), with its folder created.
      *

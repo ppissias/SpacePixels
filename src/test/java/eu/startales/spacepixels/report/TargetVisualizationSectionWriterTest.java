@@ -217,7 +217,7 @@ public class TargetVisualizationSectionWriterTest {
         List<BufferedImage> narrowFrames = readGifFrames(narrowGifFile);
         assertEquals("Narrow GIF must have 3 frames", 3, narrowFrames.size());
 
-        TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
+        TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
         assertEquals("Narrow GIF width must match track box width", cropBounds.trackBoxWidth, narrowFrames.get(0).getWidth());
         assertEquals("Narrow GIF height must match track box height", cropBounds.trackBoxHeight, narrowFrames.get(0).getHeight());
 

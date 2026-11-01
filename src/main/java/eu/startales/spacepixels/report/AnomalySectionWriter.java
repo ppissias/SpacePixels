@@ -47,7 +47,7 @@ final class AnomalySectionWriter {
     private static void writeCard(PrintWriter report, DetectionReportContext context,
                                   AnomalyDetection anomaly, int number) throws IOException {
         DetectedObject point = anomaly.object;
-        var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding());
+        var bounds = new TrackCropGeometry.CropBounds(point, context.settings.getTrackCropPadding(), context.frameDimensions());
         String prefix = "anomaly_" + number;
         TrackMatch track = likelyTrack(context, point);
         report.println("<div class='detection-card anomaly-card' id='" + context.findingAnchor(FindingCategory.ANOMALY, number) + "'>");

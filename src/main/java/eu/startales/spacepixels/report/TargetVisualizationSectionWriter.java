@@ -81,7 +81,7 @@ final class TargetVisualizationSectionWriter {
         int counter = 1;
         for (Track track : context.singleStreaks) {
             context.progress.next();
-            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
+            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
             DetectedObject point = track.points.get(0);
             int frameIndex = point.sourceFrameIndex;
             int partCount = track.points.size();
@@ -150,7 +150,7 @@ final class TargetVisualizationSectionWriter {
         int counter = 1;
         for (Track track : context.streakTracks) {
             context.progress.next();
-            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
+            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
             List<DetectedObject> framePoints = uniqueFramePoints(track);
 
             String shapeFileName = ReportFiles.link(FindingCategory.STREAK_TRACK, "streak_track_" + counter + "_shape.png");
@@ -220,7 +220,7 @@ final class TargetVisualizationSectionWriter {
         int counter = 1;
         for (Track track : context.movingTargets) {
             context.progress.next();
-            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding());
+            TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
             List<DetectedObject> framePoints = uniqueFramePoints(track);
 
             String shapeFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_shape.png");
@@ -237,7 +237,7 @@ final class TargetVisualizationSectionWriter {
             String cleanNarrowFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_clean_narrow.gif");
             String cleanWideFileName = ReportFiles.link(FindingCategory.MOVING_TARGET, "moving_track_" + counter + "_clean_wide.gif");
 
-            int[] frameDims = extractFrameDimensions(context);
+            int[] frameDims = context.frameDimensions();
             int[] wideDimensions = computeWideSourceDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
 
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createCroppedDisplayImage(
@@ -860,11 +860,15 @@ final class TargetVisualizationSectionWriter {
         return new int[]{wideWidth, wideHeight};
     }
 
-    /** Renders the complete wide field, scaling its resolution proportionally to at most 1000 pixels per side. */
+    /** Renders the complete wide field, kept inside the frame, scaling its resolution to at most 1000 pixels per side. */
     private static BufferedImage createWideDownloadFrame(short[][] pixels, TrackCropGeometry.CropBounds bounds,
                                                          int[] sourceDimensions, VisualizationSettings settings) {
+        int sourceWidth = sourceDimensions[0];
+        int sourceHeight = sourceDimensions[1];
+        int startX = TrackCropGeometry.insideFrame(bounds.fixedCenterX - sourceWidth / 2, sourceWidth, pixels[0].length);
+        int startY = TrackCropGeometry.insideFrame(bounds.fixedCenterY - sourceHeight / 2, sourceHeight, pixels.length);
         BufferedImage field = TrackVisualizationRenderer.createCroppedDisplayImage(pixels,
-                bounds.fixedCenterX, bounds.fixedCenterY, sourceDimensions[0], sourceDimensions[1], settings);
+                startX + sourceWidth / 2, startY + sourceHeight / 2, sourceWidth, sourceHeight, settings);
         double scale = Math.min(1.0, 1000.0 / Math.max(field.getWidth(), field.getHeight()));
         if (scale == 1.0) {
             return field;
@@ -880,24 +884,6 @@ final class TargetVisualizationSectionWriter {
             graphics.dispose();
         }
         return output;
-    }
-
-    private static int[] extractFrameDimensions(DetectionReportContext context) {
-        if (context.rawFrames != null) {
-            for (short[][] frame : context.rawFrames) {
-                if (frame != null && frame.length > 0 && frame[0] != null && frame[0].length > 0) {
-                    return new int[]{frame[0].length, frame.length};
-                }
-            }
-        }
-        if (context.fitsFiles != null) {
-            for (FitsFileInformation fits : context.fitsFiles) {
-                if (fits != null && fits.getSizeWidth() > 0 && fits.getSizeHeight() > 0) {
-                    return new int[]{fits.getSizeWidth(), fits.getSizeHeight()};
-                }
-            }
-        }
-        return new int[]{0, 0};
     }
 
     private static final class SkyOrientationOverlay {
