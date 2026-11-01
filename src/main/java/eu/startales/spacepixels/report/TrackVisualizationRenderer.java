@@ -49,7 +49,7 @@ final class TrackVisualizationRenderer {
                 settings.getAutoStretchWhiteSigma());
     }
 
-    static double[] sharedDisplayLevels(List<short[][]> frames, VisualizationSettings settings) {
+    static double[] sharedDisplayLevels(Iterable<short[][]> frames, VisualizationSettings settings) {
         return DisplayImageRenderer.sharedDisplayLevels(
                 frames,
                 settings.getAutoStretchBlackSigma(),

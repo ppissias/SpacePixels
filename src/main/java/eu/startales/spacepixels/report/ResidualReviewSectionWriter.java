@@ -371,12 +371,10 @@ final class ResidualReviewSectionWriter {
             }
             int cx = (int) Math.round(mean(source, true));
             int cy = (int) Math.round(mean(source, false));
-            List<short[][]> crops = new ArrayList<>(frames.size());
-            for (int frameIndex : frames) {
-                crops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
-                        context.rawFrames.get(frameIndex), cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL));
-            }
-            sourceLevels.add(TrackVisualizationRenderer.sharedDisplayLevels(crops, context.settings));
+            sourceLevels.add(TrackVisualizationRenderer.sharedDisplayLevels(() -> frames.stream().map(frameIndex ->
+                    TrackVisualizationRenderer.robustEdgeAwareCrop(
+                            context.rawFrames.get(frameIndex), cx, cy, COMMON_MOTION_PANEL, COMMON_MOTION_PANEL)).iterator(),
+                    context.settings));
         }
         List<BufferedImage> gifFrames = new ArrayList<>();
         for (int frameIndex : frames) {
@@ -621,14 +619,11 @@ final class ResidualReviewSectionWriter {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
             Map<Integer, DetectedObject> pointByFrame = buildPointByFrameMap(track);
             List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
-            List<short[][]> rescueCrops = new ArrayList<>(sampledIndices.size());
-            for (int frameIndex : sampledIndices) {
-                rescueCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
-                        context.rawFrames.get(frameIndex),
-                        cropBounds.fixedCenterX, cropBounds.fixedCenterY,
-                        cropBounds.trackBoxWidth, cropBounds.trackBoxHeight));
-            }
-            double[] rescueLevels = TrackVisualizationRenderer.sharedDisplayLevels(rescueCrops, context.settings);
+            double[] rescueLevels = TrackVisualizationRenderer.sharedDisplayLevels(() -> sampledIndices.stream().map(frameIndex ->
+                    TrackVisualizationRenderer.robustEdgeAwareCrop(
+                            context.rawFrames.get(frameIndex),
+                            cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                            cropBounds.trackBoxWidth, cropBounds.trackBoxHeight)).iterator(), context.settings);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 DetectedObject detectedPoint = pointByFrame.get(frameIndex);
@@ -750,14 +745,11 @@ final class ResidualReviewSectionWriter {
             Set<Integer> mandatoryFrames = collectResidualFrameIndices(track);
             Map<Integer, DetectedObject> pointByFrame = buildPointByFrameMap(track);
             List<Integer> sampledIndices = context.sampleFrames(mandatoryFrames, 12);
-            List<short[][]> clusterCrops = new ArrayList<>(sampledIndices.size());
-            for (int frameIndex : sampledIndices) {
-                clusterCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
-                        context.rawFrames.get(frameIndex),
-                        cropBounds.fixedCenterX, cropBounds.fixedCenterY,
-                        cropBounds.trackBoxWidth, cropBounds.trackBoxHeight));
-            }
-            double[] clusterLevels = TrackVisualizationRenderer.sharedDisplayLevels(clusterCrops, context.settings);
+            double[] clusterLevels = TrackVisualizationRenderer.sharedDisplayLevels(() -> sampledIndices.stream().map(frameIndex ->
+                    TrackVisualizationRenderer.robustEdgeAwareCrop(
+                            context.rawFrames.get(frameIndex),
+                            cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                            cropBounds.trackBoxWidth, cropBounds.trackBoxHeight)).iterator(), context.settings);
             List<BufferedImage> contextFrames = new ArrayList<>();
             for (int frameIndex : sampledIndices) {
                 DetectedObject detectedPoint = pointByFrame.get(frameIndex);

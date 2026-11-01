@@ -257,6 +257,12 @@ Related functionality, not part of this item: an **Auto** setting on the Image S
    - Consolidate the four 16-bit preset transforms (`Asinh`, `Enhance Low`, `Enhance High`, `Extreme`) into `DisplayStretch` so Batch Stretch, the Image Stretch tab preview, and the full-size viewers share one 16-bit implementation, using the full-frame histogram for the 350 × 350 tab preview across all four presets.
    - *Decision:* Agreed
 
+#### Follow-up after the implementation review (2026-11-01)
+
+- **White Sigma default 20.** On real crops of six reference datasets, the old standard deviation was 2.4 to 25 times the robust sky noise, because it included the stars and gradients. With White Sigma 5 the robust white point clipped most stars to white and spread the sky noise over the grey range. The maintainer chose a new default of 20; the settings page now allows up to 100. Black Sigma stays 0.5. Saved visualization files keep their value.
+- **Track animations hold one crop at a time.** The shared levels are measured from crops made one by one, and each crop is made again to draw it, so a long track with frame-wide crops does not hold all of them.
+- **Batch Stretch is pinned** by a checksum test (`DisplayStretchTest.batchStretchKeepsItsOutput`) recorded from the per-pixel code before the stretch tables.
+
 ## Removed from the previous plan (2026-10-23)
 
 - **S16, prepared diagnostic states and re-export.** Dropped. No code path renders a saved result again, so nothing would read the prepared states twice.

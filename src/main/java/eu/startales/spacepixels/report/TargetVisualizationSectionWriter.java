@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
 
 /**
  * Writes the per-target visualization section for streaks, moving tracks, anomalies, and their supporting
@@ -163,13 +164,10 @@ final class TargetVisualizationSectionWriter {
             TrackVisualizationRenderer.saveLosslessPng(shapeImage, context.file(shapeFileName));
 
             String starFileName = ReportFiles.link(FindingCategory.STREAK_TRACK, "streak_track_" + counter + "_star_centric.gif");
-            List<short[][]> streakCrops = new ArrayList<>(framePoints.size());
-            for (DetectedObject point : framePoints) {
-                streakCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
-                        context.rawFrames.get(point.sourceFrameIndex),
-                        cropBounds.fixedCenterX, cropBounds.fixedCenterY,
-                        cropBounds.trackBoxWidth, cropBounds.trackBoxHeight));
-            }
+            Iterable<short[][]> streakCrops = () -> framePoints.stream().map(point -> TrackVisualizationRenderer.robustEdgeAwareCrop(
+                    context.rawFrames.get(point.sourceFrameIndex),
+                    cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                    cropBounds.trackBoxWidth, cropBounds.trackBoxHeight)).iterator();
             double[] streakLevels = TrackVisualizationRenderer.sharedDisplayLevels(streakCrops, context.settings);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE,
@@ -248,34 +246,36 @@ final class TargetVisualizationSectionWriter {
             int[] frameDims = context.frameDimensions();
             int[] wideDimensions = computeWideSourceDimensions(cropBounds.trackBoxWidth, cropBounds.trackBoxHeight, frameDims[0], frameDims[1]);
 
+            // Each crop is made when it is needed, once to measure the animation's levels and again to draw it, so a
+            // long track never holds all its crops at once.
             int objectCropSize = context.settings.getTrackObjectCentricCropSize();
-            List<short[][]> objectCrops = new ArrayList<>(framePoints.size());
-            List<short[][]> starCrops = new ArrayList<>(framePoints.size());
-            List<short[][]> wideCrops = new ArrayList<>(framePoints.size());
-            for (DetectedObject point : framePoints) {
-                short[][] rawFrame = context.rawFrames.get(point.sourceFrameIndex);
-                objectCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
-                        rawFrame, (int) Math.round(point.x), (int) Math.round(point.y), objectCropSize, objectCropSize));
-                starCrops.add(TrackVisualizationRenderer.robustEdgeAwareCrop(
-                        rawFrame, cropBounds.fixedCenterX, cropBounds.fixedCenterY, cropBounds.trackBoxWidth, cropBounds.trackBoxHeight));
-                wideCrops.add(cropWideDownloadSource(rawFrame, cropBounds, wideDimensions));
-            }
-            double[] objectLevels = TrackVisualizationRenderer.sharedDisplayLevels(objectCrops, context.settings);
-            double[] starLevels = TrackVisualizationRenderer.sharedDisplayLevels(starCrops, context.settings);
-            double[] wideLevels = TrackVisualizationRenderer.sharedDisplayLevels(wideCrops, context.settings);
+            Function<DetectedObject, short[][]> objectCrop = point -> TrackVisualizationRenderer.robustEdgeAwareCrop(
+                    context.rawFrames.get(point.sourceFrameIndex), (int) Math.round(point.x), (int) Math.round(point.y),
+                    objectCropSize, objectCropSize);
+            Function<DetectedObject, short[][]> starCrop = point -> TrackVisualizationRenderer.robustEdgeAwareCrop(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds.fixedCenterX, cropBounds.fixedCenterY,
+                    cropBounds.trackBoxWidth, cropBounds.trackBoxHeight);
+            Function<DetectedObject, short[][]> wideCrop = point -> cropWideDownloadSource(
+                    context.rawFrames.get(point.sourceFrameIndex), cropBounds, wideDimensions);
+            double[] objectLevels = TrackVisualizationRenderer.sharedDisplayLevels(
+                    () -> framePoints.stream().map(objectCrop).iterator(), context.settings);
+            double[] starLevels = TrackVisualizationRenderer.sharedDisplayLevels(
+                    () -> framePoints.stream().map(starCrop).iterator(), context.settings);
+            double[] wideLevels = TrackVisualizationRenderer.sharedDisplayLevels(
+                    () -> framePoints.stream().map(wideCrop).iterator(), context.settings);
 
-            GifSequenceWriter.saveAnimatedGif(objectCrops.stream().map(crop ->
-                    TrackVisualizationRenderer.createDisplayImageAtLevels(crop, objectLevels)).iterator(),
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point ->
+                    TrackVisualizationRenderer.createDisplayImageAtLevels(objectCrop.apply(point), objectLevels)).iterator(),
                     context.file(objectFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
             GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point -> TrackVisualizationRenderer.createStarCentricHighlightedFrame(
                     context.rawFrames.get(point.sourceFrameIndex), cropBounds, point, context.settings, Color.WHITE, null,
                     TrackVisualizationRenderer.frameLabel(context, point.sourceFrameIndex), false, starLevels)).iterator(),
                     context.file(starFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
-            GifSequenceWriter.saveAnimatedGif(starCrops.stream().map(crop ->
-                    TrackVisualizationRenderer.createDisplayImageAtLevels(crop, starLevels)).iterator(),
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point ->
+                    TrackVisualizationRenderer.createDisplayImageAtLevels(starCrop.apply(point), starLevels)).iterator(),
                     context.file(cleanNarrowFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
-            GifSequenceWriter.saveAnimatedGif(wideCrops.stream().map(crop ->
-                    scaleWideDownloadFrame(TrackVisualizationRenderer.createDisplayImageAtLevels(crop, wideLevels))).iterator(),
+            GifSequenceWriter.saveAnimatedGif(framePoints.stream().map(point ->
+                    scaleWideDownloadFrame(TrackVisualizationRenderer.createDisplayImageAtLevels(wideCrop.apply(point), wideLevels))).iterator(),
                     context.file(cleanWideFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
 
             double[] meanCenter = computeTrackMeanPixelCenter(track);

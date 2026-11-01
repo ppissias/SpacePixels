@@ -136,12 +136,12 @@ public final class VisualizationSettings {
         return variableStarReportOptions;
     }
 
-    /** A copy with the black point {@code sigma} standard deviations below the image mean. */
+    /** A copy with the black point {@code sigma} robust sky noises below the sky median. */
     public VisualizationSettings withAutoStretchBlackSigma(double sigma) {
         return with(values -> values.autoStretchBlackSigma = sigma);
     }
 
-    /** A copy with the white point {@code sigma} standard deviations above the image mean. */
+    /** A copy with the white point {@code sigma} robust sky noises above the sky median. */
     public VisualizationSettings withAutoStretchWhiteSigma(double sigma) {
         return with(values -> values.autoStretchWhiteSigma = sigma);
     }
@@ -271,7 +271,7 @@ public final class VisualizationSettings {
     /** The values while a copy is made; it starts with the built-in values. */
     private static final class Values {
         double autoStretchBlackSigma = 0.5;
-        double autoStretchWhiteSigma = 5.0;
+        double autoStretchWhiteSigma = 20.0;
         int gifBlinkSpeedMs = 300;
         int trackCropPadding = 200;
         int trackObjectCentricCropSize = 200;

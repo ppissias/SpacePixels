@@ -555,13 +555,7 @@ final class ReportMaps {
     }
 
     // --- NEW: RAINBOW CLUSTER MAP RENDERER ---
-    static BufferedImage createRainbowClusterMap(short[][] backgroundData, List<List<DetectedObject>> allTransients,
-                                                 VisualizationSettings settings) {
-        return createRainbowClusterMap(TrackVisualizationRenderer.createDisplayImage(backgroundData, settings), allTransients, settings);
-    }
-
-    static BufferedImage createRainbowClusterMap(BufferedImage grayBg, List<List<DetectedObject>> allTransients,
-                                                 VisualizationSettings settings) {
+    static BufferedImage createRainbowClusterMap(BufferedImage grayBg, List<List<DetectedObject>> allTransients) {
         int imgWidth = grayBg.getWidth();
         int imgHeight = grayBg.getHeight();
 
@@ -605,10 +599,7 @@ final class ReportMaps {
         int scaledW = (int) Math.round(cropW * scale);
         int scaledH = (int) Math.round(cropH * scale);
 
-        // Extract and softly scale the background
-        // Crop and scale a copy of the field display image without mutating it.
-
-
+        // Crop and softly scale a copy of the field display image without mutating it.
         BufferedImage rgbMap = new BufferedImage(scaledW, scaledH, BufferedImage.TYPE_INT_RGB);
         Graphics2D g2d = rgbMap.createGraphics();
 

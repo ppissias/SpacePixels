@@ -1166,7 +1166,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 "autoStretchWhiteSigma", "Auto Stretch White Sigma", "sigma",
                 "Controls how far above the sky median (in robust sky noise) the automatic white point is placed when stretching rendered imagery. Higher values preserve more bright-core detail but can reduce contrast on faint structure. Pictures of the whole field from the enhanced stack use their own automatic asinh stretch.",
                 false, () -> visualization.getAutoStretchWhiteSigma(), value -> visualization = visualization.withAutoStretchWhiteSigma(value),
-                0.1, 20.0, 0.1);
+                0.1, 100.0, 0.1);
         spinGifBlinkSpeed = addApplicationInteger(panel, visualizationBindings,
                 "gifBlinkSpeedMs", "GIF Blink Speed (ms)", "ms",
                 "Frame delay used for exported animated GIFs. Lower values blink faster; higher values slow the inspection cadence.",

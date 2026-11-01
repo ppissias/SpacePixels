@@ -13,7 +13,7 @@ import io.github.ppissias.jtransient.core.DataArea;
 
 import java.awt.image.BufferedImage;
 import java.awt.image.WritableRaster;
-import java.util.List;
+import java.util.Arrays;
 
 /**
  * Generic grayscale display renderer shared by UI previews and report export paths; the stretch sigmas come from the
@@ -51,14 +51,15 @@ public final class DisplayImageRenderer {
 
     /**
      * Shared display levels across a sequence of frame crops: uses the median of the frames' sky medians and the
-     * median of their robust sky noises, bounded by the brightest valid pixel across the sequence.
+     * median of their robust sky noises, bounded by the brightest valid pixel across the sequence. The crops are read
+     * one at a time, so a lazy sequence that makes each crop on demand never holds them all.
      */
-    public static double[] sharedDisplayLevels(List<short[][]> frames, double blackSigma, double whiteSigma) {
-        if (frames == null || frames.isEmpty()) {
+    public static double[] sharedDisplayLevels(Iterable<short[][]> frames, double blackSigma, double whiteSigma) {
+        if (frames == null) {
             return new double[]{0.0, 0.0};
         }
-        float[] skies = new float[frames.size()];
-        float[] noises = new float[frames.size()];
+        float[] skies = new float[16];
+        float[] noises = new float[16];
         int validFrames = 0;
         int maxActual = 0;
         for (short[][] frame : frames) {
@@ -68,6 +69,10 @@ public final class DisplayImageRenderer {
             FrameStats stats = frameStats(frame);
             if (!stats.valid) {
                 continue;
+            }
+            if (validFrames == skies.length) {
+                skies = Arrays.copyOf(skies, 2 * validFrames);
+                noises = Arrays.copyOf(noises, 2 * validFrames);
             }
             skies[validFrames] = (float) stats.sky;
             noises[validFrames] = (float) stats.noise;
@@ -308,7 +313,7 @@ public final class DisplayImageRenderer {
 
     /** The median of the first {@code count} values, which it sorts. */
     private static double median(float[] values, int count) {
-        java.util.Arrays.sort(values, 0, count);
+        Arrays.sort(values, 0, count);
         return count % 2 == 1 ? values[count / 2] : 0.5 * (values[count / 2 - 1] + values[count / 2]);
     }
 

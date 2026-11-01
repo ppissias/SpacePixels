@@ -157,7 +157,7 @@ final class GlobalMapsSectionWriter {
         BufferedImage transientMap = ReportMaps.createGlobalTransientMap(fieldDisplay, allTransients, reportContext.settings);
         TrackVisualizationRenderer.saveLosslessPng(transientMap, reportContext.file(TRANSIENT_MAP));
 
-        BufferedImage rainbowMap = ReportMaps.createRainbowClusterMap(fieldDisplay, allTransients, reportContext.settings);
+        BufferedImage rainbowMap = ReportMaps.createRainbowClusterMap(fieldDisplay, allTransients);
         TrackVisualizationRenderer.saveLosslessPng(rainbowMap, reportContext.file(CLUSTER_MAP));
 
         report.println("<div class='panel'>");
