@@ -84,6 +84,8 @@ public class SolarSystemControllerTest {
         await(() -> edt(() -> !controller.isRunning()));
         assertSame(previous, edt(() -> session.getSkyCatalogue().getSolarSystem()));
         assertTrue(edt(controller::problem).contains("did not answer"));
+        assertEquals("Asteroids and comets: JPL did not answer within 300 s.",
+                view.messages.get(view.messages.size() - 1));
     }
 
     @Test public void aMissingSiteIsSaidWithoutAskingJpl() throws Exception {

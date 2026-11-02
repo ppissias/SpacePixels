@@ -183,10 +183,13 @@ final class SolarSystemController implements AutoCloseable {
         stop();
         if (failure != null || result == null) {
             problem = "The fetch failed: " + failure;
-            listener.message("Asteroids and comets: the fetch failed");
+            listener.message("Asteroids and comets: JPL request failed"
+                    + (failure == null || failure.isBlank() ? "" : " — " + failure));
         } else if (result.source == null || result.source.isEmpty()) {
             problem = result.problems.isEmpty() ? "JPL did not answer." : String.join("\n", result.problems);
-            listener.message("Asteroids and comets: JPL could not be asked");
+            String detail = result.problems.isEmpty() ? "JPL did not answer."
+                    : result.problems.get(0).replaceFirst("^Field search \\(JPL SB-Ident\\):\\s*", "");
+            listener.message("Asteroids and comets: " + detail);
         } else {
             problem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
             session.saveSolarSystem(result, saveProblem -> {
