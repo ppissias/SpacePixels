@@ -1,4 +1,5 @@
 package eu.startales.spacepixels.report.lookup;
+import eu.startales.spacepixels.solarsystem.JplSbIdentUrlBuilder;
 
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;

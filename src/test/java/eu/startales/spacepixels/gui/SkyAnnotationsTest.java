@@ -88,6 +88,66 @@ public class SkyAnnotationsTest {
         });
     }
 
+    @Test
+    public void placesAsteroidsWhereTheyArePredictedAtTheMiddleOfEachExposure() {
+        long start = Instant.parse("2026-03-10T02:00:00Z").toEpochMilli();
+        long hour = 3_600_000L;
+        eu.startales.spacepixels.solarsystem.SolarSystemObjects objects = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+        // Moving north at 600 px an hour (0.25° at 1.5″ per pixel), from 300 px south of the centre.
+        eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body asteroid = body("194 Prokne (A879 FA)", false, "JPL#172");
+        for (int step = 0; step <= 2; step++) {
+            asteroid.samples.add(solarSample(start + step * hour, 150.0, 20.0 - 300 * SCALE_DEG + step * 600 * SCALE_DEG, 14.1, 0.005));
+        }
+        // Far north of the frame all night: neither placed nor drawn.
+        eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body far = body("(2014 QV125)", false, null);
+        far.samples.add(solarSample(start, 150.0, 21.0, 20.0, null));
+        far.samples.add(solarSample(start + 2 * hour, 150.0, 21.0, 20.0, null));
+        objects.bodies.add(asteroid);
+        objects.bodies.add(far);
+
+        // A 10-minute exposure starting 25 minutes in: the middle is 30 minutes in, 300 px north of the start.
+        List<SkyMark> marks = SkyAnnotations.projectSolarSystem(objects, TRANSFORMER, 2000, 1600, start + 25 * 60_000L, 10 * 60_000L);
+        assertEquals(1, marks.size());
+        SkyMark mark = marks.get(0);
+        assertEquals(SkyMark.Kind.SOLAR_SYSTEM, mark.kind);
+        assertEquals(999.5, mark.x, 1e-3);
+        assertEquals(799.5, mark.y, 1e-3);
+        assertEquals("194 Prokne 14.1", mark.label);
+        assertEquals("the exposure's start", 749.5, mark.trail[1], 1e-3);
+        assertEquals("the exposure's end", 849.5, mark.trail[3], 1e-3);
+        assertEquals("the path over the session", 6, mark.path.length);
+        assertTrue(mark.description, mark.description.contains("V 14.1") && mark.description.contains("JPL#172")
+                && mark.description.contains("within 1″"));
+
+        // Nearly two hours later the object has left the frame, but its path still crosses it.
+        long later = start + 2 * hour - 60_000L;
+        SkyMark gone = SkyAnnotations.projectSolarSystem(objects, TRANSFORMER, 2000, 1600, later, 0).get(0);
+        assertTrue("off the frame: the path only", !gone.isPlaced() && gone.path != null);
+        assertTrue(gone.description, gone.description.contains("elsewhere"));
+        SkyMark unknownTime = SkyAnnotations.projectSolarSystem(objects, TRANSFORMER, 2000, 1600, 0, 0).get(0);
+        assertTrue("a frame without a time shows the path only", !unknownTime.isPlaced() && unknownTime.path != null);
+    }
+
+    private static eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body body(String name, boolean comet, String solution) {
+        var body = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
+        body.name = name;
+        body.comet = comet;
+        body.orbitSolution = solution;
+        return body;
+    }
+
+    private static eu.startales.spacepixels.solarsystem.SolarSystemObjects.Sample solarSample(long time, double ra, double dec,
+            Double magnitude, Double sigma) {
+        var sample = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Sample();
+        sample.timeMillis = time;
+        sample.ra = ra;
+        sample.dec = dec;
+        sample.magnitude = magnitude;
+        sample.raSigmaArcsec = sigma;
+        sample.decSigmaArcsec = sigma;
+        return sample;
+    }
+
     /** 1.5″ per pixel, north up and east left, centre at pixel (999.5, 799.5) of a 2000 × 1600 frame. */
     private static final double SCALE_DEG = 1.5 / 3600;
     private static final WcsCoordinateTransformer TRANSFORMER = WcsCoordinateTransformer.fromHeader(header());

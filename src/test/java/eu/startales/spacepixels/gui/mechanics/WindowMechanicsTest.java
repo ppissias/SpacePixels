@@ -34,6 +34,7 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         requireButton("Blink Selected", false);
         requireButton("Plate Solve Selected", false);
         requireButton("Fetch Sky Catalogue", false);
+        requireButton("Fetch Asteroids and Comets", false);
         requireButton("Preview Frame", false);
         requireButton("Manual Transient Inspection", false);
         requireButton("Auto-Tune Settings", false);

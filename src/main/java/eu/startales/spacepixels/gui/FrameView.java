@@ -28,6 +28,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.RenderingHints;
+import java.awt.Stroke;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseWheelEvent;
@@ -98,14 +99,19 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private static final Color SKY_DEEP_SKY_COLOR = new Color(255, 215, 70);
     private static final Color SKY_VARIABLE_COLOR = new Color(255, 90, 210);
     private static final Color SKY_NAMED_STAR_COLOR = new Color(235, 235, 255);
+    private static final Color SKY_SOLAR_SYSTEM_COLOR = new Color(190, 255, 90);
     /** Screen pixels per catalogue mark: when more would be on screen, only the brightest (or largest) are drawn. */
     private static final double SCREEN_AREA_PER_STAR = 2500;
     private static final double SCREEN_AREA_PER_VARIABLE = 2500;
     private static final double SCREEN_AREA_PER_DEEP_SKY = 5000;
+    private static final double SCREEN_AREA_PER_SOLAR_SYSTEM = 5000;
     /** Labels are written only while no more marks of the kind than this are drawn. */
     private static final int MAX_LABELLED_STARS = 60;
     private static final int MAX_LABELLED_VARIABLES = 60;
     private static final int MAX_LABELLED_DEEP_SKY = 150;
+    private static final int MAX_LABELLED_SOLAR_SYSTEM = 40;
+    /** The radius of an asteroid's or comet's ring on screen. */
+    private static final double SOLAR_SYSTEM_RING = 9;
     /** Long survey names ("Gaia DR3 3131…", "ZTF J0639…") are written only while this few variables are drawn. */
     private static final int MAX_LABELLED_SURVEY_VARIABLES = 15;
     private static final int SHORT_NAME_LENGTH = 12;
@@ -144,6 +150,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private boolean skyStars = true;
     private boolean skyDeepSky = true;
     private boolean skyVariables = true;
+    private boolean skySolarSystem = true;
     private ViewerAnnotationPreferences skyPreferences = ViewerAnnotationPreferences.DEFAULT;
     /** The catalogue marks drawn last, for {@link #skyMarkAt}. */
     private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
@@ -247,7 +254,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         VisualizationSettings markers = markerSettings.get(); copy.markerSettings = () -> markers;
         copy.variableStarOverlay = variableStarOverlay; copy.variableStarsVisible = variableStarsVisible;
         copy.skyMarks = skyMarks == null ? null : List.copyOf(skyMarks); copy.skyStarLimit = skyStarLimit;
-        copy.skyStars = skyStars; copy.skyDeepSky = skyDeepSky; copy.skyVariables = skyVariables; copy.skyPreferences = skyPreferences;
+        copy.skyStars = skyStars; copy.skyDeepSky = skyDeepSky; copy.skyVariables = skyVariables;
+        copy.skySolarSystem = skySolarSystem; copy.skyPreferences = skyPreferences;
         return copy;
     }
 
@@ -356,11 +364,12 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         repaint();
     }
 
-    /** Which kinds of catalogue objects are drawn. */
-    void setSkyLayers(boolean stars, boolean deepSky, boolean variables) {
+    /** Which kinds of catalogue objects are drawn; {@code solarSystem} is the predicted asteroids and comets. */
+    void setSkyLayers(boolean stars, boolean deepSky, boolean variables, boolean solarSystem) {
         this.skyStars = stars;
         this.skyDeepSky = deepSky;
         this.skyVariables = variables;
+        this.skySolarSystem = solarSystem;
         drawnSkyMarks = new java.util.ArrayList<>();
         repaint();
     }
@@ -423,10 +432,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         double reach = Math.max(3, 8 / scale);
         SkyMark best = null;
         double bestDistance = Double.MAX_VALUE;
-        for (SkyMark.Kind kind : new SkyMark.Kind[]{SkyMark.Kind.VARIABLE, SkyMark.Kind.NAMED_STAR, SkyMark.Kind.STAR}) {
+        for (SkyMark.Kind kind : new SkyMark.Kind[]{SkyMark.Kind.SOLAR_SYSTEM, SkyMark.Kind.VARIABLE, SkyMark.Kind.NAMED_STAR,
+                SkyMark.Kind.STAR}) {
             for (SkyMark mark : drawnSkyMarks) {
                 double distance = Math.hypot(mark.x - pixel.x, mark.y - pixel.y);
-                if (mark.kind == kind && distance <= reach && distance < bestDistance) {
+                if (mark.kind == kind && mark.isPlaced() && distance <= reach && distance < bestDistance) {
                     best = mark;
                     bestDistance = distance;
                 }
@@ -805,14 +815,21 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         List<SkyMark> variables = new java.util.ArrayList<>();
         List<SkyMark> deepSky = new java.util.ArrayList<>();
         List<SkyMark> namedStars = new java.util.ArrayList<>();
+        List<SkyMark> solarSystem = new java.util.ArrayList<>();
         for (SkyMark mark : skyMarks) {
             boolean shown = mark.kind == SkyMark.Kind.STAR || mark.kind == SkyMark.Kind.NAMED_STAR ? skyStars
-                    : mark.kind == SkyMark.Kind.VARIABLE ? skyVariables : skyDeepSky;
+                    : mark.kind == SkyMark.Kind.VARIABLE ? skyVariables
+                    : mark.kind == SkyMark.Kind.SOLAR_SYSTEM ? skySolarSystem : skyDeepSky;
             if (!shown || !skyPreferences.includes(mark)) {
                 continue;
             }
             if (mark.kind == SkyMark.Kind.NAMED_STAR) {
                 namedStars.add(mark);
+                continue;
+            }
+            if (mark.kind == SkyMark.Kind.SOLAR_SYSTEM) {
+                // Kept by its path too: an object can cross the screen before or after this frame's time.
+                solarSystem.add(mark);
                 continue;
             }
             double x = left + (mark.x + 0.5) * scale;
@@ -828,7 +845,9 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         int starTotal = stars.size();
         int variableTotal = variables.size();
         int deepSkyTotal = deepSky.size();
+        int solarSystemTotal = solarSystem.size();
         stars = brightest(stars, (int) (area / SCREEN_AREA_PER_STAR), brightestFirst);
+        solarSystem = brightest(solarSystem, Math.max(10, (int) (area / SCREEN_AREA_PER_SOLAR_SYSTEM)), brightestFirst);
         variables = brightest(variables, (int) (area / SCREEN_AREA_PER_VARIABLE), brightestFirst);
         deepSky = brightest(deepSky, (int) (area / SCREEN_AREA_PER_DEEP_SKY),
                 java.util.Comparator.comparingDouble((SkyMark mark) -> -mark.semiMajor));
@@ -916,6 +935,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             g2.setFont(UiStyle.bodyFont());
             drawn.add(mark);
         }
+        drawSolarSystem(g2, solarSystem, left, top, scale, drawn);
         g2.setClip(screenClip);
         drawnSkyMarks = drawn;
 
@@ -929,11 +949,70 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         if (deepSky.size() < deepSkyTotal) {
             clipped.add(String.format(Locale.US, "the largest %,d of %,d deep-sky objects", deepSky.size(), deepSkyTotal));
         }
+        if (solarSystem.size() < solarSystemTotal) {
+            clipped.add(String.format(Locale.US, "the brightest %,d of %,d asteroids and comets", solarSystem.size(), solarSystemTotal));
+        }
         if (!clipped.isEmpty()) {
             String note = "Showing " + String.join(", ", clipped) + " on screen · zoom in for more";
             g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
             drawNote(g2, note, getHeight() - noteHeight(g2) - UiStyle.space(6), SKY_STAR_COLOR);
         }
+    }
+
+    /**
+     * Asteroids and comets: the predicted path over the session as a faint dashed line, the motion during this
+     * exposure as a solid line, a ring at the predicted position with its name and magnitude, and the 3-sigma
+     * uncertainty as a dotted ellipse when it is larger than the ring. Marks without a position at this frame's time
+     * show their path only.
+     */
+    private void drawSolarSystem(Graphics2D g2, List<SkyMark> marks, double left, double top, double scale, List<SkyMark> drawn) {
+        boolean label = skyPreferences.names() && marks.size() <= MAX_LABELLED_SOLAR_SYSTEM;
+        Stroke dashed = new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{6, 4}, 0);
+        Stroke dotted = new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{2, 3}, 0);
+        for (SkyMark mark : marks) {
+            if (mark.path != null && mark.path.length >= 4) {
+                Path2D.Double path = new Path2D.Double();
+                path.moveTo(left + (mark.path[0] + 0.5) * scale, top + (mark.path[1] + 0.5) * scale);
+                for (int i = 2; i + 1 < mark.path.length; i += 2) {
+                    path.lineTo(left + (mark.path[i] + 0.5) * scale, top + (mark.path[i + 1] + 0.5) * scale);
+                }
+                g2.setColor(withAlpha(SKY_SOLAR_SYSTEM_COLOR, 170));
+                g2.setStroke(dashed);
+                g2.draw(path);
+            }
+            if (!mark.isPlaced()) {
+                continue;
+            }
+            double x = left + (mark.x + 0.5) * scale;
+            double y = top + (mark.y + 0.5) * scale;
+            g2.setColor(SKY_SOLAR_SYSTEM_COLOR);
+            if (mark.trail != null) {
+                double x0 = left + (mark.trail[0] + 0.5) * scale;
+                double y0 = top + (mark.trail[1] + 0.5) * scale;
+                double x1 = left + (mark.trail[2] + 0.5) * scale;
+                double y1 = top + (mark.trail[3] + 0.5) * scale;
+                if (Math.hypot(x1 - x0, y1 - y0) >= 3) {
+                    g2.setStroke(new BasicStroke(1.5f));
+                    g2.draw(new java.awt.geom.Line2D.Double(x0, y0, x1, y1));
+                }
+            }
+            if (mark.semiMajor * scale >= SOLAR_SYSTEM_RING) {
+                java.awt.geom.AffineTransform saved = g2.getTransform();
+                g2.rotate(mark.angle, x, y);
+                double a = mark.semiMajor * scale;
+                double b = Math.max(2, mark.semiMinor * scale);
+                g2.setStroke(dotted);
+                g2.draw(new Ellipse2D.Double(x - a, y - b, 2 * a, 2 * b));
+                g2.setTransform(saved);
+            }
+            g2.setStroke(new BasicStroke(1.5f));
+            g2.draw(new Ellipse2D.Double(x - SOLAR_SYSTEM_RING, y - SOLAR_SYSTEM_RING, 2 * SOLAR_SYSTEM_RING, 2 * SOLAR_SYSTEM_RING));
+            if (label) {
+                drawLabel(g2, mark.label, x + SOLAR_SYSTEM_RING + 3, y + SOLAR_SYSTEM_RING + 3, SKY_SOLAR_SYSTEM_COLOR);
+            }
+            drawn.add(mark);
+        }
+        g2.setStroke(new BasicStroke(1.2f));
     }
 
     private static List<SkyMark> brightest(List<SkyMark> marks, int limit, java.util.Comparator<SkyMark> order) {

@@ -12,6 +12,7 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.detection.DetectionOverlays;
 import eu.startales.spacepixels.detection.RunPreviewSink;
 import eu.startales.spacepixels.fits.FitsFileInformation;
@@ -88,6 +89,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JButton blinkButton = new JButton(BLINK_SELECTED);
     private final JButton solveButton = new JButton("Plate Solve Selected");
     private final JButton skyCatalogueButton = new JButton(FETCH_SKY_CATALOGUE);
+    private final JButton solarSystemButton = new JButton(FETCH_SOLAR_SYSTEM);
     private final JButton detectSingleButton = new JButton("Preview Frame");
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
@@ -149,6 +151,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     + "(AAVSO VSX)<br>in the field of the plate-solved frames, for the Annotate switch (A) of the viewers. "
                     + "Runs in the background;<br>the star depth is set in the Astrometry Config tab.</html>",
             CommandAvailability.Command.SKY_CATALOGUE, this::commandFacts, this::onSkyCatalogueButton);
+    private final CommandAction solarSystemAction = new CommandAction(FETCH_SOLAR_SYSTEM,
+            "<html>Ask JPL which known asteroids and comets cross the field of the plate-solved frames, and where they are<br>"
+                    + "at each frame's time, for the Annotate switch (A) of the viewers. Sends the field, the frame times and the<br>"
+                    + "observing site (or IAU code) to JPL. Runs in the background; the depth is set in the Astrometry Config tab.</html>",
+            CommandAvailability.Command.SOLAR_SYSTEM, this::commandFacts, this::onSolarSystemButton);
     private final CommandAction inspectionAction = new CommandAction("Manual Transient Inspection",
             "Extract purified transients from all frames against the master background and navigate through them using arrow keys. "
                     + "Uses the normal extraction only, without the faint-streak search.",
@@ -157,7 +164,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.",
             CommandAvailability.Command.DETECT_ITERATIVELY, this::commandFacts, this::startIterativeDetection);
     private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, solveAction,
-            skyCatalogueAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction, iterativeAction);
+            skyCatalogueAction, solarSystemAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction,
+            iterativeAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
 
@@ -193,6 +201,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JProgressBar skyFetchBar = new JProgressBar();
     private final JPanel skyFetchIndicator = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
     private SkyCatalogueController skyController;
+    // Asteroids and comets: fetched in the background like the sky catalogue, sharing its progress indicator.
+    private static final String FETCH_SOLAR_SYSTEM = "Fetch Asteroids and Comets";
+    private SolarSystemController solarController;
 
     private DetectionSequenceFrame detectionSequenceFrame;
     /**
@@ -303,6 +314,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         importButton.setAction(importAction);
         convertMonoButton.setAction(convertMonoAction);
         skyCatalogueButton.setAction(skyCatalogueAction);
+        solarSystemButton.setAction(solarSystemAction);
         manualTransientInspectionButton.setAction(inspectionAction);
         detectIterativelyButton.setAction(iterativeAction);
         solveButton.setAction(solveAction);
@@ -331,6 +343,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         JPanel astrometryGroup = workflowGroup("2  Astrometry", astrometryStatus,
                 buttonRow(solveButton),
                 buttonRow(skyCatalogueButton),
+                buttonRow(solarSystemButton),
                 buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
         JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
@@ -500,7 +513,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         boolean blinking = blinkPlaying || (running != null && running.kind() == JobKind.BLINK);
         return new CommandAvailability.Facts(frames, !containsColorImages,
                 table == null ? 0 : table.getSelectedRowCount(), selectedRow >= 0 && isSolvedRow(selectedRow), solved,
-                uiLocked, blinking, skyController != null && skyController.isRunning());
+                uiLocked, blinking, skyController != null && skyController.isRunning(),
+                solarController != null && solarController.isRunning());
     }
 
     private boolean isSolvedRow(int row) {
@@ -520,6 +534,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         preparationLock.accept(facts.busy());
         blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : BLINK_SELECTED);
         skyCatalogueAction.putValue(Action.NAME, facts.skyFetching() ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
+        solarSystemAction.putValue(Action.NAME, facts.solarSystemFetching() ? "Cancel Asteroids and Comets" : FETCH_SOLAR_SYSTEM);
     }
 
     /** Wires the independent preparation window and its job lock without taking the application window as a dependency. */
@@ -864,13 +879,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             // One solved frame is enough: the frames are aligned, so the report uses its solution for all of them.
             hasSolvedFrame = solved > 0;
             if (hasSolvedFrame) {
-                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved<br>" + skyCatalogueStatusText() + "</html>");
+                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved<br>" + skyCatalogueStatusText()
+                        + "<br>" + solarSystemStatusText() + "</html>");
                 astrometryStatus.setToolTipText(skyCatalogueTooltip());
             } else {
                 astrometryStatus.setText("Solve one frame to identify objects");
                 astrometryStatus.setToolTipText("<html>No frame is plate-solved yet. One solved frame gives the report sky coordinates:<br>"
                         + "moving objects are identified with JPL and SkyBoT, and variable-star candidates are matched against AAVSO VSX.<br>"
-                        + "It also lets " + FETCH_SKY_CATALOGUE + " download the stars and deep-sky objects of the field.</html>");
+                        + "It also lets " + FETCH_SKY_CATALOGUE + " download the stars and deep-sky objects of the field,<br>"
+                        + "and " + FETCH_SOLAR_SYSTEM + " ask JPL for the asteroids and comets that cross it.</html>");
             }
             int selected = table.getSelectedRowCount();
             inspectStatus.setText(selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"));
@@ -1173,6 +1190,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
     }
 
+    /** Delegates the asteroid and comet fetch/cancel to the current session's workflow, with the live settings; EDT only. */
+    private void onSolarSystemButton() {
+        if (solarController != null) {
+            solarController.fetchOrCancel(applicationSettings.getConfig());
+        }
+    }
+
     /** The current session's model, or the empty model before an import. */
     private SkyCatalogueModel skyCatalogue() {
         ProcessingSession session = sessions.current();
@@ -1183,15 +1207,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private void restoreSkyCatalogue() {
         if (skyController != null) skyController.close();
         skyController = null;
+        if (solarController != null) solarController.close();
+        solarController = null;
         ProcessingSession session = sessions.current();
         if (session == null) return;
         skyController = new SkyCatalogueController(session, () -> sessions.isCurrent(session),
                 new SkyCatalogueController.Listener() {
                     /** Updates only Swing presentation from the controller's EDT-owned state. */
                     @Override public void changed() {
-                        skyFetchIndicator.setVisible(skyController != null && skyController.isRunning());
-                        if (skyController != null) skyFetchLabel.setText(skyController.progressText());
-                        refreshWorkflowStatus();
+                        showBackgroundFetches();
                     }
 
                     /** Shares catalogue workflow outcomes with the main status line. */
@@ -1199,7 +1223,71 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                         statusLabel.setText(text);
                     }
                 });
+        solarController = new SolarSystemController(session, () -> sessions.isCurrent(session),
+                new SolarSystemController.Listener() {
+                    /** Updates only Swing presentation from the controller's EDT-owned state. */
+                    @Override public void changed() {
+                        showBackgroundFetches();
+                    }
+
+                    /** Shares asteroid and comet outcomes with the main status line. */
+                    @Override public void message(String text) {
+                        statusLabel.setText(text);
+                    }
+                });
         skyController.restore();
+    }
+
+    /** Shows the running catalogue and asteroid fetches at the right of the status bar, and refreshes the commands. */
+    private void showBackgroundFetches() {
+        boolean sky = skyController != null && skyController.isRunning();
+        boolean solar = solarController != null && solarController.isRunning();
+        skyFetchIndicator.setVisible(sky || solar);
+        skyFetchLabel.setText(sky && solar ? skyController.progressText() + " · " + solarController.progressText()
+                : sky ? skyController.progressText() : solar ? solarController.progressText() : "");
+        refreshWorkflowStatus();
+    }
+
+    /** The third line of the Astrometry status: the predicted asteroids and comets. */
+    private String solarSystemStatusText() {
+        if (solarController != null && solarController.isRunning()) {
+            return "Fetching asteroids and comets…";
+        }
+        SolarSystemObjects objects = skyCatalogue().getSolarSystem();
+        String problem = solarController == null ? null : solarController.problem();
+        if (objects == null) {
+            return problem != null ? "⚠ Asteroids and comets not fetched" : "No asteroids or comets yet";
+        }
+        return (objects.problems.isEmpty() && problem == null ? "✓ " : "⚠ ")
+                + Character.toUpperCase(objects.summary().charAt(0)) + objects.summary().substring(1);
+    }
+
+    /** The asteroid and comet part of the Astrometry tooltip. */
+    private String solarSystemTooltip() {
+        SolarSystemObjects objects = skyCatalogue().getSolarSystem();
+        StringBuilder text = new StringBuilder();
+        if (objects != null) {
+            text.append("<br><br>Asteroids and comets for the Annotate switch: ").append(objects.summary())
+                    .append(String.format(Locale.US, " predicted to V %.1f", objects.magnitudeLimit))
+                    .append(objects.source == null || objects.source.isEmpty() ? "" : "<br>from " + escapeHtml(objects.source))
+                    .append(objects.observer == null ? "" : ", for the " + escapeHtml(objects.observer))
+                    .append(objects.fetchedAtUtc == null ? "" : ", fetched " + fetchedText(objects.fetchedAtUtc));
+            double depth = applicationSettings.getConfig().solarSystemMagnitude();
+            if (Math.abs(depth - objects.magnitudeLimit) > 0.01) {
+                text.append(String.format(Locale.US, "<br><i>The depth is now set to V %.1f: fetch again to use it.</i>", depth));
+            }
+        } else {
+            text.append("<br><br>").append(FETCH_SOLAR_SYSTEM).append(" asks JPL which known asteroids and comets cross the field,<br>"
+                    + "and where they are at each frame's time, for the Annotate switch (A) of the viewers.");
+        }
+        String problem = solarController == null ? null : solarController.problem();
+        if (problem != null) {
+            text.append("<br><br><b>").append(objects == null ? "Not fetched:" : "Incomplete:").append("</b> ")
+                    .append(escapeHtml(problem).replace("\n", "<br>"));
+        } else if (objects != null && !objects.problems.isEmpty()) {
+            text.append("<br><br><b>Incomplete:</b> ").append(escapeHtml(String.join("\n", objects.problems)).replace("\n", "<br>"));
+        }
+        return text.toString();
     }
 
     /** Current catalogue problem for status rendering, or none when no session is open. */
@@ -1295,7 +1383,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         } else if (correctionProblem() != null) {
             text.append("<br><br><b>Plate solution not checked:</b> ").append(escapeHtml(correctionProblem()));
         }
-        return text.append("</html>").toString();
+        return text.append(solarSystemTooltip()).append("</html>").toString();
     }
 
     /** "2026-10-10 14:03 UTC" from an ISO instant. */
@@ -1550,6 +1638,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     void closeSessionViews() {
         if (skyController != null) skyController.close();
         skyController = null;
+        if (solarController != null) solarController.close();
+        solarController = null;
         if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
         subscribedSkyCatalogue = null;
         if (detectionSequenceFrame != null) {

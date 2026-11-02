@@ -15,6 +15,7 @@ public class AppConfig {
         copy.pixelSize = pixelSize;
         copy.focalLength = focalLength;
         copy.skyCatalogueStarMagnitude = skyCatalogueStarMagnitude;
+        copy.solarSystemMagnitude = solarSystemMagnitude;
         return copy;
     }
 
@@ -38,6 +39,12 @@ public class AppConfig {
     public static final double DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE = 15.0;
     public static final double MIN_SKY_CATALOGUE_STAR_MAGNITUDE = 10.0;
     public static final double MAX_SKY_CATALOGUE_STAR_MAGNITUDE = 18.0;
+    /** Faintest predicted V magnitude (a comet's total magnitude) asked for by Fetch Asteroids and Comets. */
+    public double solarSystemMagnitude = DEFAULT_SOLAR_SYSTEM_MAGNITUDE;
+
+    public static final double DEFAULT_SOLAR_SYSTEM_MAGNITUDE = 19.0;
+    public static final double MIN_SOLAR_SYSTEM_MAGNITUDE = 8.0;
+    public static final double MAX_SOLAR_SYSTEM_MAGNITUDE = 23.0;
 
     /** The star depth, within the allowed range (an edited or old file may hold anything). */
     public double skyCatalogueStarMagnitude() {
@@ -45,6 +52,14 @@ public class AppConfig {
             return skyCatalogueStarMagnitude == 0 ? DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE : MIN_SKY_CATALOGUE_STAR_MAGNITUDE;
         }
         return Math.min(MAX_SKY_CATALOGUE_STAR_MAGNITUDE, skyCatalogueStarMagnitude);
+    }
+
+    /** The asteroid and comet depth, within the allowed range (an edited or old file may hold anything). */
+    public double solarSystemMagnitude() {
+        if (!(solarSystemMagnitude >= MIN_SOLAR_SYSTEM_MAGNITUDE)) {
+            return solarSystemMagnitude == 0 ? DEFAULT_SOLAR_SYSTEM_MAGNITUDE : MIN_SOLAR_SYSTEM_MAGNITUDE;
+        }
+        return Math.min(MAX_SOLAR_SYSTEM_MAGNITUDE, solarSystemMagnitude);
     }
 
     /** The key Astrometry.net solves log in with: the observer's own key, or "" for an anonymous login. */

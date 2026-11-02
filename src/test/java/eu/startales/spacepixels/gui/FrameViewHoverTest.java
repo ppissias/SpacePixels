@@ -32,12 +32,35 @@ public class FrameViewHoverTest {
             view.zoomToScale(4);
             paint(view);
             assertEquals("DK Per · EA/SD", view.getToolTipText(mouse(view, 202, 162)));
-            view.setSkyLayers(true, true, false);
+            view.setSkyLayers(true, true, false, true);
             assertNull(view.getToolTipText(mouse(view, 202, 162)));
             paint(view);
             assertNull(view.getToolTipText(mouse(view, 202, 162)));
             view.clear();
             assertNull(view.getToolTipText(mouse(view, 202, 162)));
+        });
+    }
+
+    @Test public void asteroidsAreNamedWhereTheyArePredictedAndTheirPathsAreDrawnWithoutAPosition() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            FrameView view = new FrameView();
+            view.setSize(400, 320);
+            FitsFileInformation info = new FitsFileInformation("hover.fit", "hover.fit", true, 200, 160);
+            view.showFrame(BlinkSequence.fromMono(info, new short[160][200]), new byte[1][65536], false);
+            List<SkyMark> marks = new ArrayList<>();
+            marks.add(new SkyMark(SkyMark.Kind.SOLAR_SYSTEM, 100, 80, 14.1, 30, 5, 0, "194 Prokne 14.1",
+                    "194 Prokne (A879 FA) · asteroid", new double[]{0, 80, 200, 80}, new double[]{98, 80, 102, 80}));
+            marks.add(new SkyMark(SkyMark.Kind.STAR, 100, 80, 9, 0, 0, 0, "9.0", "Gaia G 9.0"));
+            marks.add(new SkyMark(SkyMark.Kind.SOLAR_SYSTEM, Double.NaN, Double.NaN, 18, 0, 0, 0, "(2014 QV125) 18.0",
+                    "(2014 QV125) · asteroid · elsewhere", new double[]{0, 10, 200, 10}, null));
+            view.setSkyMarks(marks, 15);
+            paint(view);
+            assertEquals("the asteroid comes before the star under it", "194 Prokne (A879 FA) · asteroid",
+                    view.getToolTipText(mouse(view, 201, 161)));
+            assertNull("an object elsewhere at this time has no position to point at", view.getToolTipText(mouse(view, 200, 21)));
+            view.setSkyLayers(true, true, true, false);
+            paint(view);
+            assertEquals("Gaia G 9.0", view.getToolTipText(mouse(view, 201, 161)));
         });
     }
 

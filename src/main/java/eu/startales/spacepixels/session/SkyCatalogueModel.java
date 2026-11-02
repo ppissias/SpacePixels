@@ -12,6 +12,7 @@ package eu.startales.spacepixels.session;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.skycatalog.SkySnapshot;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 
 import java.io.File;
 import java.io.IOException;
@@ -21,8 +22,10 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 
 /**
- * The sky catalogue of the imported session and its plate-solution correction, shared by the main window (which
- * fetches, fits or loads them) and the frame viewers (which draw the catalogue and switch the correction on or off).
+ * The sky catalogue of the imported session, its predicted asteroids and comets and its plate-solution correction,
+ * shared by the main window (which fetches, fits or loads them) and the frame viewers (which draw the catalogue and
+ * the predictions, and switch the correction on or off). The catalogue listeners hear of both the catalogue and the
+ * predictions.
  * A viewer that is open when either arrives is told, and offers it without changing what it shows. Used on the Swing
  * thread only.
  */
@@ -32,6 +35,7 @@ public final class SkyCatalogueModel {
     private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
     private final List<Runnable> correctionListeners = new CopyOnWriteArrayList<>();
     private SkyCatalogue catalogue;
+    private SolarSystemObjects solarSystem;
     private PlateSolutionCorrection correction;
     private File sessionFolder;
     private BiConsumer<PlateSolutionCorrection, Consumer<Throwable>> correctionWriter;
@@ -54,6 +58,19 @@ public final class SkyCatalogueModel {
 
     public void set(SkyCatalogue catalogue) {
         this.catalogue = catalogue;
+        for (Runnable listener : listeners) {
+            listener.run();
+        }
+    }
+
+    /** The predicted asteroids and comets of the session, or null. */
+    public SolarSystemObjects getSolarSystem() {
+        return solarSystem;
+    }
+
+    /** Replaces the predictions, never changing them in place, and tells the catalogue listeners. */
+    public void setSolarSystem(SolarSystemObjects solarSystem) {
+        this.solarSystem = solarSystem;
         for (Runnable listener : listeners) {
             listener.run();
         }

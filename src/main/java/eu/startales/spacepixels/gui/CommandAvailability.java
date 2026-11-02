@@ -21,7 +21,7 @@ final class CommandAvailability {
 
     /** The application workflow commands, including Batch Stretch on the Image Stretch tab. */
     enum Command {
-        PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, BLINK, PREVIEW, INSPECTION,
+        PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, SOLAR_SYSTEM, BLINK, PREVIEW, INSPECTION,
         AUTO_TUNE, DETECT, DETECT_ITERATIVELY
     }
 
@@ -36,9 +36,10 @@ final class CommandAvailability {
      * @param busy           whether a job holds the window, or a blink plays
      * @param blinking       whether a blink is loading or playing (its command then stops it)
      * @param skyFetching    whether the sky catalogue is being fetched (its command then cancels it)
+     * @param solarSystemFetching whether the asteroids and comets are being fetched (their command then cancels it)
      */
     record Facts(int frames, boolean monochrome, int selectedFrames, boolean selectedSolved, int solvedFrames,
-                 boolean busy, boolean blinking, boolean skyFetching) {
+                 boolean busy, boolean blinking, boolean skyFetching, boolean solarSystemFetching) {
     }
 
     /** Whether a command can run; when it cannot, why, worded to follow "Not available: ". */
@@ -61,7 +62,8 @@ final class CommandAvailability {
             return Availability.unavailable("wait until the current task has finished.");
         }
         if (command == Command.PREPARE_FRAMES || command == Command.IMPORT || command == Command.DETECT_ITERATIVELY
-                || (command == Command.SKY_CATALOGUE && facts.skyFetching())) {
+                || (command == Command.SKY_CATALOGUE && facts.skyFetching())
+                || (command == Command.SOLAR_SYSTEM && facts.solarSystemFetching())) {
             return Availability.AVAILABLE;
         }
         if (facts.frames() == 0) {
@@ -74,6 +76,7 @@ final class CommandAvailability {
             case BATCH_STRETCH:
                 return Availability.AVAILABLE;
             case SKY_CATALOGUE:
+            case SOLAR_SYSTEM:
                 return facts.solvedFrames() > 0 ? Availability.AVAILABLE
                         : Availability.unavailable("plate solve at least one frame first, and write the solution to its FITS header.");
             case BLINK:

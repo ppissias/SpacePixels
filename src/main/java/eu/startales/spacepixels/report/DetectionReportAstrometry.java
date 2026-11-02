@@ -25,7 +25,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
 import eu.startales.spacepixels.report.lookup.AstrometryIdentificationHtmlBuilder;
-import eu.startales.spacepixels.report.lookup.JplSbIdentUrlBuilder;
+import eu.startales.spacepixels.solarsystem.JplSbIdentUrlBuilder;
 import eu.startales.spacepixels.report.lookup.SatCheckerQueryTargetFactory;
 import eu.startales.spacepixels.report.lookup.SatCheckerUrlBuilder;
 import eu.startales.spacepixels.report.lookup.SkyViewerHtmlBuilder;

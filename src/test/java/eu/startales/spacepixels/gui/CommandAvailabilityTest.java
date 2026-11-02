@@ -72,6 +72,19 @@ public class CommandAvailabilityTest {
     }
 
     @Test
+    public void theAsteroidsAndCometsNeedASolvedFrameAndCanBeCancelledWhileTheyAreFetched() {
+        assertEquals("plate solve at least one frame first, and write the solution to its FITS header.",
+                CommandAvailability.of(Command.SOLAR_SYSTEM, session().build()).reason());
+        assertTrue(enabled(Command.SOLAR_SYSTEM, session().solved(1).build()));
+        assertTrue("colour frames have sky positions too", enabled(Command.SOLAR_SYSTEM, session().colour().solved(1).build()));
+        assertTrue("cancel", enabled(Command.SOLAR_SYSTEM, session().fetchingSolarSystem().build()));
+        // The catalogue fetch running beside it does not turn this command into a cancel, nor the other way round.
+        assertFalse(enabled(Command.SOLAR_SYSTEM, session().fetching().build()));
+        assertFalse(enabled(Command.SKY_CATALOGUE, session().fetchingSolarSystem().build()));
+        assertFalse(enabled(Command.SOLAR_SYSTEM, session().solved(1).fetchingSolarSystem().busy().build()));
+    }
+
+    @Test
     public void blinkNeedsThreeSelectedFramesAndStopsABlinkInProgress() {
         assertEquals("select at least 3 frames in the table.",
                 CommandAvailability.of(Command.BLINK, session().selected(2).build()).reason());
@@ -121,6 +134,7 @@ public class CommandAvailabilityTest {
         private boolean busy;
         private boolean blinking;
         private boolean fetching;
+        private boolean fetchingSolarSystem;
 
         FactsBuilder frames(int frames) {
             this.frames = frames;
@@ -162,8 +176,13 @@ public class CommandAvailabilityTest {
             return this;
         }
 
+        FactsBuilder fetchingSolarSystem() {
+            fetchingSolarSystem = true;
+            return this;
+        }
+
         Facts build() {
-            return new Facts(frames, monochrome, selected, selectedSolved, solved, busy, blinking, fetching);
+            return new Facts(frames, monochrome, selected, selectedSolved, solved, busy, blinking, fetching, fetchingSolarSystem);
         }
     }
 }

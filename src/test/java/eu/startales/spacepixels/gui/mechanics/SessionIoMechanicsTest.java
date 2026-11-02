@@ -3,6 +3,7 @@ package eu.startales.spacepixels.gui.mechanics;
 import eu.startales.spacepixels.gui.ApplicationWindow;
 import eu.startales.spacepixels.session.*;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
 import java.awt.EventQueue;
@@ -30,6 +31,9 @@ public class SessionIoMechanicsTest extends MechanicsTestCase {
         }
         @Override public void saveCatalogue(File directory, SkyCatalogue catalogue) throws IOException {
             files.saveCatalogue(directory, catalogue);
+        }
+        @Override public void saveSolarSystem(File directory, SolarSystemObjects objects) throws IOException {
+            files.saveSolarSystem(directory, objects);
         }
         @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
             saveStarted.countDown();

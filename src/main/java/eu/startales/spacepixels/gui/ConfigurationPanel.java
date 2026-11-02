@@ -77,6 +77,10 @@ public class ConfigurationPanel extends JPanel {
             AppConfig.DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE, AppConfig.MIN_SKY_CATALOGUE_STAR_MAGNITUDE,
             AppConfig.MAX_SKY_CATALOGUE_STAR_MAGNITUDE, 0.5));
     private final JLabel starDepthStatus = statusLabel();
+    private final JSpinner solarDepthSpinner = UiStyle.spinner(new DecimalSpinnerModel(
+            AppConfig.DEFAULT_SOLAR_SYSTEM_MAGNITUDE, AppConfig.MIN_SOLAR_SYSTEM_MAGNITUDE,
+            AppConfig.MAX_SOLAR_SYSTEM_MAGNITUDE, 0.5));
+    private final JLabel solarDepthStatus = statusLabel();
 
     /** Site values as last saved, for the unsaved-changes indicator and Revert. */
     private String savedObservatoryCode = "";
@@ -86,6 +90,7 @@ public class ConfigurationPanel extends JPanel {
     private boolean savedAstrometryUseOwnKey;
     private String savedAstrometryApiKey = "";
     private double savedStarDepth;
+    private double savedSolarDepth;
     private long saveVersion;
     /** True while the fields are filled from the configuration, so the fill is not treated as an edit. */
     private boolean loading;
@@ -169,6 +174,17 @@ public class ConfigurationPanel extends JPanel {
                         + "doubles the stars and the wait. Variable stars are fetched to one magnitude fainter. "
                         + "A change applies to the next fetch.",
                 verticalStack(starDepthSpinner, starDepthStatus)));
+        solarDepthSpinner.setEditor(new JSpinner.NumberEditor(solarDepthSpinner, "0.0"));
+        UiStyle.inputWidth(solarDepthSpinner, 80);
+        solarDepthSpinner.addChangeListener(e -> solarDepthChanged());
+        mainContent.add(createConfigRow(
+                "Asteroid and Comet Depth (V)",
+                "The faintest asteroids and comets that <b>Fetch Asteroids and Comets</b> asks JPL for, as a predicted V "
+                        + "magnitude. For comets JPL predicts the total magnitude, which can be off by a magnitude or more. "
+                        + "A deeper limit finds more objects and takes longer: a search of one field took from half a minute "
+                        + "to four minutes in tests, and for frames more than about ten years old JPL may not answer at all "
+                        + "without a limit. A change applies to the next fetch.",
+                verticalStack(solarDepthSpinner, solarDepthStatus)));
 
         // --- OBSERVING SITE ---
         mainContent.add(createSectionHeader("Observing Site (for object identification)"));
@@ -254,6 +270,8 @@ public class ConfigurationPanel extends JPanel {
         try {
             starDepthSpinner.setValue(config.skyCatalogueStarMagnitude());
             starDepthStatus.setText(" ");
+            solarDepthSpinner.setValue(config.solarSystemMagnitude());
+            solarDepthStatus.setText(" ");
             astrometryOwnKeyButton.setSelected(config.astrometryNetUseOwnKey);
             astrometryAnonymousButton.setSelected(!config.astrometryNetUseOwnKey);
             astrometryKeyField.setText(nullToEmpty(config.astrometryNetApiKey));
@@ -271,6 +289,7 @@ public class ConfigurationPanel extends JPanel {
         savedAstrometryUseOwnKey = config.astrometryNetUseOwnKey;
         savedAstrometryApiKey = nullToEmpty(config.astrometryNetApiKey);
         savedStarDepth = config.skyCatalogueStarMagnitude();
+        savedSolarDepth = config.solarSystemMagnitude();
         validateAll();
         checkAstap();
         showAstrometryAccountNote();
@@ -452,6 +471,7 @@ public class ConfigurationPanel extends JPanel {
         saveButton.setEnabled(false);
         footerMessageLabel.setText("Saving application defaults...");
         starDepthStatus.setText("Saving...");
+        solarDepthStatus.setText("Saving...");
         storage.submit("Application defaults", () -> {
             applicationSettings.save(snapshot);
             return null;
@@ -465,12 +485,16 @@ public class ConfigurationPanel extends JPanel {
                 savedAstrometryUseOwnKey = snapshot.astrometryNetUseOwnKey;
                 savedAstrometryApiKey = nullToEmpty(snapshot.astrometryNetApiKey);
                 savedStarDepth = snapshot.skyCatalogueStarMagnitude();
+                savedSolarDepth = snapshot.solarSystemMagnitude();
             }
             updateSavedState();
             if (saveVersion != expectedVersion) return;
             saveButton.setEnabled(true);
             starDepthStatus.setForeground(failure == null ? UiStyle.helpColor() : warningColor());
             starDepthStatus.setText(failure == null ? "✓ Saved · used by the next Fetch Sky Catalogue"
+                    : "Cannot save: " + failure.getMessage());
+            solarDepthStatus.setForeground(failure == null ? UiStyle.helpColor() : warningColor());
+            solarDepthStatus.setText(failure == null ? "✓ Saved · used by the next Fetch Asteroids and Comets"
                     : "Cannot save: " + failure.getMessage());
             footerMessageLabel.setText(failure == null ? "Saved application defaults."
                     + (hasUnsavedDefaults() ? " Newer edits remain unsaved." : "")
@@ -511,7 +535,8 @@ public class ConfigurationPanel extends JPanel {
                 || !nullToEmpty(config().astapExecutablePath).equals(savedAstap)
                 || config().astrometryNetUseOwnKey != savedAstrometryUseOwnKey
                 || !nullToEmpty(config().astrometryNetApiKey).equals(savedAstrometryApiKey)
-                || config().skyCatalogueStarMagnitude() != savedStarDepth;
+                || config().skyCatalogueStarMagnitude() != savedStarDepth
+                || config().solarSystemMagnitude() != savedSolarDepth;
     }
 
     /** Keeps the new star depth at once, like the ASTAP path. */
@@ -520,6 +545,16 @@ public class ConfigurationPanel extends JPanel {
             return;
         }
         config().skyCatalogueStarMagnitude = ((Number) starDepthSpinner.getValue()).doubleValue();
+        updateSavedState();
+        saveDefaults(false);
+    }
+
+    /** Keeps the new asteroid and comet depth at once, like the star depth. */
+    private void solarDepthChanged() {
+        if (loading) {
+            return;
+        }
+        config().solarSystemMagnitude = ((Number) solarDepthSpinner.getValue()).doubleValue();
         updateSavedState();
         saveDefaults(false);
     }

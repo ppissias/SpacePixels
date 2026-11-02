@@ -7,7 +7,7 @@ import org.junit.Test;
 import java.time.Instant;
 import static org.junit.Assert.*;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
-import eu.startales.spacepixels.report.lookup.JplSbIdentUrlBuilder;
+import eu.startales.spacepixels.solarsystem.JplSbIdentUrlBuilder;
 import eu.startales.spacepixels.report.lookup.SolarSystemQueryTargetFactory;
 
 public class ReportingConsistencyTest {

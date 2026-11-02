@@ -15,6 +15,7 @@ import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.fits.WcsSolutionResolver;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.skycatalog.SkyProjection;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 
 import javax.swing.*;
 import java.awt.*;
@@ -27,15 +28,17 @@ import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 
 /**
  * The Annotate switch of a frame viewer (key A), with its Layers menu: labels from the session's sky catalogue
- * (stars, deep-sky objects and variable stars) drawn on the frame, and the object under the cursor named in the
- * readout. The viewers only show the catalogue; it is fetched in the main window. When it arrives while the viewer
- * is open, the switch becomes available and a note says so, but nothing changes on the frame until it is turned on.
+ * (stars, deep-sky objects and variable stars) and its predicted asteroids and comets drawn on the frame, and the
+ * object under the cursor named in the readout. Asteroids and comets are placed where JPL predicts them at the middle
+ * of each frame's exposure, so they move from frame to frame. The viewers only show the catalogue and the
+ * predictions; both are fetched in the main window. When either arrives while the viewer is open, the switch becomes
+ * available and a note says so, but nothing changes on the frame until it is turned on.
  * Next to it, Correct plate solution (key C) switches the session's correction to the Gaia stars on or off, for all
  * viewers at once and for what else uses the plate solution.
  */
 final class SkyAnnotations {
 
-    static final String NOT_FETCHED_TIP = "Fetch Sky Catalogue in the main window (2 Astrometry) first.";
+    static final String NOT_FETCHED_TIP = "Fetch Sky Catalogue or Fetch Asteroids and Comets in the main window (2 Astrometry) first.";
     /** Marks are kept for this many plate solutions; aligned frames usually share one. */
     private static final int CACHED_SOLUTIONS = 3;
     private static final Color NOTICE_COLOR = new Color(255, 200, 80);
@@ -46,6 +49,7 @@ final class SkyAnnotations {
     private final JCheckBoxMenuItem starsItem = new JCheckBoxMenuItem("Stars (Gaia)", true);
     private final JCheckBoxMenuItem deepSkyItem = new JCheckBoxMenuItem("Galaxies, nebulae and clusters (SIMBAD)", true);
     private final JCheckBoxMenuItem variablesItem = new JCheckBoxMenuItem("Variable stars (AAVSO VSX)", true);
+    private final JCheckBoxMenuItem solarSystemItem = new JCheckBoxMenuItem("Asteroids and comets (JPL)", true);
     private final JCheckBoxMenuItem namesItem = new JCheckBoxMenuItem("Names and magnitude labels", true);
     private ViewerAnnotationPreferences preferences = ViewerAnnotationPreferences.DEFAULT;
     private final JCheckBox correctBox = new JCheckBox("Correct plate solution");
@@ -65,6 +69,8 @@ final class SkyAnnotations {
     private FitsFileInformation[] files;
     private FitsFileInformation shownInfo;
     private SkyCatalogue catalogue;
+    /** The session's predicted asteroids and comets, or null. */
+    private SolarSystemObjects solarSystem;
     private boolean attached;
     private SkyCatalogueModel model = new SkyCatalogueModel();
 
@@ -80,7 +86,7 @@ final class SkyAnnotations {
         view.setSkyPreferences(preferences);
         annotateBox.addActionListener(e -> apply());
         JPopupMenu layers = new JPopupMenu();
-        for (JCheckBoxMenuItem item : new JCheckBoxMenuItem[]{starsItem, deepSkyItem, variablesItem}) {
+        for (JCheckBoxMenuItem item : new JCheckBoxMenuItem[]{starsItem, deepSkyItem, variablesItem, solarSystemItem}) {
             item.addActionListener(e -> apply());
             layers.add(item);
         }
@@ -129,10 +135,11 @@ final class SkyAnnotations {
             attached = true;
         }
         catalogue = model.get();
+        solarSystem = model.getSolarSystem();
         marksBySolution.clear();
         notice.setText(" ");
         updateEnabled();
-        view.setSkyLayers(starsItem.isSelected(), deepSkyItem.isSelected(), variablesItem.isSelected());
+        setLayers();
     }
 
     /** Stops following the catalogue and lets go of the marks, when the viewer closes. */
@@ -143,6 +150,7 @@ final class SkyAnnotations {
         files = null;
         shownInfo = null;
         catalogue = null;
+        solarSystem = null;
         marksBySolution.clear();
         view.setSkyMarks(null, 0);
     }
@@ -150,8 +158,8 @@ final class SkyAnnotations {
     /** The viewer now shows this frame. */
     void showFrame(FitsFileInformation info) {
         shownInfo = info;
-        if (annotateBox.isSelected()) {
-            view.setSkyMarks(marksFor(info), catalogue.starMagnitudeLimit);
+        if (annotateBox.isSelected() && hasContent()) {
+            view.setSkyMarks(marksFor(info), starLimit());
         }
     }
 
@@ -217,16 +225,16 @@ final class SkyAnnotations {
 
     /** Freezes this frame's currently enabled projected catalogue marks on the EDT, without changing the viewer. */
     List<SkyMark> exportMarks(FitsFileInformation info) {
-        if (!annotateBox.isSelected() || catalogue == null) return List.of();
+        if (!annotateBox.isSelected() || !hasContent()) return List.of();
         List<SkyMark> marks = marksFor(info);
         return marks == null ? List.of() : List.copyOf(marks);
     }
 
     private void apply() {
         notice.setText(" ");
-        view.setSkyLayers(starsItem.isSelected(), deepSkyItem.isSelected(), variablesItem.isSelected());
-        if (annotateBox.isSelected() && catalogue != null && shownInfo != null) {
-            view.setSkyMarks(marksFor(shownInfo), catalogue.starMagnitudeLimit);
+        setLayers();
+        if (annotateBox.isSelected() && hasContent() && shownInfo != null) {
+            view.setSkyMarks(marksFor(shownInfo), starLimit());
         } else {
             view.setSkyMarks(null, 0);
         }
@@ -275,17 +283,38 @@ final class SkyAnnotations {
     }
 
     private void catalogueChanged() {
+        SkyCatalogue previousCatalogue = catalogue;
+        SolarSystemObjects previousSolarSystem = solarSystem;
         catalogue = model.get();
+        solarSystem = model.getSolarSystem();
         marksBySolution.clear();
-        if (catalogue == null) {
+        if (!hasContent()) {
             annotateBox.setSelected(false);
         }
         updateEnabled();
         // Labels already on are replaced in place; otherwise the frame stays as it is and the note offers them.
         apply();
-        if (catalogue != null && !annotateBox.isSelected()) {
-            notice.setText("Sky catalogue ready · A shows it");
+        if (!annotateBox.isSelected()) {
+            if (solarSystem != null && solarSystem != previousSolarSystem) {
+                notice.setText("Asteroids and comets ready · A shows them");
+            } else if (catalogue != null && catalogue != previousCatalogue) {
+                notice.setText("Sky catalogue ready · A shows it");
+            }
         }
+    }
+
+    /** Whether there is anything to annotate: the sky catalogue, the predicted asteroids and comets, or both. */
+    private boolean hasContent() {
+        return catalogue != null || solarSystem != null;
+    }
+
+    /** The star depth of the catalogue, which sizes the star circles; 0 without a catalogue. */
+    private double starLimit() {
+        return catalogue == null ? 0 : catalogue.starMagnitudeLimit;
+    }
+
+    private void setLayers() {
+        view.setSkyLayers(starsItem.isSelected(), deepSkyItem.isSelected(), variablesItem.isSelected(), solarSystemItem.isSelected());
     }
 
     private void correctionChanged() {
@@ -325,20 +354,34 @@ final class SkyAnnotations {
                     + "This applies to all viewers, the cursor RA/Dec<br>and the report of the next Detect Moving Targets; "
                     + "the FITS files are not changed.</html>");
         }
-        boolean available = catalogue != null;
+        boolean available = hasContent();
         annotateBox.setEnabled(available);
         layersButton.setEnabled(available);
         if (!available) {
-            annotateBox.setToolTipText("<html>Labels from the sky catalogue (A).<br><i>Not available: " + NOT_FETCHED_TIP + "</i></html>");
+            annotateBox.setToolTipText("<html>Labels from the sky catalogue and the predicted asteroids and comets (A).<br><i>Not available: "
+                    + NOT_FETCHED_TIP + "</i></html>");
         } else {
-            annotateBox.setToolTipText("<html>Labels from the sky catalogue (A): " + catalogue.summary()
-                    + (catalogue.starSource == null ? "" : ",<br>stars from " + catalogue.starSource) + ".</html>");
+            StringBuilder tip = new StringBuilder("<html>Labels on the frame (A):");
+            if (catalogue != null) {
+                tip.append("<br>sky catalogue: ").append(catalogue.summary())
+                        .append(catalogue.starSource == null ? "" : ", stars from " + catalogue.starSource);
+            }
+            if (solarSystem != null) {
+                tip.append("<br>predicted by JPL: ").append(solarSystem.summary());
+            }
+            annotateBox.setToolTipText(tip.append(".</html>").toString());
         }
+        solarSystemItem.setToolTipText(solarSystem == null
+                ? "Fetch Asteroids and Comets in the main window (2 Astrometry) first."
+                : "Where JPL predicts the known asteroids and comets at the middle of each exposure, with their paths.");
     }
 
-    /** The marks of this frame, from its plate solution (or the one it shares with the aligned frames). */
+    /**
+     * The marks of this frame, from its plate solution (or the one it shares with the aligned frames): the
+     * catalogue's, kept per plate solution, and the asteroids and comets at this frame's time.
+     */
     private List<SkyMark> marksFor(FitsFileInformation info) {
-        if (info == null || catalogue == null) {
+        if (info == null || !hasContent()) {
             return null;
         }
         WcsSolutionResolver.ResolvedWcsSolution solution;
@@ -350,16 +393,25 @@ final class SkyAnnotations {
         if (solution == null) {
             return null;
         }
-        // A corrected solution differs a little per frame.
-        String key = solution.getSourceFileName() + (solution.getTransformer().isCorrected() ? "/" + info.getFileName() : "")
-                + "@" + info.getSizeWidth() + "x" + info.getSizeHeight();
-        List<SkyMark> marks = marksBySolution.get(key);
-        if (marks == null) {
-            marks = project(catalogue, solution.getTransformer(), info.getSizeWidth(), info.getSizeHeight(),
-                    info.getObservationTimestamp());
-            marksBySolution.put(key, marks);
+        List<SkyMark> marks = List.of();
+        if (catalogue != null) {
+            // A corrected solution differs a little per frame.
+            String key = solution.getSourceFileName() + (solution.getTransformer().isCorrected() ? "/" + info.getFileName() : "")
+                    + "@" + info.getSizeWidth() + "x" + info.getSizeHeight();
+            marks = marksBySolution.get(key);
+            if (marks == null) {
+                marks = project(catalogue, solution.getTransformer(), info.getSizeWidth(), info.getSizeHeight(),
+                        info.getObservationTimestamp());
+                marksBySolution.put(key, marks);
+            }
         }
-        return marks;
+        if (solarSystem == null) {
+            return marks;
+        }
+        List<SkyMark> all = new ArrayList<>(marks);
+        all.addAll(projectSolarSystem(solarSystem, solution.getTransformer(), info.getSizeWidth(), info.getSizeHeight(),
+                info.getObservationTimestamp(), info.getExposureDurationMillis()));
+        return all;
     }
 
     // ==========================================
@@ -409,6 +461,128 @@ final class SkyAnnotations {
                     String.format(Locale.US, "%.1f", star.g), starDescription(star)));
         }
         return marks;
+    }
+
+    /**
+     * The predicted asteroids and comets on a frame whose exposure starts at {@code startMillis} (0 or less when
+     * unknown) and lasts {@code exposureMillis}: each at the middle of the exposure, with its path over the session,
+     * its motion during the exposure and its 3-sigma uncertainty in pixels. An object whose path crosses the frame
+     * is kept even when it is elsewhere at this time, unplaced (NaN position).
+     */
+    static List<SkyMark> projectSolarSystem(SolarSystemObjects objects, WcsCoordinateTransformer transformer, int width,
+                                            int height, long startMillis, long exposureMillis) {
+        List<SkyMark> marks = new ArrayList<>();
+        long exposure = Math.max(0, exposureMillis);
+        long middle = startMillis > 0 ? startMillis + exposure / 2 : -1;
+        for (SolarSystemObjects.Body body : objects.bodies) {
+            double[] path = pathOf(body, transformer);
+            SolarSystemObjects.Position position = middle > 0 ? SolarSystemObjects.positionAt(body, middle) : null;
+            double[] pixel = position == null ? null : transformer.skyToPixel(position.ra(), position.dec());
+            boolean placed = pixel != null && onFrame(pixel, width, height, -EDGE_ROOM);
+            if (!placed && !pathCrosses(path, width, height)) {
+                continue;
+            }
+            double semiMajor = 0;
+            double semiMinor = 0;
+            double angle = 0;
+            double[] trail = null;
+            if (placed) {
+                double[] ellipse = uncertaintyEllipse(transformer, position, pixel);
+                if (ellipse != null) {
+                    semiMajor = ellipse[0];
+                    semiMinor = ellipse[1];
+                    angle = ellipse[2];
+                }
+                if (exposure > 0) {
+                    SolarSystemObjects.Position first = SolarSystemObjects.positionAt(body, startMillis);
+                    SolarSystemObjects.Position last = SolarSystemObjects.positionAt(body, startMillis + exposure);
+                    double[] from = first == null ? null : transformer.skyToPixel(first.ra(), first.dec());
+                    double[] to = last == null ? null : transformer.skyToPixel(last.ra(), last.dec());
+                    if (from != null && to != null) {
+                        trail = new double[]{from[0], from[1], to[0], to[1]};
+                    }
+                }
+            }
+            Double magnitude = position != null ? position.magnitude() : body.samples.get(0).magnitude;
+            String label = SolarSystemObjects.label(body) + (magnitude == null ? "" : String.format(Locale.US, " %.1f", magnitude));
+            marks.add(new SkyMark(SkyMark.Kind.SOLAR_SYSTEM, placed ? pixel[0] : Double.NaN, placed ? pixel[1] : Double.NaN,
+                    magnitude == null ? Double.NaN : magnitude, semiMajor, semiMinor, angle, label,
+                    solarSystemDescription(body, position, placed), path, trail));
+        }
+        return marks;
+    }
+
+    /** The body's sampled positions in frame pixels, as x0, y0, x1, y1, …; positions outside the projection are left out. */
+    private static double[] pathOf(SolarSystemObjects.Body body, WcsCoordinateTransformer transformer) {
+        double[] path = new double[body.samples.size() * 2];
+        int length = 0;
+        for (SolarSystemObjects.Sample sample : body.samples) {
+            double[] pixel = transformer.skyToPixel(sample.ra, sample.dec);
+            if (pixel != null && Double.isFinite(pixel[0]) && Double.isFinite(pixel[1])) {
+                path[length++] = pixel[0];
+                path[length++] = pixel[1];
+            }
+        }
+        return java.util.Arrays.copyOf(path, length);
+    }
+
+    /** Whether a path comes onto the frame: a point on it, or a step whose bounding box overlaps it. */
+    private static boolean pathCrosses(double[] path, int width, int height) {
+        for (int i = 0; i + 1 < path.length; i += 2) {
+            double minX = path[i];
+            double maxX = path[i];
+            double minY = path[i + 1];
+            double maxY = path[i + 1];
+            if (i + 3 < path.length) {
+                minX = Math.min(minX, path[i + 2]);
+                maxX = Math.max(maxX, path[i + 2]);
+                minY = Math.min(minY, path[i + 3]);
+                maxY = Math.max(maxY, path[i + 3]);
+            }
+            if (maxX >= -0.5 && minX <= width - 0.5 && maxY >= -0.5 && minY <= height - 0.5) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * The 3-sigma uncertainty as {semi-major, semi-minor, angle} in frame pixels and radians, from the RA and Dec
+     * uncertainties on the sky; null when they are unknown.
+     */
+    private static double[] uncertaintyEllipse(WcsCoordinateTransformer transformer, SolarSystemObjects.Position position,
+                                               double[] pixel) {
+        if (position.raSigmaArcsec() == null || position.decSigmaArcsec() == null) {
+            return null;
+        }
+        double cosDec = Math.max(1e-6, Math.cos(Math.toRadians(position.dec())));
+        double[] alongRa = transformer.skyToPixel(position.ra() + position.raSigmaArcsec() / 3600.0 / cosDec, position.dec());
+        double[] alongDec = transformer.skyToPixel(position.ra(), position.dec() + position.decSigmaArcsec() / 3600.0);
+        if (alongRa == null || alongDec == null) {
+            return null;
+        }
+        double raLength = Math.hypot(alongRa[0] - pixel[0], alongRa[1] - pixel[1]);
+        double decLength = Math.hypot(alongDec[0] - pixel[0], alongDec[1] - pixel[1]);
+        double[] major = raLength >= decLength ? alongRa : alongDec;
+        return new double[]{Math.max(raLength, decLength), Math.min(raLength, decLength),
+                Math.atan2(major[1] - pixel[1], major[0] - pixel[0])};
+    }
+
+    static String solarSystemDescription(SolarSystemObjects.Body body, SolarSystemObjects.Position position, boolean placed) {
+        StringBuilder text = new StringBuilder(body.name).append(body.comet ? " · comet" : " · asteroid");
+        if (!placed) {
+            return text.append(" · elsewhere at this frame's time (path shown)").toString();
+        }
+        if (position.magnitude() != null) {
+            text.append(String.format(Locale.US, body.comet ? " · total magnitude %.1f" : " · V %.1f", position.magnitude()));
+        }
+        if (position.raSigmaArcsec() != null && position.decSigmaArcsec() != null) {
+            double sigma = Math.max(position.raSigmaArcsec(), position.decSigmaArcsec());
+            text.append(sigma < 1 ? " · within 1″ (3σ)" : String.format(Locale.US, " · ±%s″ (3σ)", trimNumber(sigma)));
+        }
+        text.append(body.orbitSolution == null ? " · predicted from JPL's field search (straight-line motion)"
+                : " · predicted by JPL Horizons, orbit " + body.orbitSolution);
+        return text.toString();
     }
 
     private static boolean onFrame(double[] position, int width, int height, double reach) {

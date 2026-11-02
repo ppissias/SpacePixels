@@ -7,6 +7,9 @@ import eu.startales.spacepixels.fits.WcsSolutionResolver;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.skycatalog.SkyCatalogueStore;
 import eu.startales.spacepixels.skycatalog.SkyField;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
+import eu.startales.spacepixels.solarsystem.SolarSystemQuery;
+import eu.startales.spacepixels.solarsystem.SolarSystemStore;
 import java.io.File;
 import java.io.IOException;
 import java.util.Arrays;
@@ -17,6 +20,7 @@ import java.util.logging.Logger;
 public interface SessionMetadataStore {
     SessionMetadata load(File folder, FitsFileInformation[] files) throws IOException;
     void saveCatalogue(File folder, SkyCatalogue catalogue) throws IOException;
+    void saveSolarSystem(File folder, SolarSystemObjects objects) throws IOException;
     void saveCorrection(File folder, PlateSolutionCorrection correction) throws IOException;
     void saveAutoTune(File folder, AutoTuneSessionStore.Document document) throws IOException;
 
@@ -30,6 +34,10 @@ public interface SessionMetadataStore {
                 SkyField field = solution == null || files.length == 0 ? null
                         : SkyField.of(solution.getTransformer(), files[0].getSizeWidth(), files[0].getSizeHeight());
                 if (catalogue != null && field != null && !field.isSameFieldAs(catalogue.field)) catalogue = null;
+                SolarSystemObjects solarSystem = SolarSystemStore.load(folder);
+                if (solarSystem != null && !SolarSystemStore.matches(solarSystem, field, SolarSystemQuery.observingSpan(files))) {
+                    solarSystem = null;
+                }
                 if (correction != null && (solution == null
                         || !solution.getTransformer().solutionKey().equals(correction.solutionKey))) correction = null;
                 AutoTuneSessionStore.Document tuning = files.length == 0 ? null : AutoTuneSessionStore.loadMatching(folder,
@@ -43,11 +51,14 @@ public interface SessionMetadataStore {
                                 "Cannot compact saved Auto-Tune results; the loaded measurements remain available.", failure);
                     }
                 }
-                return new SessionMetadata(catalogue, correction, tuning);
+                return new SessionMetadata(catalogue, correction, tuning, solarSystem);
             }
 
             @Override public void saveCatalogue(File folder, SkyCatalogue catalogue) throws IOException {
                 SkyCatalogueStore.save(folder, catalogue);
+            }
+            @Override public void saveSolarSystem(File folder, SolarSystemObjects objects) throws IOException {
+                SolarSystemStore.save(folder, objects);
             }
             @Override public void saveCorrection(File folder, PlateSolutionCorrection correction) throws IOException {
                 PlateSolutionCorrection.save(folder, correction);

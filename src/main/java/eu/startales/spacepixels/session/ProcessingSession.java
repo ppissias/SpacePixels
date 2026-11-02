@@ -9,6 +9,7 @@ import eu.startales.spacepixels.detection.TrackOverlay;
 import eu.startales.spacepixels.detection.VariableStarOverlay;
 import eu.startales.spacepixels.detection.AutoTuneSessionStore;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import java.io.File;
 import java.io.IOException;
@@ -48,6 +49,8 @@ public final class ProcessingSession implements AutoCloseable {
     private JTransientEngine.MasterStackResult masterStack;
     /** Non-blocking shutdown supplied by the desktop workflow; the session has no dependency on its GUI owner. */
     private Runnable closeSkyCatalogueWork;
+    /** Non-blocking shutdown of the asteroid and comet fetch, supplied like {@link #closeSkyCatalogueWork}. */
+    private Runnable closeSolarSystemWork;
     private volatile boolean closed;
 
     /** A session without application storage, for headless use and tests; it owns and closes {@code plateSolver}. */
@@ -74,6 +77,7 @@ public final class ProcessingSession implements AutoCloseable {
                 saveMetadata(() -> storage.store().saveCorrection(folder, correction), finished));
         skyCatalogue.set(metadata.catalogue());
         skyCatalogue.setCorrection(metadata.correction());
+        skyCatalogue.setSolarSystem(metadata.solarSystem());
     }
 
     public SessionMetadata getMetadata() { return metadata; }
@@ -84,6 +88,11 @@ public final class ProcessingSession implements AutoCloseable {
     /** Saves this session's already captured catalogue; completion is delivered only while this session is open. */
     public void saveCatalogue(SkyCatalogue catalogue, Consumer<Throwable> finished) {
         saveMetadata(() -> storage.store().saveCatalogue(folder, catalogue), finished);
+    }
+
+    /** Saves this session's predicted asteroids and comets; completion is delivered only while this session is open. */
+    public void saveSolarSystem(SolarSystemObjects objects, Consumer<Throwable> finished) {
+        saveMetadata(() -> storage.store().saveSolarSystem(folder, objects), finished);
     }
 
     /** Saves this session's detached tuning document; completion is delivered only while this session is open. */
@@ -243,6 +252,14 @@ public final class ProcessingSession implements AutoCloseable {
         closeSkyCatalogueWork = shutdown;
     }
 
+    /** Owns one non-blocking asteroid-and-comet-fetch shutdown, replacing any previous owner; register while open. */
+    public void ownSolarSystemWork(Runnable shutdown) {
+        requireOpen();
+        Objects.requireNonNull(shutdown);
+        if (closeSolarSystemWork != null) closeSolarSystemWork.run();
+        closeSolarSystemWork = shutdown;
+    }
+
     private void requireOpen() {
         if (closed) throw new IllegalStateException("Session is closed.");
     }
@@ -256,6 +273,9 @@ public final class ProcessingSession implements AutoCloseable {
             Runnable shutdown = closeSkyCatalogueWork;
             closeSkyCatalogueWork = null;
             if (shutdown != null) shutdown.run();
+            Runnable solarSystemShutdown = closeSolarSystemWork;
+            closeSolarSystemWork = null;
+            if (solarSystemShutdown != null) solarSystemShutdown.run();
         } finally {
             try {
                 plateSolver.close();

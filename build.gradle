@@ -58,7 +58,7 @@ sourceSets {
                 'eu/startales/spacepixels/tools/**', 'eu/startales/spacepixels/fits/**',
                 'eu/startales/spacepixels/detection/**', 'eu/startales/spacepixels/platesolve/**',
                 'eu/startales/spacepixels/report/**', 'eu/startales/spacepixels/skycatalog/**',
-                'eu/startales/spacepixels/preparation/**'
+                'eu/startales/spacepixels/solarsystem/**', 'eu/startales/spacepixels/preparation/**'
         resources.include 'spacepixels-build.properties', 'eu/startales/spacepixels/util/**',
                 'eu/startales/spacepixels/tools/**', 'eu/startales/spacepixels/report/**'
     }

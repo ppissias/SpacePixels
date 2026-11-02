@@ -91,6 +91,19 @@ public class SpacePixelsAppConfigIOTest {
     }
 
     @Test
+    public void theAsteroidDepthDefaultsForOlderFilesAndStaysInRange() throws Exception {
+        AppConfig older = SpacePixelsAppConfigIO.load(new StringReader("{\"skyCatalogueStarMagnitude\": 15.0}"));
+        assertEquals(AppConfig.DEFAULT_SOLAR_SYSTEM_MAGNITUDE, older.solarSystemMagnitude(), 0);
+        AppConfig config = new AppConfig();
+        config.solarSystemMagnitude = 30;
+        assertEquals(AppConfig.MAX_SOLAR_SYSTEM_MAGNITUDE, config.solarSystemMagnitude(), 0);
+        config.solarSystemMagnitude = 2;
+        assertEquals(AppConfig.MIN_SOLAR_SYSTEM_MAGNITUDE, config.solarSystemMagnitude(), 0);
+        config.solarSystemMagnitude = 17.5;
+        assertEquals(17.5, config.copy().solarSystemMagnitude(), 0);
+    }
+
+    @Test
     public void onlyAChosenNonBlankKeyIsUsed() {
         AppConfig appConfig = new AppConfig();
         appConfig.astrometryNetApiKey = "abcdefghijklmnop";

@@ -13,6 +13,7 @@ import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.platesolve.PlateSolveService;
 import eu.startales.spacepixels.skycatalog.SkySnapshot;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -37,7 +38,7 @@ public class ApplicationStorageSessionTest {
         CountDownLatch entered = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         SkyCatalogue catalogue = new SkyCatalogue();
-        SessionMetadata metadata = new SessionMetadata(catalogue, null, null);
+        SessionMetadata metadata = new SessionMetadata(catalogue, null, null, null);
         Store store = new Store() {
             @Override public SessionMetadata load(File directory, FitsFileInformation[] files) throws IOException {
                 assertFalse(EventQueue.isDispatchThread());
@@ -79,6 +80,7 @@ public class ApplicationStorageSessionTest {
         CountDownLatch release = new CountDownLatch(1);
         List<Boolean> saved = new CopyOnWriteArrayList<>();
         ApplicationStorage storage = new ApplicationStorage(new Store() {
+            @Override public void saveSolarSystem(File directory, SolarSystemObjects objects) {}
             @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
                 assertFalse(EventQueue.isDispatchThread());
                 entered.countDown();
@@ -115,6 +117,7 @@ public class ApplicationStorageSessionTest {
         AtomicInteger attempts = new AtomicInteger();
         BlockingQueue<Runnable> callbacks = new LinkedBlockingQueue<>();
         ApplicationStorage storage = new ApplicationStorage(new Store() {
+            @Override public void saveSolarSystem(File directory, SolarSystemObjects objects) {}
             @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {
                 if (attempts.incrementAndGet() == 1) throw new IOException("read only");
             }
@@ -356,6 +359,7 @@ public class ApplicationStorageSessionTest {
     private static class Store implements SessionMetadataStore {
         @Override public SessionMetadata load(File directory, FitsFileInformation[] files) throws IOException { return SessionMetadata.empty(); }
         @Override public void saveCatalogue(File directory, SkyCatalogue catalogue) throws IOException {}
+        @Override public void saveSolarSystem(File directory, SolarSystemObjects objects) {}
         @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {}
         @Override public void saveAutoTune(File directory, AutoTuneSessionStore.Document document) throws IOException {}
     }

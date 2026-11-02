@@ -34,6 +34,7 @@ public class ViewerMechanicsTest extends MechanicsTestCase {
                     && !status.contains("Checking");
         });
         assertTrue(window().button(VisibleText.button("Fetch Sky Catalogue")).target().isEnabled());
+        assertTrue("a solved session can ask JPL", window().button(VisibleText.button("Fetch Asteroids and Comets")).target().isEnabled());
 
         window().table().selectRows(0);
         window().button(VisibleText.button("Preview Frame")).click();

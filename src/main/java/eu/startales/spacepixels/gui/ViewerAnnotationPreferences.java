@@ -34,12 +34,15 @@ record ViewerAnnotationPreferences(double faintestStar, double faintestVariable,
         storage.putBoolean("names", names);
     }
 
-    /** Applies independent star/variable limits; deep-sky objects and unknown magnitudes remain available. */
+    /**
+     * Applies independent star/variable limits; deep-sky objects, asteroids and comets (limited when fetched) and
+     * unknown magnitudes remain available.
+     */
     boolean includes(SkyMark mark) {
         double limit = switch (mark.kind) {
             case STAR, NAMED_STAR -> faintestStar;
             case VARIABLE -> faintestVariable;
-            case DEEP_SKY -> NO_LIMIT;
+            case DEEP_SKY, SOLAR_SYSTEM -> NO_LIMIT;
         };
         return limit == NO_LIMIT || !Double.isFinite(mark.magnitude) || mark.magnitude <= limit;
     }
