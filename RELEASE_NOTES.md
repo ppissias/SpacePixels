@@ -1,5 +1,37 @@
 # SpacePixels Release Notes
 
+<!-- root-toc:start -->
+## Contents
+
+- [2026.10-04](#202610-04)
+  - [Changed](#changed)
+  - [Removed](#removed)
+  - [Build and release checks](#build-and-release-checks)
+  - [Upgrading and API changes](#upgrading-and-api-changes)
+- [2026.10-03](#202610-03)
+  - [Highlights](#highlights)
+  - [Detection changes](#detection-changes)
+  - [Import](#import)
+  - [The settings tab and the application](#the-settings-tab-and-the-application)
+  - [Fixes](#fixes)
+  - [Upgrading and API changes](#upgrading-and-api-changes-1)
+- [2026.10-02](#202610-02)
+  - [Highlights](#highlights-1)
+  - [Detection changes](#detection-changes-1)
+  - [Variable-star photometry](#variable-star-photometry)
+  - [The report and application](#the-report-and-application)
+  - [Fixes](#fixes-1)
+  - [Upgrading and API changes](#upgrading-and-api-changes-2)
+- [2026.10-01](#202610-01)
+  - [Highlights](#highlights-2)
+  - [The report](#the-report)
+  - [The application](#the-application)
+  - [Detection changes](#detection-changes-2)
+  - [Fixes](#fixes-2)
+  - [Upgrading](#upgrading)
+  - [Under the hood](#under-the-hood)
+<!-- root-toc:end -->
+
 ## 2026.10-04
 
 ### Changed

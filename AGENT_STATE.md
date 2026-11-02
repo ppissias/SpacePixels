@@ -1,5 +1,14 @@
 # Agent State — features collaboration
 
+<!-- root-toc:start -->
+## Contents
+
+- [Completed collaboration](#completed-collaboration)
+- [Branch review follow-up (2026-10-26)](#branch-review-follow-up-2026-10-26)
+- [Task ledger](#task-ledger)
+- [Maintainer decisions](#maintainer-decisions)
+<!-- root-toc:end -->
+
 ## Completed collaboration
 
 - Goal: Implement features F10, F11, F13, F14, F15, and F16 from [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md) as authorized by the maintainer on 2026-10-25.

@@ -14,6 +14,28 @@ How SpacePixels is built, how its code is organised, the principles it follows, 
 
 Machine-specific paths (tools, test datasets, scratch folders, memory limits) are not in this repository. Each machine keeps them in a git-ignored `LOCAL-ENVIRONMENT.txt` at the repository root (see [AGENTS.md](AGENTS.md)).
 
+<!-- root-toc:start -->
+## Contents
+
+- [Principles](#principles)
+- [Working rules](#working-rules)
+- [Build and run](#build-and-run)
+  - [Dependencies](#dependencies)
+  - [Windows installer](#windows-installer)
+- [The packages](#the-packages)
+- [How a user action runs](#how-a-user-action-runs)
+- [The session](#the-session)
+- [Settings](#settings)
+- [Frame viewers](#frame-viewers)
+- [The report](#the-report)
+- [Headless: the API and the command line](#headless-the-api-and-the-command-line)
+- [Persistence and outputs](#persistence-and-outputs)
+- [Testing](#testing)
+  - [Real-data regression](#real-data-regression)
+- [Design patterns in use](#design-patterns-in-use)
+- [Diagnostics](#diagnostics)
+<!-- root-toc:end -->
+
 ## Principles
 
 Scientific correctness and preservation of valid results constrain every design change. Within that constraint, the maintainer's goals for the code, in order:

@@ -10,6 +10,17 @@ The same single Gradle project builds the desktop application separately. `run`,
 
 The API artifact compiles for Java 21 and supplies matching sources, Javadocs, POM and Gradle module metadata. JTransient is a compile/API dependency because public requests/results expose its types. FITS, Gson and JPlateSolve are runtime-transitive implementation dependencies; JPlateSolve does not need `api` scope for the supported detection API. Headless AWT/`java.desktop` remains necessary for images/reports. See [API.md](API.md#dependency) for the embedding boundary.
 
+<!-- root-toc:start -->
+## Contents
+
+- [Desktop release archives](#desktop-release-archives)
+- [Windows installer](#windows-installer)
+- [Maven Central publishing](#maven-central-publishing)
+- [Local configuration](#local-configuration)
+- [Build the Central bundle](#build-the-central-bundle)
+- [Upload to the Central Portal](#upload-to-the-central-portal)
+<!-- root-toc:end -->
+
 ## Desktop release archives
 
 Run `releaseCheck` before packaging. From the repository root:

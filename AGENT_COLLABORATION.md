@@ -1,5 +1,18 @@
 # Lightweight Round-Robin Agent Collaboration — v2.2
 
+<!-- root-toc:start -->
+## Contents
+
+- [1. Objective](#1-objective)
+- [2. Files and reading discipline](#2-files-and-reading-discipline)
+- [3. One-time bootstrap by Agent A](#3-one-time-bootstrap-by-agent-a)
+- [4. Non-negotiable safety](#4-non-negotiable-safety)
+- [5. Round robin: A implements / B reviews / B implements / C reviews](#5-round-robin-a-implements--b-reviews--b-implements--c-reviews)
+- [6. Deferral does not halt the project](#6-deferral-does-not-halt-the-project)
+- [7. State and handoff length limits](#7-state-and-handoff-length-limits)
+- [8. Staying active, unresponsive agents and stopping](#8-staying-active-unresponsive-agents-and-stopping)
+<!-- root-toc:end -->
+
 ## 1. Objective
 
 Agents independently select **authorized, bounded** work, implement it, review each other, and rotate without waiting for routine maintainer prompts. Disagreements **defer the affected task, not the entire collaboration**. Keep agent-to-agent text minimal: source code, specs, tests, and Git are the detailed evidence.
