@@ -463,12 +463,20 @@ public final class PhotometryReportSectionWriter {
             for (int i = start; i < k; i++) {
                 best = Math.min(best, t.apertureChoices.get(i).scatterChange);
             }
-            parts.add(String.format(Locale.US, "%.2f to %.2f: <strong>%.1f&times; FWHM</strong> (%.1f px)%s", first.magFrom, last.magTo,
-                    first.fwhmFactor, first.radiusPixels, best < 0 ? String.format(Locale.US, ", up to %.0f%% less scatter", -100 * best) : ""));
+            parts.add(String.format(Locale.US, "%.2f to %.2f: <strong>%.1f&times; FWHM</strong> (%s)%s", first.magFrom, last.magTo,
+                    first.fwhmFactor, radiusRange(first.minRadiusPixels, first.maxRadiusPixels),
+                    best < 0 ? String.format(Locale.US, ", up to %.0f%% less scatter", -100 * best) : ""));
             start = k;
         }
         return "<div class='astro-note'>Measuring aperture by brightness (instrumental mag), chosen from the scatter of the constant stars: "
-                + String.join("; ", parts) + ".</div>";
+                + String.join("; ", parts) + ". Radii follow each frame's measured FWHM.</div>";
+    }
+
+    /** An aperture's radius over the frames used, in pixels: one value, or the smallest and largest. */
+    static String radiusRange(double min, double max) {
+        String from = formatMag(min, 1);
+        String to = formatMag(max, 1);
+        return (from.equals(to) ? from : from + "&ndash;" + to) + " px";
     }
 
     private static void appendReason(StringBuilder text, int count, String reason) {
@@ -809,7 +817,10 @@ public final class PhotometryReportSectionWriter {
         report.println(compactMetric(formatMag(star.amplitude, 3), "Observed variation in this session (mag)",
                 "95th minus the 5th percentile of the usable differential magnitudes within this session; not a full-cycle amplitude."));
         report.println(compactMetric(formatMag(star.meanMag, 2), "Mean instrumental magnitude",
-                "Mean brightness on the instrumental magnitude scale. Larger values indicate fainter stars; this is not a calibrated catalogue magnitude."));
+                "Mean brightness on the instrumental magnitude scale, measured in the main aperture for every star. Larger values indicate fainter stars; this is not a calibrated catalogue magnitude."));
+        report.println(compactMetric(formatMag(star.apertureFwhmFactor, 1) + "&times; FWHM", "Measuring aperture",
+                "Aperture of the light curve and its error bars, chosen for this star's brightness range from the scatter of the constant stars. Its radius follows each frame's measured FWHM: "
+                        + radiusRange(star.apertureMinRadiusPixels, star.apertureMaxRadiusPixels).replace("&ndash;", " to ") + "."));
         report.println(compactMetric(formatMag(star.excessScatter, 1) + "x", "Scatter ratio",
                 "Measured brightness scatter divided by the expected scatter for stars of similar brightness. A value near 1 matches the scatter of those stars."));
         report.println(compactMetric(formatMag(star.scatterZ, 1), "Scatter significance (z)",
@@ -1357,7 +1368,7 @@ public final class PhotometryReportSectionWriter {
         chart.errorBars(x, used, star.magError, color);
         chart.points(x, used, color, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
         chart.points(x, flagged, PhotometrySvgChart.CONTEXT_GRAY, 4, PhotometrySvgChart.Marker.HOLLOW_CIRCLE, flaggedTips);
-        return "<div>" + chart.render() + "<p class='compact-note'>Error bars show estimated sky-noise uncertainty, a lower bound on total uncertainty. Zoom in to inspect points; drag to pan and Reset to see the full curve.</p></div>";
+        return "<div>" + chart.render() + "<p class='compact-note'>Error bars show the measuring aperture's estimated sky-noise uncertainty, a lower bound on total uncertainty. Zoom in to inspect points; drag to pan and Reset to see the full curve.</p></div>";
     }
 
     /**
@@ -1575,11 +1586,11 @@ public final class PhotometryReportSectionWriter {
         for (StarLightCurve star : presentation.identities) labels.put(star.id, presentation.label(star));
         try (AtomicReportFile output = new AtomicReportFile(context.file(STARS_CSV))) {
             PrintWriter csv = output.writer();
-            csv.println("star_id,x,y,mean_inst_mag,tier,usable_frames,scatter,expected_scatter,excess_scatter,scatter_z,stetson_j,stetson_j_z,amplitude,failed_gates,not_scored_reason,candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec");
+            csv.println("star_id,x,y,mean_inst_mag,tier,usable_frames,scatter,expected_scatter,excess_scatter,scatter_z,stetson_j,stetson_j_z,amplitude,aperture_fwhm_factor,failed_gates,not_scored_reason,candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec");
             for (StarLightCurve s : analysis.stars) {
                 csv.println(s.id + "," + csvNum(s.x) + "," + csvNum(s.y) + "," + csvNum(s.meanMag) + "," + s.tier + "," + s.usableFrames + ","
                         + csvNum(s.scatter) + "," + csvNum(s.expectedScatter) + "," + csvNum(s.excessScatter) + "," + csvNum(s.scatterZ) + ","
-                        + csvNum(s.stetsonJ) + "," + csvNum(s.stetsonJZ) + "," + csvNum(s.amplitude) + ","
+                        + csvNum(s.stetsonJ) + "," + csvNum(s.stetsonJZ) + "," + csvNum(s.amplitude) + "," + csvNum(s.apertureFwhmFactor) + ","
                         + csvText(String.join(";", s.failedGates)) + "," + csvText(s.notScoredReason) + csvIdentification(context, s, labels.get(s.id)));
             }
             output.commit();
@@ -1587,12 +1598,13 @@ public final class PhotometryReportSectionWriter {
 
         try (AtomicReportFile output = new AtomicReportFile(context.file(LIGHT_CURVES_CSV))) {
             PrintWriter csv = output.writer();
-            csv.println("star_id,tier,frame_index,filename,julian_date,delta_mag,mag_error,flags,candidate_label");
+            csv.println("star_id,tier,frame_index,filename,julian_date,delta_mag,mag_error,aperture_fwhm_factor,flags,candidate_label");
             for (StarLightCurve s : analysis.candidates) {
                 for (int j = 0; j < analysis.frames.size(); j++) {
                     PipelineTelemetry.PhotometryFrameStat f = analysis.frames.get(j);
                     csv.println(s.id + "," + s.tier + "," + (f.frameIndex + 1) + "," + csvText(f.filename) + "," + csvNum(f.julianDate) + ","
-                            + csvNum(s.deltaMag[j]) + "," + csvNum(s.magError[j]) + "," + csvText(String.join(";", PhotometryFlags.describe(s.flags[j]))) + "," + csvText(labels.get(s.id)));
+                            + csvNum(s.deltaMag[j]) + "," + csvNum(s.magError[j]) + "," + csvNum(s.apertureFwhmFactor) + ","
+                            + csvText(String.join(";", PhotometryFlags.describe(s.flags[j]))) + "," + csvText(labels.get(s.id)));
                 }
             }
             output.commit();

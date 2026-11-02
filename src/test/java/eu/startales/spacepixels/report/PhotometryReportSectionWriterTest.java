@@ -7,6 +7,7 @@ import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.photometry.PhotometricReadiness;
+import io.github.ppissias.jtransient.photometry.StarLightCurve;
 import io.github.ppissias.jtransient.photometry.VariabilityTier;
 import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
@@ -91,6 +92,25 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map.svg").isFile());
         assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map_full.svg").isFile());
         assertEquals(FRAMES + 1, Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath()).size());
+        assertTrue(html.contains("Measuring aperture"));
+
+        // The exported errors and aperture are the candidate's own, frame by frame.
+        StarLightCurve candidate = result.variableStarAnalysis.candidates.get(0);
+        List<String> lightCurves = Files.readAllLines(new File(exportDir, "variable_stars/photometry_lightcurves.csv").toPath());
+        List<String> header = List.of(lightCurves.get(0).split(","));
+        int errorColumn = header.indexOf("mag_error");
+        int apertureColumn = header.indexOf("aperture_fwhm_factor");
+        int rows = 0;
+        for (String line : lightCurves.subList(1, lightCurves.size())) {
+            String[] cells = line.split(",", -1);
+            if (!cells[0].equals(String.valueOf(candidate.id))) continue;
+            int j = Integer.parseInt(cells[header.indexOf("frame_index")]) - 1;
+            assertEquals(candidate.magError[j], cells[errorColumn].isEmpty() ? Double.NaN : Double.parseDouble(cells[errorColumn]), 5e-7);
+            assertEquals(candidate.apertureFwhmFactor, Double.parseDouble(cells[apertureColumn]), 5e-7);
+            rows++;
+        }
+        assertEquals(FRAMES, rows);
+        assertTrue(Files.readAllLines(new File(exportDir, "variable_stars/photometry_stars.csv").toPath()).get(0).contains(",amplitude,aperture_fwhm_factor,"));
 
         // Optional: keep a standalone page for visual review.
         String previewDir = System.getenv("SPACEPIXELS_PHOTOMETRY_PREVIEW_DIR");
@@ -161,6 +181,13 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(PhotometryReportSectionWriter.gateQuestion("SPLIT_HALF").contains("non-overlapping pairs"));
         assertTrue(PhotometryReportSectionWriter.gateOutcome("LINEARITY", true, 0).contains("At least one measurement"));
         assertFalse(PhotometryReportSectionWriter.gateOutcome("LINEARITY", false, 0).contains("usable measurement"));
+    }
+
+    @Test
+    public void apertureRadiusShowsOneValueOrTheSpanOverTheFrames() {
+        assertEquals("2.0 px", PhotometryReportSectionWriter.radiusRange(2.0, 2.04));
+        assertEquals("1.7&ndash;2.3 px", PhotometryReportSectionWriter.radiusRange(1.73, 2.31));
+        assertEquals("n/a px", PhotometryReportSectionWriter.radiusRange(Double.NaN, Double.NaN));
     }
 
     @Test
