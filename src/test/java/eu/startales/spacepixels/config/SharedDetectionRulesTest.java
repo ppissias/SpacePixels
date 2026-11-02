@@ -36,6 +36,21 @@ public class SharedDetectionRulesTest {
         }
     }
 
+    /** The star-cap warning explains, with the engine's own numbers, the references the star-shape check counts. */
+    @Test
+    public void starCapWarningExplainsTheReferencesTheShapeCheckCounts() {
+        DetectionConfig config = new DetectionConfig();
+        config.enableVariableStarDetection = true;
+        config.photometryMaxStars = 52;
+        var issue = DetectionConfigRules.validate(config, DetectionConfigRules.Operation.CONFIGURATION).stream()
+                .filter(i -> i.ruleId() == DetectionConfigRules.RuleId.PHOTOMETRY_STAR_CAP).findFirst().orElseThrow();
+        String text = DetectionSettingsPresentation.issue(issue);
+        assertTrue(text, text.contains("star cap (52) is below 55"));
+        assertTrue(text, text.contains("its 50 reference stars"));
+        assertTrue(text, text.contains("comparison-star fit its 10"));
+        assertTrue(text, text.contains("Zero or a negative cap measures every usable star"));
+    }
+
     /** Round-trips hidden values and sentinels, then checks API snapshot independence and advisory diagnostics. */
     @Test
     public void auditedLegacyProfilesRoundTripWithoutSilentScientificChanges() throws Exception {

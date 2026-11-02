@@ -46,8 +46,13 @@ public final class DetectionSettingsPresentation {
                     + "This is a legacy GUI policy, not a universal engine error: pruned tracks and streaks can have larger jumps.";
             case GEOMETRIC_JITTER_JUMP -> "Star jitter exceeds the maximum raw jump; geometric point linking cannot form a baseline "
                     + "when that branch is used, including fallback without timestamps.";
-            case PHOTOMETRY_STAR_CAP -> "The photometry star cap is below " + issue.values().get("requiredStars")
-                    + "; variable-star readiness or ensemble solving cannot succeed. Zero or a negative cap remains uncapped.";
+            case PHOTOMETRY_STAR_CAP -> "The photometry star cap (" + issue.values().get("photometryMaxStars") + ") is below "
+                    + issue.values().get("requiredStars") + ", the fewest stars from which the star-shape check can count its "
+                    + issue.values().get("linearityMinStars") + " reference stars (and the comparison-star fit its "
+                    + issue.values().get("ensembleMinStars") + "). The check counts only stars measured precisely enough "
+                    + "(signal-to-noise ratio of about 20), up to the 90th brightness rank, so even that many stars succeed "
+                    + "only when all of them qualify; flagged or faint stars mean a real field usually needs several times more. "
+                    + "Zero or a negative cap measures every usable star.";
             case PHOTOMETRY_GEOMETRY_FACTORS, PHOTOMETRY_EFFECTIVE_GEOMETRY -> "Photometry annulus factors need effective pixel-radius expansion outside all comparison apertures. "
                     + "The engine resolves this using measured FWHM; configured factors are not rewritten.";
             case LIMITED_AMPLITUDE -> "Limited-readiness amplitude is below the ordinary minimum, making this gate less conservative.";
