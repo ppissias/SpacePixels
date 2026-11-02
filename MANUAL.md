@@ -22,6 +22,8 @@ This manual walks through the everyday workflows with screenshots from real sess
 8. [Detection settings in brief](#8-detection-settings-in-brief)
 9. [Tips and troubleshooting](#9-tips-and-troubleshooting)
 
+[Annex: Preparing data with Siril](#annex-preparing-data-with-siril) · [Annex: Local Stellarium integration](#annex-local-stellarium-integration)
+
 ---
 
 ## 1. Before you start
@@ -144,7 +146,7 @@ ASTAP checks run in the background and show **Checking ASTAP installation...** w
 
 After a successful solve, SpacePixels offers to write the WCS solution into the frame. This preserves all image pixels, tile compression and additional FITS extensions, and verifies the complete updated file and WCS before replacing the original. Whole-file archives such as `.fits.gz` must be decompressed before import. Closing SpacePixels during a solve waits for solver cleanup; an accepted header write finishes before exit.
 
-Both backends use blind solving: SpacePixels does not pass a position, search radius or optical scale to restrict the search. ASTAP searches the whole sky with automatic scale selection and writes no unused annotated JPEG; any older JPEG alongside the frame is preserved. Custom solving is deferred to a later feature.
+Both backends use blind solving: SpacePixels does not pass a position, search radius or optical scale to restrict the search. ASTAP searches the whole sky with automatic scale selection and writes no unused annotated JPEG; any older JPEG alongside the frame is preserved. Custom solving is outside the current scope.
 
 Without a plate solution you can still detect, blink and inspect objects in pixel coordinates. Sky-coordinate overlays, coordinate-based catalogue searches and some calibrated diagnostics require astrometry. With one, **Fetch Sky Catalogue** in **2 Astrometry** downloads the stars, deep-sky objects and variable stars of the field, which the viewers can then draw on your frames (see [Annotate](#annotate-stars-deep-sky-objects-and-variable-stars)).
 
@@ -423,7 +425,7 @@ The JPL NEO Recovery search then identified it (see [Identifying objects](#5-ide
 
 ### Preparing an observing session
 
-Click **Prepare Frames…**, above **Import Aligned Frames…** in **1 Prepare**. It opens a separate window; a dataset does not need to be imported first.
+Click **Prepare Frames…**, above **Import Aligned Frames…** in **1 Prepare**. It opens a separate window; a dataset does not need to be imported first. The fixed Siril options, and why each one is used, are explained in [Annex: Preparing data with Siril](#annex-preparing-data-with-siril).
 
 ![Preparing an observing session](docs/images/manual/ui-preparation.png)
 
@@ -731,6 +733,121 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 **Colour frames.** Detection works on monochrome data; accept the conversion offer after import, or click **Convert to Mono** later, then import the generated mono folder.
 
 **Signed 16-bit frames, or pixel values below zero.** SpacePixels reads 16-bit frames as unsigned values (`BZERO` 32768). Frames stored as signed 16 bit (`BZERO` 0) or with other scaling would be read at the wrong brightness level, so import offers to convert them into a new folder. When the conversion finds pixels below zero (frames bias- or dark-subtracted without a pedestal, in signed 16 bit or 32 bit), it asks how to store them. **Add an Offset** (recommended) adds one common offset before the sequence-wide linear scale, keeps normal negative values and leaves registration padding at 0; extreme values follow the separate outlier choice; the report takes the offset off again for the sky brightness. **Set to 0** clips negative values before the common linear conversion and cuts off the low side of the noise; when the sky itself is near zero, most of each frame becomes 0, every frame then looks like a failed registration and detection fails.
+
+---
+
+## Annex: Preparing data with Siril
+
+**Prepare with Siril** runs one fixed recipe. The steps in the window are in [Preparing an observing session](#preparing-an-observing-session). This annex explains the options in that recipe. **Preview processing instructions** shows the script before it runs, and the run folder keeps the same instructions.
+
+The aim is a sequence of individual exposures that have been calibrated and aligned, and otherwise left as measured. Detection compares those frames. A stretched, denoised or stacked picture is a different product.
+
+SpacePixels starts `siril-cli` on private copies in a new `spacepixels_prepared_…` folder. Your Siril preferences are neither read nor changed. The original files are not modified.
+
+### What is left out
+
+These operations are absent because each one would rewrite pixels the search compares from frame to frame.
+
+- **Stretch, background extraction, photometric colour calibration, denoising and star removal.**
+- **Cosmetic correction** (`-cc`). A hot pixel and a short trail can look alike. Filling pixels in before the search removes samples the search should see.
+- **Dark optimization** (`-opt`). Siril would scale the dark to the light. The dark is subtracted as recorded, so it has to belong to the same exposure group as the lights. The group rule is in the preparing section: the full range may differ by up to 2% of the shortest exposure, with a minimum of 0.1 s.
+- **CFA flat equalization** (`-equalize_cfa`). That rescales the colour channels of a flat toward the same mean and changes the tint of the calibrated lights.
+- **Drizzle, comet alignment, and stacking the lights into the detection input.** Drizzle resamples onto a finer grid. Comet alignment holds the comet still and trails the stars. Detection needs the separate registered exposures. An optional reference stack can be written beside them; it is not the sequence that is imported.
+
+### Private settings
+
+Every script starts with `requires 1.4.0`, `set32bits`, compression turned off, and `setcpu` set to at most four threads, and to no more threads than the computer has. Working images stay 32-bit through calibration and registration. Rounding happens once, at the [16-bit handoff](#the-16-bit-sequence) below.
+
+The run folder contains a private `siril.cfg`:
+
+| Setting | Value | Role |
+|---|---|---|
+| `extension` | `.fit` | Working files are FITS under the name Siril writes |
+| `compression` / `enabled` | `false` | The file Siril writes is the file SpacePixels reads back. Compression stays off in the configuration and again at the start of each script |
+| `debayer` / `use_bayer_header` | `true` | The Bayer pattern comes from the working file, rather than from a pattern saved in the Siril application |
+| `debayer` / `interpolation` | `8` | RCD demosaic in Siril 1.4. This is the method used, whichever demosaic method is selected in the Siril application |
+| `mem_mode` | `0` | The memory limit is a fraction of available memory |
+| `mem_ratio` | `0.35` | That fraction is 35% |
+
+With **From file metadata**, the Bayer header on the converted working file is left as conversion recorded it. With a camera preset or **Custom**, SpacePixels writes the chosen pattern, row order and offsets onto the converted working copies before calibration. Originals are not rewritten. Row order changes which pixels are treated as red, green and blue. The preparing section describes those camera controls.
+
+### Conversion
+
+Each folder of exposures is converted on its own, without debayering:
+
+```
+convert lights -out=../../converted/lights
+```
+
+Darks, flats, biases and dark-flats use the same form. A colour camera RAW file becomes a CFA FITS mosaic. Siril's RAW reader still decodes the camera file, including its black level. Matching calibration folders go through the same conversion, so they stay in that domain. A master made by another program can disagree with that decoding. Prefer the original exposures, or a master produced from them in the same way.
+
+An existing master FITS is not converted again. It is used as the calibration master.
+
+Before Siril reads a FITS working copy, SpacePixels repairs two header forms Siril would drop. A dotted `DATE-OBS` time (`HH.mm.ss`) becomes colon-separated, and quoted `SITELAT` / `SITELONG` values become numeric degrees. Pixel bytes are unchanged. The preparing section describes the check that follows.
+
+### Calibration masters
+
+A folder of bias, dark or dark-flat exposures is stacked as a mean with outlier rejection, without normalization, in 32-bit:
+
+```
+stack biases rej 3 3 -nonorm -32b -out=../../masters/biases
+```
+
+`rej 3 3` is Siril's mean stack with Winsorized sigma clipping at 3 low and 3 high. The rejection name is left off, and Winsorized is Siril's default for that form. `-nonorm` keeps the measured pedestal. Siril would otherwise scale an additive frame, and the amount removed from the lights would no longer be the bias or dark that was measured.
+
+Flats keep the illumination pattern and divide out the flat's overall brightness:
+
+```
+stack pp_flats rej 3 3 -norm=mul -32b -out=../../masters/flats
+```
+
+When a flat folder is supplied with a dark-flat, the flats are calibrated with that dark-flat before the stack (`calibrate flats -dark=…`). With no dark-flat, a bias is used (`-bias=…`). Dark optimization is not applied to that step either. Calibration frames are not debayered on their own, so a flat used on a mosaic stays a mosaic.
+
+### Calibrating the lights
+
+Lights are calibrated when a dark, a flat or a bias was supplied. **Colour (Bayer CFA)** is calibrated even without those files, because the mosaic still has to become RGB.
+
+- A dark is subtracted when one was supplied. A separate bias is not subtracted as well: the dark master already contains the bias, and subtracting both would remove it twice. That bias is still applied to the flats when no dark-flat was supplied.
+- With no dark, a bias is subtracted when one was supplied.
+- A flat is applied when one was supplied.
+- **Colour (Bayer CFA)** adds `-cfa -debayer`. Calibration runs on the mosaic, and `-debayer` then writes RGB with the RCD method from the private configuration. `-cfa` marks the frames as a colour mosaic. `-equalize_cfa` is not added.
+- **Monochrome** lights are not debayered. **Already debayered RGB** lights are not debayered again.
+
+A colour sequence with no dark, flat or bias still runs `calibrate lights -cfa -debayer`. A monochrome or already-RGB sequence with no calibration frames skips `calibrate` and registers the converted lights directly. After calibration the sequence name is `pp_lights`. Without calibration it stays `lights`.
+
+### Registration
+
+```
+register pp_lights -2pass
+seqapplyreg pp_lights -framing=current -interp=linear
+```
+
+`-2pass` selects the reference frame and computes the alignment. `seqapplyreg` writes the moved frames. The names above are for a calibrated colour or calibrated mono sequence; an uncalibrated sequence uses `lights` in both commands.
+
+`-transf=` is omitted, so Siril uses its default transform, a homography: shift, rotation, scale and a small perspective term. That is the transform Siril uses for ordinary registration, including wide fields. A shift-only model would leave field rotation uncorrected. A similarity model (shift, rotation and one scale) is stricter. The recipe stays on the homography. A trail that is straight on the sky and visibly bent in the registered frames is the observation that would justify revisiting that choice.
+
+On a colour image, star positions are measured on the green channel, which is Siril's default. The registered file still contains red, green and blue. Keeping only the green channel would discard the light in the other two, so the recipe does not do that extraction. The three channels are combined in the next step.
+
+`-framing=current` keeps every registered frame the size of the reference frame. Where a frame does not cover that canvas, the margin stays zero. SpacePixels uses those margins to measure drift and to tell image from empty border. `-framing=min` would crop every frame to the common overlap and remove that evidence. Keep the same full canvas when registering outside SpacePixels.
+
+`-interp=linear` places a sub-pixel dither onto the reference grid. Nearest-neighbour leaves that dither as a one-pixel step. Lanczos-4 rings around stars, and those rings would be part of the data detection measures. Drizzle is not used.
+
+### The 16-bit sequence
+
+Siril's registered frames are 32-bit. SpacePixels then writes the sequence detection reads: unsigned 16-bit monochrome FITS in `aligned/`.
+
+- Red, green and blue become one plane by their arithmetic mean, with equal weight. This is a straight average, not a photometric luminance.
+- One scale and one offset serve the whole sequence. Frames are not scaled one by one.
+- Registration margins that are zero stay zero, including when the offset keeps ordinary negative values.
+- Normalized values inside `[-0.5, 1.5]` are stored directly. Values outside that headroom open the dialog in the preparing section: **Clip extremes**, **Preserve all values**, or **Cancel**.
+
+The detection engine reads 16-bit samples. The 32-bit working files exist so that calibration, registration and this final scale are not rounded at every step.
+
+Source world-coordinate solutions are removed. Registration has moved the pixels, and the old solution is not rewritten to follow them. Plate-solve one prepared frame before catalogue or astrometric work.
+
+Siril can leave out a frame it cannot register. At least three registered frames, each tied to one source exposure, are required. The completion message and `preparation.json` list anything left out.
+
+**Generate a reference stack** adds one stack of the registered frames, with the same rejection and no normalization (`rej 3 3 -nonorm -32b`), stored in `reference/`. That stack is not a detection input.
 
 ---
 

@@ -20,6 +20,11 @@ import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import java.awt.*;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.font.TextAttribute;
 import java.io.File;
 import java.io.IOException;
 import java.net.URI;
@@ -38,6 +43,10 @@ import java.util.function.Consumer;
 
 /** Preparation form, input readiness and owned installation checks; heavy processing is delegated as an immutable request. */
 final class PreparationPanel extends JPanel implements AutoCloseable {
+    /** Published manual section for the fixed Siril recipe, opened from the integration box. */
+    static final String SIRIL_PREPARATION_MANUAL_URL =
+            "https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md#annex-preparing-data-with-siril";
+
     /** Follow-up choices are captured with the recipe, never read from live controls after a job starts. */
     record Selection(PreparationRequest request, boolean importFrames) { }
 
@@ -815,6 +824,43 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         }
     }
 
+    /** Underlined manual text beside Get Siril. It is ordinary text, and Enter, Space or a click opens it. */
+    private JLabel sirilManualLink() {
+        JLabel link = new JLabel("How SpacePixels uses Siril");
+        link.setFont(UiStyle.bodyFont().deriveFont(Map.of(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON)));
+        link.setForeground(UiStyle.linkColor());
+        link.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        link.setToolTipText(SIRIL_PREPARATION_MANUAL_URL);
+        link.setFocusable(true);
+        link.getAccessibleContext().setAccessibleName("Open the manual section that explains how Prepare Frames uses Siril");
+        link.getAccessibleContext().setAccessibleDescription(SIRIL_PREPARATION_MANUAL_URL);
+        link.addMouseListener(new MouseAdapter() {
+            /** Opens the manual section on a primary click. */
+            @Override public void mouseClicked(MouseEvent event) {
+                if (SwingUtilities.isLeftMouseButton(event)) openSirilManual();
+            }
+        });
+        link.addKeyListener(new KeyAdapter() {
+            /** Opens the manual section once the text has keyboard focus. */
+            @Override public void keyPressed(KeyEvent event) {
+                if (event.getKeyCode() == KeyEvent.VK_ENTER || event.getKeyCode() == KeyEvent.VK_SPACE) {
+                    openSirilManual();
+                    event.consume();
+                }
+            }
+        });
+        return link;
+    }
+
+    /** Opens the published manual section that explains the fixed Siril recipe. */
+    private void openSirilManual() {
+        try {
+            Desktop.getDesktop().browse(URI.create(SIRIL_PREPARATION_MANUAL_URL));
+        } catch (Exception failure) {
+            message(reason(failure));
+        }
+    }
+
     /** Cancels form-owned inspection/probes; an admitted processing job is cancelled by the owning preparation window. */
     @Override public void close() {
         if (closed) return;
@@ -850,7 +896,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             JButton download = AccessibleControls.link("Get Siril", "Download Siril", () -> {
                 try { Desktop.getDesktop().browse(URI.create(SirilInstallation.WEBSITE)); } catch (Exception failure) { message(reason(failure)); }
             });
-            add(row(status, download), BorderLayout.SOUTH);
+            add(row(status, download, sirilManualLink()), BorderLayout.SOUTH);
             browse.setToolTipText("Choose the Siril installation folder, or the siril-cli executable.");
             check.setToolTipText("Identify the selected command-line tool without processing any images.");
             browse.addActionListener(event -> {

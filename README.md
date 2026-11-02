@@ -59,7 +59,7 @@ For supported formats and detailed preparation rules, see [Input requirements](#
 - Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays, SkyBoT/JPL moving-object identification, SatChecker satellite identification for streaks, and Stellarium Web context links.
 - Offers linear monochrome conversion after importing color FITS, and separately batch-stretches entire datasets from Image Stretch.
 - Includes headless utilities for batch detection.
-- **Prepare Frames…** runs a separately installed Siril to calibrate and register exposures on private copies. The [manual](MANUAL.md#preparing-an-observing-session) explains the required inputs.
+- **Prepare Frames…** runs a separately installed Siril to calibrate and register exposures on private copies. The [manual](MANUAL.md#preparing-an-observing-session) explains the required inputs, and [how Siril is used](MANUAL.md#annex-preparing-data-with-siril) explains each option in the recipe.
 
 ## Report output
 

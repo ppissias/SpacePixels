@@ -1,6 +1,6 @@
 # Observing-session preparation
 
-SpacePixels opens one modeless **Prepare observing session** window from **Prepare Frames…**, above **Import Aligned Frames…** on Main. It operates independently of the imported session and uses the same processing job slot as detection. The user workflow is in [MANUAL.md](../../MANUAL.md#preparing-an-observing-session); remaining acceptance and follow-ups are in [FEATURE-REQUESTS.md](../../FEATURE-REQUESTS.md#f13-observing-session-preparation).
+SpacePixels opens one modeless **Prepare observing session** window from **Prepare Frames…**, above **Import Aligned Frames…** on Main. It operates independently of the imported session and uses the same processing job slot as detection. The user workflow is in [MANUAL.md](../../MANUAL.md#preparing-an-observing-session). Why each generated Siril option is fixed is explained for users in [Annex: Preparing data with Siril](../../MANUAL.md#annex-preparing-data-with-siril). This note keeps the ownership, input and validation contracts.
 
 ## Scope and window ownership
 

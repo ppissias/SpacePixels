@@ -103,7 +103,7 @@ public class PreparationPanelTest {
                 PreparationPanel.inputBrowseStart(null, session.resolve("missing"), lights).getCanonicalPath());
     }
 
-    /** A camera mode is intentionally unset rather than guessed from a two-dimensional image or extension. */
+    /** A camera mode is intentionally unset rather than guessed from a two-dimensional image or extension. The Siril box links to the manual annex. */
     @Test public void cameraModeIsInitiallyUnknownWithOnlySirilInstallation() throws Exception {
         ApplicationStorage storage = new ApplicationStorage();
         AtomicReference<PreparationPanel> reference = new AtomicReference<>();
@@ -119,6 +119,17 @@ public class PreparationPanelTest {
                 assertTrue(all(panel).stream().filter(JLabel.class::isInstance).map(JLabel.class::cast)
                         .anyMatch(label -> label.getText() != null && label.getText().contains("Siril installation folder")
                                 && label.getText().contains("siril-cli.exe")));
+                assertEquals("https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md#annex-preparing-data-with-siril",
+                        PreparationPanel.SIRIL_PREPARATION_MANUAL_URL);
+                JLabel manual = all(panel).stream().filter(JLabel.class::isInstance).map(JLabel.class::cast)
+                        .filter(label -> "How SpacePixels uses Siril".equals(label.getText())).findFirst().orElseThrow();
+                JButton getSiril = button(panel, "Get Siril");
+                assertEquals(PreparationPanel.SIRIL_PREPARATION_MANUAL_URL, manual.getToolTipText());
+                assertEquals(Cursor.HAND_CURSOR, manual.getCursor().getType());
+                assertTrue(manual.isFocusable());
+                assertSame(getSiril.getParent(), manual.getParent());
+                assertTrue(manual.getParent().getComponentZOrder(manual) > getSiril.getParent().getComponentZOrder(getSiril));
+                assertFalse(all(panel).stream().anyMatch(c -> c instanceof JButton b && "How SpacePixels uses Siril".equals(b.getText())));
                 assertEquals(1, all(panel).stream().filter(c -> c instanceof JTextField f
                         && f.getAccessibleContext().getAccessibleName() != null
                         && f.getAccessibleContext().getAccessibleName().endsWith("installation path")).count());
