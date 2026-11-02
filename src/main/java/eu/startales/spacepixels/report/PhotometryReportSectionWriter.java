@@ -57,8 +57,8 @@ public final class PhotometryReportSectionWriter {
 
     /**
      * What the check measures, independent of this star. The mouse-over follows it with the pass or fail result.
-     * SPLIT_HALF pairs consecutive usable points into non-overlapping pairs. LINEARITY looks at every
-     * measurement flag on the star, including frames that are not in the light curve.
+     * SPLIT_HALF pairs consecutive usable points into non-overlapping pairs. LINEARITY looks at the measurement
+     * flags on every frame used for photometry, including measurements left out of the light curve.
      */
     static String gateQuestion(String gate) {
         switch (gate) {
@@ -77,7 +77,7 @@ public final class PhotometryReportSectionWriter {
             case "LOCAL":
                 return "Checks whether nearby comparison stars share the candidate's variation with a similar amplitude.";
             case "LINEARITY":
-                return "Checks for saturation and measurements brighter than the estimated linear limit.";
+                return "Checks for saturation and measurements brighter than the estimated linear limit on the frames used for photometry.";
             default:
                 return gate;
         }
@@ -117,8 +117,8 @@ public final class PhotometryReportSectionWriter {
                 return failed ? "The measured variation exceeds the allowed association with one or more monitored frame properties"
                         : "Associations with the monitored frame properties remain within the allowed limits";
             case "LINEARITY":
-                return failed ? "At least one measurement was flagged as saturated or brighter than the estimated linear limit"
-                        : "No measurement was flagged as saturated or brighter than the estimated linear limit";
+                return failed ? "At least one measurement on a frame used for photometry was flagged as saturated or brighter than the estimated linear limit"
+                        : "No measurement on the frames used for photometry was flagged as saturated or brighter than the estimated linear limit";
             default:
                 return gate;
         }
