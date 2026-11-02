@@ -12,6 +12,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
 | [F22](#f22-known-asteroids-and-comets-in-the-field) | Known asteroids and comets in the field | First version implemented 2026-11-02 (viewer overlay); report table and track comparison open |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
+| [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Requested 2026-11-02; method proposed, decision points open |
 
 The other investigations from 2026-11-02 are owned by JTransient: [photometry strictness/defaults](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [single faint-streak elongation](../JTransient/FEATURE-REQUESTS.md#st-7-elongation-threshold-for-single-faint-streaks), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -163,3 +164,36 @@ Next steps:
 2. Write the input and output contract here and in JTransient, for agreement.
 3. First version: detection in camera coordinates (satellites, meteors, flashes) in JTransient; chronological inventory, streaming reads, cancel and resume, and a night report with a timeline in SpacePixels.
 4. Second version: an alt/az calibration per camera, which gives every frame a sky solution from its time; sky coordinates and SatChecker identification with the F21 comparison; meteor shower association; several cameras.
+
+## F24. Calibrated magnitudes for variable stars
+
+**Request (2026-11-02).** When a sky catalogue has been fetched, it has the stars' magnitudes. Use it to report the variable stars' actual magnitudes instead of only relative ones.
+
+**What exists today.** Photometry reports each star's mean instrumental magnitude (main aperture, camera scale) and a differential light curve against that mean (`delta_mag`). A candidate card shows the matched star's catalogue values, Gaia DR3 G and BP−RP and the VSX magnitudes or amplitude, beside the measurements without converting them. Night & Equipment already matches the extracted stars with Gaia and fits a zero point per frame (Gaia G with one colour term in BP−RP for the session, plus a linearity slope), but only for the sky brightness and the linearity reading; the photometry does not use it.
+
+**Proposed method.**
+
+1. **Calibration stars.** Photometry stars of the session that are CONSTANT, have a finite mean magnitude and a Gaia match within the matching radius of the plate solution, are not mostly saturated or non-linear, lie in check B's linear range, and have a BP−RP colour.
+2. **Fit.** A robust fit, with outliers clipped, of `G = meanMag + ZP + c × (BP−RP)` to those stars, with a check that G follows the instrumental magnitude with a slope of 1. Reuse Night & Equipment's Gaia matching rather than writing a second one; the fit itself uses photometry's own ensemble mean magnitudes, which share the light curves' gauge. `meanMag` is the ensemble mean at the session's median transparency, so one zero point serves the whole session.
+3. **Results.** Each star's estimated G is `meanMag + ZP + c × colour`, and each light-curve point is that plus `delta_mag`. A light curve measured in another aperture is differential, so it calibrates the same way. A star without a Gaia colour takes the median colour of the calibration stars, with a larger stated uncertainty.
+4. **Quality.** Report the number of calibration stars, the fitted colour term, the linearity slope and the RMS of the calibration residuals as the expected accuracy of one star. Show no calibrated values when there are too few stars, the slope departs from 1, or the RMS is large.
+
+**Where it would appear.** Estimated G beside the instrumental magnitude on candidate cards and tables, a calibrated light-curve axis or a toggle, new CSV columns (star mean, and per-point values in the light curves), and a calibration note in the readiness diagnostics. With VSX values in the same band, the catalogue comparison could compare the observed brightest and faintest values directly, not only the amplitude.
+
+**Limits to state in the report.**
+
+- **Passband.** Gaia G is very broad; the frames are taken through luminance, colour filters or none. The colour term corrects most of the difference, but the result is an estimate of G, typically good to a few hundredths of a magnitude, worse for very red or blue stars and for filters far from G.
+- **Colour changes.** The colour term uses Gaia's mean colour; pulsating stars change colour as they vary, which adds an error at their extremes.
+- **Requirements.** A plate solution and a fetched sky catalogue covering the field, with enough calibration stars inside its magnitude limit.
+- **Not submission data.** AAVSO submissions need standard filters and its comparison sequences; the exported values remain an estimate.
+
+**Ownership.** SpacePixels owns the catalogue and the plate solution, so the calibration belongs to the application; JTransient's photometry outputs are its input and do not change. It is independent of JTransient's VS-12 work.
+
+**Decision points.**
+
+1. Band: estimated Gaia G only, or also V (and R) from Gaia DR3's published colour transformations, so the comparison with VSX values works in their own band (with larger errors for red stars).
+2. Presentation: beside the instrumental values, or as the default axis of the light curves when a calibration exists.
+3. Acceptance limits for showing values: the minimum number of calibration stars and the largest accepted RMS and slope departure.
+4. Whether a recorded filter (`FILTER` card) should limit which bands are offered.
+
+**Verification.** On klangwolke-2 and M81 Kumar, which have plate solutions and saved catalogues: compare calibrated means with Gaia G for constant stars left out of the fit, and the calibrated light curves of VSX-matched variables with their catalogue ranges in the matching band. Check the colour-term and linearity readings against Night & Equipment's, sessions without a catalogue or plate solution (no calibrated values, no change otherwise), a filtered sequence (m31-b/g/red), and that detection, scores and candidates are unchanged.
