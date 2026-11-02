@@ -1526,6 +1526,7 @@ public final class PhotometryReportSectionWriter {
                 + "Z is the ensemble zero-point offset relative to the session median frame; positive values indicate a fainter frame. "
                 + "The response slope is the slope of photometric residuals against instrumental magnitude used by check D. "
                 + "Star counts show the number used in the comparison ensemble and the number measured. "
+                + "The flag columns count measurements, not stars or objects, and one measurement can carry several flags. "
                 + "Hover a column name for its definition.</p>");
         report.println("<p class='compact-note'>After removing the fitted spatial brightness gradient, the frame is excluded if any region in the 3 &times; 3 grid differs from the central region by at least 0.10 mag. "
                 + "The frame status shows &ldquo;Spatial residual&rdquo; and the magnitude of the difference. "
@@ -1557,6 +1558,8 @@ public final class PhotometryReportSectionWriter {
                 + th("Crossed", "Measurements flagged because a moving object crossed the measurement region.")
                 + th("Edge/Void", "Measurements flagged at the edge or in an empty area and omitted from the ensemble.")
                 + th("Outliers", "Measurements flagged as isolated outliers and omitted from the ensemble.")
+                + th("Bad Flux", "Measurements with no positive flux in the main aperture, so no magnitude, omitted from the ensemble.")
+                + th("Contaminated", "Measurements whose star shape departed strongly from that star's usual shape, as a hot pixel, cosmic ray or faint passing object in the aperture causes, omitted from the ensemble.")
                 + "</tr></thead><tbody>");
         for (PipelineTelemetry.PhotometryFrameStat f : t.frames) {
             String status = f.used ? "Used" : "Excluded: " + ReportFormat.escapeHtml(f.exclusionReason);
@@ -1571,7 +1574,8 @@ public final class PhotometryReportSectionWriter {
                     + "<td" + ("FAIL".equals(f.responseStatus) ? " class='alert'" : "") + ">" + f.responseStatus + "</td>"
                     + "<td>" + formatMag(f.responseSlope, 4) + "</td><td>" + formatMag(f.responseSlopeError, 4) + "</td>"
                     + "<td>" + f.starsInEnsemble + " / " + f.starsMeasured + "</td>"
-                    + "<td>" + f.saturated + "</td><td>" + f.nonlinear + "</td><td>" + f.crossing + "</td><td>" + f.edgeOrVoid + "</td><td>" + f.outliers + "</td></tr>");
+                    + "<td>" + f.saturated + "</td><td>" + f.nonlinear + "</td><td>" + f.crossing + "</td><td>" + f.edgeOrVoid + "</td><td>" + f.outliers + "</td>"
+                    + "<td>" + f.badFlux + "</td><td>" + f.contaminated + "</td></tr>");
         }
         report.println("</tbody></table></div></div>");
     }
@@ -1614,7 +1618,7 @@ public final class PhotometryReportSectionWriter {
             PrintWriter csv = output.writer();
             csv.println("frame_index,filename,julian_date,used,exclusion_reason,fwhm,aperture_radius,sky,offset_x,offset_y,registration_spread,"
                     + "sky_at_zero_fraction,shape_status,linear_limit_mag,linear_range_mag,concentration_reference,zero_point,plane_x,plane_y,"
-                    + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux");
+                    + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux,contaminated");
             for (PipelineTelemetry.PhotometryFrameStat f : analysis.frames) {
                 csv.println((f.frameIndex + 1) + "," + csvText(f.filename) + "," + csvNum(f.julianDate) + "," + f.used + "," + csvText(f.exclusionReason) + ","
                         + csvNum(f.fwhm) + "," + csvNum(f.apertureRadius) + "," + csvNum(f.skyMedian) + "," + csvNum(f.registrationOffsetX) + ","
@@ -1622,7 +1626,7 @@ public final class PhotometryReportSectionWriter {
                         + f.shapeLinearityStatus + "," + csvNum(f.linearLimitMag) + "," + csvNum(f.linearRangeMag) + "," + csvNum(f.concentrationReference) + ","
                         + csvNum(f.zeroPoint) + "," + csvNum(f.planeX) + "," + csvNum(f.planeY) + "," + f.responseStatus + ","
                         + csvNum(f.responseSlope) + "," + csvNum(f.responseSlopeError) + "," + f.starsInEnsemble + "," + f.starsMeasured + ","
-                        + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux);
+                        + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux + "," + f.contaminated);
             }
             output.commit();
         }

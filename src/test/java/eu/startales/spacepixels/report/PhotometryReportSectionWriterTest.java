@@ -7,6 +7,7 @@ import io.github.ppissias.jtransient.engine.ImageFrame;
 import io.github.ppissias.jtransient.engine.JTransientEngine;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.photometry.PhotometricReadiness;
+import io.github.ppissias.jtransient.photometry.PhotometryFlags;
 import io.github.ppissias.jtransient.photometry.StarLightCurve;
 import io.github.ppissias.jtransient.photometry.VariabilityTier;
 import io.github.ppissias.jtransient.photometry.VariableStarAnalysis;
@@ -112,6 +113,22 @@ public class PhotometryReportSectionWriterTest {
         assertEquals(FRAMES, rows);
         assertTrue(Files.readAllLines(new File(exportDir, "variable_stars/photometry_stars.csv").toPath()).get(0).contains(",amplitude,aperture_fwhm_factor,"));
 
+        // The frame CSV's bad-flux and contamination counts are the engine's flags on that frame.
+        List<String> frameRows = Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath());
+        List<String> frameHeader = List.of(frameRows.get(0).split(","));
+        VariableStarAnalysis analysis = result.variableStarAnalysis;
+        for (int j = 0; j < analysis.frames.size(); j++) {
+            String[] cells = frameRows.get(j + 1).split(",", -1);
+            int badFlux = 0;
+            int contaminated = 0;
+            for (StarLightCurve star : analysis.stars) {
+                if ((star.flags[j] & PhotometryFlags.BAD_FLUX) != 0) badFlux++;
+                if ((star.flags[j] & PhotometryFlags.CONTAMINATED) != 0) contaminated++;
+            }
+            assertEquals(badFlux, Integer.parseInt(cells[frameHeader.indexOf("bad_flux")]));
+            assertEquals(contaminated, Integer.parseInt(cells[frameHeader.indexOf("contaminated")]));
+        }
+
         // Optional: keep a standalone page for visual review.
         String previewDir = System.getenv("SPACEPIXELS_PHOTOMETRY_PREVIEW_DIR");
         if (previewDir != null) {
@@ -165,6 +182,42 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("Variable Stars: Session Diagnostics"));
         assertTrue(html.contains("Variable Stars: Candidates"));
         assertTrue(html.contains("Variable Stars: Per-Frame Measurements"));
+    }
+
+    /** Zero and overlapping flag counts reach the per-frame table and CSV unchanged. */
+    @Test
+    public void frameTableAndCsvShowBadFluxAndContaminationCounts() throws Exception {
+        DetectionConfig config = new DetectionConfig();
+        config.enableVariableStarDetection = true;
+        PipelineTelemetry.PhotometryTelemetry telemetry = new PipelineTelemetry.PhotometryTelemetry();
+        telemetry.verdict = "LIMITED";
+        PipelineTelemetry.PhotometryFrameStat clean = new PipelineTelemetry.PhotometryFrameStat();
+        clean.frameIndex = 0;
+        clean.filename = "a.fits";
+        PipelineTelemetry.PhotometryFrameStat flagged = new PipelineTelemetry.PhotometryFrameStat();
+        flagged.frameIndex = 1;
+        flagged.filename = "b.fits";
+        flagged.saturated = 5;
+        flagged.contaminated = 5;
+        flagged.badFlux = 2;
+        telemetry.frames.add(clean);
+        telemetry.frames.add(flagged);
+        VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), Collections.emptyList(), telemetry);
+        File exportDir = temporaryFolder.newFolder();
+        StringWriter output = new StringWriter();
+
+        PhotometryReportSectionWriter.writeSection(new PrintWriter(output), context(config, Collections.emptyList(), exportDir), analysis);
+
+        String html = output.toString();
+        assertTrue(html.contains(">Bad Flux</th>"));
+        assertTrue(html.contains(">Contaminated</th>"));
+        assertTrue(html.contains("count measurements, not stars or objects"));
+        assertTrue(html.contains("<td>0</td><td>0</td><td>0</td></tr>"));
+        assertTrue(html.contains("<td>0</td><td>2</td><td>5</td></tr>"));
+        List<String> csv = Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath());
+        assertTrue(csv.get(0).endsWith(",outliers,bad_flux,contaminated"));
+        assertTrue(csv.get(1).endsWith(",0,0,0"));
+        assertTrue(csv.get(2).endsWith(",0,2,5"));
     }
 
     @Test
