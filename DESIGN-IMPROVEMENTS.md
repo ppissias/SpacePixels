@@ -6,18 +6,6 @@ Every item here is a proposal until the maintainer decides on it. When an item i
 
 **How to use the issue reviews (2026-10-24).** Before implementing an item, consider and evaluate the review comments at its end against the current code. Record which comments are accepted, adjusted or rejected, why, and the relevant verification with the change. They are review input, not authorization to implement the proposal or automatic proof of a current bug. The review was static; no runtime or real-data checks were run. Recheck references and caller counts as other work lands.
 
-<!-- root-toc:start -->
-## Contents
-
-- [Code review of 2026-10-23](#code-review-of-2026-10-23)
-  - [What is good and should stay](#what-is-good-and-should-stay)
-  - [Recommended changes](#recommended-changes)
-  - [SP-21. Upgrade nom-tam-fits after the dither fix](#sp-21-upgrade-nom-tam-fits-after-the-dither-fix)
-  - [SP-22. Upgrade Gson to 2.15.0](#sp-22-upgrade-gson-to-2150)
-  - [Shared logging review (JT-04)](#shared-logging-review-jt-04)
-- [Removed from the previous plan (2026-10-23)](#removed-from-the-previous-plan-2026-10-23)
-<!-- root-toc:end -->
-
 ## Code review of 2026-10-23
 
 A fresh review of the whole application (about 50,000 lines of main code and 17,000 of tests), against the principles in [DEVELOPER.md](DEVELOPER.md#principles): readable code, a clear design with clear boundaries, and a few chosen patterns applied consistently, with no abstraction that lacks a real need.

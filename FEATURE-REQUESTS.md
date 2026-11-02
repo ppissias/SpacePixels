@@ -10,16 +10,11 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
 | [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Planned for the next release; not implemented |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
+| [F21](#f21-satchecker-match-confidence-from-observed-motion) | SatChecker match confidence from observed motion | Investigation requested 2026-11-02 |
+| [F22](#f22-known-asteroids-and-comets-in-the-field) | Known asteroids and comets in the field | First version implemented 2026-11-02 (viewer overlay); report table and track comparison open |
+| [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 
-<!-- root-toc:start -->
-## Contents
-
-- [F04. MCP agent services](#f04-mcp-agent-services)
-  - [Proposed services (for agreement)](#proposed-services-for-agreement)
-- [F09. Consolidated super report for iterative runs](#f09-consolidated-super-report-for-iterative-runs)
-- [F15. Report themes and custom CSS](#f15-report-themes-and-custom-css)
-- [F01. Slow-mover and per-frame tuning relation](#f01-slow-mover-and-per-frame-tuning-relation)
-<!-- root-toc:end -->
+The other investigations from 2026-11-02 are owned by JTransient: [photometry strictness/defaults](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [single faint-streak elongation](../JTransient/FEATURE-REQUESTS.md#st-7-elongation-threshold-for-single-faint-streaks), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
 ## F04. MCP agent services
 
@@ -92,3 +87,88 @@ A graphical colour editor is outside this proposal. Still to decide: whether cus
 ## F01. Slow-mover and per-frame tuning relation
 
 Proposed investigation only. Compare the maximum-stack slow-mover thresholds with the tuned per-frame thresholds on the same real datasets before changing defaults. Measure recovery, false positives and run time. A maximum stack's sigma is not a single-frame sigma; the current distinction is described in JTransient's [algorithm reference](../JTransient/ALGORITHM.md). This remains a comparison of existing behaviour; any algorithm or default change needs a separate maintainer decision.
+
+## F21. SatChecker match confidence from observed motion
+
+**Request (2026-11-02).** Investigate whether SpacePixels can assess a returned satellite identification against its own observations and present useful evidence about the match.
+
+**Analysis scope.** Inventory the prediction and uncertainty information actually returned by SatChecker and the measured positions, capture times, exposure intervals, streak directions/lengths and WCS accuracy available for each finding. Evaluate position residuals over several observations, direction, angular speed and timing agreement where both sides provide enough information. Distinguish a nearby prediction from a supported identification, including multiple plausible satellites, missing timing/WCS and incomplete or flashing trails. Brightness predictions may have substantial uncertainty and need separate justification before becoming an acceptance test.
+
+**Before implementation.** Establish what can be calculated reliably, what historical orbit coverage permits, whether existing lookup responses need extending, and which explanations help the user. Calibrate any proposed confidence categories on known matches and deliberate mismatches; do not present an uncalibrated score as a probability. Preserve the provider response and provenance alongside the comparison.
+
+## F22. Known asteroids and comets in the field
+
+**Request (2026-11-02).** Like the stellar catalogue, obtain the known asteroids and comets expected within the field over the observing sequence, and show their changing positions in Blink and Inspect.
+
+**Decisions (made, 2026-11-02):**
+
+- "I propose to have yet another button, for this data to be fetched and then displayed."
+- On what is sent: "The command should send what it needs in order to get the information, no problem with sending also the coordinates of the observer, this rule I had was more for exporting data I pushish as examples."
+- JPL only (SB-Ident and Horizons), with SkyBoT kept as a report link, and a first version with the viewer overlay only: agreed.
+- On the magnitude limit: "I propose to have this configurable, like we do for the sky catalogue and propose to have the same magnitude for all objects."
+
+**Implemented (2026-11-02): the first version.** **Fetch Asteroids and Comets** and the asteroid and comet layer of **Annotate** are described in [MANUAL.md](MANUAL.md#known-asteroids-and-comets), the design in [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md#sky-catalogue-and-plate-correction). The analysis and its measurements are in git history. Two of its findings shaped the code: JPL's field search leaves out every comet unless `mag-required=false` (now set for the report's per-finding lookup too), and it picks its candidates by two-body motion of current orbits, which missed Apophis on 2021-03-06 (4.4° off) until near-Earth objects were searched 5° around the field.
+
+**Remaining work.**
+
+1. A report table of the known objects in the field: predicted magnitude against the field depth, and whether each was detected. Bright known objects that were not detected give a completeness check of the detection on real data.
+2. An explicit comparison of tracks with predictions (positions within the uncertainty over at least three frames, agreeing rates) before a track is called consistent with a known object. F21 needs the same comparison for satellites; build it once.
+3. A clock check: when the matched known objects all sit ahead of or behind their detections along their paths, report the implied frame-time offset (for example camera local time written as `DATE-OBS`) without correcting it silently.
+
+## F23. Fixed-camera and all-sky sequence analysis
+
+**Request (2026-11-02).** Analyse thousands of short exposures from a stationary wide-field or all-sky camera across a night, without requiring aligned input, to find satellite/meteor streaks and optical flashes. Develop ideas and a preliminary design first.
+
+**Application and engine ownership.** SpacePixels owns chronological file inventory, bounded reading, batching, progress, restart/cancellation and presentation; JTransient owns detection and calibration of the science. Investigate a separate input/processing mode with an explicit contract. The existing aligned-frame pipeline must continue to receive aligned frames.
+
+**Questions to investigate.** Compare fixed batches of 50 or 100 frames with time-based windows and adaptive segmentation driven by sky brightness, clouds and stellar motion. Assess overlaps and state needed to avoid losing or double-counting events at boundaries. Explore robust temporal backgrounds in camera coordinates, moving-star suppression, sensor defects, lens distortion and horizon masks, intermittent clouds, per-window tuning and cross-window event association. Distinguish single-frame meteor evidence, multi-frame satellite evidence and point-like flashes; do not assume every isolated bright event is astronomical.
+
+**Cost and validation.** Estimate throughput, I/O and memory for realistic nights before selecting batch sizes or an Auto-Tune strategy. Require representative camera sequences and labelled events/negative controls, with recovery, false alarms per unit observing time, boundary behavior and changing-condition tests. Record unresolved acquisition metadata, colour/raw handling and astrometric-calibration needs. A full night should be processable with bounded memory and traceable settings/evidence per interval.
+
+### F23 analysis (2026-11-02)
+
+**Star motion rules out batches of a fixed number of frames.** In a fixed camera the stars drift at about 15″/s × cos δ. With a star width (FWHM) of 2 px, or 2.5 px for the 50 mm lens:
+
+| Setup | Scale | Drift of one FWHM at δ = 0 | Star trail in a 10 s exposure | Drift over 50 × 10 s |
+|---|---|---|---|---|
+| All-sky fisheye, 1.55 mm lens, 2.4 µm pixels | 319″/px | 42 s | 0.5 px | 24 px |
+| 14 mm lens, 5.9 µm pixels | 87″/px | 12 s | 1.7 px | 87 px |
+| 50 mm lens, 4.3 µm pixels | 18″/px | 3 s | 8.5 px | 424 px |
+
+A median of a batch keeps the stars only while they move less than about half a FWHM: about two 10 s frames for the all-sky camera. Otherwise the stars drop out of the median, escape the star mask and become sidereal-rate "tracks". Warping the frames onto a common sky frame would allow batches, but then the horizon, trees and hot pixels move instead and must be masked in camera coordinates first. Fisheye distortion would also have to be modelled to about 0.1–0.2 px over tens to hundreds of pixels.
+
+### F23 proposed design
+
+- **Rolling reference.** Each frame's reference comes from its neighbours within a time window (about ±2–5 minutes, not a frame count). The sky part is motion-compensated; static scenery uses a plain temporal median.
+- **Star-motion model from the data.** Bright stars tracked over 1–2 minutes give the motion field: a rotation about the image of the celestial pole for a rectilinear lens, a smooth field for a fisheye. The model also predicts each pixel's star-trail direction and length, which rejects star residuals and trailed stars. Geostationary satellites stay fixed in camera coordinates, like hot pixels, and need their own rule if they are wanted.
+- **Segments by conditions.** A cheap first pass records each frame's sky level, noise, star count (a drop means cloud), FWHM and any exposure or gain change. It splits the night at twilight, clouds, moonrise and setting changes, and builds the hot-pixel map and the horizon mask. A reference never spans a segment boundary.
+- **Boundaries.** A rolling window has no internal boundaries. At segment edges and on resume, open satellite chains are carried over and the window's frames are read again.
+- **Detection.** On each difference image (frame minus its reference), reuse `SourceExtractor`, the streak classification and `StreakLinker`-style joining, in camera coordinates and only between neighbouring frames, because long paths curve.
+- **Event classes.** No isolated bright event is assumed to be astronomical:
+  - satellite: a streak that continues end to end across consecutive frames at a steady rate, possibly flaring;
+  - meteor: a single-frame streak without continuation, varying in brightness;
+  - aircraft: slow, with dotted lights blinking at about 1 Hz, often coloured;
+  - flash: point-like and star-shaped in one frame, checked against hot pixels, cosmic rays (sharper than a star), star positions and glints on a satellite path.
+- **Thresholds.** Set from the noise of the difference images, with false alarms per hour measured on negated difference images (the null test used for the faint-streak gate). The calibrated Auto-Tune works on aligned stacks and does not carry over.
+- **Contract.** JTransient gets a new entry point that accepts frames one at a time in time order, says when each frame can be released, and returns events, a conditions timeline and timings. Its results must not depend on how the application reads the frames. SpacePixels does the chronological inventory (times, gaps, format checks), read-ahead, progress, cancel and resume (results saved per segment), and a night report. The aligned pipeline is unchanged.
+
+**Cost estimate, to be confirmed by a prototype.** Extraction took 1.36 s per 61-megapixel frame on klangwolke-2, so about 0.15 s for a 6.4-megapixel all-sky frame. The rolling reference costs 0.2–1.5 s per frame depending on the method and is the main unknown, so 3,000 frames take about 15–90 minutes. A 16-bit 6.4-megapixel frame is about 13 MB, about 39 GB per night. Memory stays bounded whatever the length of the night: about 0.3 GB for 21 frames of 6.4 megapixels, about 1 GB at 24 megapixels, plus working buffers.
+
+**Validation.** Use nights that are clear, partly cloudy and moonlit, with twilight edges and with heavy air traffic. Label events by manual review, by SatChecker once the camera is calibrated, and by a second camera when one is available. Inject synthetic streaks and flashes into real frames to measure recovery by brightness, length and rate. Use negated differences and a cloudy night as negative controls. Measure false alarms per clear hour, events across segment edges and resumes, throughput and peak memory.
+
+### F23 open questions and next steps
+
+Questions for the maintainer:
+
+1. Camera and lens: all-sky fisheye or wide-field; the exposure, the cadence and the gap between frames.
+2. Files: FITS, or JPEG/PNG from all-sky software (8-bit and stretched, which limits sensitivity); mono or colour; whether the capture software changes exposure or gain during the night.
+3. Timestamps: exposure start or middle, and how the clock is synchronised (NTP, GPS). One second of error is up to 0.87° of motion for a satellite in low Earth orbit.
+4. Sample data: one or two nights, or a few hundred frames with known events.
+5. The first version's priority among satellites, meteors and flashes, and whether camera pixels and times are enough or sky coordinates are needed from the start.
+
+Next steps:
+
+1. A scratch spike: measure star motion and conditions, compare two or three reference methods on about 500 frames, and measure recovery of injected events, false alarms per hour, throughput and memory.
+2. Write the input and output contract here and in JTransient, for agreement.
+3. First version: detection in camera coordinates (satellites, meteors, flashes) in JTransient; chronological inventory, streaming reads, cancel and resume, and a night report with a timeline in SpacePixels.
+4. Second version: an alt/az calibration per camera, which gives every frame a sky solution from its time; sky coordinates and SatChecker identification with the F21 comparison; meteor shower association; several cameras.
