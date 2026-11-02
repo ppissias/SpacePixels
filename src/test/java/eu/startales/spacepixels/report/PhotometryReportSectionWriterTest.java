@@ -94,6 +94,7 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map_full.svg").isFile());
         assertEquals(FRAMES + 1, Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath()).size());
         assertTrue(html.contains("Measuring aperture"));
+        assertTrue(html.contains("Comparison-star fit"));
 
         // The exported errors and aperture are the candidate's own, frame by frame.
         StarLightCurve candidate = result.variableStarAnalysis.candidates.get(0);
@@ -234,6 +235,24 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(PhotometryReportSectionWriter.gateQuestion("SPLIT_HALF").contains("non-overlapping pairs"));
         assertTrue(PhotometryReportSectionWriter.gateOutcome("LINEARITY", true, 0).contains("At least one measurement"));
         assertFalse(PhotometryReportSectionWriter.gateOutcome("LINEARITY", false, 0).contains("usable measurement"));
+    }
+
+    /** The comparison-star fit state reads plainly when finished and is highlighted at the round limit. */
+    @Test
+    public void comparisonStarFitShowsRoundsOrTheLimit() {
+        PipelineTelemetry.PhotometryTelemetry t = new PipelineTelemetry.PhotometryTelemetry();
+        t.ensembleIterations = 6;
+        t.ensembleConverged = true;
+        t.ensembleIterationLimit = 15;
+        assertEquals("Finished after 6 rounds", PhotometryReportSectionWriter.ensembleFitHtml(t));
+
+        t.ensembleIterations = 15;
+        t.ensembleConverged = false;
+        t.ensembleLastChangeMag = 3.46e-5;
+        t.apertureSolvesAtIterationLimit = 2;
+        String limited = PhotometryReportSectionWriter.ensembleFitHtml(t);
+        assertTrue(limited, limited.contains("! Round limit (15) reached</span>, last change 3.5e-05 mag"));
+        assertTrue(limited, limited.contains("2 comparison-aperture fits reached the limit"));
     }
 
     @Test

@@ -335,6 +335,10 @@ public final class PhotometryReportSectionWriter {
                 "Correlation between the brightness-response slope and the sky background, from -1 to 1. A value near 1 or -1 can indicate a stretch or a sky-subtraction problem."));
         report.println(configItem("D · Frames failing the brightness-response check", String.valueOf(t.framesFailingResponse),
                 "Frames in which the photometric residuals depend on instrumental magnitude."));
+        if (t.ensembleIterations > 0) {
+            report.println(configItem("Comparison-star fit", ensembleFitHtml(t),
+                    "The frame corrections (transparency offset and brightness gradient across the field) are fitted to the comparison stars in repeated rounds that down-weight variable stars. The fit is finished when the predicted correction changes by less than 0.00001 mag between rounds. A fit that reaches the round limit keeps its last result; this does not change the verdict."));
+        }
         report.println(configItem("Session FWHM from source extraction (px)", formatMag(t.sessionFwhm, 2) + " px",
                 "Full width at half maximum, a measure of the width of stellar images, from the source extraction used for detection."));
         report.println(configItem("Saturation level", formatMag(t.saturationLevel, 0) + " ADU",
@@ -470,6 +474,22 @@ public final class PhotometryReportSectionWriter {
         }
         return "<div class='astro-note'>Measuring aperture by brightness (instrumental mag), chosen from the scatter of the constant stars: "
                 + String.join("; ", parts) + ". Radii follow each frame's measured FWHM.</div>";
+    }
+
+    /**
+     * The state of the final comparison-star fit, highlighted when it or a comparison-aperture fit reached the
+     * round limit.
+     */
+    static String ensembleFitHtml(PipelineTelemetry.PhotometryTelemetry t) {
+        String main = t.ensembleConverged
+                ? "Finished after " + t.ensembleIterations + " rounds"
+                : "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! Round limit (" + t.ensembleIterationLimit + ") reached</span>, last change "
+                        + (Double.isFinite(t.ensembleLastChangeMag) ? String.format(Locale.US, "%.1e", t.ensembleLastChangeMag) : "n/a") + " mag";
+        if (t.apertureSolvesAtIterationLimit > 0) {
+            main += "; <span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>" + t.apertureSolvesAtIterationLimit
+                    + " comparison-aperture fit" + (t.apertureSolvesAtIterationLimit == 1 ? "" : "s") + " reached the limit</span>";
+        }
+        return main;
     }
 
     /** An aperture's radius over the frames used, in pixels: one value, or the smallest and largest. */
