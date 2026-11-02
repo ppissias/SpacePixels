@@ -366,10 +366,16 @@ When one frame is plate-solved, every track card shows the sky position and butt
 - **Search SkyBoT** (three search radii): known asteroids and comets around the position, from the IMCCE SkyBoT service.
 - **Render JPL Results Here**: the JPL Small-Body Identification service for the exact field of the object.
 - **Render JPL NEO Recovery Results Here**: a wider JPL search for fast near-Earth objects, which JPL's exact search can miss.
-- **SatChecker** (on streaks): satellites that crossed the field at that time.
+- **Compare track with satellites** (on streak tracks): searches the actual exposures, then compares the saved streak measurements with the predicted paths of the returned satellites.
 - **Stellarium Web** and **Stellarium Local**: the sky at that time and place, for context (see [Annex: Local Stellarium integration](#annex-local-stellarium-integration)).
 
 The buttons that say **Here** show the answer inside the report. They need SpacePixels to be running (it fetches the answer for the report), and the answer is saved into the report, so it is still there when you open the report later, also without SpacePixels. The other buttons open the service in your browser. JPL can take up to a minute to answer.
+
+The satellite comparison shows distances in arcseconds and approximate image pixels, the independent exposures covered, direction differences and predicted versus centroid-based speed. Expand a candidate to see the observed centroids over its predicted exposure paths, per-exposure distances and the source and epoch of its orbital data. Every exposure has equal weight, however many fragments it contains. The centroid's time within a long exposure is unknown, so its speed is an estimate with an exposure-limited range. Missing trail sections do not have to fill the predicted path.
+
+The closest returned fit supports an association; it does not confirm identity or give a confidence percentage. Search failures, incomplete predictions and sampling limits are shown explicitly. No returned candidate does not rule out a satellite. The comparison records coordinate assumptions, unknown observer height and the UTC/UT1 timing approximation, which matters particularly for fast satellites. It stops rather than transforming explicitly unsupported coordinate frames. **Cancel comparison** stops an active request; **Refresh lookup** retrieves new predictions. A comparison is limited to 16 search exposures, 12 returned candidates, 48 provider requests and five minutes, with any limit made visible. Two comparisons can run at once.
+
+New reports save the measurements and observing location used by the comparison and cache the provider responses and results together, so reopening them uses their own coordinates and timing. Older reports retain their existing candidate-search buttons. **Open midpoint candidate search (raw JSON)** is a separate short search for inspection, not the full motion comparison. Historical orbit coverage varies by object; even an old observation can return candidates, and their trajectories still need to be checked.
 
 ![JPL identifies the track](docs/images/manual/report-identify.png)
 

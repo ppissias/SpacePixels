@@ -146,6 +146,7 @@ final class ReportLookupPayloadNormalizer {
                 String firstUtc = null;
                 String lastUtc = null;
                 String tleEpochUtc = null;
+                String orbitalDataSource = null;
                 double minAngle = Double.NaN;
                 double maxAngle = Double.NaN;
                 double minRangeKm = Double.NaN;
@@ -167,8 +168,10 @@ final class ReportLookupPayloadNormalizer {
                         }
 
                         if (tleEpochUtc == null) {
-                            tleEpochUtc = getString(position, "tle_epoch");
+                            tleEpochUtc = getString(position, "orbital_data_epoch");
+                            if (tleEpochUtc == null) tleEpochUtc = getString(position, "tle_epoch");
                         }
+                        if (orbitalDataSource == null) orbitalDataSource = getString(position, "orbital_data_source");
 
                         double angle = getDouble(position, "angle");
                         double rangeKm = getDouble(position, "range_km");
@@ -196,6 +199,7 @@ final class ReportLookupPayloadNormalizer {
                 addStringProperty(candidate, "firstUtc", firstUtc);
                 addStringProperty(candidate, "lastUtc", lastUtc);
                 addStringProperty(candidate, "tleEpochUtc", tleEpochUtc);
+                addStringProperty(candidate, "orbitalDataSource", orbitalDataSource);
                 addFiniteProperty(candidate, "minAngleDeg", minAngle);
                 addFiniteProperty(candidate, "maxAngleDeg", maxAngle);
                 addFiniteProperty(candidate, "minRangeKm", minRangeKm);

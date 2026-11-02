@@ -54,6 +54,7 @@ public final class ReportLookupProxyServer {
 
     private volatile HttpServer server;
     private volatile ExecutorService executor;
+    private final SatelliteComparisonHandler satelliteComparisons = new SatelliteComparisonHandler();
 
     private ReportLookupProxyServer() {
     }
@@ -86,6 +87,7 @@ public final class ReportLookupProxyServer {
             });
             httpServer.setExecutor(workerPool);
             httpServer.createContext(FETCH_PATH, new FetchHandler());
+            httpServer.createContext("/api/report/compare-satellite-track", satelliteComparisons);
             httpServer.start();
 
             server = httpServer;
@@ -102,6 +104,7 @@ public final class ReportLookupProxyServer {
     }
 
     public synchronized void stop() {
+        satelliteComparisons.cancelAll();
         HttpServer runningServer = server;
         server = null;
         if (runningServer != null) {

@@ -204,11 +204,8 @@ final class TargetVisualizationSectionWriter {
                     "Show individual streak fragments (" + track.points.size() + ")",
                     "Detection Coordinates & Frames",
                     buildStreakPointEntriesHtml(track, context.astrometryContext, false)));
-            report.print(DetectionReportAstrometry.buildConfirmedStreakTrackSatCheckerHtml(
-                    context.astrometryContext,
-                    track,
-                    "streak-track-satchecker-" + counter,
-                    String.format(Locale.US, "satchecker_track_%02d", counter)));
+            report.print(context.data.streakObservations.get(context.trackFindings.id(track)).html(
+                    "streak-track-satchecker-" + counter, String.format(Locale.US, "satchecker_track_%02d", counter)));
             report.print(DetectionReportAstrometry.buildTrackSkyViewerHtml(
                     context.astrometryContext,
                     track,

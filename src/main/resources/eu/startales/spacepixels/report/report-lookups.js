@@ -9,6 +9,7 @@
   const JPL_MAX_RENDER_ROWS = 250;
   const liveLookupCache = new Map();
   const liveRenderSlotState = new Map();
+  const activeSatelliteRequests = new Map();
   const persistedLookupCache = readPersistedLookupCache();
 
   function escapeHtml(value) {
@@ -100,6 +101,7 @@
       slotId: slotId,
       renderTitle: renderTitle,
       renderOrder: Number.isFinite(renderOrder) ? renderOrder : 0,
+      isTrackComparison: !!button.getAttribute('data-observation-id'),
       response: payload && payload.response ? payload.response : null,
       error: payload && payload.error ? payload.error : null
     };
@@ -228,8 +230,9 @@
     }).join('');
   }
 
-  function buildLoadingPanelHtml(title) {
-    return "<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta'>Loading...</div></div><div class='live-caption'>Loading saved or live report data from SpacePixels...</div></div>";
+  function buildLoadingPanelHtml(title, comparison) {
+    const caption = comparison ? 'Loading predictions across the recorded exposures. This can take several minutes; use Cancel comparison to stop it.' : 'Loading saved or live report data from SpacePixels...';
+    return "<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta'>Loading...</div></div><div class='live-caption'>" + caption + "</div></div>";
   }
 
   function buildLookupUnavailablePanelHtml(provider, error, title) {
@@ -253,6 +256,7 @@
   }
 
   function buildSatCheckerResponseHtml(response, title) {
+    if (response.normalized && response.normalized.trackComparison) return buildSatelliteComparisonHtml(response, title);
     const normalized = response.normalized || {};
     const candidates = safeArray(normalized.candidates).slice();
     candidates.sort(function (a, b) {
@@ -313,6 +317,87 @@
     html += buildRawJsonDetails(response.payload);
     html += "</div>";
     return html;
+  }
+
+  // All scientific distances are calculated on the sphere by the proxy. This tangent-plane plot is for inspection.
+  function exposureColour(index) { return ['#6ec6ff', '#ffb74d', '#81c784', '#ce93d8', '#ef9a9a', '#80cbc4'][index % 6]; }
+
+  function satelliteOverlay(exposures) {
+    const observed = exposures.flatMap(e => safeArray(e.observed));
+    if (!observed.length) return '';
+    const ra0 = observed[0][0] * Math.PI / 180, dec0 = observed[0][1] * Math.PI / 180;
+    function project(p) {
+      const ra = p[0] * Math.PI / 180, dec = p[1] * Math.PI / 180;
+      const d = Math.sin(dec0) * Math.sin(dec) + Math.cos(dec0) * Math.cos(dec) * Math.cos(ra - ra0);
+      if (d <= 0.01) return null;
+      return [Math.cos(dec) * Math.sin(ra - ra0) / d, (Math.cos(dec0) * Math.sin(dec) - Math.sin(dec0) * Math.cos(dec) * Math.cos(ra - ra0)) / d];
+    }
+    const points = exposures.flatMap(e => safeArray(e.observed).concat(safeArray(e.predicted))).map(project).filter(Boolean);
+    let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
+    points.forEach(p => { xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); });
+    const scale = Math.min(650 / Math.max(1e-6, xmax - xmin), 190 / Math.max(1e-6, ymax - ymin));
+    function xy(p) { const v = project(p); return v ? [(380 + (v[0] - (xmin + xmax) / 2) * scale).toFixed(2), (125 - (v[1] - (ymin + ymax) / 2) * scale).toFixed(2)] : null; }
+    let svg = "<svg role='img' aria-label='Observed fragment centroids and predicted paths during their exposures' viewBox='0 0 760 260' style='display:block;box-sizing:border-box;width:100%;min-width:640px;max-height:360px;background:#101820;border:1px solid #506070'>";
+    exposures.forEach((e, i) => {
+      const colour = exposureColour(i);
+      // Do not join separately projected path sections across the back of the tangent plane.
+      let section = [];
+      function flush() { if (section.length > 1) svg += "<polyline fill='none' stroke='" + colour + "' stroke-width='1.5' points='" + section.join(' ') + "'><title>Frame " + escapeHtml(e.frame) + " predicted path</title></polyline>"; section = []; }
+      safeArray(e.predicted).forEach(p => { const v = xy(p); if (v) section.push(v.join(',')); else flush(); }); flush();
+      safeArray(e.observed).forEach(p => { const v = xy(p); if (v) svg += "<circle cx='" + v[0] + "' cy='" + v[1] + "' r='3' fill='" + colour + "' stroke='#fff' stroke-width='.7'><title>Frame " + escapeHtml(e.frame) + " centroid</title></circle>"; });
+    });
+    return "<div class='live-table-box' style='max-height:none;overflow-y:hidden'>" + svg + "<text x='12' y='20' fill='#fff' font-size='12'>North ↑ · East →</text><text x='12' y='247' fill='#ddd' font-size='12'>Lines: predicted exposure paths · Points: observed centroids · Colours identify exposures</text></svg></div>";
+  }
+
+  function orbitalProvenanceText(p) {
+    return (p.source || 'source unavailable') + ' · epoch ' + (p.epoch || 'unavailable')
+      + (typeof p.epochAgeDays === 'number' ? ' (' + formatNumber(Math.abs(p.epochAgeDays), 1) + ' days ' + (p.epochAgeDays < 0 ? 'after' : 'before') + ' observations)' : '');
+  }
+
+  function buildSatelliteComparisonHtml(response, title) {
+    const n = response.normalized || {}, candidates = safeArray(n.candidates);
+    let html = "<div class='live-render-panel'><div class='live-render-heading' style='flex-wrap:wrap'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta' style='overflow-wrap:anywhere'>" + escapeHtml(buildRenderMeta(response)) + "</div></div>";
+    html += "<p class='live-caption'>Candidate discovery succeeded for " + escapeHtml(n.searchedExposures) + ' of ' + escapeHtml(n.totalExposures) + ' independent exposures. '
+      + (n.discoveryComplete ? 'Search intervals were covered; catalogue completeness is unknown.' : '<strong>Search coverage is incomplete.</strong>') + '</p>';
+    if (n.unavailableExposureCount) html += "<p class='live-caption'>" + escapeHtml(n.unavailableExposureCount) + ' additional observed exposures lack usable timing or sky measurements and could not be compared.</p>';
+    if (n.followUpComplete === false) html += "<p class='live-caption'><strong>Trajectory follow-up is incomplete.</strong> " + escapeHtml(candidates.length) + ' of ' + escapeHtml(n.totalReturnedCandidates) + ' returned candidates have follow-up results or errors. Inspect coverage and limitations before comparing alternatives.</p>';
+    if (!candidates.length) html += "<p class='live-empty-note'>No candidate was returned by the completed searches. This does not rule out a satellite.</p>";
+    else {
+      html += "<p class='live-caption'>Complete, adequately sampled comparisons come first, ordered by median distance to the predicted exposure paths with equal weight per exposure. Partial or provisional comparisons follow. A close returned fit is an association to inspect, not a confirmed identity or a confidence probability.</p>";
+      html += "<div class='live-table-box'><table><thead><tr><th>Candidate / NORAD</th><th>Typical path distance</th><th>Covered exposures</th><th>Motion direction difference</th><th>Predicted / centroid speed (″/s)</th></tr></thead><tbody>";
+      candidates.forEach(c => {
+        const m = c.comparison || {};
+        html += '<tr><td>' + escapeHtml(c.displayName) + ' / ' + escapeHtml(c.noradId) + '</td><td>'
+          + (m.medianDistanceArcsec === undefined ? 'Unavailable' : escapeHtml(formatNumber(m.medianDistanceArcsec, 2)) + '″ (' + escapeHtml(formatNumber(m.medianDistancePixels, 1)) + ' px)')
+          + '</td><td>' + escapeHtml(m.coveredExposures === undefined ? 0 : m.coveredExposures) + ' / ' + escapeHtml(n.totalExposures)
+          + (m.completeCoverage && m.samplingAdequate ? '' : ' · partial or provisional') + '</td><td>' + escapeHtml(formatNumber(m.motionDirectionDifferenceDegrees, 2)) + '°</td><td>'
+          + escapeHtml(formatNumber(m.predictedSpeedArcsecSecond, 2)) + ' / ' + escapeHtml(formatNumber(m.centroidSpeedArcsecSecond, 2)) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+      candidates.forEach((c, i) => {
+        const m = c.comparison || {};
+        html += '<details' + (i === 0 ? ' open' : '') + '><summary>' + escapeHtml(c.displayName) + ' — exposure evidence and overlay</summary>';
+        if (c.unavailableReason || m.unavailableReason) html += "<p class='live-caption'>Insufficient evidence: " + escapeHtml(c.unavailableReason || m.unavailableReason) + '</p>';
+        html += "<p class='live-caption'>Centroid speed uses exposure midpoints as an estimate. The unknown centroid times allow approximately "
+          + escapeHtml(formatNumber(m.centroidSpeedLowerArcsecSecond, 2)) + ' to ' + (m.centroidSpeedUpperArcsecSecond === undefined ? 'an unbounded upper rate' : escapeHtml(formatNumber(m.centroidSpeedUpperArcsecSecond, 2)) + ' ″/s')
+          + '. Partial trails need not fill the predicted exposure path. Fragment-axis difference (180° ambiguity): ' + escapeHtml(formatNumber(m.axisDifferenceDegrees, 2)) + '°.'
+          + ' The UTC/UT1 input approximation corresponds to up to about ' + escapeHtml(formatNumber(m.ut1TimingSensitivityArcsec, 1)) + '″ of along-path timing sensitivity.</p>';
+        html += satelliteOverlay(safeArray(m.exposures));
+        html += "<div class='live-table-box'><table><thead><tr><th>Frame</th><th>Exposure start UTC / seconds</th><th>Fragments</th><th>Median / p90 distance (″)</th><th>Perpendicular (″)</th><th>Beyond exposure path (″)</th></tr></thead><tbody>";
+        safeArray(m.exposures).forEach((e, index) => {
+          html += "<tr><td style='color:" + exposureColour(index) + "'>" + escapeHtml(e.frame) + '</td><td>' + escapeHtml(e.startUtc || 'unavailable') + ' / ' + escapeHtml(formatNumber(e.exposureSeconds, 1)) + '</td><td>' + escapeHtml(e.fragmentCount || 0) + '</td>';
+          if (e.unavailableReason) html += "<td colspan='3'>" + escapeHtml(e.unavailableReason) + '</td>';
+          else html += '<td>' + escapeHtml(formatNumber(e.medianDistanceArcsec, 2)) + ' / ' + escapeHtml(formatNumber(e.p90DistanceArcsec, 2)) + '</td><td>' + escapeHtml(formatNumber(e.perpendicularArcsec, 2)) + '</td><td>' + escapeHtml(formatNumber(e.beyondExposurePathArcsec, 2)) + '</td>';
+          html += '</tr>';
+        });
+        html += '</tbody></table></div>';
+        html += "<p class='live-caption'>Prediction orbital data: " + escapeHtml(safeArray(c.predictionOrbitalData).map(orbitalProvenanceText).join('; '))
+          + '. Discovery orbital data: ' + escapeHtml(safeArray(c.discoveryOrbitalData).map(orbitalProvenanceText).join('; '))
+          + (c.orbitalDataChanged ? '. Orbital epochs differ from candidate discovery; both responses are saved.' : '') + '</p></details>';
+      });
+    }
+    html += "<details><summary>Assumptions and limitations</summary><ul>" + safeArray(n.warnings).map(w => '<li>' + escapeHtml(w) + '</li>').join('') + '</ul></details>';
+    return html + buildRawJsonDetails(response.payload) + '</div>';
   }
 
   function buildJplResponseHtml(response, title) {
@@ -424,7 +509,7 @@
       return '';
     }
     if (entry.kind === 'loading') {
-      return buildLoadingPanelHtml(entry.renderTitle);
+      return buildLoadingPanelHtml(entry.renderTitle, entry.isTrackComparison);
     }
     if (entry.kind === 'unavailable') {
       return buildLookupUnavailablePanelHtml(entry.provider, entry.error, entry.renderTitle);
@@ -458,16 +543,22 @@
         return;
       }
       const persistedResponse = Object.assign({}, entries[sidecarFile], { cacheSource: 'saved-report' });
+      const digest = button.getAttribute('data-observation-digest');
+      if (digest && (persistedResponse.observationDigest !== digest || !persistedResponse.normalized || persistedResponse.normalized.comparisonVersion !== 1)) return;
       const provider = button.getAttribute('data-provider');
       const target = button.getAttribute('data-target');
       if (provider && target) {
-        liveLookupCache.set(provider + '|' + target, persistedResponse);
+        liveLookupCache.set(provider + '|' + target + (digest ? '|' + digest : ''), persistedResponse);
       }
       upsertSlotEntry(buildEntryState(button, 'response', { response: persistedResponse }));
     });
   }
 
   function loadLiveLookup(button, refresh) {
+    if (activeSatelliteRequests.has(button)) {
+      activeSatelliteRequests.get(button)();
+      return Promise.resolve({ok: false, message: 'Comparison cancelled.'});
+    }
     const provider = button.getAttribute('data-provider');
     const target = button.getAttribute('data-target');
     const sidecarFile = button.getAttribute('data-sidecar-file');
@@ -476,7 +567,9 @@
       return Promise.resolve();
     }
 
-    const cacheKey = provider + '|' + target;
+    const observationId = button.getAttribute('data-observation-id');
+    const digest = button.getAttribute('data-observation-digest');
+    const cacheKey = provider + '|' + target + (digest ? '|' + digest : '');
     if (refresh) liveLookupCache.delete(cacheKey);
     if (liveLookupCache.has(cacheKey)) {
       upsertSlotEntry(buildEntryState(button, 'response', { response: liveLookupCache.get(cacheKey) }));
@@ -497,22 +590,52 @@
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), provider === 'jpl' ? 330000 : 90000);
-    return fetch(requestUrl, {signal: controller.signal})
+    let options = {signal: controller.signal};
+    let cancelRequest = () => controller.abort();
+    if (observationId) {
+      try {
+        const element = document.getElementById(observationId);
+        const observation = JSON.parse(element ? element.textContent : 'null');
+        if (!observation) throw new Error('The saved observation snapshot is unavailable.');
+        const requestId = 'track-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+        requestUrl = REPORT_PROXY_BASE_URL + '/api/report/compare-satellite-track';
+        options = {signal: controller.signal, method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({
+          requestId, observation, report: window.location.href.split('#')[0].split('?')[0], sidecar: sidecarFile, refresh: !!refresh
+        })};
+        cancelRequest = () => {
+          controller.abort();
+          fetch(requestUrl, {method: 'DELETE', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({requestId})}).catch(() => {});
+        };
+        activeSatelliteRequests.set(button, cancelRequest);
+        button.disabled = false;
+        button.textContent = 'Cancel comparison';
+      } catch (error) {
+        button.disabled = false; button.textContent = originalLabel;
+        const response = {ok: false, message: String(error)};
+        upsertSlotEntry(buildEntryState(button, 'response', {response}));
+        return Promise.resolve(response);
+      }
+    }
+    const timeout = setTimeout(cancelRequest, observationId ? 310000 : provider === 'jpl' ? 330000 : 90000);
+    return fetch(requestUrl, options)
       .then(function (httpResponse) {
         return httpResponse.json();
       })
       .then(function (response) {
+        if (controller.signal.aborted) throw new Error('Comparison cancelled or timed out.');
+        if (digest && response && response.ok && response.observationDigest !== digest) throw new Error('The returned comparison belongs to different observations.');
         if (response && response.ok === true) liveLookupCache.set(cacheKey, response);
         upsertSlotEntry(buildEntryState(button, 'response', { response: response }));
         return response;
       })
       .catch(function (error) {
-        upsertSlotEntry(buildEntryState(button, 'unavailable', { error: error }));
+        if (observationId && controller.signal.aborted) upsertSlotEntry(buildEntryState(button, 'response', {response: {ok: false, message: 'Satellite comparison cancelled or timed out.'}}));
+        else upsertSlotEntry(buildEntryState(button, 'unavailable', { error: error }));
         return {ok: false, message: String(error)};
       })
       .finally(function () {
         clearTimeout(timeout);
+        activeSatelliteRequests.delete(button);
         button.disabled = false;
         button.textContent = originalLabel;
       });
@@ -648,7 +771,7 @@
       });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = {loadLiveLookup, identifyAllVsx, openLocalStellarium};
+  if (typeof module !== 'undefined' && module.exports) module.exports = {loadLiveLookup, identifyAllVsx, openLocalStellarium, buildSatelliteComparisonHtml};
   seedButtonRenderOrder();
   SpacePixelsCatalogueComparison.initialize(document);
   seedPersistedLookupResults();

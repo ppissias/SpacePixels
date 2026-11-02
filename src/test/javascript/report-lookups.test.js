@@ -5,16 +5,18 @@ const vm = require('node:vm');
 const source = fs.readFileSync('src/main/resources/eu/startales/spacepixels/report/report-lookups.js', 'utf8');
 const {matchesMarker} = require('../../main/resources/eu/startales/spacepixels/report/report-interactions.js');
 
-function client(responses, count = 1, catalogueStar = '', timers = {}) {
+function client(responses, count = 1, catalogueStar = '', timers = {}, comparison = {}) {
   const slot = {innerHTML: ''}, status = {textContent: ''}, requests = [], requestOptions = [], buttons = [];
   const knownAs = {innerHTML: '', getAttribute: key => key === 'data-catalogue-star' ? catalogueStar : null,
     querySelector: () => null};
   for (let i = 0; i < count; i++) {
     const attributes = {'data-provider': 'vsx', 'data-target': 'target-' + i, 'data-slot-id': 'slot', 'data-sidecar-file': 'v' + i + '.json'};
+    Object.assign(attributes, comparison.attributes || {});
     buttons.push({textContent: 'Look up', getAttribute: key => attributes[key], setAttribute: (key, value) => attributes[key] = value});
   }
   const document = {
-    getElementById: id => id === 'slot' ? slot : null, addEventListener() {},
+    getElementById: id => id === 'slot' ? slot : id === 'observation' ? {textContent: JSON.stringify(comparison.observation || {})}
+      : id === 'cache' && comparison.cache ? {textContent: JSON.stringify(comparison.cache)} : null, addEventListener() {},
     querySelector: () => status,
     querySelectorAll: query => query === '.render-live-link' || query === "button[data-identify-all='1']" ? buttons
       : query === '[data-known-as-sidecar] strong' ? Array(9).fill({})
@@ -38,6 +40,62 @@ function client(responses, count = 1, catalogueStar = '', timers = {}) {
 }
 const success = matches => ({ok: true, provider: 'vsx', persisted: true, normalized: {matches}, payload: {}});
 const hit = {name: 'Example', type: 'EA', periodDays: 1, separationArcsec: 1};
+
+const trackAttributes = {'data-provider': 'satchecker', 'data-observation-id': 'observation', 'data-observation-digest': 'digest'};
+const trackResponse = () => ({ok: true, provider: 'satchecker', observationDigest: 'digest', persisted: true,
+  normalized: {trackComparison: true, comparisonVersion: 1, discoveryComplete: true, searchedExposures: 2, totalExposures: 2,
+    candidates: [{displayName: 'Satellite <example>', noradId: 123, comparison: {completeCoverage: true, samplingAdequate: true,
+      coveredExposures: 2, medianDistanceArcsec: 3, medianDistancePixels: 2, exposures: []}}], warnings: ['Unknown clock accuracy']}, payload: {}});
+
+test('track comparison posts the saved observation, renders evidence and reuses only its own digest', async () => {
+  const c = client([trackResponse()], 1, '', {}, {attributes: trackAttributes, observation: {findingId: 'ST1'}});
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.equal(c.requestOptions[0].method, 'POST');
+  assert.equal(JSON.parse(c.requestOptions[0].body).observation.findingId, 'ST1');
+  assert.match(c.requests[0], /compare-satellite-track$/);
+  assert.match(c.slot.innerHTML, /not a confirmed identity/);
+  assert.match(c.slot.innerHTML, /Satellite &lt;example&gt;/);
+  await c.api.loadLiveLookup(c.buttons[0]); assert.equal(c.requests.length, 1);
+  c.buttons[0].setAttribute('data-observation-digest', 'different');
+  await c.api.loadLiveLookup(c.buttons[0]); assert.equal(c.requests.length, 2);
+  assert.doesNotMatch(c.slot.innerHTML, /Typical path distance/);
+});
+
+test('saved track evidence reopens without a provider or desktop request', async () => {
+  const c = client([], 1, '', {}, {attributes: trackAttributes, cache: {entries: {'v0.json': trackResponse()}}});
+  assert.match(c.slot.innerHTML, /saved report cache/);
+  await c.api.loadLiveLookup(c.buttons[0]); assert.equal(c.requests.length, 0);
+});
+
+test('old observations cannot silently reuse a cached comparison of different measurements', () => {
+  const c = client([], 1, '', {}, {attributes: {...trackAttributes, 'data-observation-digest': 'changed'}, cache: {entries: {'v0.json': trackResponse()}}});
+  assert.equal(c.slot.innerHTML, '');
+});
+
+test('cancellation aborts the active comparison and rejects a late successful reply', async () => {
+  let finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const c = client([() => pending, {ok: true}], 1, '', {}, {attributes: trackAttributes});
+  const running = c.api.loadLiveLookup(c.buttons[0]);
+  assert.equal(c.buttons[0].textContent, 'Cancel comparison');
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.equal(c.requestOptions[0].signal.aborted, true);
+  assert.equal(c.requestOptions[1].method, 'DELETE');
+  finish({json: async () => trackResponse()}); await running;
+  assert.match(c.slot.innerHTML, /cancelled or timed out/);
+  assert.doesNotMatch(c.slot.innerHTML, /Satellite &lt;example&gt;/);
+  assert.equal(c.buttons[0].disabled, false);
+});
+
+test('partial searches and failed trajectories remain explicit in the evidence display', () => {
+  const r = trackResponse(); r.normalized.discoveryComplete = false;
+  r.normalized.candidates[0].unavailableReason = 'No historical orbit';
+  const c = client([]);
+  const html = c.api.buildSatelliteComparisonHtml(r, 'Comparison');
+  assert.match(html, /Search coverage is incomplete/); assert.match(html, /No historical orbit/);
+  r.normalized.candidates = [];
+  assert.match(c.api.buildSatelliteComparisonHtml(r, 'Comparison'), /does not rule out a satellite/);
+});
 
 test('catalogue star remains without a VSX match and a positive VSX result takes precedence', async () => {
   const fallback = 'Catalogue star: <strong>Gaia DR3 3131123006665005568</strong>';

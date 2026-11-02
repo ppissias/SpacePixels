@@ -107,6 +107,27 @@ public final class DetectionReportAstrometry {
             return scope + " from " + escapeHtml(wcsSolution.getSourceFileName()) + " (" + escapeHtml(wcsSolution.getSourceType()) + ")";
         }
 
+        /** Copies the coordinate-system declarations of the actual WCS source, including malformed declarations. */
+        public java.util.Map<String, String> getWcsCoordinateMetadata() {
+            var metadata = new java.util.LinkedHashMap<String, String>();
+            if (wcsSolution != null && fitsFiles != null) for (var file : fitsFiles) {
+                if (file == null || !file.getFileName().equals(wcsSolution.getSourceFileName())) continue;
+                for (String key : new String[]{"RADESYS", "RADECSYS", "EQUINOX"}) {
+                    String value = file.getFitsHeader().get(key);
+                    if (value != null) metadata.put(key, value);
+                }
+                break;
+            }
+            return java.util.Map.copyOf(metadata);
+        }
+
+        /** Returns a frame's declared time scale; absent FITS TIMESYS is treated as UTC by the importer. */
+        public String getFrameTimeSystem(int frameIndex) {
+            if (fitsFiles == null || frameIndex < 0 || frameIndex >= fitsFiles.length || fitsFiles[frameIndex] == null) return null;
+            String value = fitsFiles[frameIndex].getFitsHeader().get("TIMESYS");
+            return value == null ? null : value.replace("'", "").trim();
+        }
+
         public long getFrameTimestampMillis(int frameIndex) {
             if (fitsFiles == null || frameIndex < 0 || frameIndex >= fitsFiles.length || fitsFiles[frameIndex] == null) {
                 return -1L;
@@ -233,44 +254,6 @@ public final class DetectionReportAstrometry {
                 liveRenderSlotId,
                 liveRenderSidecarBaseName,
                 true);
-    }
-
-    static String buildTrackSatCheckerHtml(Context astrometryContext,
-                                           Track track) {
-        return buildTrackSatCheckerHtml(astrometryContext, track, null, false);
-    }
-
-    static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
-                                                          Track track,
-                                                          String liveRenderSlotId) {
-        return buildConfirmedStreakTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, null);
-    }
-
-    static String buildConfirmedStreakTrackSatCheckerHtml(Context astrometryContext,
-                                                          Track track,
-                                                          String liveRenderSlotId,
-                                                          String liveRenderSidecarFileName) {
-        return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, liveRenderSidecarFileName, true);
-    }
-
-    private static String buildTrackSatCheckerHtml(Context astrometryContext,
-                                                   Track track,
-                                                   String liveRenderSlotId,
-                                                   String liveRenderSidecarFileName,
-                                                   boolean useSimpleLabels) {
-        return AstrometryIdentificationHtmlBuilder.buildTrackSatCheckerHtml(
-                astrometryContext,
-                track,
-                liveRenderSlotId,
-                liveRenderSidecarFileName,
-                useSimpleLabels);
-    }
-
-    private static String buildTrackSatCheckerHtml(Context astrometryContext,
-                                                   Track track,
-                                                   String liveRenderSlotId,
-                                                   boolean useSimpleLabels) {
-        return buildTrackSatCheckerHtml(astrometryContext, track, liveRenderSlotId, null, useSimpleLabels);
     }
 
     static String buildTrackSkyRateSummaryHtml(Context astrometryContext,

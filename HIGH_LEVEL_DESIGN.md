@@ -526,6 +526,12 @@ Responsibilities:
 - normalize and cache JSON lookup responses
 - persist lookup responses back into report-side cache data
 
+Linked streak tracks also export immutable `StreakTrackObservation` snapshots in `report-data.json` and the HTML. They retain exact export-time sky coordinates, frame exposure intervals, principal footprint axes, pixel scale, observing context and WCS provenance; they never consult the subsequently imported session. This is an additive field in schema version 1. Existing report fields and old candidate lookup/cache formats remain readable.
+
+`SatelliteComparisonHandler` accepts a bounded snapshot at `/api/report/compare-satellite-track`, with two comparison slots, cancellation and an overall deadline. `SatCheckerTrackLookup` discovers candidates over actual exposures and follows them by NORAD catalogue number through the explicitly allowed ephemeris endpoint. It preserves original responses and orbital-data source/epoch, and reports failed searches, coverage gaps and request/sample limits separately from empty results. A SHA-256 identity of canonical observation JSON binds cached evidence to its measurements; successful comparisons and their inputs reopen offline through the existing report/sidecar cache.
+
+`SatelliteTrackComparison` calculates finite great-circle exposure-path distances without assigning a centroid its frame midpoint as a measured instant. It summarizes per exposure before combining exposures, keeps perpendicular and beyond-end disagreement separate, and presents direction and speed evidence without an identity probability or an automatic acceptance threshold. Curvature estimates and angular step limits trigger bounded denser sampling; unresolved resolution is provisional. UTC Julian dates approximate the provider's UT1 input, unknown observer heights remain declared, and unsupported reference frames abstain. The report overlay uses a tangent plane only for display. See [Satellite motion comparison](docs/features/satellite-motion-comparison.md) for the scientific contract and validation boundaries.
+
 The report remains a static disk artifact; this server only supports live enrichment when the desktop app is running.
 
 ## 5. Runtime Flows
@@ -702,7 +708,7 @@ Report categories are driven by JTransient result data:
 
 Same-frame groups of rescued anomalies are offered to confirmed-streak consolidation; an unmerged group remains separate anomalies. There is no suspected-streak result category.
 
-`AnomalySectionWriter` presents these as unconfirmed single-frame events: exposure timing and coordinates, plain-language detection reasons, a static before/event/after comparison and a shareable GIF. Both views use the same event-derived display stretch and nearest kept neighbours; labels sit outside the sky crops. Raw measurements, footprints and mask overlap are collapsed under Detection details. Anomaly SatChecker queries use the event position and the whole exposure, with metadata fallback from the FITS frame; they do not use the shortened streak-query window. They reuse the report's live lookup and cache/sidecar flow and present satellite results as possible associations without changing detection classifications.
+`AnomalySectionWriter` presents these as unconfirmed single-frame events: exposure timing and coordinates, plain-language detection reasons, a static before/event/after comparison and a shareable GIF. Both views use the same event-derived display stretch and nearest kept neighbours; labels sit outside the sky crops. Raw measurements, footprints and mask overlap are collapsed under Detection details. Anomaly SatChecker queries use the event position and the whole exposure, with metadata fallback from the FITS frame. They reuse the report's live lookup and cache/sidecar flow and present satellite results as possible associations without changing detection classifications; they have no linked track for a motion comparison.
 
 An anomaly is marked as likely part of a moving-object track when all of these hold:
 

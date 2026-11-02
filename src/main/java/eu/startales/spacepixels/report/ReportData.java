@@ -29,6 +29,7 @@ final class ReportData {
     final List<StarLightCurve> variableCandidates;
     final ReportInclusion inclusion;
     final String generatedAtUtc = Instant.now().toString();
+    final Map<String, eu.startales.spacepixels.report.lookup.StreakTrackObservation> streakObservations;
     private final int totalFrames;
     private final eu.startales.spacepixels.config.VariableStarReportOptions variableStarOptions;
     private final Map<Integer, Finding> variablesByStar;
@@ -93,6 +94,12 @@ final class ReportData {
         findings = List.copyOf(output);
         findingsById = new HashMap<>();
         for (Finding finding : findings) findingsById.put(finding.id(), finding);
+        var observations = new LinkedHashMap<String, eu.startales.spacepixels.report.lookup.StreakTrackObservation>();
+        for (var track : context.streakTracks) {
+            String id = context.trackFindings.id(track);
+            observations.put(id, eu.startales.spacepixels.report.lookup.StreakTrackObservation.capture(id, context.astrometryContext, track));
+        }
+        streakObservations = Collections.unmodifiableMap(observations);
     }
 
     static ReportData create(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
@@ -163,6 +170,7 @@ final class ReportData {
         data.put("frameNumbering", "one-based; empty frames on stack candidates means per-frame evidence is unavailable");
         data.put("rejectedFrames", rejectedFrames.stream().sorted().map(i -> i + 1).toList());
         data.put("includedGroups", inclusion); data.put("findings", findings);
+        data.put("streakObservations", streakObservations);
         data.put("variableStarPresentation", variableStarOptions);
         try (var file = new AtomicReportFile(new File(directory, "report-data.json"))) {
             new GsonBuilder().setPrettyPrinting().create().toJson(data, file.writer()); file.commit();

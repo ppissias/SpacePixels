@@ -26,7 +26,7 @@ import eu.startales.spacepixels.report.ReportExporter;
  */
 public final class ReportLookupCacheStore {
 
-    private static final int MAX_SIDECAR_BYTES = (10 * 1024 * 1024) + (256 * 1024);
+    private static final int MAX_SIDECAR_BYTES = 24 * 1024 * 1024;
     private static final Gson GSON = new GsonBuilder().disableHtmlEscaping().create();
     private static final Logger LOGGER = Logger.getLogger(ReportLookupCacheStore.class.getName());
     private static final Object[] FILE_LOCKS = IntStream.range(0, 128).mapToObj(index -> new Object()).toArray();

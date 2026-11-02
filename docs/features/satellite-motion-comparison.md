@@ -1,0 +1,52 @@
+# Satellite motion comparison
+
+F21 compares only linked streak tracks. Linking establishes an engine track, not a satellite identity. Single-frame streaks and anomaly lookups retain their existing candidate searches.
+
+## Captured evidence
+
+New reports include a `streakObservations` map keyed by report-local ST ID in `report-data.json` (additive schema version 1). Each observation has its own version, observer provenance, nominal WCS and correction-applied flag, coordinate-system declarations, independent exposure intervals and precise export-time fragment coordinates. Longitudes use the same signed normalization as the existing provider URL builder. Fragment axes describe the principal footprint orientation when measurable; they are not timed endpoints or a guarantee of a complete trail. Per-fragment pixel scales convert angular distances to approximate pixels. UTC times retain the importer's millisecond precision. The snapshot is independent of mutable engine points and later sessions. Browser input is bounded to 256 exposures, 10,000 fragments, one hour per exposure and a one-day total span before any provider work.
+
+Canonical JSON hashing normalizes object-key order and equivalent numeric spellings. The digest binds cached provider data and comparisons to the exact measurements and observing context. The HTML carries the same observation snapshot; lookup never rereads today's FITS headers or settings. Old reports have no snapshot and continue to use their original candidate searches.
+
+## Provider requests
+
+Candidate discovery uses a padded circular FOV over each actual exposure interval, including two seconds of temporal padding at either end. The local field includes every captured fragment centroid, with a maximum radius of five degrees; wider exposures are explicitly unavailable. The search is bounded to 16 exposures; spatial padding and provider catalogue coverage are not completeness guarantees. Candidates are deduplicated by NORAD ID, with up to 12 followed up, prioritized by the number of discovery exposures and then query-centre proximity. More candidates, failed searches and unsearched exposures are disclosed.
+
+Follow-up uses only `/ephemeris/catalog-number-jdstep/` on the known provider host. Display names never select an orbit. Every returned row must carry the requested NORAD identity. Full-span requests are used for short reasonably populated spans; otherwise exposures are requested individually. Two seconds of padding bracket exposure boundaries. Initial sampling is one second, with one bounded refinement to 0.125 seconds when curvature or angular displacement requires it. A discrete curvature estimate above a quarter image pixel, or a step above 0.25 degrees, marks unresolved sampling as provisional. This is an interpolation diagnostic, not a bound on orbit accuracy or a proof against motion between samples.
+
+One comparison allows 48 requests, 24,000 received ephemeris samples, approximately 12 MiB of original response text and five minutes. Two comparisons can run concurrently. Cancellation disconnects the active provider connection and prevents later requests; geometry also checks cancellation between fragment measurements. Shutdown cancels the proxy's comparisons. The existing atomic sidecar and HTML-cache writes preserve completed results; failures remain retryable. Expiring the time budget retains completed comparisons as explicitly partial evidence; explicit cancellation aborts publication. Orbital epochs are also shown as signed ages relative to the observation span, without converting age into an angular error estimate.
+
+## Geometry and interpretation
+
+Positions are unit vectors. Each fragment is compared with the nearest point on short great-circle arcs of the predicted path during its own exposure, with interpolated exposure boundaries. Paths are never extrapolated across missing coverage, sample gaps or an orbital-data change within an exposure. The calculation keeps finite-path distance, perpendicular distance and along-path distance beyond an exposure endpoint distinct. Each exposure contributes one median before the overall median is calculated; 93 fragments in six exposures provide six independent exposure observations.
+
+The evidence includes per-exposure median, p90 and maximum distance, approximate pixels, predicted angular speed, principal-axis disagreement modulo 180 degrees, and chronological motion-direction disagreement. The centroid-based speed is explicitly a midpoint-based estimate. Its displayed range allows the first and last centroid to occur anywhere within their respective exposures; it is not a statistical interval and assumes a meaningful approximately uniform-motion summary. There is no fitted spatial translation, clock correction, required trail completeness or speed acceptance gate.
+
+Complete, adequately sampled comparisons are ordered first by measured median distance. Partial comparisons follow, then unresolved sampling or fewer than two covered exposures, then failed trajectories. An artificially close undersampled arc must not outrank a complete valid comparison. No universal residual threshold, identity-confirmation label or confidence percentage is assigned. Partial trajectories and similarly fitting alternatives must be inspected alongside exposure support and provenance. A single returned candidate says nothing about search completeness. Brightness and illumination are not acceptance gates.
+
+## Coordinate conventions and limitations
+
+SatChecker's [ephemeris documentation](https://satchecker.readthedocs.io/en/latest/api.html) specifies UT1 Julian dates and observer height above the WGS84 ellipsoid. Its [Skyfield propagation implementation](https://github.com/iausathub/satchecker/blob/main/src/api/utils/propagation_strategies.py) uses `ut1_jd` and topocentric `radec()` with ICRF-oriented axes. SpacePixels currently supplies captured UTC Julian dates as an approximation, explicitly disclosing up to 0.9 seconds of timing sensitivity; it does not silently apply a fitted clock offset. This is material for fast objects. No calibrated covariance or positional probability is available from the reviewed responses.
+
+Explicitly unsupported WCS frames and non-J2000 equinoxes require a transformation and abstain. FK5 J2000 is compared without a subarcsecond frame-bias correction. Missing reference-frame declarations or an implausible EQUINOX remain recorded assumptions; the TAN/SIP transformer does not use that card. Unsupported declared non-UTC exposure time scales are omitted with an explanation. Unknown heights use a disclosed zero-height assumption. Even declared heights may have an uncertain vertical datum. These numeric comparisons are diagnostic evidence, not an absolute astrometric-accuracy measurement.
+
+The provider documents [historical coverage back to July 2019](https://satchecker.readthedocs.io/en/latest/). Live FOV requests nevertheless returned a candidate with a May 2018 orbital epoch for the Integral challenge. Coverage must therefore be observed per request and object; the documentation is neither a hard date gate nor a completeness guarantee. The live follow-up also established a 1,000-row limit, so ephemerides are retrieved in overlapping chunks of at most approximately 900 steps. General LEO matching, calibrated thresholds and false-identification rates need independently identified fast and slow objects, ambiguous alternatives and a broader timing/WCS error budget.
+
+## Validation
+
+Geometry tests cover arbitrary centroid times within exposures, reversed exposure associations, wrong candidates, equal exposure weighting, finite endpoints, missing samples, orbit changes, RA wrapping and near-pole coordinates. Provider-boundary tests cover NORAD identity, current and legacy orbital fields, incomplete searches, cancellation and endpoint validation. Client tests cover digest-bound cache reuse, offline reopen, escaped text, partial evidence and cancellation with late response delivery. Real-data validation uses separate baseline/current scratch exports and saved provider-response replay; original observing-session files and reports remain untouched.
+
+The original four Klangwolke-2 tracks reproduce the independent investigation's distances to within 0.00001 arcsecond when replaying its saved responses: NSTAR A 5.04813″, USA 65 4.45723″, SOLIDARIDAD 2 5.59206″ and ASC 1 3.01730″. This replay tests geometry and provenance handling, not the completeness of new candidate discovery.
+
+Live discovery and follow-up on Klangwolke-1 gave the following best returned fits. These are supported associations for inspection, without independently established identities:
+
+| Track | Independent exposures | Best returned fit / NORAD | Typical path distance | Direction difference | Next returned distance |
+|---|---|---|---|---|---|
+| ST1 | 4 | TELSTAR 12 (ORION 2) / 25949 | 0.81″ | 0.066° | 70,381″ |
+| ST2 | 2 | DELTA 4 R/B / 47238 | 5.31″ | 0.015° | 1,306″ |
+| ST3 | 2 | ARIANE 5 R/B / 37266 | 30.60″ | 0.100° | 1,248″ |
+| ST4 | 2 | SKYTERRA 1 / 37218 | 4.05″ | 0.060° | 47,021″ |
+
+Integral's single returned candidate, SL-16 DEB / 39906, missed the four observed exposure paths by a typical 297,454″ (about 82.6 degrees), despite appearing in the FOV results. The feature retains and displays this disagreement rather than treating the lookup as an identification. Its historical epoch and the provider's 1,000-row response limit were observed in real requests, not simulated.
+
+Baseline/current exports of all 18 reference datasets and Integral (19 dataset pairs) have identical existing report-data fields (apart from generation time), rejected frames, detection configurations, CSVs and all 6,566 other exported assets. The expected changes are the observation snapshot, comparison controls and client script. Current-engine Klangwolke-2 has seven streak tracks in both runs; the historical four-track report is a separate geometry replay. The full application check, both published-API consumer variants and the three real-data smoke tests pass. No detector or library source changes are involved.

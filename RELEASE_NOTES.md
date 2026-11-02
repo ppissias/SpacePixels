@@ -3,6 +3,8 @@
 <!-- root-toc:start -->
 ## Contents
 
+- [Unreleased](#unreleased)
+  - [Added](#added)
 - [2026.10-04](#202610-04)
   - [Changed](#changed)
   - [Removed](#removed)
@@ -31,6 +33,12 @@
   - [Upgrading](#upgrading)
   - [Under the hood](#under-the-hood)
 <!-- root-toc:end -->
+
+## Unreleased
+
+### Added
+
+- **Satellite motion comparison (F21).** Streak-track reports can compare their saved observations with SatChecker predictions over the actual exposure intervals, showing path distances, direction, speed evidence, per-exposure overlays and orbital provenance. Results and provider responses reopen offline. Incomplete searches, missing historical orbits and sampling/metadata limits stay explicit; the feature does not assign a satellite identity probability. Existing reports keep their candidate lookup flow. The report JSON gains an optional `streakObservations` map without changing existing schema-version-1 fields; this map includes the observing context needed for reproducible comparisons.
 
 ## 2026.10-04
 

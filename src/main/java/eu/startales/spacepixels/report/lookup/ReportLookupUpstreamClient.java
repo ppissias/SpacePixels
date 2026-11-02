@@ -35,9 +35,17 @@ public final class ReportLookupUpstreamClient {
     }
 
     static JsonObject proxyLookup(String provider, String targetUrl) {
+        return proxyLookup(provider, targetUrl, null);
+    }
+
+    /** Registers the current connection with its comparison so cancellation disconnects network I/O. */
+    static JsonObject proxyLookup(String provider, String targetUrl, SatCheckerTrackLookup.Control control) {
         HttpURLConnection connection = null;
         try {
+            validateTarget(provider, targetUrl);
             connection = (HttpURLConnection) new URL(targetUrl).openConnection();
+            if ("satchecker".equals(provider)) connection.setInstanceFollowRedirects(false);
+            if (control != null) control.bind(connection);
             connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
             connection.setReadTimeout(resolveReadTimeoutMillis(provider));
             connection.setRequestMethod("GET");
@@ -61,13 +69,17 @@ public final class ReportLookupUpstreamClient {
             }
 
             if (upstreamStatus >= 200 && upstreamStatus < 300) {
-                validatePayload(provider, payload);
+                boolean ephemeris = "satchecker".equals(provider) && URI.create(targetUrl).getPath().equals("/ephemeris/catalog-number-jdstep/");
+                if (ephemeris) validateEphemerisPayload(payload); else validatePayload(provider, payload);
                 response.addProperty("ok", true);
                 response.add("payload", payload);
-                response.add("normalized", ReportLookupPayloadNormalizer.normalize(provider, payload));
+                response.add("normalized", ephemeris ? new JsonObject() : ReportLookupPayloadNormalizer.normalize(provider, payload));
             } else {
                 response.addProperty("ok", false);
-                response.addProperty("message", "Upstream service returned HTTP " + upstreamStatus + ".");
+                String detail = payload.isJsonObject() && payload.getAsJsonObject().has("message")
+                        && payload.getAsJsonObject().get("message").isJsonPrimitive()
+                        ? " " + payload.getAsJsonObject().get("message").getAsString() : "";
+                response.addProperty("message", "Upstream service returned HTTP " + upstreamStatus + "." + detail);
                 response.add("payload", payload);
             }
             return response;
@@ -80,6 +92,7 @@ public final class ReportLookupUpstreamClient {
             error.addProperty("message", "Report lookup failed: " + e.getMessage());
             return error;
         } finally {
+            if (control != null) control.release(connection);
             if (connection != null) {
                 connection.disconnect();
             }
@@ -92,15 +105,16 @@ public final class ReportLookupUpstreamClient {
         if (!"https".equalsIgnoreCase(uri.getScheme())) {
             throw new IllegalArgumentException("Report lookups only allow HTTPS targets.");
         }
-        if (uri.getFragment() != null || uri.getRawUserInfo() != null) {
+        if (uri.getFragment() != null || uri.getRawUserInfo() != null || uri.getPort() != -1 && uri.getPort() != 443) {
             throw new IllegalArgumentException("Report lookup target contains unsupported URL parts.");
         }
 
         String host = uri.getHost();
         String path = uri.getPath();
         if ("satchecker".equals(provider)) {
-            if (!"satchecker.cps.iau.org".equalsIgnoreCase(host) || !"/fov/satellite-passes/".equals(path)) {
-                throw new IllegalArgumentException("Only SatChecker candidate lookups are allowed.");
+            if (!"satchecker.cps.iau.org".equalsIgnoreCase(host)
+                    || !"/fov/satellite-passes/".equals(path) && !"/ephemeris/catalog-number-jdstep/".equals(path)) {
+                throw new IllegalArgumentException("Only SatChecker candidate and catalogue-number ephemeris lookups are allowed.");
             }
         } else if ("jpl".equals(provider)) {
             if (!"ssd-api.jpl.nasa.gov".equalsIgnoreCase(host) || !"/sb_ident.api".equals(path)) {
@@ -131,6 +145,17 @@ public final class ReportLookupUpstreamClient {
             default -> false;
         };
         if (!valid) throw new IllegalArgumentException("The catalogue response is incomplete; no identification conclusion can be drawn. Retry the lookup.");
+    }
+
+    /** Ephemerides use a different tabular shape; pending tasks and errors are not empty trajectories. */
+    static void validateEphemerisPayload(JsonElement payload) {
+        if (payload == null || !payload.isJsonObject()) throw new IllegalArgumentException("Invalid satellite ephemeris response.");
+        var root = payload.getAsJsonObject();
+        if (!root.has("fields") || !root.get("fields").isJsonArray() || !root.has("data") || !root.get("data").isJsonArray()
+                || root.has("error")) throw new IllegalArgumentException("Satellite ephemeris is incomplete or unavailable.");
+        var fields = root.getAsJsonArray("fields");
+        for (String field : new String[]{"catalog_id", "julian_date", "right_ascension_deg", "declination_deg"})
+            if (!fields.contains(new JsonPrimitive(field))) throw new IllegalArgumentException("Satellite ephemeris lacks " + field + ".");
     }
 
     private static int resolveReadTimeoutMillis(String provider) {
