@@ -36,7 +36,12 @@ import java.util.function.Function;
  * Edits apply to the session as soon as they are valid; Save keeps them for the next start.
  */
 public class ConfigurationPanel extends JPanel {
-    private static final int CONFIG_TEXT_FIELD_WIDTH = 190;
+    /** IAU observatory codes are three characters. */
+    private static final int OBSERVATORY_CODE_COLUMNS = 5;
+    /** Signed decimal degrees, with room for a hemisphere letter. */
+    private static final int COORDINATE_COLUMNS = 12;
+    /** Wide enough for a normal Astrometry.net API key. A longer key scrolls inside the field. */
+    private static final int API_KEY_COLUMNS = 18;
 
     /** ASTAP download page, offered when no star database is found. */
     static final String ASTAP_DOWNLOAD_URL = "https://www.hnsky.org/astap.htm";
@@ -110,9 +115,12 @@ public class ConfigurationPanel extends JPanel {
 
         JPanel mainContent = new WidthTrackingPanel();
         mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
+        observatoryCodeTextField.setColumns(OBSERVATORY_CODE_COLUMNS);
+        latTextField.setColumns(COORDINATE_COLUMNS);
+        longTextField.setColumns(COORDINATE_COLUMNS);
+        astrometryKeyField.setColumns(API_KEY_COLUMNS);
 
-        // --- EXTERNAL TOOLS ---
-        mainContent.add(createSectionHeader("Plate Solving"));
+        JPanel plateSolving = section("Plate Solving");
 
         astapPathLabel.setForeground(UiStyle.helpColor());
         JButton astapPathButton = new JButton("Browse...");
@@ -127,9 +135,9 @@ public class ConfigurationPanel extends JPanel {
         astapPathRow.add(astapPathButton);
         astapPathRow.add(Box.createHorizontalStrut(6));
         astapPathRow.add(astapCheckButton);
-        JPanel astapControl = verticalStack(astapPathRow, verticalStack(astapStatusLabel, astapDownloadButton));
+        JPanel astapControl = rightColumn(astapPathRow, verticalStack(astapStatusLabel, astapDownloadButton));
 
-        mainContent.add(createConfigRow(
+        plateSolving.add(createConfigRow(
                 "ASTAP Executable Path",
                 "The local ASTAP solver used by <b>Plate Solve Selected</b> with the ASTAP option. ASTAP also needs a star "
                         + "database (D50 is a good choice for most setups), installed next to the program. "
@@ -142,7 +150,6 @@ public class ConfigurationPanel extends JPanel {
         astrometryAccount.add(astrometryOwnKeyButton);
         astrometryAnonymousButton.setSelected(true);
         astrometryKeyField.setEnabled(false);
-        UiStyle.inputWidth(astrometryKeyField, CONFIG_TEXT_FIELD_WIDTH);
         astrometryCheckButton.setToolTipText("Log in to Astrometry.net with this account. Nothing is uploaded.");
         JPanel astrometryChoiceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         astrometryChoiceRow.add(astrometryAnonymousButton);
@@ -153,56 +160,57 @@ public class ConfigurationPanel extends JPanel {
         astrometryKeyRow.add(Box.createHorizontalStrut(6));
         astrometryKeyRow.add(astrometryCheckButton);
 
-        mainContent.add(createConfigRow(
+        plateSolving.add(createConfigRow(
                 "Astrometry.net Account",
                 "Used by <b>Plate Solve Selected</b> with the <b>Astrometry.net (online)</b> option. <b>Anonymous</b> needs "
                         + "no account; all anonymous uploads belong to one shared account. With <b>My API key</b>, your uploads also show up on your Astrometry.net profile. "
                         + "To get a key, sign in at nova.astrometry.net: the key is in the <b>My Profile</b> section of the "
                         + "dashboard. SpacePixels keeps it in plain text in <code>spacepixels_app.json</code> in your home "
                         + "folder. <b>Check</b> logs in without uploading anything.",
-                verticalStack(astrometryChoiceRow, verticalStack(astrometryKeyRow, astrometryStatus))));
+                rightColumn(astrometryChoiceRow, rightColumn(astrometryKeyRow, astrometryStatus))));
+        mainContent.add(plateSolving);
 
-        // --- SKY CATALOGUE ---
-        mainContent.add(createSectionHeader("Sky Catalogue (Annotate)"));
+        JPanel skyCatalogue = section("Sky Catalogue (Annotate)");
         starDepthSpinner.setEditor(new JSpinner.NumberEditor(starDepthSpinner, "0.0"));
         UiStyle.inputWidth(starDepthSpinner, 80);
         starDepthSpinner.addChangeListener(e -> starDepthChanged());
-        mainContent.add(createConfigRow(
+        skyCatalogue.add(createConfigRow(
                 "Star Depth (Gaia G)",
                 "The faintest stars that <b>Fetch Sky Catalogue</b> downloads from Gaia, as a G magnitude. "
                         + "Magnitude 15 takes about half a minute for a field of 4° × 3°; each magnitude deeper roughly "
                         + "doubles the stars and the wait. Variable stars are fetched to one magnitude fainter. "
                         + "A change applies to the next fetch.",
-                verticalStack(starDepthSpinner, starDepthStatus)));
+                rightColumn(starDepthSpinner, starDepthStatus)));
         solarDepthSpinner.setEditor(new JSpinner.NumberEditor(solarDepthSpinner, "0.0"));
         UiStyle.inputWidth(solarDepthSpinner, 80);
         solarDepthSpinner.addChangeListener(e -> solarDepthChanged());
-        mainContent.add(createConfigRow(
+        skyCatalogue.add(createConfigRow(
                 "Asteroid and Comet Depth (V)",
                 "The faintest asteroids and comets that <b>Fetch Asteroids and Comets</b> asks JPL for, as a predicted V "
                         + "magnitude. For comets JPL predicts the total magnitude, which can be off by a magnitude or more. "
                         + "A deeper limit finds more objects and takes longer: a search of one field took from half a minute "
                         + "to four minutes in tests, and for frames more than about ten years old JPL may not answer at all "
                         + "without a limit. A change applies to the next fetch.",
-                verticalStack(solarDepthSpinner, solarDepthStatus)));
+                rightColumn(solarDepthSpinner, solarDepthStatus)));
+        mainContent.add(skyCatalogue);
 
-        // --- OBSERVING SITE ---
-        mainContent.add(createSectionHeader("Observing Site (for object identification)"));
+        JPanel observingSite = section("Observing Site (for object identification)");
 
-        mainContent.add(createConfigRow(
+        observingSite.add(createConfigRow(
                 "IAU Observatory Code",
                 "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups where supported.<br><b>Format:</b> MPC/IAU code such as <code>J95</code>.<br><b>Note:</b> <code>500</code> is only a SkyBoT geocenter fallback and is not valid for JPL Small-Body Identification.",
                 fieldWithStatus(observatoryCodeTextField, observatoryCodeStatus)));
 
-        mainContent.add(createConfigRow(
+        observingSite.add(createConfigRow(
                 "Site Latitude (N)",
                 "Observation site latitude for accurate celestial annotation. If the FITS headers hold a latitude, SpacePixels uses that value; this field is the fallback.<br><b>Format:</b> signed decimal degrees, positive for north and negative for south, e.g. <code>37.9838</code> or <code>-24.6272</code>. A hemisphere letter also works, e.g. <code>24.6272S</code>.",
                 fieldWithStatus(latTextField, latStatus)));
 
-        mainContent.add(createConfigRow(
+        observingSite.add(createConfigRow(
                 "Site Longitude (E)",
                 "Observation site longitude for accurate celestial annotation. If the FITS headers hold a longitude, SpacePixels uses that value; this field is the fallback.<br><b>Format:</b> signed decimal degrees, positive for east and negative for west, e.g. <code>23.7275</code> or <code>-70.4030</code>. A hemisphere letter also works, e.g. <code>70.4030W</code>.",
                 fieldWithStatus(longTextField, longStatus)));
+        mainContent.add(observingSite);
 
         JScrollPane scrollPane = new JScrollPane(mainContent);
         scrollPane.setBorder(null);
@@ -765,9 +773,39 @@ public class ConfigurationPanel extends JPanel {
         }
     }
 
-    private static JPanel fieldWithStatus(JTextField field, JLabel status) {
-        UiStyle.inputWidth(field, CONFIG_TEXT_FIELD_WIDTH);
-        return verticalStack(field, status);
+    private static JPanel fieldWithStatus(JComponent editor, JLabel status) {
+        return rightColumn(editor, status);
+    }
+
+    /**
+     * Pins an editor to the right edge of the settings row and puts its note underneath. The editor keeps the width of
+     * its text, so every field and spinner meets the same right edge.
+     */
+    private static JPanel rightColumn(JComponent editor, JComponent below) {
+        JPanel column = new JPanel(new BorderLayout(0, 4));
+        JPanel editorRow = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        editorRow.setOpaque(false);
+        editorRow.add(editor);
+        column.add(editorRow, BorderLayout.NORTH);
+        column.add(below, BorderLayout.CENTER);
+        return column;
+    }
+
+    /**
+     * Groups one category in a titled rectangle. The height follows the controls, as on Prepare an observing session.
+     */
+    private static JPanel section(String title) {
+        JPanel panel = new JPanel() {
+            /** Spare viewport height stays below the form. The box does not become a tall empty area. */
+            @Override public Dimension getMaximumSize() {
+                return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+            }
+        };
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createTitledBorder(title),
+                BorderFactory.createEmptyBorder(UiStyle.space(7), UiStyle.space(9), UiStyle.space(7), UiStyle.space(9))));
+        return panel;
     }
 
     private static JPanel verticalStack(JComponent top, JComponent bottom) {
@@ -781,22 +819,10 @@ public class ConfigurationPanel extends JPanel {
         return panel;
     }
 
-    /**
-     * Creates a styled section header matching the FlatLaf Accent color.
-     */
-    private JLabel createSectionHeader(String title) {
-        JLabel headerLabel = new JLabel(title);
-        headerLabel.setFont(UiStyle.sectionFont());
-        headerLabel.setForeground(DetectionConfigurationPanel.accentColor());
-        headerLabel.setBorder(new EmptyBorder(20, 0, 10, 0));
-        headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        return headerLabel;
-    }
-
     private JPanel createConfigRow(String title, String description, JComponent inputControl) {
         JLabel titleLabel = new JLabel(title);
         AccessibleControls.label(titleLabel, inputControl, description);
-        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         inputWrapper.add(inputControl);
         return new SettingsRowPanel(titleLabel, description, inputWrapper);
     }
