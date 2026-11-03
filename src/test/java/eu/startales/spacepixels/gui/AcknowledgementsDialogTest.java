@@ -40,11 +40,14 @@ public class AcknowledgementsDialogTest {
                 assertEquals("Software & Utilities", tabs.getTitleAt(2));
                 assertEquals("Scientific References", tabs.getTitleAt(3));
 
-                // Verify Tab 1 (Test Data) - aligned with MANUAL
+                // Verify Tab 1 (Test Data) includes the contributors credited in README and MANUAL.
                 String tab1Text = extractEditorText(tabs.getComponentAt(0));
                 assertTrue(tab1Text.contains("Klangwolke"));
                 assertTrue(tab1Text.contains("Austral Wiki"));
                 assertTrue(tab1Text.contains("Duncan Warren"));
+                assertTrue(tab1Text.contains("TheStarsabove"));
+                assertTrue(tab1Text.contains("Kumar"));
+                assertTrue(tab1Text.contains("https://github.com/chvvkumar"));
 
                 // Verify Tab 2 (Services & APIs)
                 String tab2Text = extractEditorText(tabs.getComponentAt(1));

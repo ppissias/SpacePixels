@@ -1,6 +1,6 @@
 # SpacePixels User Manual
 
-<sub><i>Many thanks to Klangwolke at Cloudynights, Austral Wiki at Cloudynights, and Duncan Warren for providing some of the test data used by SpacePixels.</i></sub>
+<sub><i>Many thanks to Klangwolke at Cloudynights, Austral Wiki at Cloudynights and Duncan Warren for providing some of the test data used in this manual.</i></sub>
 
 SpacePixels searches your astrophotography exposures for moving objects and brightness changes. Give it a sequence of aligned sub-exposures to obtain an HTML report with candidate tracks, crops, animations, maps and optional variable-star light curves. Catalogue searches help investigate candidates; a detection or catalogue association is not, by itself, a confirmed discovery.
 
