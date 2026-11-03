@@ -13,8 +13,11 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F22](#f22-known-asteroids-and-comets-in-the-field) | Known asteroids and comets in the field | First version implemented 2026-11-02 (viewer overlay); report table and track comparison open |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
+| [F25](#f25-experimental-faint-mover-search-settings-and-presentation) | Experimental faint-mover search: settings and presentation | Proposed 2026-11-03: off by default, dedicated settings section; depends on JTransient SM-F2 |
 
-The other investigations from 2026-11-02 are owned by JTransient: [photometry strictness/defaults](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [single faint-streak elongation](../JTransient/FEATURE-REQUESTS.md#st-7-elongation-threshold-for-single-faint-streaks), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
+The other investigations from 2026-11-02 are owned by JTransient: [remaining deferred photometry work](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review) and [readiness policy](../JTransient/FEATURE-REQUESTS.md#vs-9-selected-stars-and-the-linearity-check-minimum), [single faint-streak elongation](../JTransient/FEATURE-REQUESTS.md#st-7-elongation-threshold-for-single-faint-streaks), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
+
+The full-frame investigation of three possible additional experimental high-sensitivity moving-object detectors is owned by [JTransient SM-F2](../JTransient/FEATURE-REQUESTS.md#sm-f2-experimental-high-sensitivity-moving-object-detection), requested 2026-11-03. Its measured Klangwolke-2 recovery, injections, controls, resources and pending integration decisions are recorded there. SpacePixels controls and presentation will follow an agreed engine contract.
 
 ## F04. MCP agent services
 
@@ -218,3 +221,34 @@ The saved Gaia star model contains source identity when available, position, pro
 - Check offline reopening, older caches/reports, additive CSV/schema behavior, saved provenance and uncertainty labels. Detection outputs, scores, candidates and engine readiness must be unchanged.
 
 **Scientific references used in the review.** [Gaia DR3 photometric relationships](https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html) describe the validity ranges and limitations of passband transformations. [AAVSO's guide to using its data](https://archive.aavso.org/index.php/quickstart-guide-using-aavso-data) distinguishes filtered and unfiltered observations and calibration limitations.
+
+## F25. Experimental faint-mover search: settings and presentation
+
+**Request (2026-11-03).** Independently discover faint moving objects that the per-frame detection misses, using the methods of [JTransient SM-F2](../JTransient/FEATURE-REQUESTS.md#sm-f2-experimental-high-sensitivity-moving-object-detection).
+
+**Decisions (made, 2026-11-03):**
+
+- "I would not like to do a known object stack, I would like to independently discover these using the methods we are exploring." Fetched known asteroids ([F22](#f22-known-asteroids-and-comets-in-the-field)) are only a reference to check the results, never used to find them.
+- "I think this feature should be disabled by default, I think we need another dedicated section for this and any settings it may need."
+
+**Settings.** A dedicated **Faint Movers (experimental)** section in Detection Settings, listed under **Analyses in This Run** like variable-star photometry:
+
+- **Search for faint movers**, off by default.
+- **Slowest motion**, shown as a displacement over the session in FWHM.
+- **Fastest motion**, in arcsec/min when a plate solution exists and px/min otherwise; stored in px/min.
+- **Minimum score**: higher is stricter; the default follows SM-F2's calibration.
+- **Time limit**, in minutes.
+- An estimate of the extra run time for the current session (frames, frame size, speed range), shown before the run.
+
+Profiles save these keys. Auto-Tune leaves them unchanged in the first version.
+
+**Report.** A separate category, **Faint mover candidates (FM#)**, apart from moving-object tracks. Each candidate shows:
+- position and motion: arcsec/min and position angle with a plate solution, and RA/Dec along the path;
+- score and half-session scores;
+- the shift-stacked cutout and a blink of the frames with the fitted path.
+
+With fetched known asteroids, a candidate that follows a prediction within its uncertainty is labelled with that object's name, as a comparison only. The run summary states the search domain (speed range, frames, area searched) and whether the search was truncated.
+
+**Viewers.** A **Show faint movers** layer in Blink and Preview Frame draws each candidate's path and its position in the current frame.
+
+**Depends on** the JTransient SM-F2 engine stage and its result fields. Until they exist, nothing changes in SpacePixels.

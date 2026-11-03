@@ -96,11 +96,7 @@ These videos show the versions available when recorded. Use the manual for curre
 
 ## Screenshots and sample reports
 
-Many thanks to Klangwolke at Cloudynights for providing amazing data for this report.
-
-Many thanks to Cloudynights user TheStarsabove for providing data.
-
-Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
+Many thanks to **Klangwolke at Cloudynights**, **Austral Wiki at Cloudynights**, and **Duncan Warren** for providing some of the test data used by SpacePixels.
 
 **Check out sample reports.**
 

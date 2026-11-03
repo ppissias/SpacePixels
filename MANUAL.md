@@ -1,6 +1,6 @@
 # SpacePixels User Manual
 
-<sub><i>Many thanks to Klangwolke at Cloudynights and Duncan Warren for providing some of the test data used in this manual.</i></sub>
+<sub><i>Many thanks to Klangwolke at Cloudynights, Austral Wiki at Cloudynights, and Duncan Warren for providing some of the test data used by SpacePixels.</i></sub>
 
 SpacePixels searches your astrophotography exposures for moving objects and brightness changes. Give it a sequence of aligned sub-exposures to obtain an HTML report with candidate tracks, crops, animations, maps and optional variable-star light curves. Catalogue searches help investigate candidates; a detection or catalogue association is not, by itself, a confirmed discovery.
 
@@ -22,7 +22,7 @@ This manual walks through the everyday workflows with screenshots from real sess
 8. [Detection settings in brief](#8-detection-settings-in-brief)
 9. [Tips and troubleshooting](#9-tips-and-troubleshooting)
 
-[Annex: Preparing data with Siril](#annex-preparing-data-with-siril) · [Annex: Local Stellarium integration](#annex-local-stellarium-integration)
+[Annex: What to avoid when preparing data](#annex-what-to-avoid-when-preparing-data) · [Annex: Preparing data with Siril](#annex-preparing-data-with-siril) · [Annex: Local Stellarium integration](#annex-local-stellarium-integration) · [Annex: Scientific references and algorithms](#annex-scientific-references-and-algorithms)
 
 ---
 
@@ -50,6 +50,8 @@ Use the individual calibrated, registered exposures that you would otherwise com
 - **timestamps** in the FITS headers (`DATE-OBS`), so speeds and object identification work;
 - **linear, unstretched** image values; do not apply denoising, star removal or a nonlinear stretch before detection;
 - **zero-filled registration borders** retained around shifted frames; do not crop all frames to their common overlap.
+
+See [Annex: What to avoid when preparing data](#annex-what-to-avoid-when-preparing-data) for operations to leave out during calibration and registration.
 
 Detection needs at least three usable frames after quality control. Auto-Tune requires at least four input frames; variable-star photometry requires at least 20 after quality control and additional readiness checks.
 
@@ -484,6 +486,8 @@ The scan does not split images within one folder by filter, exposure, camera or 
 
 Variable-star photometry is an optional analysis. Switch it on under **Analyses in This Run** on the Overview of Detection Settings, or on the Variable Stars page, before you click **Detect Moving Targets**. It measures the brightness of the field stars in every frame and reports stars that change. It needs at least 20 frames after quality control, and the original, unstretched (linear) frames.
 
+SpacePixels uses JTransient's forced multi-aperture photometry. Its flux-error estimate includes the sky-background and finite-annulus terms discussed by [Howell (1989)](#annex-scientific-references-and-algorithms), with an empirical blank-sky correction for correlated noise. Relative frame transparency is fitted with the star-magnitude plus frame-zero-point model of inhomogeneous ensemble photometry ([Honeycutt 1992](#annex-scientific-references-and-algorithms)); Cauchy iteratively reweighted least squares and spatial transparency planes are JTransient extensions. Variability is evaluated using excess scatter and an adaptation of the [Stetson (1996)](#annex-scientific-references-and-algorithms) $J$ index over consecutive usable measurements, with a noise estimate from local magnitude neighbours, followed by consistency gates (aperture consistency, persistence, split-half stability, and systematic driver responses).
+
 The same 61-megapixel session with photometry switched on:
 
 ![Variable-star summary](docs/images/manual/variable-stars-summary.png)
@@ -623,6 +627,8 @@ If a viewer is open when the catalogue arrives, the frame does not change: the *
 
 ### Known asteroids and comets
 
+![Known asteroid 767 Bondia annotated in the Lagoon Nebula field, with its predicted ring, exposure motion and session path](docs/images/manual/ui-asteroids.jpg)
+
 Once one frame is plate-solved, **Fetch Asteroids and Comets** in **2 Astrometry** asks NASA JPL which known asteroids and comets cross the field of your frames during the session, and where each one is at every frame's time. It sends JPL the field, the frame times and your observing site (or your IAU observatory code); the site comes from the FITS headers, or from the **Astrometry Config** tab when they have none. The frames need their capture times (`DATE-OBS`).
 
 - JPL's field search finds the objects brighter than the **Asteroid and Comet Depth** on the Astrometry Config tab (V 19 by default). For comets JPL predicts the total magnitude, which can be off by a magnitude or more. A second search looks for near-Earth objects up to 5° around the field: fast ones can cross the field during the night.
@@ -760,6 +766,48 @@ In most sessions you only need Auto-Tune and the profile. Change single settings
 
 ---
 
+## Annex: What to avoid when preparing data
+
+The goal of data preparation for SpacePixels is a sequence of individual sub-exposures that are calibrated and star-aligned, and otherwise left as measured. SpacePixels searches for variations across time by comparing physical pixel values from frame to frame. Image processing operations that look appealing for a final stacked astrophoto can corrupt or erase the real astrophysical signals SpacePixels searches for.
+
+Whether you prepare your sub-exposures with Siril, PixInsight (WBPP), DeepSkyStacker, Astro Pixel Processor, or custom scripts, leave out the following operations:
+
+### 1. Cosmetic correction and hot pixel removal
+- **What to avoid:** Defect maps, automated hot/cold pixel detection and replacement (such as Siril `-cc` or PixInsight CosmeticCorrection with auto-detect).
+- **Why:** A faint, slow-moving asteroid or a short streak in a single sub-exposure has a profile very similar to an isolated warm or hot pixel. Automated cosmetic filters can replace these faint targets with the surrounding background, erasing them before detection starts. In other cases, aggressive filtering leaves small negative pits ("holes") in the background that trigger false transient detections.
+- **What SpacePixels does instead:** SpacePixels natively identifies stationary sensor defects and hot pixels by tracking stationary features across the sequence and masking them out with its master star and defect mask. Real movers, which change position across exposures, are preserved.
+
+### 2. Dark optimization and dark scaling
+- **What to avoid:** Dark frame optimization or adaptive dark scaling (for example Siril `-opt` or PixInsight "Optimize dark frames").
+- **Why:** Dark scaling multiplies the master dark by a fitted factor to minimize residual noise against the light frame. On modern CMOS sensors with non-linear dark current and amplifier glow signatures, dark scaling leaves hot-pixel remnants and creates artificial non-uniform background patterns.
+- **What to do instead:** Use dark exposures taken at the exact same exposure duration and sensor temperature as your light frames, and subtract the master dark directly without scaling.
+
+### 3. Background extraction and per-frame gradient removal
+- **What to avoid:** Dynamic background extraction (DBE), automatic background extraction (ABE), GraXpert, or per-frame photometric colour calibration (PCC) applied to individual sub-exposures.
+- **Why:** Estimating and subtracting a varying background model from each frame individually alters the relative photometric baseline and local noise floor across the time series. This can disrupt detection thresholds and distort variable-star aperture photometry.
+- **What to do instead:** Let SpacePixels measure the natural background and sky noise directly from your linear calibrated exposures.
+
+### 4. Denoising, star removal, sharpening, and deconvolution
+- **What to avoid:** AI-based or non-linear smoothing and sharpening filters (NoiseXTerminator, BlurXTerminator, StarNet, RC-Astro tools, wavelet filters, unsharp masks).
+- **Why:** These tools suppress faint low-SNR features, alter stellar point-spread functions (PSFs), and invent synthetic smooth textures. SpacePixels' statistical extraction algorithms depend on unaltered sensor noise statistics and natural optical PSFs.
+
+### 5. Comet alignment
+- **What to avoid:** Aligning (registering) the sequence on the comet's nucleus instead of on the stars.
+- **Why:** Comet alignment holds the comet stationary while trailing every star into lines. SpacePixels relies on a stationary star field to construct a master star mask; trailing the stars across the frame invalidates the star mask and prevents detection.
+- **What to do instead:** Always register on the stars. SpacePixels will track moving comets and asteroids against the stationary star background.
+
+### 6. Cropping to the common overlap
+- **What to avoid:** Cropping all frames to their common intersection (for example Siril `-framing=min` or an automatic bounding-box crop).
+- **Why:** SpacePixels inspects the zero-padded borders created by mount dithering and drift (`-framing=current` in Siril, "Standard Mode" in DeepSkyStacker) to measure tracking stability, distinguish image borders from valid sensor data, and reject false detections along image boundaries. Cropping to the common overlap destroys this boundary information.
+- **What to do instead:** Keep the canvas size equal to the reference frame, with zero-filled margins where frames shifted.
+
+### 7. Ringing interpolation filters and drizzle
+- **What to avoid:** Lanczos or high-order sinc interpolation kernels during star registration, as well as drizzle resampling.
+- **Why:** Lanczos and sinc filters produce negative ringing (dark halos or rings) around bright stars. These rings become high-contrast edges in difference frames, leaking through star masks and triggering false detections. Drizzle resamples data onto a non-uniform fractional grid that perturbs single-frame pixel statistics.
+- **What to do instead:** Use standard linear or bilinear interpolation for star alignment.
+
+---
+
 ## Annex: Preparing data with Siril
 
 **Prepare with Siril** runs one fixed recipe. The steps in the window are in [Preparing an observing session](#preparing-an-observing-session). This annex explains the options in that recipe. **Preview processing instructions** shows the script before it runs, and the run folder keeps the same instructions.
@@ -892,3 +940,46 @@ To let SpacePixels and its reports control your local Stellarium window, enable 
 Once enabled, keep Stellarium open while reviewing a detection report and click **Stellarium Local** (crop FOV) or **Stellarium Local Wide** on any finding card to jump directly to that sky position and moment in Stellarium.
 
 The report normally shows **Commands sent** with **Acceptance is unconfirmed**, because the direct browser connection cannot read Stellarium's reply. Check the Stellarium window to confirm the view. When replies can be read, the report checks that every command was accepted before saying so. The complete request has a **10-second timeout**; a timeout or error restores the button so you can retry. Some commands may already have been applied, so check Stellarium before retrying.
+
+---
+
+## Annex: Scientific references and algorithms
+
+The references below describe methods and data actually used by SpacePixels and its libraries. Each entry identifies its role. Project-specific extensions, thresholds and selection gates are documented in [JTransient's algorithm guide](https://github.com/ppissias/JTransient/blob/master/ALGORITHM.md). The **Acknowledgements** link in the desktop window opens these references alongside the external services and software credits.
+
+### Variable-star photometry
+
+- **Honeycutt, R. K. (1992).** "CCD Ensemble Photometry on an Inhomogeneous Set of Exposures". *PASP*, 104, 435–440. [doi:10.1086/133015](https://doi.org/10.1086/133015)
+  JTransient's `EnsembleSolver` uses the star-magnitude plus frame-zero-point model for differential light curves. Cauchy IRLS and spatial transparency planes are project extensions.
+- **Stetson, P. B. (1996).** "On the Automatic Determination of Light-Curve Parameters for Cepheid Variables". *PASP*, 108, 851–876. [doi:10.1086/133808](https://doi.org/10.1086/133808)
+  JTransient's `VariabilityScorer` adapts the $J$ statistic to consecutive usable residuals with a magnitude-neighbour noise estimate, alongside excess scatter, when selecting variable-star candidates.
+- **Howell, S. B. (1989).** "Two-dimensional aperture photometry: Signal-to-noise ratio of point-source observations and optimal data-extraction techniques". *PASP*, 101, 616–622. [doi:10.1086/132477](https://doi.org/10.1086/132477)
+  The sky-background and finite-annulus terms inform `ApertureMeasurer`'s flux errors; JTransient also measures an empirical blank-sky correction. These are background-noise estimates, rather than the complete source-photon/read-noise CCD equation. The code also uses its own fractional-pixel apertures and seeing-based radii; it does not implement Howell's growth-curve correction.
+- **AAVSO observing guides.** [CCD/CMOS Photometry Guide](https://aavso.org/manuals/) and [VPhot User's Guide](https://www.aavso.org/sites/default/files/publications_files/VPHOT%20Users%20Guide%20V3.2.pdf).
+  Observational guidance for aperture/annulus choices and interpreting differential light curves. The VPhot guide is further reading in JTransient's variable-star documentation; SpacePixels performs its photometry in JTransient.
+
+### Astrometry and World Coordinate Systems (WCS)
+
+- **Greisen, E. W., & Calabretta, M. R. (2002).** "Representations of world coordinates in FITS". *A&A*, 395, 1061–1075. [doi:10.1051/0004-6361:20021326](https://doi.org/10.1051/0004-6361:20021326)
+  SpacePixels' `WcsCoordinateTransformer` reads reference pixels, coordinate values and CD or PC/CDELT matrices to map image pixels to intermediate coordinates.
+- **Calabretta, M. R., & Greisen, E. W. (2002).** "Representations of celestial coordinates in FITS". *A&A*, 395, 1077–1122. [doi:10.1051/0004-6361:20021327](https://doi.org/10.1051/0004-6361:20021327)
+  `WcsCoordinateTransformer` uses the TAN (gnomonic) celestial projection for sky annotations, catalogue matching and report coordinates.
+- **Shupe, D. L., et al. (2005).** "The SIP Convention for Representing Distortion in FITS Image Headers". *ADASS XIV*, ASP Conf. Ser. 347, 491–495. [Caltech author record](https://authors.library.caltech.edu/records/fqnyw-qdw79)
+  `WcsCoordinateTransformer` applies supplied SIP polynomial coefficients, with inverse iteration, in pixel/sky transformations for annotations and report coordinates. See also the [registered SIP specification](https://fits.gsfc.nasa.gov/registry/sip/SIP_distortion_v1_0.pdf).
+- **Lang, D., et al. (2010).** "Astrometry.net: Blind astrometric calibration of arbitrary astronomical images". *AJ*, 139, 1782–1800. [doi:10.1088/0004-6256/139/5/1782](https://doi.org/10.1088/0004-6256/139/5/1782)
+  The optional Nova Astrometry.net backend, called through JPlateSolve, supplies blind plate solutions used by SpacePixels.
+- **Meeus, J. (1998).** *Astronomical Algorithms*, 2nd ed., Willmann-Bell. [Publisher](https://shopatsky.com/products/astronomical-algorithms-2nd-edition)
+  The report's local sidereal-time polynomial and equatorial-to-horizontal conversion follow the conventional formulae described in this reference. Displayed Alt/Az uses UTC as an approximation to UT1, without a full apparent-place or atmospheric-refraction correction.
+
+### Catalogue and data references
+
+- **Gaia Collaboration (2016; 2023).** ["The Gaia mission", *A&A*, 595, A1](https://doi.org/10.1051/0004-6361/201629272); ["Gaia Data Release 3: Summary of the content and survey properties", *A&A*, 674, A1](https://doi.org/10.1051/0004-6361/202243940).
+  Gaia DR3 positions, proper motions, G magnitudes and BP−RP colours supply the sky catalogue, plate-solution correction and field-depth/observing-condition diagnostics. Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and Analysis Consortium](https://www.cosmos.esa.int/web/gaia/dpac/consortium), supported by national institutions through the Gaia Multilateral Agreement. See [Gaia's credit and citation guidance](https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/).
+- **Wenger, M., et al. (2000).** "The SIMBAD astronomical database". *A&AS*, 143, 9–22. [doi:10.1051/aas:2000332](https://doi.org/10.1051/aas:2000332)
+  SIMBAD supplies deep-sky and named-star entries in the sky catalogue and external object-search links in variable-star reports.
+- **Ochsenbein, F., Bauer, P., & Marcout, J. (2000).** "The VizieR database of astronomical catalogues". *A&AS*, 143, 23–32. [doi:10.1051/aas:2000169](https://doi.org/10.1051/aas:2000169)
+  VizieR hosts the Gaia DR3 and VSX tables queried by the sky-catalogue client and report lookups.
+- **AAVSO VSX (Watson et al., 2006–).** *International Variable Star Index*, [VizieR catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
+  Known-variable positions, types, periods and magnitude ranges support annotations and report catalogue comparisons. Retrieved data are recorded with the session or lookup.
+
+The viewer and report image stretch uses SpacePixels' normalized asinh **intensity** curve in `DisplayStretch`. It is separate from the differential-magnitude calculations above.
