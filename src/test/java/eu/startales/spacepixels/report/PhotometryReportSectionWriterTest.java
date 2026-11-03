@@ -202,6 +202,7 @@ public class PhotometryReportSectionWriterTest {
         flagged.contaminated = 5;
         flagged.badFlux = 2;
         flagged.skyNoiseFactor = 2.31;
+        flagged.peakRemoved = 3;
         telemetry.frames.add(clean);
         telemetry.frames.add(flagged);
         VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), Collections.emptyList(), telemetry);
@@ -214,12 +215,13 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains(">Bad Flux</th>"));
         assertTrue(html.contains(">Contaminated</th>"));
         assertTrue(html.contains("count measurements, not stars or objects"));
-        assertTrue(html.contains("<td>0</td><td>0</td><td>0</td></tr>"));
-        assertTrue(html.contains("<td>0</td><td>2</td><td>5</td></tr>"));
+        assertTrue(html.contains(">Peak Removed</th>"));
+        assertTrue(html.contains("<td>0</td><td>0</td><td>0</td><td>0</td></tr>"));
+        assertTrue(html.contains("<td>0</td><td>2</td><td>5</td><td>3</td></tr>"));
         List<String> csv = Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath());
-        assertTrue(csv.get(0).endsWith(",outliers,bad_flux,contaminated,sky_noise_factor"));
-        assertTrue(csv.get(1).endsWith(",0,0,0,"));
-        assertTrue(csv.get(2).endsWith(",0,2,5,2.310000"));
+        assertTrue(csv.get(0).endsWith(",outliers,bad_flux,contaminated,sky_noise_factor,peak_removed"));
+        assertTrue(csv.get(1).endsWith(",0,0,0,,0"));
+        assertTrue(csv.get(2).endsWith(",0,2,5,2.310000,3"));
     }
 
     @Test
@@ -254,6 +256,22 @@ public class PhotometryReportSectionWriterTest {
         String limited = PhotometryReportSectionWriter.ensembleFitHtml(t);
         assertTrue(limited, limited.contains("! Round limit (15) reached</span>, last change 3.5e-05 mag"));
         assertTrue(limited, limited.contains("2 comparison-aperture fits reached the limit"));
+    }
+
+    /** The peak-removal check reads as found, with the measurements left out, or as not found, with its counts. */
+    @Test
+    public void peakRemovalCheckShowsWhetherItWasFound() {
+        PipelineTelemetry.PhotometryTelemetry t = new PipelineTelemetry.PhotometryTelemetry();
+        t.peakCheckFadings = 435;
+        t.peakCheckConcentratedFadings = 154;
+        t.peakCheckConcentratedBrightenings = 108;
+        assertEquals("Not found: 154 of 435 brief fadings and 108 brightenings concentrated in the brightest pixel",
+                PhotometryReportSectionWriter.peakRemovalHtml(t));
+        t.peakRemovalFound = true;
+        t.peakCheckConcentratedBrightenings = 1;
+        t.measurementsPeakRemoved = 626;
+        String found = PhotometryReportSectionWriter.peakRemovalHtml(t);
+        assertTrue(found, found.contains("! Found</span>: 154 of 435 brief fadings and 1 brightening concentrated in the brightest pixel; 626 measurements left out"));
     }
 
     /** The sky-noise factor reads as a multiplier with its frame range and names frames that used the median. */

@@ -302,11 +302,13 @@ public final class PhotometryReportSectionWriter {
         report.println(frameFunnelHtml(t));
         report.println(apertureChoicesHtml(t));
         long flagged = t.measurementsSaturated + t.measurementsNonlinear + t.measurementsCrossing + t.measurementsEdgeOrVoid
-                + t.measurementsOutlier + t.measurementsContaminated;
+                + t.measurementsOutlier + t.measurementsContaminated + t.measurementsPeakRemoved;
         if (flagged > 0) {
             report.println("<div class='astro-note'>Measurements flagged: " + t.measurementsSaturated + " saturated, " + t.measurementsNonlinear + " nonlinear, "
                     + t.measurementsCrossing + " moving-object crossings, " + t.measurementsEdgeOrVoid + " at an edge or in a void, "
-                    + t.measurementsOutlier + " isolated outliers, " + t.measurementsContaminated + " shape contamination. These measurements are omitted from the ensemble.</div>");
+                    + t.measurementsOutlier + " isolated outliers, " + t.measurementsContaminated + " shape contamination"
+                    + (t.measurementsPeakRemoved > 0 ? ", " + t.measurementsPeakRemoved + " star peaks removed before registration" : "")
+                    + ". These measurements are omitted from the ensemble.</div>");
         }
         report.println("<details class='foldable-streak-details'><summary>All readiness diagnostics</summary><div class='foldable-streak-body'>");
         report.println("<p class='compact-note'>Hover a row for the definition of that diagnostic.</p>");
@@ -381,6 +383,13 @@ public final class PhotometryReportSectionWriter {
                 "Measurements omitted as a single frame far from the star's other measurements, with no neighbouring frame to support it. A change that lasts several frames is kept."));
         report.println(configItem("Measurements flagged: shape contamination", String.valueOf(t.measurementsContaminated),
                 "Measurements omitted because the stellar profile in that frame does not match the star's usual profile, often from a hot pixel or a cosmic ray."));
+        if (t.peakCheckFadings > 0) {
+            report.println(configItem("Star peaks removed before registration", peakRemovalHtml(t),
+                    "Hot-pixel removal can take the peak pixel of an undersampled star for a hot pixel and remove its light before registration. "
+                            + "The light curve then fades for one pointing, and the lost light sits in the brightest pixel; a real fading dims the whole star. "
+                            + "Noise, cosmic rays and hot pixels make such one-pixel changes in both directions, so the session counts as affected only when fadings of that kind far outnumber brightenings. "
+                            + "Only then are those fadings left out of the variability scores; they stay in the light curves as flagged points."));
+        }
         report.println(configItem("Photometry processing time", String.format(Locale.US, "%.2f s", t.processingTimeMs / 1000.0),
                 "Time taken by the variable-star photometry stage."));
         report.println("</div>");
@@ -510,6 +519,17 @@ public final class PhotometryReportSectionWriter {
                     ? " frame with too little blank sky uses the median" : " frames with too little blank sky use the median");
         }
         return text;
+    }
+
+    /** The peak-removal check: found or not, with the brief fadings and brightenings concentrated in the brightest pixel. */
+    static String peakRemovalHtml(PipelineTelemetry.PhotometryTelemetry t) {
+        String counts = t.peakCheckConcentratedFadings + " of " + t.peakCheckFadings + " brief fadings and "
+                + t.peakCheckConcentratedBrightenings + (t.peakCheckConcentratedBrightenings == 1 ? " brightening" : " brightenings")
+                + " concentrated in the brightest pixel";
+        return t.peakRemovalFound
+                ? "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! Found</span>: " + counts + "; "
+                        + t.measurementsPeakRemoved + " measurements left out"
+                : "Not found: " + counts;
     }
 
     /** An aperture's radius over the frames used, in pixels: one value, or the smallest and largest. */
@@ -1600,6 +1620,7 @@ public final class PhotometryReportSectionWriter {
                 + th("Outliers", "Measurements flagged as isolated outliers and omitted from the ensemble.")
                 + th("Bad Flux", "Measurements with no positive flux in the main aperture, so no magnitude, omitted from the ensemble.")
                 + th("Contaminated", "Measurements whose star shape departed strongly from that star's usual shape, as a hot pixel, cosmic ray or faint passing object in the aperture causes, omitted from the ensemble.")
+                + th("Peak Removed", "Measurements of brief fadings whose lost light sits in the star's brightest pixel, in a session where the star peaks were removed before registration, omitted from the variability scores.")
                 + "</tr></thead><tbody>");
         for (PipelineTelemetry.PhotometryFrameStat f : t.frames) {
             String status = f.used ? "Used" : "Excluded: " + ReportFormat.escapeHtml(f.exclusionReason);
@@ -1615,7 +1636,7 @@ public final class PhotometryReportSectionWriter {
                     + "<td>" + formatMag(f.responseSlope, 4) + "</td><td>" + formatMag(f.responseSlopeError, 4) + "</td>"
                     + "<td>" + f.starsInEnsemble + " / " + f.starsMeasured + "</td>"
                     + "<td>" + f.saturated + "</td><td>" + f.nonlinear + "</td><td>" + f.crossing + "</td><td>" + f.edgeOrVoid + "</td><td>" + f.outliers + "</td>"
-                    + "<td>" + f.badFlux + "</td><td>" + f.contaminated + "</td></tr>");
+                    + "<td>" + f.badFlux + "</td><td>" + f.contaminated + "</td><td>" + f.peakRemoved + "</td></tr>");
         }
         report.println("</tbody></table></div></div>");
     }
@@ -1658,7 +1679,7 @@ public final class PhotometryReportSectionWriter {
             PrintWriter csv = output.writer();
             csv.println("frame_index,filename,julian_date,used,exclusion_reason,fwhm,aperture_radius,sky,offset_x,offset_y,registration_spread,"
                     + "sky_at_zero_fraction,shape_status,linear_limit_mag,linear_range_mag,concentration_reference,zero_point,plane_x,plane_y,"
-                    + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux,contaminated,sky_noise_factor");
+                    + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux,contaminated,sky_noise_factor,peak_removed");
             for (PipelineTelemetry.PhotometryFrameStat f : analysis.frames) {
                 csv.println((f.frameIndex + 1) + "," + csvText(f.filename) + "," + csvNum(f.julianDate) + "," + f.used + "," + csvText(f.exclusionReason) + ","
                         + csvNum(f.fwhm) + "," + csvNum(f.apertureRadius) + "," + csvNum(f.skyMedian) + "," + csvNum(f.registrationOffsetX) + ","
@@ -1666,7 +1687,7 @@ public final class PhotometryReportSectionWriter {
                         + f.shapeLinearityStatus + "," + csvNum(f.linearLimitMag) + "," + csvNum(f.linearRangeMag) + "," + csvNum(f.concentrationReference) + ","
                         + csvNum(f.zeroPoint) + "," + csvNum(f.planeX) + "," + csvNum(f.planeY) + "," + f.responseStatus + ","
                         + csvNum(f.responseSlope) + "," + csvNum(f.responseSlopeError) + "," + f.starsInEnsemble + "," + f.starsMeasured + ","
-                        + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux + "," + f.contaminated + "," + csvNum(f.skyNoiseFactor));
+                        + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux + "," + f.contaminated + "," + csvNum(f.skyNoiseFactor) + "," + f.peakRemoved);
             }
             output.commit();
         }
@@ -1704,6 +1725,7 @@ public final class PhotometryReportSectionWriter {
         if ((flags & PhotometryFlags.FRAME_EXCLUDED) != 0) plain.add("frame excluded");
         if ((flags & PhotometryFlags.BAD_FLUX) != 0) plain.add("brightness could not be measured");
         if ((flags & PhotometryFlags.CONTAMINATED) != 0) plain.add("shape contamination");
+        if ((flags & PhotometryFlags.PEAK_REMOVED) != 0) plain.add("star peak removed before registration");
         return plain.isEmpty() ? "excluded" : String.join("; ", plain);
     }
 
