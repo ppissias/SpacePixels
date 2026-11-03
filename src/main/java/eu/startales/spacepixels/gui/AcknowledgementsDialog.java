@@ -127,13 +127,13 @@ final class AcknowledgementsDialog extends JDialog {
         return "<h3>Test Datasets & Observers</h3>"
                 + "<p>SpacePixels relies on real-world astrophotography datasets to validate transient and moving-target detection, "
                 + "calibrate Auto-Tune algorithms, verify variable-star photometry, and refine star masking.</p>"
-                + "<p>Many thanks to <b>Klangwolke at Cloudynights</b>, <b>Austral Wiki at Cloudynights</b>, "
-                + "<b>Duncan Warren</b>, <b>TheStarsabove at Cloudynights</b>, and "
-                + "<a href='https://github.com/chvvkumar'><b>Kumar</b></a> "
+                + "<p>Many thanks to <b>Klangwolke at Cloudynights</b>, "
+                + "<b>Duncan Warren</b>, <b>TheStarsabove at Cloudynights</b>,  "
+                + "<a href='https://github.com/chvvkumar'><b>Kumar</b></a> and <b>Austral Wiki at Cloudynights</b> "
                 + "for providing some of the test data used by SpacePixels.</p>"
                 + "<p class='muted'>If you have sub-exposure sequences of moving objects (asteroids, comets), optical transients, "
                 + "or variable stars that you would like to contribute for testing and algorithm development, please reach out via "
-                + "the <a href='https://github.com/ppissias/SpacePixels'>SpacePixels GitHub repository</a>.</p>";
+                + "the <a href='https://github.com/ppissias/SpacePixels'>SpacePixels GitHub repository</a> or email me at petrospis@gmail.com.</p>";
     }
 
     /** Resolves a bundled logo for use by Swing's HTML image renderer. */
