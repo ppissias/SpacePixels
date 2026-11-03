@@ -201,6 +201,7 @@ public class PhotometryReportSectionWriterTest {
         flagged.saturated = 5;
         flagged.contaminated = 5;
         flagged.badFlux = 2;
+        flagged.skyNoiseFactor = 2.31;
         telemetry.frames.add(clean);
         telemetry.frames.add(flagged);
         VariableStarAnalysis analysis = new VariableStarAnalysis(new PhotometricReadiness(), Collections.emptyList(), telemetry);
@@ -216,9 +217,9 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(html.contains("<td>0</td><td>0</td><td>0</td></tr>"));
         assertTrue(html.contains("<td>0</td><td>2</td><td>5</td></tr>"));
         List<String> csv = Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath());
-        assertTrue(csv.get(0).endsWith(",outliers,bad_flux,contaminated"));
-        assertTrue(csv.get(1).endsWith(",0,0,0"));
-        assertTrue(csv.get(2).endsWith(",0,2,5"));
+        assertTrue(csv.get(0).endsWith(",outliers,bad_flux,contaminated,sky_noise_factor"));
+        assertTrue(csv.get(1).endsWith(",0,0,0,"));
+        assertTrue(csv.get(2).endsWith(",0,2,5,2.310000"));
     }
 
     @Test
@@ -253,6 +254,20 @@ public class PhotometryReportSectionWriterTest {
         String limited = PhotometryReportSectionWriter.ensembleFitHtml(t);
         assertTrue(limited, limited.contains("! Round limit (15) reached</span>, last change 3.5e-05 mag"));
         assertTrue(limited, limited.contains("2 comparison-aperture fits reached the limit"));
+    }
+
+    /** The sky-noise factor reads as a multiplier with its frame range and names frames that used the median. */
+    @Test
+    public void skyNoiseFactorShowsTheMedianAndRange() {
+        PipelineTelemetry.PhotometryTelemetry t = new PipelineTelemetry.PhotometryTelemetry();
+        t.skyNoiseFactorMedian = 2.314;
+        t.skyNoiseFactorMin = 2.1;
+        t.skyNoiseFactorMax = 2.554;
+        assertEquals("&times;2.31 (frames 2.10&ndash;2.55)", PhotometryReportSectionWriter.skyNoiseFactorHtml(t));
+        t.skyNoiseFactorMin = 2.31;
+        t.skyNoiseFactorMax = 2.31;
+        t.framesWithoutSkyNoiseFactor = 1;
+        assertEquals("&times;2.31; 1 frame with too little blank sky uses the median", PhotometryReportSectionWriter.skyNoiseFactorHtml(t));
     }
 
     /** The aperture summary names stars kept on the main aperture only when there are any. */

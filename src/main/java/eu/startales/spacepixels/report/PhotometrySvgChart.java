@@ -91,7 +91,7 @@ final class PhotometrySvgChart {
 
     PhotometrySvgChart interactive() { interactive = true; return this; }
 
-    /** Sky-noise errors supplied by the engine; these are lower bounds, not empirical total errors. */
+    /** Sky-noise errors supplied by the engine, including shared pixel noise; lower bounds, not empirical total errors. */
     void errorBars(double[] xs, double[] ys, double[] errors, String color) {
         double[] low = new double[ys.length], high = new double[ys.length];
         for (int i = 0; i < ys.length; i++) {

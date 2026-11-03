@@ -339,6 +339,10 @@ public final class PhotometryReportSectionWriter {
             report.println(configItem("Comparison-star fit", ensembleFitHtml(t),
                     "The frame corrections (transparency offset and brightness gradient across the field) are fitted to the comparison stars in repeated rounds that down-weight variable stars. The fit is finished when the predicted correction changes by less than 0.00001 mag between rounds. A fit that reaches the round limit keeps its last result; this does not change the verdict."));
         }
+        if (Double.isFinite(t.skyNoiseFactorMedian)) {
+            report.println(configItem("Sky-noise factor (main aperture)", skyNoiseFactorHtml(t),
+                    "How much noisier an aperture on blank sky is than independent pixels would make it, measured on every frame. Registration interpolates the frames, so neighbouring pixels share noise. The error bars and mag_error include each frame's factor for the measuring aperture. They still leave out the star's own photon noise and the atmosphere, so they remain a lower bound."));
+        }
         report.println(configItem("Session FWHM from source extraction (px)", formatMag(t.sessionFwhm, 2) + " px",
                 "Full width at half maximum, a measure of the width of stellar images, from the source extraction used for detection."));
         report.println(configItem("Saturation level", formatMag(t.saturationLevel, 0) + " ADU",
@@ -493,6 +497,19 @@ public final class PhotometryReportSectionWriter {
                     + " comparison-aperture fit" + (t.apertureSolvesAtIterationLimit == 1 ? "" : "s") + " reached the limit</span>";
         }
         return main;
+    }
+
+    /** The main aperture's sky-noise factor: median and range over the frames, and frames that used the median. */
+    static String skyNoiseFactorHtml(PipelineTelemetry.PhotometryTelemetry t) {
+        String median = formatMag(t.skyNoiseFactorMedian, 2);
+        String from = formatMag(t.skyNoiseFactorMin, 2);
+        String to = formatMag(t.skyNoiseFactorMax, 2);
+        String text = "&times;" + median + (from.equals(to) ? "" : " (frames " + from + "&ndash;" + to + ")");
+        if (t.framesWithoutSkyNoiseFactor > 0) {
+            text += "; " + t.framesWithoutSkyNoiseFactor + (t.framesWithoutSkyNoiseFactor == 1
+                    ? " frame with too little blank sky uses the median" : " frames with too little blank sky use the median");
+        }
+        return text;
     }
 
     /** An aperture's radius over the frames used, in pixels: one value, or the smallest and largest. */
@@ -1391,7 +1408,7 @@ public final class PhotometryReportSectionWriter {
         chart.errorBars(x, used, star.magError, color);
         chart.points(x, used, color, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
         chart.points(x, flagged, PhotometrySvgChart.CONTEXT_GRAY, 4, PhotometrySvgChart.Marker.HOLLOW_CIRCLE, flaggedTips);
-        return "<div>" + chart.render() + "<p class='compact-note'>Error bars show the measuring aperture's estimated sky-noise uncertainty, a lower bound on total uncertainty. Zoom in to inspect points; drag to pan and Reset to see the full curve.</p></div>";
+        return "<div>" + chart.render() + "<p class='compact-note'>Error bars show the measuring aperture's estimated sky-noise uncertainty, including the noise neighbouring pixels share (measured on blank sky). They are a lower bound on the total uncertainty: the star's own photon noise and the atmosphere are not included. Zoom in to inspect points; drag to pan and Reset to see the full curve.</p></div>";
     }
 
     /**
@@ -1641,7 +1658,7 @@ public final class PhotometryReportSectionWriter {
             PrintWriter csv = output.writer();
             csv.println("frame_index,filename,julian_date,used,exclusion_reason,fwhm,aperture_radius,sky,offset_x,offset_y,registration_spread,"
                     + "sky_at_zero_fraction,shape_status,linear_limit_mag,linear_range_mag,concentration_reference,zero_point,plane_x,plane_y,"
-                    + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux,contaminated");
+                    + "response_status,response_slope,response_slope_error,stars_in_ensemble,stars_measured,saturated,nonlinear,crossing,edge_or_void,outliers,bad_flux,contaminated,sky_noise_factor");
             for (PipelineTelemetry.PhotometryFrameStat f : analysis.frames) {
                 csv.println((f.frameIndex + 1) + "," + csvText(f.filename) + "," + csvNum(f.julianDate) + "," + f.used + "," + csvText(f.exclusionReason) + ","
                         + csvNum(f.fwhm) + "," + csvNum(f.apertureRadius) + "," + csvNum(f.skyMedian) + "," + csvNum(f.registrationOffsetX) + ","
@@ -1649,7 +1666,7 @@ public final class PhotometryReportSectionWriter {
                         + f.shapeLinearityStatus + "," + csvNum(f.linearLimitMag) + "," + csvNum(f.linearRangeMag) + "," + csvNum(f.concentrationReference) + ","
                         + csvNum(f.zeroPoint) + "," + csvNum(f.planeX) + "," + csvNum(f.planeY) + "," + f.responseStatus + ","
                         + csvNum(f.responseSlope) + "," + csvNum(f.responseSlopeError) + "," + f.starsInEnsemble + "," + f.starsMeasured + ","
-                        + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux + "," + f.contaminated);
+                        + f.saturated + "," + f.nonlinear + "," + f.crossing + "," + f.edgeOrVoid + "," + f.outliers + "," + f.badFlux + "," + f.contaminated + "," + csvNum(f.skyNoiseFactor));
             }
             output.commit();
         }
