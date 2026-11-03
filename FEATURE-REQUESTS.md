@@ -252,3 +252,77 @@ With fetched known asteroids, a candidate that follows a prediction within its u
 **Viewers.** A **Show faint movers** layer in Blink and Preview Frame draws each candidate's path and its position in the current frame.
 
 **Depends on** the JTransient SM-F2 engine stage and its result fields. Until they exist, nothing changes in SpacePixels.
+
+### Handoff notes for the implementation (2026-11-03)
+
+**Engine state.** JTransient commit 4930869 (not pushed; SpacePixels builds against the local JTransient checkout) adds the stage. The method, checks and measurements are in [JTransient ALGORITHM.md section 21](../JTransient/ALGORITHM.md#faint-mover-search), the settings in [CONFIG.md section 9](../JTransient/CONFIG.md#9-faint-mover-search-experimental), and the record of design changes and open points in [SM-F2, Implementation](../JTransient/FEATURE-REQUESTS.md#implementation-2026-11-03).
+
+**Settings** (`DetectionConfig`; `DetectionConfigRules.Stage.FAINT_MOVERS`, active only when the switch is on):
+
+| Field | Default | Domain | Notes |
+|---|---|---|---|
+| `enableFaintMoverSearch` | false | boolean | Needs capture times; only the largest session (no gap over 120 min) with at least 8 kept frames is searched. |
+| `faintMoverMinDisplacementFwhm` | 2.0 | positive | Slowest motion as movement over the session in FWHM. |
+| `faintMoverMaxSpeedPixelsPerMinute` | 1.0 | positive | Stored in px/min; show arcsec/min with a plate solution. Cost grows with its square. |
+| `faintMoverMinScore` | 8.0 | positive | About 0.5 false candidates per session at 8 in shuffled-time controls. |
+| `faintMoverMaxSeconds` | 600.0 | positive | Time limit; the search then reports `truncated`. |
+
+SpacePixels does not bind them yet. The fields are hidden in the panel, but profiles, `detection_config.json` and the report's settings list already contain them. `SharedDetectionRulesTest` covers their numeric validation generically. The patterns to follow are `StreakDetectionSettings` / `VariableStarsSettings` (`DetectionSetting` definitions) and the **Analyses in This Run** listing used by variable-star photometry.
+
+**Results to present.**
+- `PipelineResult.faintMoverCandidates`: strongest first; empty when off or skipped. Each `FaintMoverCandidate` has:
+  - `x`, `y` at `referenceTimeMillis` (the mean mid-exposure of the searched frames), and `positionAt(timeMillis)` for any frame's mid-exposure time (timestamp + exposure / 2);
+  - `vx`, `vy` in px/min, and `speedPixelsPerMinute()`;
+  - `score`, plus `firstHalfScore` and `secondHalfScore` (NaN when a half was mostly masked and could not be tested);
+  - `stationaryScore`, and `cameraScore` (negative infinity without frame registrations);
+  - `cutout`: 31 x 31 floats, the PSF-filtered stack along the motion in score units, centred on the position, `[row][column]`.
+- `PipelineTelemetry.faintMoverSearchTelemetry` (`FaintMoverSearchTelemetry`), null when off. It has:
+  - `skippedReason`, a sentence to show as is; the other fields are then partly empty;
+  - `frames` and `framesOutsideSession`, the search domain (`sessionMinutes`, `fwhmPixels`, speeds, grid steps, `coarseMotions`), `tiles`, `tilesSearched`, `truncated`, `searchedPixels` and `elapsedMs`;
+  - the counts removed by each check (`belowScore`, `rejectedSplitHalf`, `rejectedStationary`, `followingCamera`, `duplicates`, `matchedTracks`, `nearStronger`) and `candidates`. The engine's text telemetry already prints a section.
+- **Stage timing:** `PipelineTelemetry.Stage.FAINT_MOVER_SEARCH` appears in the stage table when the search ran.
+- **Progress:** messages at 92 % ("Searching for faint movers: tile i of N..."). It is the longest stage, so the progress display should show its tile count.
+
+**Run-time estimate.** `FaintMoverSearch.Plan.estimatedWork` = coarse motions x frames x data-area pixels. It is about 7e-11 s per unit on a 16-core desktop, so calibrate per machine or show a range. The plan needs the engine's inputs, so before a run the application must approximate it:
+- frames and capture times from the headers;
+- the step = FWHM / the largest time from the session's mean mid-exposure, with the last measured FWHM or about 2.5 px;
+- motions = pi x (max speed / step)^2 less the slow disc;
+- pixels = the image size.
+
+Measured times:
+
+| Session | Frames | Motions | Search time |
+|---|---|---|---|
+| Klangwolke-2 (60 Mpx) | 28 | 720 | 70-90 s |
+| m101-reg | 106 | 10,116 | 313 s |
+| m81-reg | 97 | 5,700 | 201 s |
+| M81 Kumar | 39 | 39,340 | 878 s, before the time-limit fix |
+
+The search also needs heap: the frames are already in memory, plus about (512 + 2 x margin)^2 x (4 x frames + 12) bytes per worker.
+
+**Known-object labels** ([F22](#f22-known-asteroids-and-comets-in-the-field)), as a comparison only. Compare a fetched object's predicted position at `referenceTimeMillis` and its motion over the session with the candidate's: matches on Klangwolke-2 were within about 2 px and 0.05 px/min, so use about 2 FWHM and 0.1 px/min. Note the fetch's magnitude limit, because unmatched candidates fainter than it cannot be called unknown.
+
+**Reference output for checking the presentation:** Klangwolke-2, shipped profile with the search on, 11 candidates:
+
+| Score | Position | Motion (px/min) | Match |
+|---|---|---|---|
+| 47.5 | (2083.9, 3289.3) | (-0.132, -0.148) | 4767 Sutoku (not tracked by this profile) |
+| 22.7 | (5892.4, 3630.7) | (-0.296, -0.164) | 74326 |
+| 21.4 | (5180.1, 5829.2) | (-0.181, -0.181) | 25729 |
+| 15.3 | (2512.4, 3037.0) | (-0.148, 0.000) | none; moves visibly, likely real |
+| 14.5 | (4768.3, 6076.5) | (-0.230, -0.148) | 43283 Robinbock |
+| 13.9 | (3064.3, 2122.2) | (-0.197, -0.312) | 77716 |
+| 13.5 | (606.4, 2948.3) | (-0.263, -0.230) | 26239 |
+| 9.9 | (5962.1, 1602.2) | (-0.329, -0.197) | none; plausible |
+| 9.7 | (5273.3, 400.4) | (-0.362, -0.033) | none; probably a bright-star residual |
+| 8.5 | (7146.2, 5506.4) | (-0.378, +0.049) | none; uncertain |
+| 8.1 | (5281.9, 3404.9) | (-0.066, -0.115) | none; plausible |
+
+611 Valeria is recognised as tracked (not reported). With the search off, all 18 reference datasets give byte-identical reports apart from the five new settings in the settings list.
+
+**Not yet measured or checked.**
+- UG 6524 was not measured.
+- The time-limit fix (each tile checks the limit while it runs) is unit-tested but has not been rerun on M81 Kumar.
+- M81 Kumar's 6 candidates were not examined, and it has no shuffled-time control yet.
+- A bright-star residual candidate remains, because temporal-variance weighting is not implemented.
+
