@@ -752,6 +752,12 @@ public class ApplicationWindow {
         manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
         manualLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+        JButton acknowledgementsLink = AccessibleControls.link("Acknowledgements", "Open credits and acknowledgements",
+                () -> AcknowledgementsDialog.show(frmIpodImage));
+        acknowledgementsLink.setForeground(UiStyle.linkColor());
+        acknowledgementsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        acknowledgementsLink.setToolTipText("Contributors, external services, catalogues and software used by SpacePixels.");
+        acknowledgementsLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.BOLD));
         updateNoticeLabel.setForeground(UIManager.getColor("Button.default.foreground"));
         updateNoticeLabel.setBackground(UIManager.getColor("Button.default.background"));
@@ -763,6 +769,7 @@ public class ApplicationWindow {
         JPanel links = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         links.setOpaque(false);
         links.add(updateNoticeLabel);
+        links.add(acknowledgementsLink);
         links.add(manualLink);
         JPanel trailing = new JPanel(new GridBagLayout());
         trailing.setOpaque(false);
