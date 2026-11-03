@@ -450,7 +450,7 @@ public final class PhotometryReportSectionWriter {
      * The measuring aperture of each brightness range, merged where neighbouring ranges share it, with the scatter
      * reduction against the main aperture.
      */
-    private static String apertureChoicesHtml(PipelineTelemetry.PhotometryTelemetry t) {
+    static String apertureChoicesHtml(PipelineTelemetry.PhotometryTelemetry t) {
         if (t.apertureChoices.isEmpty()) {
             return "";
         }
@@ -472,8 +472,11 @@ public final class PhotometryReportSectionWriter {
                     best < 0 ? String.format(Locale.US, ", up to %.0f%% less scatter", -100 * best) : ""));
             start = k;
         }
+        String fallbacks = t.apertureMainFallbacks <= 0 ? ""
+                : " " + t.apertureMainFallbacks + (t.apertureMainFallbacks == 1 ? " star keeps" : " stars keep")
+                + " the main aperture because the chosen one lacks some of " + (t.apertureMainFallbacks == 1 ? "its" : "their") + " measurements.";
         return "<div class='astro-note'>Measuring aperture by brightness (instrumental mag), chosen from the scatter of the constant stars: "
-                + String.join("; ", parts) + ". Radii follow each frame's measured FWHM.</div>";
+                + String.join("; ", parts) + ". Radii follow each frame's measured FWHM." + fallbacks + "</div>";
     }
 
     /**

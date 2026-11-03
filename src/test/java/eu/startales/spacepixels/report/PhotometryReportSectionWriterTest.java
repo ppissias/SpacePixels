@@ -255,6 +255,24 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(limited, limited.contains("2 comparison-aperture fits reached the limit"));
     }
 
+    /** The aperture summary names stars kept on the main aperture only when there are any. */
+    @Test
+    public void apertureSummaryMentionsStarsKeptOnTheMainAperture() {
+        PipelineTelemetry.PhotometryTelemetry t = new PipelineTelemetry.PhotometryTelemetry();
+        PipelineTelemetry.PhotometryApertureChoice choice = new PipelineTelemetry.PhotometryApertureChoice();
+        choice.magFrom = -12;
+        choice.magTo = -10;
+        choice.fwhmFactor = 1.0;
+        choice.minRadiusPixels = 1.73;
+        choice.maxRadiusPixels = 2.41;
+        t.apertureChoices.add(choice);
+        String none = PhotometryReportSectionWriter.apertureChoicesHtml(t);
+        assertTrue(none, none.contains("(1.7&ndash;2.4 px)"));
+        assertFalse(none, none.contains("main aperture because"));
+        t.apertureMainFallbacks = 3;
+        assertTrue(PhotometryReportSectionWriter.apertureChoicesHtml(t).contains("3 stars keep the main aperture because the chosen one lacks some of their measurements."));
+    }
+
     @Test
     public void apertureRadiusShowsOneValueOrTheSpanOverTheFrames() {
         assertEquals("2.0 px", PhotometryReportSectionWriter.radiusRange(2.0, 2.04));
