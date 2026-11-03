@@ -80,8 +80,8 @@ public final class VariableStarsSettings {
             true, Double.class, config -> config.variableMinSplitHalfCorrelation,
             (config, value) -> config.variableMinSplitHalfCorrelation = value);
     public static final DetectionSetting<Double> VARIABLE_MAX_APERTURE_AMPLITUDE_DIFFERENCE = new DetectionSetting<>(
-            "variableMaxApertureAmplitudeDifference", "Max Aperture Amplitude Difference", "",
-            "Amplitudes measured with small and large apertures may differ by at most this fraction. Rejects neighbour leakage and seeing effects.",
+            "variableMaxApertureAmplitudeDifference", "Max Aperture Difference", "",
+            "The light curves measured with the small (1.0 x FWHM) and large (2.0 x FWHM) apertures may differ through time by at most this share of the variation; a larger difference rejects the candidate only when it is also beyond twice its uncertainty.<br>Rejects light leaking from neighbours, seeing effects and apertures that move in opposite directions.",
             true, Double.class, config -> config.variableMaxApertureAmplitudeDifference,
             (config, value) -> config.variableMaxApertureAmplitudeDifference = value);
     public static final DetectionSetting<Double> VARIABLE_MAX_SYSTEMATICS_CORRELATION = new DetectionSetting<>(

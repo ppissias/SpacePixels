@@ -71,7 +71,7 @@ public final class PhotometryReportSectionWriter {
             case "SPLIT_HALF":
                 return "Checks agreement between the two sequences formed by pairing consecutive usable measurements into non-overlapping pairs.";
             case "APERTURE":
-                return "Compares amplitudes measured with small and large photometric apertures. A discrepancy can indicate contamination or other aperture-dependent effects.";
+                return "Checks that the small and large photometric apertures show the same pattern through time. A difference can indicate light from a neighbour, contamination or other aperture-dependent effects.";
             case "SYSTEMATICS":
                 return "Checks for associations with transparency, stellar-image width, sky background, and registration offsets.";
             case "LOCAL":
@@ -111,8 +111,8 @@ public final class PhotometryReportSectionWriter {
                 return failed ? "The paired measurement sequences show insufficient agreement"
                         : "The paired measurement sequences agree sufficiently";
             case "APERTURE":
-                return failed ? "Amplitudes differ by more than the allowed tolerance"
-                        : "Amplitudes agree within the allowed tolerance";
+                return failed ? "The small and large apertures differ in their pattern by more than the allowed share and their uncertainty"
+                        : "The small and large apertures show the same pattern within the allowed share or their uncertainty";
             case "SYSTEMATICS":
                 return failed ? "The measured variation exceeds the allowed association with one or more monitored frame properties"
                         : "Associations with the monitored frame properties remain within the allowed limits";
@@ -856,8 +856,8 @@ public final class PhotometryReportSectionWriter {
                 "Time between the first and last usable measurements."));
         report.println(compactMetric(formatMag(star.splitHalfCorrelation, 2), "Paired-sequence correlation (r)",
                 "Correlation between the first and second points of consecutive, non-overlapping pairs of usable measurements. This is the SPLIT_HALF statistic. White noise is near zero; a change spanning several frames is high."));
-        report.println(compactMetric(formatMag(star.apertureAmplitudeDifference, 2), "Aperture amplitude difference",
-                "Absolute difference between the small-aperture and large-aperture amplitudes, divided by the candidate amplitude. This is a fraction of the amplitude, not a difference in magnitudes. A discrepancy can indicate contamination or other aperture-dependent effects."));
+        report.println(compactMetric(formatMag(star.aperturePatternDifference, 2) + " &plusmn; " + formatMag(star.aperturePatternDifferenceError, 2), "Aperture pattern difference",
+                "Share of the light curve's pattern by which the small (1.0 x FWHM) and large (2.0 x FWHM) apertures differ through time, with its uncertainty: 0 when they agree, -2 when they move in opposite directions, -0.5 when the large aperture shows half the variation. The APERTURE check fails when it is beyond the allowed share and twice its uncertainty."));
         report.println(compactMetric(formatMag(star.maxSystematicsCorrelation, 2)
                 + (star.maxSystematicsSource != null ? " <span style='font-size:10px; color:#999;'>" + ReportFormat.escapeHtml(star.maxSystematicsSource) + "</span>" : ""),
                 "Maximum systematics correlation (r)",
