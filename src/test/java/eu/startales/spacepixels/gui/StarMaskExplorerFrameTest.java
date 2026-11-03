@@ -4,9 +4,12 @@ import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Test;
 
 import java.awt.Color;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.image.BufferedImage;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class StarMaskExplorerFrameTest {
 
@@ -59,5 +62,28 @@ public class StarMaskExplorerFrameTest {
         assertEquals(0, FrameView.levelFor(0.6));
         assertEquals(1, FrameView.levelFor(0.5));
         assertEquals(3, FrameView.levelFor(0.11));
+    }
+
+    @Test
+    public void mouseWheelAndDoubleClickZoomPictureWithoutFrame() {
+        FrameView view = new FrameView();
+        view.setSize(400, 300);
+        view.showPicture(new BufferedImage(800, 600, BufferedImage.TYPE_INT_RGB));
+        assertEquals(50.0, view.zoomPercent(), 1e-8);
+
+        view.dispatchEvent(new MouseWheelEvent(
+                view, MouseEvent.MOUSE_WHEEL, System.currentTimeMillis(), 0,
+                200, 150, 0, false, MouseWheelEvent.WHEEL_UNIT_SCROLL, 1, -1));
+        assertTrue(view.zoomPercent() > 50.0);
+
+        view.dispatchEvent(new MouseEvent(
+                view, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                200, 150, 2, false));
+        assertEquals(50.0, view.zoomPercent(), 1e-8);
+
+        view.dispatchEvent(new MouseEvent(
+                view, MouseEvent.MOUSE_CLICKED, System.currentTimeMillis(), 0,
+                200, 150, 2, false));
+        assertEquals(100.0, view.zoomPercent(), 1e-8);
     }
 }

@@ -558,11 +558,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     /** Fraction of the frame width under this screen column. */
     private double frameX(int screenX, double scale) {
-        return (screenX - left(scale)) / (scale * frame.getWidth());
+        return (screenX - left(scale)) / (scale * shownWidth());
     }
 
     private double frameY(int screenY, double scale) {
-        return (screenY - top(scale)) / (scale * frame.getHeight());
+        return (screenY - top(scale)) / (scale * shownHeight());
     }
 
     /** Screen position of the frame's left edge: centred when it fits, else set by the centre. */
