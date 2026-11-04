@@ -10,11 +10,8 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
 | [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Planned for the next release; not implemented |
 | [F01](#f01-slow-mover-and-per-frame-tuning-relation) | Slow-mover and per-frame tuning relation | Proposed experiment |
-| [F22](#f22-known-asteroids-and-comets-in-the-field) | Known asteroids and comets in the field | Fetch/viewer overlay and FM candidate comparisons implemented; general report table, ordinary-track comparison and clock check remain open |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
-| [F27](#f27-associate-local-rescue-candidates-with-moving-tracks) | Associate local rescue candidates with moving tracks | Investigation requested: the Lagoon example shows one mover split between a track and two local rescue candidates |
-| [F28](#f28-faint-mover-live-preview-and-phase-progress) | Faint-mover live preview and phase progress | Requested: refresh the processing display roughly every three seconds and show progress within the faint-mover phase |
 
 The other investigations from 2026-11-02 are owned by JTransient: [remaining deferred photometry work](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [readiness policy](../JTransient/FEATURE-REQUESTS.md#vs-9-selected-stars-and-the-linearity-check-minimum), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -93,25 +90,6 @@ A graphical colour editor is outside this proposal. Still to decide: whether cus
 ## F01. Slow-mover and per-frame tuning relation
 
 Proposed investigation only. Compare the maximum-stack slow-mover thresholds with the tuned per-frame thresholds on the same real datasets before changing defaults. Measure recovery, false positives and run time. A maximum stack's sigma is not a single-frame sigma; the current distinction is described in JTransient's [algorithm reference](../JTransient/ALGORITHM.md). This remains a comparison of existing behaviour; any algorithm or default change needs a separate maintainer decision.
-
-## F22. Known asteroids and comets in the field
-
-**Request (2026-11-02).** Like the stellar catalogue, obtain the known asteroids and comets expected within the field over the observing sequence, and show their changing positions in Blink and Inspect.
-
-**Decisions (made, 2026-11-02):**
-
-- "I propose to have yet another button, for this data to be fetched and then displayed."
-- On what is sent: "The command should send what it needs in order to get the information, no problem with sending also the coordinates of the observer, this rule I had was more for exporting data I pushish as examples."
-- JPL only (SB-Ident and Horizons), with SkyBoT kept as a report link, and a first version with the viewer overlay only: agreed.
-- On the magnitude limit: "I propose to have this configurable, like we do for the sky catalogue and propose to have the same magnitude for all objects."
-
-**Implemented scope (2026-11-02/04).** **Fetch Asteroids and Comets**, its configurable magnitude limit and the asteroid/comet layer of **Annotate** are described in [MANUAL.md](MANUAL.md#known-asteroids-and-comets), the design in [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md#sky-catalogue-and-plate-correction). F25 also compares FM candidates with captured predictions using reference position and mean motion, retaining ambiguous matches, fetch provenance and missing coverage. Those heuristic comparisons are implemented and remain unverified; they never seed detection. The analysis and its measurements are in git history. Two of its findings shaped the code: JPL's field search leaves out every comet unless `mag-required=false` (now set for the report's per-finding lookup too), and it picks its candidates by two-body motion of current orbits, which missed Apophis on 2021-03-06 (4.4° off) until near-Earth objects were searched 5° around the field.
-
-**Remaining work.**
-
-1. A general report table of the known objects in the field: predicted magnitude against the field depth, and whether each was detected. A completeness assessment must account for passband, masks, usable path coverage, skipped analyses and truncated searches before interpreting a bright object's absence. Existing FM cards do not provide this field-wide table.
-2. An explicit comparison of ordinary moving-object tracks with predictions (positions within the uncertainty over at least three frames, agreeing rates) before a track is called consistent with a known object. Preserve uncertainty and ambiguity; the implemented FM reference-position/rate comparison is not this general track check. The satellite exposure-path geometry is implemented in `report.lookup`; reuse the demonstrated calculations where the minor-planet inputs and uncertainty model match.
-3. A clock check: when the matched known objects all sit ahead of or behind their detections along their paths, report the implied frame-time offset (for example camera local time written as `DATE-OBS`) without correcting it silently.
 
 ## F23. Fixed-camera and all-sky sequence analysis
 
@@ -224,19 +202,3 @@ The saved Gaia star model contains source identity when available, position, pro
 - Check offline reopening, older caches/reports, additive CSV/schema behavior, saved provenance and uncertainty labels. Detection outputs, scores, candidates and engine readiness must be unchanged.
 
 **Scientific references used in the review.** [Gaia DR3 photometric relationships](https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html) describe the validity ranges and limitations of passband transformations. [AAVSO's guide to using its data](https://archive.aavso.org/index.php/quickstart-guide-using-aavso-data) distinguishes filtered and unfiltered observations and calibration limitations.
-
-## F27. Associate local rescue candidates with moving tracks
-
-**Request (2026-11-04).** In the existing Lagoon report, the maintainer observes one moving asteroid represented by a track and two Local Rescue candidates. Investigate why these parts remain separate and what can be done for such cases. The machine-local report reference is retained in the ignored environment notes.
-
-**Investigation.** Start with that existing report. Identify the track and both rescue groups, their original frames, midpoint times, positions and motion. Trace the linking, rescue and consolidation decisions, including any time/position/velocity or evidence gates, before attributing the split to a defect. Determine whether the intended outcome is a shared report association or a change to engine linking/consolidation. Avoid merging distinct objects merely because their paths align.
-
-**Ownership and decision.** Captured as a pending investigation, separate from F26. SpacePixels owns report associations and consistent presentation; any scientific linking or merging rule belongs to JTransient and must be reviewed with its application callers. No rule, threshold or implementation is agreed. Preserve the original findings and evidence while assessing recovery, false associations and regression coverage.
-
-## F28. Faint-mover live preview and phase progress
-
-**Request (2026-11-04).** While the faint-mover search is running, refresh the live processing display roughly every three seconds, like the other phases, and show progress specific to the faint-mover search.
-
-**Scope to investigate.** Review the existing stage progress and preview handoff before choosing the lightweight evidence to show. Keep previews bounded and coalesced, avoid preparing them while the display is hidden, and preserve cancellation, session identity and EDT delivery. Distinguish trial motions or partial tile coverage from retained candidates. Preview generation must respect the search budget and must not alter scientific outputs.
-
-**Status.** Captured as a pending request, separate from F26 and the motion-unit adjustment. No preview representation or implementation is agreed. Check full-size searches for sustained updates during long tiles, understandable phase-local progress, hidden-view cost and clear skipped/truncated outcomes.

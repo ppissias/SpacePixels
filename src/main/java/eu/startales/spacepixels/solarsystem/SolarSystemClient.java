@@ -47,8 +47,8 @@ import java.util.regex.Pattern;
  * simple two-body orbits, which for a near-Earth object with a close approach in between can be degrees off (Apophis
  * on 2021-03-06: 4.4°, more than the search's own error estimate), and an object it does not pick is never computed
  * precisely. The near-Earth population is small, so the wide search stays quick. JPL Horizons then
- * gives each object that passes over the frame its positions, predicted magnitude and 3-sigma uncertainty every few
- * minutes over the span. Both services integrate current orbits numerically, so the predictions also hold for frames
+     * gives each object that passes over the frame its positions, predicted magnitude and 3-sigma uncertainty every few
+     * minutes over the span plus fourteen hours on each side for clock review. Both services integrate current orbits numerically, so the predictions also hold for frames
  * taken years ago. When Horizons cannot answer for an object, its position and rate from the field search are kept as
  * straight-line motion. Interrupting the fetching thread cancels the request in progress.
  */
@@ -71,8 +71,10 @@ public final class SolarSystemClient {
     static final double NEO_MARGIN_DEG = 5.0;
     /** More objects than this get the field search's straight-line motion instead of a Horizons request each. */
     static final int MAX_REFINED = 300;
-    /** Positions are predicted from this long before the first exposure to this long after the last. */
-    static final long PAD_MILLIS = 10 * 60_000L;
+    /** Motion margin for the field search and straight-line fallback around the observing span. */
+    static final long PAD_MILLIS = SolarSystemObjects.OBSERVING_SPAN_MARGIN_MILLIS;
+    /** Horizons samples bracket possible local-time/UTC clock mistakes without extrapolating the report comparison. */
+    static final long CLOCK_CHECK_PAD_MILLIS = 14 * 60 * 60_000L;
     static final long STEP_MILLIS = 10 * 60_000L;
     /** Objects faster than this (arcseconds per hour on the sky) are close, and their paths bend within minutes. */
     static final double FAST_RATE_ARCSEC_PER_HOUR = 1000;
@@ -182,7 +184,8 @@ public final class SolarSystemClient {
             if (body == null) {
                 body = straightLine(candidate, query);
             }
-            if (crossesFrame(query, body.samples)) {
+            if (crossesFrame(query, body.samples.stream().filter(sample -> sample.timeMillis >= query.startMillis() - PAD_MILLIS
+                    && sample.timeMillis <= query.endMillis() + PAD_MILLIS).toList())) {
                 result.bodies.add(body);
             }
         }
@@ -286,7 +289,7 @@ public final class SolarSystemClient {
     // POSITIONS (HORIZONS)
     // ==========================================
 
-    /** The Horizons request for a candidate's observer table over the observing span. */
+    /** The candidate's Horizons table over the observing span plus clock-review padding, with the admitted observer. */
     static URI horizonsUri(SolarSystemQuery query, Candidate candidate) {
         double rate = Math.hypot(candidate.raRateArcsecPerHour(), candidate.decRateArcsecPerHour());
         long step = rate > FAST_RATE_ARCSEC_PER_HOUR ? FAST_STEP_MILLIS : STEP_MILLIS;
@@ -306,8 +309,8 @@ public final class SolarSystemClient {
             parameters.put("SITE_COORD", quoted(String.format(Locale.US, "%.6f,%.6f,%.4f",
                     site.longitudeDeg(), site.latitudeDeg(), site.altitudeMeters() / 1000.0)));
         }
-        parameters.put("START_TIME", quoted(HORIZONS_INPUT.format(Instant.ofEpochMilli(query.startMillis() - PAD_MILLIS))));
-        parameters.put("STOP_TIME", quoted(HORIZONS_INPUT.format(Instant.ofEpochMilli(query.endMillis() + PAD_MILLIS))));
+        parameters.put("START_TIME", quoted(HORIZONS_INPUT.format(Instant.ofEpochMilli(query.startMillis() - CLOCK_CHECK_PAD_MILLIS))));
+        parameters.put("STOP_TIME", quoted(HORIZONS_INPUT.format(Instant.ofEpochMilli(query.endMillis() + CLOCK_CHECK_PAD_MILLIS))));
         parameters.put("STEP_SIZE", quoted((step / 60_000L) + " m"));
         parameters.put("QUANTITIES", quoted("1,9,36"));
         parameters.put("ANG_FORMAT", quoted("DEG"));

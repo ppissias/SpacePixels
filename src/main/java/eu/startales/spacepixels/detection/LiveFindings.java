@@ -33,6 +33,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -64,6 +66,13 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
     });
     /** The median reference, set when its stage finishes; the engine does not change it afterwards. */
     private short[][] reference;
+    private final Object faintDelivery = new Object();
+    private long phaseGeneration;
+    private final AtomicReference<FaintWork> pendingFaint = new AtomicReference<>();
+    private final AtomicBoolean faintQueued = new AtomicBoolean();
+
+    /** Small copied work geometry and its phase identity; source images stay with this run's existing frame owner. */
+    private record FaintWork(LiveSnapshot snapshot, long generation) { }
 
     /** Draws with the built-in visualization settings, for direct component callers. */
     LiveFindings(RunPreviewSink sink, List<short[][]> frames) {
@@ -92,7 +101,11 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
     /** A new phase drops a picture that belonged to the previous one and has not been shown yet. */
     @Override
     public void stageStarted(String stage) {
-        sink.dropPending();
+        synchronized (faintDelivery) {
+            phaseGeneration++;
+            pendingFaint.set(null);
+            sink.dropPending();
+        }
     }
 
     /** Reserves the dialog's one picture slot. The engine builds a snapshot only after this returns true. */
@@ -107,11 +120,72 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         if (snapshot == null) {
             return;
         }
+        if ("Faint-mover search".equals(snapshot.phase())) {
+            synchronized (faintDelivery) { pendingFaint.set(new FaintWork(snapshot, phaseGeneration)); }
+            scheduleFaint();
+            return;
+        }
         try {
             worker.execute(() -> render(() -> snapshotPicture(snapshot)));
         } catch (RejectedExecutionException closed) {
             // The run has ended; the picture is no longer wanted.
         }
+    }
+
+    /** Keeps at most one queued faint-search rendering task; newer work replaces a pending snapshot. */
+    private void scheduleFaint() {
+        if (!faintQueued.compareAndSet(false, true)) return;
+        try {
+            worker.execute(() -> {
+                try {
+                    FaintWork work;
+                    while ((work = pendingFaint.getAndSet(null)) != null) {
+                        synchronized (faintDelivery) { if (work.generation() != phaseGeneration) continue; }
+                        RunPreview preview;
+                        try { preview = faintPicture(work.snapshot()); }
+                        catch (RuntimeException failure) { LOGGER.log(Level.FINE, "Skipped a faint-search picture", failure); continue; }
+                        synchronized (faintDelivery) {
+                            if (work.generation() == phaseGeneration) sink.preview(preview);
+                        }
+                    }
+                } finally {
+                    faintQueued.set(false);
+                    if (pendingFaint.get() != null) scheduleFaint();
+                }
+            });
+        } catch (RejectedExecutionException closed) {
+            pendingFaint.set(null);
+            faintQueued.set(false);
+        }
+    }
+
+    /** Draws only a bounded active-tile crop and trial geometry, without reconstructing scientific residuals or scores. */
+    private RunPreview faintPicture(LiveSnapshot snapshot) {
+        short[][] source = frame(snapshot.frameIndex());
+        if (source == null || source.length == 0 || snapshot.x().length != 4 || snapshot.y().length != 4)
+            return RunPreview.captionOnly(snapshot.caption());
+        int left = Math.max(0, (int) snapshot.x()[0] - 16), top = Math.max(0, (int) snapshot.y()[0] - 16);
+        int width = Math.min(544, Math.min(source[0].length - left, (int) (snapshot.x()[1] - left) + 16));
+        int height = Math.min(544, Math.min(source.length - top, (int) (snapshot.y()[1] - top) + 16));
+        if (width <= 0 || height <= 0) return RunPreview.captionOnly(snapshot.caption());
+        short[][] pixels = new short[height][width];
+        for (int y = 0; y < height; y++) System.arraycopy(source[top + y], left, pixels[y], 0, width);
+        BufferedImage gray = PreviewThumbnails.frame(pixels, settings.getAutoStretchBlackSigma(), settings.getAutoStretchWhiteSigma());
+        BufferedImage image = new BufferedImage(gray.getWidth(), gray.getHeight(), BufferedImage.TYPE_INT_RGB);
+        var graphics = image.createGraphics();
+        try {
+            graphics.drawImage(gray, 0, 0, null);
+            graphics.setColor(new Color(65, 225, 210));
+            double sx = image.getWidth() / (double) width, sy = image.getHeight() / (double) height;
+            int x0 = (int) ((snapshot.x()[0] - left) * sx), y0 = (int) ((snapshot.y()[0] - top) * sy);
+            graphics.drawRect(x0, y0, (int) ((snapshot.x()[1] - snapshot.x()[0]) * sx),
+                    (int) ((snapshot.y()[1] - snapshot.y()[0]) * sy));
+            int ax = (int) ((snapshot.x()[2] - left) * sx), ay = (int) ((snapshot.y()[2] - top) * sy);
+            int bx = (int) ((snapshot.x()[3] - left) * sx), by = (int) ((snapshot.y()[3] - top) * sy);
+            graphics.drawLine(ax, ay, bx, by);
+            graphics.drawOval(bx - 3, by - 3, 6, 6);
+        } finally { graphics.dispose(); }
+        return RunPreview.of(image, snapshot.caption());
     }
 
     @Override

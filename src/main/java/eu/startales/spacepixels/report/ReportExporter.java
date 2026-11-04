@@ -84,6 +84,7 @@ public final class ReportExporter {
             progress.step(16, 20, "overview");
             PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, reportContext.pipelineTelemetry, reportContext.summary, reportContext.localRescueTracks, fieldDepth, nightEquipment,
                     reportContext.commonMotionGroups.size(), inclusion);
+            KnownSolarSystemReport.write(report, reportContext, fieldDepth);
 
             progress.step(20, 26, "moving objects and streaks");
             report.println("<section id='moving-objects'>");
@@ -169,6 +170,8 @@ public final class ReportExporter {
                                                                                  ReportInclusion inclusion) {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
+        if (context.knownSolarSystem != null) items.add(new PipelineDiagnosticsSectionWriter.NavItem(
+                "known-solar-system", "Known asteroids & comets", Integer.toString(context.knownSolarSystem.bodies().size()), false));
         if (FindingCategory.FAINT_MOVER.included(inclusion) && pipelineTelemetry != null && pipelineTelemetry.faintMoverSearchTelemetry != null) {
             var faint = pipelineTelemetry.faintMoverSearchTelemetry;
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("faint-movers", "Faint movers",

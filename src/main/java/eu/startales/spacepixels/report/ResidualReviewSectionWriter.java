@@ -648,6 +648,7 @@ final class ResidualReviewSectionWriter {
         ResidualTransientAnalysis.LocalTransientMetrics metrics = candidate.metrics;
         report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_RESCUE, counter) + "' style='border-left-color: #40e0d0;'>");
         report.println("<div class='detection-title' style='color: #40e0d0;'>Local Rescue Candidate " + FindingCategory.LOCAL_RESCUE.id(counter) + candidateBadge + "</div>");
+        RescueTrackAssociations.write(report, context, FindingCategory.LOCAL_RESCUE.id(counter));
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>" + candidateNote + "</div>");
         report.println("<div class='image-container'>");
         if (backgroundSource != null) {

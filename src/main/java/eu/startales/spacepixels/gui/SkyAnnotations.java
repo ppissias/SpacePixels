@@ -475,7 +475,11 @@ final class SkyAnnotations {
         long exposure = Math.max(0, exposureMillis);
         long middle = startMillis > 0 ? startMillis + exposure / 2 : -1;
         for (SolarSystemObjects.Body body : objects.bodies) {
-            double[] path = pathOf(body, transformer);
+            List<SolarSystemObjects.Sample> sessionSamples = objects.endMillis > objects.startMillis
+                    ? body.samples.stream().filter(sample -> sample.timeMillis >= objects.startMillis - SolarSystemObjects.OBSERVING_SPAN_MARGIN_MILLIS
+                            && sample.timeMillis <= objects.endMillis + SolarSystemObjects.OBSERVING_SPAN_MARGIN_MILLIS).toList()
+                    : body.samples;
+            double[] path = pathOf(sessionSamples, transformer);
             SolarSystemObjects.Position position = middle > 0 ? SolarSystemObjects.positionAt(body, middle) : null;
             double[] pixel = position == null ? null : transformer.skyToPixel(position.ra(), position.dec());
             boolean placed = pixel != null && onFrame(pixel, width, height, -EDGE_ROOM);
@@ -503,7 +507,7 @@ final class SkyAnnotations {
                     }
                 }
             }
-            Double magnitude = position != null ? position.magnitude() : body.samples.get(0).magnitude;
+            Double magnitude = position != null ? position.magnitude() : sessionSamples.isEmpty() ? null : sessionSamples.getFirst().magnitude;
             String label = SolarSystemObjects.label(body) + (magnitude == null ? "" : String.format(Locale.US, " %.1f", magnitude));
             marks.add(new SkyMark(SkyMark.Kind.SOLAR_SYSTEM, placed ? pixel[0] : Double.NaN, placed ? pixel[1] : Double.NaN,
                     magnitude == null ? Double.NaN : magnitude, semiMajor, semiMinor, angle, label,
@@ -512,11 +516,11 @@ final class SkyAnnotations {
         return marks;
     }
 
-    /** The body's sampled positions in frame pixels, as x0, y0, x1, y1, …; positions outside the projection are left out. */
-    private static double[] pathOf(SolarSystemObjects.Body body, WcsCoordinateTransformer transformer) {
-        double[] path = new double[body.samples.size() * 2];
+    /** The observing-span samples in frame pixels; extended clock samples and positions outside the projection are left out. */
+    private static double[] pathOf(List<SolarSystemObjects.Sample> samples, WcsCoordinateTransformer transformer) {
+        double[] path = new double[samples.size() * 2];
         int length = 0;
-        for (SolarSystemObjects.Sample sample : body.samples) {
+        for (SolarSystemObjects.Sample sample : samples) {
             double[] pixel = transformer.skyToPixel(sample.ra, sample.dec);
             if (pixel != null && Double.isFinite(pixel[0]) && Double.isFinite(pixel[1])) {
                 path[length++] = pixel[0];

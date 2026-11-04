@@ -23,6 +23,52 @@ import static org.junit.Assert.*;
 
 /** Feeds engine stages through the live-view observer and checks the pictures and captions it hands over. */
 public class LiveFindingsTest {
+    /** Work pictures show only bounded active-tile source pixels and explicitly provisional trial geometry. */
+    @Test public void faintSearchPicturesAreBoundedDetachedAndLabelledAsWork() throws Exception {
+        var previews = new CopyOnWriteArrayList<RunPreview>();
+        var frames = frames(1);
+        short before = frames.getFirst()[20][20];
+        var findings = new LiveFindings(sink(previews, true), frames);
+        findings.stageStarted("Faint-mover search");
+        findings.liveUpdate(new LiveSnapshot("Faint-mover search", 0, "Trial motion, not a retained candidate",
+                new double[]{10, 130, 60, 90}, new double[]{10, 130, 70, 80}));
+        findings.finishPictures();
+        assertEquals(1, previews.size());
+        assertTrue(previews.getFirst().caption().contains("not a retained candidate"));
+        assertNotNull(previews.getFirst().image());
+        assertTrue(previews.getFirst().image().getWidth() <= 420);
+        assertTrue(previews.getFirst().image().getHeight() <= 420);
+        assertEquals(before, frames.getFirst()[20][20]);
+    }
+
+    /** A blocked prior rendering makes replacement and phase invalidation deterministic without timers or UI preferences. */
+    @Test public void faintSearchReplacesPendingPicturesAndDropsOldPhaseWork() throws Exception {
+        var previews = new CopyOnWriteArrayList<RunPreview>();
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var sink = new RunPreviewSink() {
+            @Override public boolean wantsPreview(boolean ignored) { return true; }
+            @Override public void preview(RunPreview p) {
+                if (p.caption().equals("block")) {
+                    entered.countDown();
+                    try { assertTrue(release.await(10, java.util.concurrent.TimeUnit.SECONDS)); }
+                    catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new AssertionError(e); }
+                }
+                previews.add(p);
+            }
+        };
+        var findings = new LiveFindings(sink, frames(1));
+        findings.liveUpdate(new LiveSnapshot("Tracking", 0, "block", null, null));
+        assertTrue(entered.await(10, java.util.concurrent.TimeUnit.SECONDS));
+        findings.liveUpdate(new LiveSnapshot("Faint-mover search", 0, "superseded", null, null));
+        findings.liveUpdate(new LiveSnapshot("Faint-mover search", 0, "old phase", null, null));
+        findings.stageStarted("Photometry");
+        release.countDown();
+        findings.finishPictures();
+        assertEquals(1, previews.size());
+        assertEquals("block", previews.getFirst().caption());
+    }
+
 
     private static final int SIZE = 160;
 

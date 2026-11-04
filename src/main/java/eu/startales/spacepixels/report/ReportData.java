@@ -36,6 +36,8 @@ final class ReportData {
     private final Map<String, Finding> findingsById;
     private final List<FaintMoverPresentation.Entry> faintMovers;
     private final Map<String, Object> faintMoverSearch;
+    private final List<RescueTrackAssociations.Match> rescueAssociations;
+    private final KnownSolarSystemReport.Summary knownSolarSystem;
 
     private ReportData(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
                        List<ResidualTransientAnalysis.CommonMotionGroup> groups, ReportInclusion inclusion) {
@@ -43,6 +45,8 @@ final class ReportData {
         variableStarOptions = context.settings.getVariableStarReportOptions();
         faintMovers = context.faintMoverPresentation;
         faintMoverSearch = FaintMoverPresentation.search(context);
+        rescueAssociations = context.rescueAssociations;
+        knownSolarSystem = context.knownSolarSystem;
         totalFrames = context.rawFrames.size();
         Set<Integer> rejected = new HashSet<>(UnclassifiedTransientSectionWriter.rejectedFrameIndices(telemetry));
         if (telemetry != null) for (var frame : telemetry.frameQualityStats) if (frame.rejected) rejected.add(frame.frameIndex);
@@ -188,6 +192,8 @@ final class ReportData {
             data.put("faintMovers", faintMovers);
         }
         data.put("streakObservations", streakObservations);
+        if (!rescueAssociations.isEmpty()) data.put("rescueAssociations", rescueAssociations);
+        if (knownSolarSystem != null) data.put("knownSolarSystem", knownSolarSystem);
         data.put("variableStarPresentation", variableStarOptions);
         try (var file = new AtomicReportFile(new File(directory, "report-data.json"))) {
             new GsonBuilder().setPrettyPrinting().create().toJson(data, file.writer()); file.commit();

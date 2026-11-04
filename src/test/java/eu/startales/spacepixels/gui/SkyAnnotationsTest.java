@@ -128,6 +128,22 @@ public class SkyAnnotationsTest {
         assertTrue("a frame without a time shows the path only", !unknownTime.isPlaced() && unknownTime.path != null);
     }
 
+    /** Extended clock ephemerides do not extend the viewer's session path or its fallback magnitude epoch. */
+    @Test public void clockPaddingDoesNotExtendTheDisplayedSessionPath() {
+        long start = Instant.parse("2026-03-10T02:00:00Z").toEpochMilli();
+        var objects = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+        objects.startMillis = start; objects.endMillis = start + 3_600_000;
+        var asteroid = body("Clock coverage control", false, "synthetic");
+        for (int minutes : new int[]{-840, -10, 70, 900}) asteroid.samples.add(solarSample(start + minutes * 60_000L,
+                150, 20 + .5 * minutes * SCALE_DEG, minutes < -10 ? 5.0 : 14.0, .01));
+        objects.bodies.add(asteroid);
+        var mark = SkyAnnotations.projectSolarSystem(objects, TRANSFORMER, 2000, 1600, 0, 0).getFirst();
+        assertEquals(4, mark.path.length);
+        assertEquals(799.5 - 5, mark.path[1], .001);
+        assertEquals(799.5 + 35, mark.path[3], .001);
+        assertTrue(mark.label, mark.label.endsWith("14.0"));
+    }
+
     private static eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body body(String name, boolean comet, String solution) {
         var body = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
         body.name = name;

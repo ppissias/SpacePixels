@@ -25,6 +25,8 @@ public final class SolarSystemObjects {
 
     /** The file in the session folder. */
     public static final String FILE_NAME = "solar_system.json";
+    /** Motion/path margin around the observing span, in milliseconds; extended clock samples do not widen that span. */
+    public static final long OBSERVING_SPAN_MARGIN_MILLIS = 10 * 60_000L;
     static final int CURRENT_VERSION = 1;
 
     public int version = CURRENT_VERSION;

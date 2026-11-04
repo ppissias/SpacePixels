@@ -157,8 +157,8 @@ public class SolarSystemClientTest {
         assertTrue(url, url.contains("COMMAND='194;'"));
         assertTrue(url, url.contains("CENTER='coord@399'"));
         assertTrue(url, url.contains("SITE_COORD='23.700000,37.900000,0.1200'"));
-        assertTrue(url, url.contains("START_TIME='2026-03-10 01:50:00'"));
-        assertTrue(url, url.contains("STOP_TIME='2026-03-10 03:10:00'"));
+        assertTrue(url, url.contains("START_TIME='2026-03-09 12:00:00'"));
+        assertTrue(url, url.contains("STOP_TIME='2026-03-10 17:00:00'"));
         assertTrue(url, url.contains("STEP_SIZE='10 m'"));
         assertTrue(url, url.contains("QUANTITIES='1,9,36'"));
         String fast = URLDecoder.decode(SolarSystemClient.horizonsUri(query(), candidate("99942 Apophis (2004 MN4)", 150, 20, 7200, 0))
@@ -223,6 +223,24 @@ public class SolarSystemClientTest {
         SolarSystemObjects.Position apophis = SolarSystemObjects.positionAt(bodies.get("99942 Apophis (2004 MN4)"), START + 48 * 60_000L);
         double[] pixel = TRANSFORMER.skyToPixel(apophis.ra(), apophis.dec());
         assertEquals(999.5, pixel[0], 5);
+    }
+
+    /** Extended clock samples must not admit an object that crosses the field only far outside the observing span. */
+    @Test public void extendedClockCoverageDoesNotWidenFinalFieldSelection() throws Exception {
+        var client = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb-group=neo")) return fieldAnswer(List.of());
+            if (url.contains("sb_ident.api")) return fieldAnswer(List.of(
+                    row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            return horizonsAnswer("194 Prokne (A879 FA)", "JPL#172", "APmag", List.of(
+                    new double[]{-840, 150, 20, 14.1, .01, .01},
+                    new double[]{-10, 152, 22, 14.1, .01, .01}, new double[]{0, 152, 22, 14.1, .01, .01},
+                    new double[]{60, 152, 22, 14.1, .01, .01}, new double[]{70, 152, 22, 14.1, .01, .01},
+                    new double[]{900, 150, 20, 14.1, .01, .01}));
+        });
+        var result = client.fetch(query(), ignored -> { });
+        assertTrue(result.problems.toString(), result.problems.isEmpty());
+        assertTrue(result.bodies.isEmpty());
     }
 
     @Test

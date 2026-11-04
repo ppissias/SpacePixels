@@ -49,6 +49,8 @@ final class DetectionReportContext {
     final List<Track> streakTracks;
     final List<Track> movingTargets;
     final TrackFindingIndex trackFindings;
+    final List<RescueTrackAssociations.Match> rescueAssociations;
+    final KnownSolarSystemReport.Summary knownSolarSystem;
     final ReportData data;
     final DataArea dataArea;
     final String dataAreaText;
@@ -166,6 +168,8 @@ final class DetectionReportContext {
         this.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
         this.animations = new AnimationRegistry();
         this.faintMoverPresentation = FaintMoverPresentation.entries(this);
+        this.rescueAssociations = RescueTrackAssociations.capture(this);
+        this.knownSolarSystem = KnownSolarSystemReport.capture(this);
         this.data = ReportData.create(this, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
         EnhancedStack stack = null;
         String problem = null;

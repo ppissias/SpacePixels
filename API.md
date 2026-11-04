@@ -289,6 +289,8 @@ Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on la
 
 The raw result's `slowMoverAnalysis.candidates` entries include `diagnostics.motionEvidence`: copied supported centroid positions, original sequence identities/capture times, descriptive timed drift/RMS/correlation and explicit availability. These do not confirm motion or change candidate selection. `SlowMoverTrackMatcher.match(candidate.object, candidate.diagnostics.motionEvidence, track)` measures a possible post-tracking correspondence using spatial screening and actual common frames; it neither merges findings nor establishes identity. See [JTransient's API contract](../JTransient/PIPELINE.md#jtransientenginerunpipeline) and [algorithm reference](../JTransient/ALGORITHM.md#temporal-review-and-track-correspondence). Generated slow-mover cards link their original-frame position CSVs; report finding identities remain unchanged.
 
+Reports optionally add `knownSolarSystem` (saved prediction provenance, sampled coverage, measured multi-frame track comparisons and a diagnostic clock suggestion) and `rescueAssociations` (possible report-only continuations with measured residuals). These are additive schema-version-1 fields. Their frame numbers are one-based; rates use px/min and suggested clock offsets use seconds to add to stored capture times. Neither model confirms identity, merges engine findings or changes timestamps. Missing ephemeris errors and ambiguity remain explicit. The request/result Java signatures are unchanged.
+
 Typical usage patterns:
 
 - inspect `getPipelineResult()` for downstream integration with JTransient-level results
