@@ -379,6 +379,10 @@ The closest returned fit supports an association; it does not confirm identity o
 
 New reports save the measurements and observing location used by the comparison and cache the provider responses and results together, so reopening them uses their own coordinates and timing. Older reports retain their existing candidate-search buttons. **Open midpoint candidate search (raw JSON)** is a separate short search for inspection, not the full motion comparison. Historical orbit coverage varies by object; even an old observation can return candidates, and their trajectories still need to be checked.
 
+![Satellite motion comparison for a streak track](docs/images/manual/satellite-track-comparison.png)
+
+In this satellite comparison example, **Compare track with satellites** evaluates candidates from SatChecker against streak track ST1. The candidate table ranks **STARLINK-3162** (NORAD 51234) first with a median path distance of 1.25″ (0.8 px), a motion direction difference of only 0.42°, and predicted speed (1,842.10 ″/s) closely matching the measured centroid speed (1,839.50 ″/s). Expanding the candidate displays the tangent-plane trajectory overlay—predicted exposure paths as coloured lines and observed centroids as white-rimmed dots—along with per-exposure perpendicular residuals and orbital TLE provenance, confirming that the candidate closely fits the actual streak motion across both frames.
+
 ![JPL identifies the track](docs/images/manual/report-identify.png)
 
 In this identification example, **Render JPL Results Here** identifies track T1 as the asteroid **4767 Sutoku**, magnitude 17.7, 12″ from the measured track position. Look at the **distance from center** and the **visual magnitude** to decide which entry is your object: the right one is close to the track position (within a few pixels of your image scale) and bright enough for your setup.
