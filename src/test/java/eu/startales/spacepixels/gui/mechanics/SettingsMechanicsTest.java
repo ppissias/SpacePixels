@@ -40,6 +40,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         requireVisible("Track Linking", "Reject Camera-Fixed Sources");
         requireVisible("Anomaly Detection", "Enable Anomaly Rescue");
         requireVisible("Slow Movers", "Enable Slow-Mover Detection");
+        requireVisible("Faint Movers (experimental)", "Search for faint movers");
         requireVisible("Residual Analysis", "Enable Residual Transient Analysis");
         requireVisible("Variable Stars", "Enable Variable-Star Detection");
         requireVisible("Report Visualization", "Auto Stretch Black Sigma");
@@ -83,6 +84,90 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         assertEquals(changedSigma, number(spinner(DECIMAL)), 0.02);
         showPage("Streak Detection");
         assertEquals(changedPixels, number(spinner(WHOLE)), 0.02);
+    }
+
+    /** The new page shares its Overview switch and saves minutes in canonical engine seconds. */
+    @Test(timeout = 180_000)
+    public void faintMoversAreOptInAndSettingsSurviveSaveAndReopen() throws Exception {
+        importSyntheticSequence();
+        window().tabbedPane().selectTab("Detection Settings");
+        showPage("Faint Movers (experimental)");
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireNotSelected().check();
+        assertEquals(1.0, number(spinner("Fastest motion")), 0.001);
+        assertEquals(10.0, number(spinner("Time limit (minutes)")), 0.001);
+        field(spinner("Time limit (minutes)")).setText("0.5");
+        field(spinner("Fastest motion")).setText("0.123");
+        window().button(VisibleText.button("Save")).click();
+        waitFor("faint mover settings saved", () -> showingLabel("Saved settings").contains("Saved settings"));
+        try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
+                eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
+            var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
+            assertTrue(config.enableFaintMoverSearch);
+            assertEquals(30, config.faintMoverMaxSeconds, 1e-9);
+            assertEquals(0.123, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
+        }
+        showPage("Overview");
+        window().checkBox(VisibleText.checkBox("Faint movers (experimental)")).requireSelected().uncheck();
+        showPage("Faint Movers (experimental)");
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireNotSelected();
+        window().button(VisibleText.button("Revert")).click();
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
+        reopenWindow();
+        importSyntheticSequence();
+        window().tabbedPane().selectTab("Detection Settings");
+        showPage("Faint Movers (experimental)");
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
+        assertEquals(0.5, number(spinner("Time limit (minutes)")), 1e-9);
+        assertEquals(0.123, number(spinner("Fastest motion")), 1e-9);
+        var solved = eu.startales.spacepixels.testsupport.SyntheticDatasetFactory.createSolvedMono16FitsSequence(
+                folder.getRoot().toPath(), "solved", 8).toFile();
+        GuiActionRunner.execute(() -> application().importFolder(solved));
+        waitFor("solved session installed", () -> GuiActionRunner.execute(() -> application().getSession() != null
+                && new java.io.File(application().getSession().getFiles()[0].getFilePath()).getParentFile().equals(solved)
+                && application().getJobCoordinator().current() == null));
+        window().tabbedPane().selectTab("Detection Settings");
+        showPage("Faint Movers (experimental)");
+        assertTrue(controlIsShowing("arcsec/min"));
+        var file = GuiActionRunner.execute(() -> application().getSession().getFiles()[0]);
+        var wcs = eu.startales.spacepixels.fits.WcsCoordinateTransformer.fromHeader(file.getFitsHeader());
+        var a = wcs.pixelToSky(file.getSizeWidth() / 2.0, file.getSizeHeight() / 2.0);
+        var b = wcs.pixelToSky(file.getSizeWidth() / 2.0 + 1, file.getSizeHeight() / 2.0);
+        double scale = eu.startales.spacepixels.util.SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
+        assertEquals(0.123 * scale, number(spinner("Fastest motion")), 1e-9);
+        window().button(VisibleText.button("Save")).click();
+        waitFor("converted units saved", () -> showingLabel("Saved settings").contains("Saved settings"));
+        try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
+                eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
+            var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
+            assertEquals(0.123, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
+        }
+    }
+
+    /** Readable converted values do not quantize precise canonical settings during an unchanged save. */
+    @Test(timeout = 180_000)
+    public void unchangedConvertedControlsRetainPreciseCanonicalValues() throws Exception {
+        var precise = new io.github.ppissias.jtransient.config.DetectionConfig();
+        precise.enableFaintMoverSearch = true;
+        precise.faintMoverMaxSpeedPixelsPerMinute = 0.1234567890123;
+        precise.faintMoverMaxSeconds = 1;
+        try (var writer = java.nio.file.Files.newBufferedWriter(java.nio.file.Path.of(System.getProperty("user.home"),
+                eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
+            eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.write(writer, precise, 30);
+        }
+        reopenWindow();
+        importSyntheticSequence();
+        window().tabbedPane().selectTab("Detection Settings");
+        showPage("Faint Movers (experimental)");
+        assertEquals(0.123457, number(spinner("Fastest motion")), 0);
+        assertEquals(0.0166667, number(spinner("Time limit (minutes)")), 0);
+        window().button(VisibleText.button("Save")).click();
+        waitFor("precise canonical values saved", () -> showingLabel("Saved settings").contains("Saved settings"));
+        try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
+                eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
+            var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
+            assertEquals(precise.faintMoverMaxSpeedPixelsPerMinute, config.faintMoverMaxSpeedPixelsPerMinute, 0);
+            assertEquals(precise.faintMoverMaxSeconds, config.faintMoverMaxSeconds, 0);
+        }
     }
 
     /** Opens the page and requires one of its controls to be on screen. */

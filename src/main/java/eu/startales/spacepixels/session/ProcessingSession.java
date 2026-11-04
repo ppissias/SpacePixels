@@ -236,6 +236,12 @@ public final class ProcessingSession implements AutoCloseable {
         return run == null ? null : run.tracks();
     }
 
+    /** The last completed run's detached experimental paths, or null before detection. */
+    public eu.startales.spacepixels.detection.FaintMoverOverlay getFaintMoverOverlay() {
+        DetectionOverlays run = lastRun;
+        return run == null ? null : run.faintMovers();
+    }
+
     /** Variable-star candidates of the last detection run, numbered as in its report, or null when none has finished. */
     public VariableStarOverlay getVariableStarOverlay() {
         DetectionOverlays run = lastRun;

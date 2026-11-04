@@ -140,7 +140,7 @@ final class DetectionPipelineSupport {
         return new DetectionSummary(
                 singleStreaks + streakTracks + movingTargets + anomalyCount
                         + slowMoverCandidates + localRescueCandidates + localActivityClusters
-                        + residualAnalysis.commonMotionGroups.size() + result.cameraFixedGroups.size(),
+                        + residualAnalysis.commonMotionGroups.size() + result.cameraFixedGroups.size() + result.faintMoverCandidates.size(),
                 singleStreaks,
                 streakTracks,
                 movingTargets,
@@ -153,7 +153,7 @@ final class DetectionPipelineSupport {
                 photometry != null ? photometry.possible : 0,
                 residualAnalysis.commonMotionGroups.size(),
                 unclassifiedDetections,
-                result.cameraFixedGroups.size());
+                result.cameraFixedGroups.size(), result.faintMoverCandidates.size());
     }
 
     private static String formatTraceTimestamp(long timestampMillis) {

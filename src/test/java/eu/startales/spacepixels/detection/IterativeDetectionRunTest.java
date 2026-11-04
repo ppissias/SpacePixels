@@ -294,7 +294,7 @@ public class IterativeDetectionRunTest {
     }
 
     private static DetectionSummary summary() {
-        return new DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
+        return new DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0);
     }
 
     private static JsonObject record(File index) throws IOException { return json(new File(index.getParentFile(), "run-data.json")); }

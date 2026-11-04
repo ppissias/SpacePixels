@@ -14,6 +14,7 @@ public final class ReportRunContext {
     private final FitsFileInformation[] files;
     private final DetectionReportAstrometry.Context astrometry;
     private final SessionCatalogue catalogue;
+    private final eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem;
 
     /**
      * Resolves the correction and the catalogue once against privately copied FITS metadata: from {@code sky} when it
@@ -30,6 +31,15 @@ public final class ReportRunContext {
         this.astrometry = AstrometryContextFactory.buildContext(this.files, options.applicationConfig(), correction);
         this.catalogue = fromSession ? SessionCatalogue.of(this.files, astrometry, folder -> sky.catalogue())
                 : SessionCatalogue.load(this.files, astrometry);
+        var predictions = fromSession ? sky.solarSystem() : directory == null ? null
+                : eu.startales.spacepixels.solarsystem.SolarSystemStore.load(directory);
+        var first = Arrays.stream(this.files).filter(Objects::nonNull).findFirst().orElse(null);
+        if (predictions != null && first != null && astrometry.getTransformer() != null
+                && eu.startales.spacepixels.skycatalog.SkyField.of(astrometry.getTransformer(), first.getSizeWidth(), first.getSizeHeight()).isSameFieldAs(predictions.field)) {
+            // Predictions have public mutable lists; detach them before callbacks or workers can see later edits.
+            var json = new com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create();
+            this.solarSystem = json.fromJson(json.toJson(predictions), eu.startales.spacepixels.solarsystem.SolarSystemObjects.class);
+        } else this.solarSystem = null;
     }
 
     /**
@@ -72,6 +82,9 @@ public final class ReportRunContext {
     SessionCatalogue catalogue() {
         return catalogue;
     }
+
+    /** Predictions privately captured at admission; report code only reads this snapshot. */
+    eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem() { return solarSystem; }
 
     /** Copies only metadata while preserving null slots used by component-level report callers. */
     private static FitsFileInformation[] snapshot(FitsFileInformation[] files) {

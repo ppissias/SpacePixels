@@ -18,7 +18,7 @@ This manual walks through the everyday workflows with screenshots from real sess
 4. [Reading the report](#4-reading-the-report)
 5. [Identifying objects](#5-identifying-objects)
 6. [Examples from real sessions](#6-examples-from-real-sessions)
-7. [Other tools](#7-other-tools): [prepare exposures](#preparing-an-observing-session), [variable stars](#variable-stars), [Blink](#blink-selected), [iterative detection](#detect-iteratively-large-datasets), [command line](#command-line)
+7. [Other tools](#7-other-tools): [prepare exposures](#preparing-an-observing-session), [faint movers](#faint-movers-experimental), [variable stars](#variable-stars), [Blink](#blink-selected), [iterative detection](#detect-iteratively-large-datasets), [command line](#command-line)
 8. [Detection settings in brief](#8-detection-settings-in-brief)
 9. [Tips and troubleshooting](#9-tips-and-troubleshooting)
 
@@ -232,6 +232,7 @@ The report starts with an overview, then the results. **Likely Artifacts** and *
 | **Streaks** (S#) and **streak tracks** (ST#) | elongated trails, in one frame or several | satellites, aircraft, fast asteroids |
 | **Single-frame anomalies** (A#) | a bright point in one frame only | flashes, glints, cosmic rays |
 | **Slow-mover candidates** (DS#) | an elongated shape in the stack of all frames | very slow asteroids and comets |
+| **Faint mover candidates** (FM#) | weak signals added along trial motions through the frames | unverified faint point-like movers (experimental, optional) |
 | **Local rescue candidates** (LR#) and **activity clusters** (LC#) | faint detections that line up or cluster | very faint movers, to be checked by eye |
 | **Variable stars** | stars whose brightness changes | variable stars (optional analysis) |
 | **Likely artifacts**: camera-fixed groups (FC#) and common-motion groups (CM#) | detections the pipeline set aside; collapsed near the end of the report | hot pixels, dust, registration residuals |
@@ -486,6 +487,25 @@ For **PixInsight WBPP**, use ordinary **Import Aligned Frames…** on one compat
 
 The scan does not split images within one folder by filter, exposure, camera or target, and choosing `lightB` does not automatically choose `flatB`. Keep different groups in separate folders and confirm the calibration match yourself. **Inspect inputs** requires at least three lights, at least two exposures for each selected calibration folder, or one explicitly selected master FITS file. Camera interpretation, decoding and the later preparation checks remain necessary.
 
+### Faint movers (experimental)
+
+Turn on **Search for faint movers** on the **Faint Movers (experimental)** page of Detection Settings, or use its switch under **Analyses in This Run** on Overview. It is off by default. This additional digital-tracking search adds weak signals along trial motions; known-object positions never seed the search. Auto-Tune preserves its five settings.
+
+| Setting | Meaning | Default |
+|---|---|---|
+| **Slowest motion** | Minimum total displacement over the searched session, in star widths (FWHM) | 2 FWHM |
+| **Fastest motion** | Maximum speed; arcsec/min with image WCS, otherwise px/min. Profiles always store px/min. | 1 px/min |
+| **Minimum score** | Higher is stricter; an empirical score, not calibrated significance | 8 |
+| **Time limit (minutes)** | Additional search-time budget, checked cooperatively; profiles store seconds | 10 min |
+
+The page estimates additional time and memory from imported frame metadata, an assumed 2.5 px FWHM and the speed range. It is approximate: quality control, seeing and the computer change the actual work. Increasing the maximum speed roughly squares its cost. At least eight kept frames with usable capture times are required. Gaps over two hours separate sessions; only the session with the most kept frames is searched. Resource limits can skip a search, and the time limit can leave partial coverage. The report states the reason or the frames, speed range, searched pixels and completed tile count; an empty or partial search does not establish that the field contains no movers.
+
+The report lists **FM1, FM2, …** separately from ordinary tracks, with reference position and time, motion, sky speed and position angle when WCS is available, whole/half-session scores, and stationary/camera-fixed comparisons. Missing evidence is shown as **N/A**. Each card has a 31 × 31 pixel PSF-filtered shift stack in score units and a source-frame blink at shared display levels. Finding navigation and the detection maps use the same FM identifiers, marking the fitted reference positions. The dashed path and exposure-midpoint markers are fitted positions, not independent detections. JSON and `faint_movers/faint_movers.csv` export the evidence and fitted coordinates at the original searched frame numbers.
+
+Saved **Known Asteroids & Comets** predictions from the same field are captured when the run starts. Comparisons use position within two FWHM at the reference time and motion within 0.1 px/min over the searched session; all compatible names are retained. These heuristic tolerances do not establish identity or a confidence probability. Missing comparison coverage and incomplete saved fetches are explicit. The report shows the fetch's magnitude limit; an unmatched candidate is not evidence of a new object. No network fetch is started by detection.
+
+In **Blink Selected** and **Preview Frame**, **Show faint movers** draws the last run's fitted paths and positions only on frames included in its search. The overlays stay with that imported session and contain no image buffers. Use the switch to inspect the unmarked pixels. These are experimental, unverified candidates: bright-star residuals can still survive, and the initial score calibration does not promise the same false-candidate rate in every dataset.
+
 ### Variable stars
 
 Variable-star photometry is an optional analysis. Switch it on under **Analyses in This Run** on the Overview of Detection Settings, or on the Variable Stars page, before you click **Detect Moving Targets**. It measures the brightness of the field stars in every frame and reports stars that change. It needs at least 20 frames after quality control, and the original, unstretched (linear) frames.
@@ -724,9 +744,9 @@ On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `h
 
 The **Detection Settings** tab has a list of pages on the left, a search box at the top (Ctrl+F) and **Save**, **Revert** and **Load Defaults** at the bottom.
 
-- **Overview**: Auto-Tune, the most important settings (detection, star mask and star jitter) and the analyses of a run: slow movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
+- **Overview**: Auto-Tune, the most important settings (detection, star mask and star jitter) and the analyses of a run: slow movers, experimental faint movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
 - **Detection**: how objects are found in each frame (Streak Detection, with the **Faint Streak Search** switch; switch it off to save time on very large frames, where it can add about a third to the detection time) and which frames are used (Quality Control, with a **Strictness** choice of Lenient, Normal or Strict for leaving out frames that differ from the rest of the session).
-- **Moving objects**: how detections are linked into tracks (Track Linking, with **Reject Camera-Fixed Sources** for hot pixels and dust) and the extra searches (Anomaly Detection, Slow Movers, Residual Analysis).
+- **Moving objects**: how detections are linked into tracks (Track Linking, with **Reject Camera-Fixed Sources** for hot pixels and dust) and the extra searches (Anomaly Detection, Slow Movers, Faint Movers (experimental), Residual Analysis).
 - **Variable stars**: the photometry settings.
 - **Report**: how images in the report are stretched and animated, and whether the report builds the **Enhanced Stack**. **Auto Stretch Black Sigma** and **White Sigma** have sliders, and a preview under them shows up to three crops with the values as you drag or type them: around the tracks of the last detection run, or, before a run, a quiet patch of sky, a busy star field and the brightest star of a frame in the middle of the session. Under each crop is the share of its pixels drawn black and drawn white; a large black share makes the sky grainy, and a large white share makes stars bloated.
 

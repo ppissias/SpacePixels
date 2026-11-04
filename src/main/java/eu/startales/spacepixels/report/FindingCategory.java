@@ -17,6 +17,7 @@ public enum FindingCategory {
     SINGLE_STREAK("S", "Single-frame streak", "Single streaks", "Single streaks", new Color(255, 153, 51), false, false),
     ANOMALY("A", "Single-frame anomaly", "Single-frame anomalies", "Single-frame anomalies", new Color(255, 51, 255), true, false),
     SLOW_MOVER("DS", "Slow-mover candidate", "Slow-mover candidates", "Maximum-stack shape candidates", new Color(170, 255, 110), true, false),
+    FAINT_MOVER("FM", "Faint mover candidate", "Faint mover candidates", "Faint mover candidates (experimental)", new Color(80, 225, 210), true, false),
     LOCAL_RESCUE("LR", "Local rescue", "Local rescue candidates", "Local rescue candidates", new Color(64, 224, 208), true, false),
     LOCAL_ACTIVITY("LC", "Local activity", "Local activity clusters", "Local activity clusters", new Color(150, 120, 255), true, true),
     VARIABLE_STAR("V", "Variable-star candidate", "Variable stars", "Variable-star candidates", new Color(255, 90, 210), true, false),
@@ -72,6 +73,7 @@ public enum FindingCategory {
             case SINGLE_STREAK -> "single_streaks";
             case ANOMALY -> "anomalies";
             case SLOW_MOVER -> "slow_movers";
+            case FAINT_MOVER -> "faint_movers";
             case LOCAL_RESCUE -> "local_rescue";
             case LOCAL_ACTIVITY -> "local_activity";
             case VARIABLE_STAR -> "variable_stars";
@@ -143,6 +145,7 @@ public enum FindingCategory {
             case MOVING_TARGET, STREAK_TRACK, SINGLE_STREAK -> true;
             case ANOMALY -> inclusion.anomalies;
             case SLOW_MOVER -> inclusion.slowMovers;
+            case FAINT_MOVER -> inclusion.faintMovers;
             case LOCAL_RESCUE -> inclusion.localRescue;
             case LOCAL_ACTIVITY -> inclusion.localActivity;
             case VARIABLE_STAR -> inclusion.variableStars;
@@ -159,6 +162,7 @@ public enum FindingCategory {
             case SINGLE_STREAK -> summary.singleStreaks;
             case ANOMALY -> summary.anomalies;
             case SLOW_MOVER -> summary.slowMoverCandidates;
+            case FAINT_MOVER -> summary.faintMoverCandidates;
             case LOCAL_RESCUE -> summary.localRescueCandidates;
             case LOCAL_ACTIVITY -> summary.localActivityClusters;
             case VARIABLE_STAR -> summary.variableStarCandidates + summary.possibleVariableStars;
@@ -173,6 +177,7 @@ public enum FindingCategory {
             case MOVING_TARGET, STREAK_TRACK, SINGLE_STREAK -> true;
             case ANOMALY -> config == null || config.enableAnomalyRescue;
             case SLOW_MOVER -> config == null || config.enableSlowMoverDetection;
+            case FAINT_MOVER -> config != null && config.enableFaintMoverSearch;
             case LOCAL_RESCUE -> config == null || config.enableResidualTransientAnalysis && config.enableLocalRescueCandidates;
             case LOCAL_ACTIVITY -> config == null || config.enableResidualTransientAnalysis && config.enableLocalActivityClusters;
             case VARIABLE_STAR -> config != null && config.enableVariableStarDetection

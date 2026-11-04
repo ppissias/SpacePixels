@@ -16,6 +16,7 @@ final class AnalysisScopeText {
         List<String> enabled = new ArrayList<>();
         enabled.add("moving objects and streaks");
         if (config.enableSlowMoverDetection) enabled.add("slow movers");
+        if (config.enableFaintMoverSearch) enabled.add("faint movers (experimental)");
         if (config.enableAnomalyRescue) enabled.add("anomaly rescue");
         if (config.enableResidualTransientAnalysis && config.enableLocalRescueCandidates) enabled.add("local rescue");
         if (config.enableResidualTransientAnalysis && config.enableLocalActivityClusters) enabled.add("activity clusters");

@@ -77,7 +77,7 @@ public class ReportExportConsistencyTest {
         assertTrue(new File(included, "moving_targets/moving_track_1_star_centric.gif.poster.png").isFile());
         assertReportFilesResolve(included);
         File excluded = temporary.newFolder("excluded");
-        ReportExporter.export(new ReportRequest(result, frames, files, excluded, config, runContext(files), new ReportInclusion(true, false, false, false, false, false, false), null));
+        ReportExporter.export(new ReportRequest(result, frames, files, excluded, config, runContext(files), new ReportInclusion(true, false, false, false, false, false, false, false), null));
         html = Files.readString(new File(excluded, "detection_report.html").toPath());
         assertFalse(html.contains("V1 (0.60 mag)")); assertFalse(html.contains("<section id='variables'>"));
         assertFalse(Files.readString(new File(excluded, "report-data.json").toPath()).contains("Variable-star candidate"));
@@ -147,7 +147,7 @@ public class ReportExportConsistencyTest {
         for (boolean rescue : List.of(false, true)) for (boolean motion : List.of(false, true)) {
             File export = temporary.newFolder("rescue-" + rescue + "-motion-" + motion);
             ReportExporter.export(new ReportRequest(result, frames, files, export, config, runContext(files),
-                    new ReportInclusion(true, false, rescue, false, motion, false, false), null));
+                    new ReportInclusion(true, false, rescue, false, motion, false, false, false), null));
             String html = Files.readString(new File(export, "detection_report.html").toPath());
             String data = Files.readString(new File(export, "report-data.json").toPath());
             assertEquals(rescue, html.contains("id='finding-lr1'"));

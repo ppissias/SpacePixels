@@ -70,6 +70,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
     private final JCheckBox tracksBox = new JCheckBox("Show tracks");
     private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
+    private final JCheckBox faintMoversBox = new JCheckBox("Show faint movers", true);
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JPanel controlRows = new JPanel();
     private final JLabel frameLabel = new JLabel(" ");
@@ -262,6 +263,16 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         view.setVariableStarsVisible(variablesBox.isSelected());
     }
 
+    /** Offers the run's experimental fitted paths independently of per-frame detections. */
+    protected void setFaintMoverOverlay(eu.startales.spacepixels.detection.FaintMoverOverlay overlay, FitsFileInformation[] files) {
+        boolean available = overlay != null && overlay.coversAnyOf(files);
+        faintMoversBox.setVisible(true);
+        faintMoversBox.setEnabled(available);
+        faintMoversBox.setToolTipText("Experimental FM candidates: dashed fitted paths and current exposure-midpoint positions. These are unverified.");
+        view.setFaintMoverOverlay(available ? overlay : null);
+        view.setFaintMoversVisible(faintMoversBox.isSelected());
+    }
+
     // ==========================================
     // OPEN AND CLOSE
     // ==========================================
@@ -374,6 +385,8 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
         variablesBox.setVisible(false);
         variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
+        faintMoversBox.setVisible(false);
+        faintMoversBox.addActionListener(e -> view.setFaintMoversVisible(faintMoversBox.isSelected()));
         previousButton.setToolTipText("Previous frame (←).");
         previousButton.addActionListener(e -> step(-1));
         nextButton.setToolTipText("Next frame (→).");
@@ -390,6 +403,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
             row.add(detectionsBox);
             row.add(tracksBox);
             row.add(variablesBox);
+            row.add(faintMoversBox);
             row.add(Box.createHorizontalStrut(10));
         }
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {

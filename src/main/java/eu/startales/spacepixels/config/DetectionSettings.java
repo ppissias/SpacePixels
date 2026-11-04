@@ -11,6 +11,7 @@ public final class DetectionSettings {
             MovingObjectsSettings.all(),
             AnomalyDetectionSettings.all(),
             SlowMoversSettings.all(),
+            FaintMoversSettings.all(),
             VariableStarsSettings.all(),
             QualitySettings.all())
             .flatMap(List::stream).toList();

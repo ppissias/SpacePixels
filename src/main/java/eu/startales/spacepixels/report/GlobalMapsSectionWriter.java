@@ -47,6 +47,7 @@ final class GlobalMapsSectionWriter {
                 && localRescueTracks.isEmpty()
                 && reportContext.localActivityClusters.isEmpty()
                 && reportContext.slowMoverCandidates.isEmpty()
+                && reportContext.faintMoverCandidates.isEmpty()
                 && (reportContext.data.variableCandidates.isEmpty())) {
             return;
         }
@@ -73,7 +74,9 @@ final class GlobalMapsSectionWriter {
         report.println("Every classified track and single-frame event over the " + reportContext.fieldName() + ". " +
                 "Track paths are connected with lines (<strong>T#</strong> for moving object tracks, <strong>ST#</strong> for confirmed streak tracks, <strong>LR#</strong> for local rescue candidates). " +
                 "Local activity clusters are ringed as <strong>LC#</strong>, while maximum-stack slow-mover shape candidates, single-frame anomalies, and single streaks are marked as <strong>DS#</strong>, <strong>A#</strong>, and <strong>S#</strong>. " +
-                "Measured variable-star candidates are circled in magenta as <strong>V#</strong>. Common-motion groups and unclassified detections are in their own sections."
+                "Measured variable-star candidates are circled in magenta as <strong>V#</strong>."
+                + (reportContext.faintMoverCandidates.isEmpty() ? "" : " Faint movers are marked in turquoise as <strong>FM#</strong> at their fitted reference positions; they remain unverified.")
+                + " Common-motion groups and unclassified detections are in their own sections."
                 + (catalogueObjects > 0 ? " From the sky catalogue of the session: Messier, NGC, IC and Sharpless objects in yellow, bright named stars in white and named variable stars in magenta." : "")
                 + (reportContext.dataArea != null ? " The dashed blue outline is the data area, where every kept frame has image data." : "")
                 + "</p>");
@@ -119,6 +122,7 @@ final class GlobalMapsSectionWriter {
                 localRescueTracks.size(),
                 reportContext.localActivityClusters.size(),
                 reportContext.slowMoverCandidates.size(),
+                reportContext.faintMoverCandidates.size(),
                 reportContext.anomalies.size(),
                 reportContext.singleStreaks.size(),
                 reportContext.data.variableCandidates.size(), interactive);
@@ -216,6 +220,7 @@ final class GlobalMapsSectionWriter {
                                                           int localRescueCount,
                                                           int localActivityCount,
                                                           int deepStackCount,
+                                                          int faintMoverCount,
                                                           int anomalyCount,
                                                           int singleStreakCount,
                                                           int variableCount, boolean interactive) {
@@ -226,6 +231,7 @@ final class GlobalMapsSectionWriter {
         appendGlobalTrajectoryLegendItem(html, FindingCategory.LOCAL_RESCUE, localRescueCount, interactive);
         appendGlobalTrajectoryLegendItem(html, FindingCategory.LOCAL_ACTIVITY, localActivityCount, interactive);
         appendGlobalTrajectoryLegendItem(html, FindingCategory.SLOW_MOVER, deepStackCount, interactive);
+        appendGlobalTrajectoryLegendItem(html, FindingCategory.FAINT_MOVER, faintMoverCount, interactive);
         appendGlobalTrajectoryLegendItem(html, FindingCategory.ANOMALY, anomalyCount, interactive);
         appendGlobalTrajectoryLegendItem(html, FindingCategory.SINGLE_STREAK, singleStreakCount, interactive);
         appendGlobalTrajectoryLegendItem(html, FindingCategory.VARIABLE_STAR, variableCount, interactive);

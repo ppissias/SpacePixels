@@ -38,7 +38,7 @@ public class GuiDetectionReportPromptTest {
     public void localRescueAndCommonMotionCanBeUncheckedOnTheirOwnRows() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var summary = new DetectionSummary(
-                    328, 0, 1, 0, 1, 0, 274, 0, "READY", 10, 18, 52, 1991, 0);
+                    328, 0, 1, 0, 1, 0, 274, 0, "READY", 10, 18, 52, 1991, 0, 0);
             var config = new DetectionConfig();
             config.enableVariableStarDetection = true;
             var choice = new Choice(summary, config);
@@ -70,13 +70,15 @@ public class GuiDetectionReportPromptTest {
     public void everyOptionalCheckboxControlsItsMatchingCategory() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var summary = new DetectionSummary(
-                    46, 2, 1, 4, 3, 5, 7, 11, "READY", 1, 1, 13, 0, 17);
+                    82, 2, 1, 4, 3, 5, 7, 11, "READY", 1, 1, 13, 0, 17, 19);
             var config = new DetectionConfig();
             config.enableLocalActivityClusters = true;
             config.enableVariableStarDetection = true;
+            config.enableFaintMoverSearch = true;
             var choice = new Choice(summary, config);
+            assertTrue(choice.hasLabel("The report will include 82 of these detections."));
             for (String row : new String[]{"Single-frame anomalies", "Slow-mover candidates", "Local rescue candidates",
-                    "Local activity clusters", "Common-motion groups", "Camera-fixed groups", "Variable stars"}) {
+                    "Local activity clusters", "Common-motion groups", "Camera-fixed groups", "Variable stars", "Faint mover candidates"}) {
                 var checkbox = choice.checkbox(row);
                 assertNotNull("Missing checkbox beside " + row, checkbox);
                 checkbox.doClick();
@@ -89,6 +91,7 @@ public class GuiDetectionReportPromptTest {
             assertFalse(inclusion.commonMotion);
             assertFalse(inclusion.variableStars);
             assertFalse(inclusion.cameraFixed);
+            assertFalse(inclusion.faintMovers);
             assertTrue(choice.hasLabel("The report will include 7 of these detections."));
         });
     }
@@ -211,7 +214,7 @@ public class GuiDetectionReportPromptTest {
 
     /** Creates a count snapshot above the desktop safety threshold. */
     private static DetectionSummary summary() {
-        return new DetectionSummary(60, 0, 0, 1, 59, 0, 0, 0, "READY", 2, 1, 0, 0, 0);
+        return new DetectionSummary(60, 0, 0, 1, 59, 0, 0, 0, "READY", 2, 1, 0, 0, 0, 0);
     }
 
     /** States the photometry readiness and, without a plate solution, that the report has no sky coordinates. */
@@ -221,11 +224,11 @@ public class GuiDetectionReportPromptTest {
             var config = new DetectionConfig();
             config.enableVariableStarDetection = true;
             var notReady = new Choice(new DetectionSummary(
-                    60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0), config);
+                    60, 0, 0, 60, 0, 0, 0, 0, "NOT_READY", 0, 0, 0, 0, 0, 0), config);
             assertTrue(notReady.hasText("session not ready for photometry"));
             assertTrue(notReady.hasText("no plate-solved frame, so the report has no sky coordinates or identification."));
             var ready = new Choice(new DetectionSummary(
-                    80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3), config);
+                    80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3, 0), config);
             assertTrue(ready.hasText("3 candidates, 1 possible"));
             assertTrue(ready.hasText("Largest group: single-frame anomalies (50)."));
         });
@@ -244,7 +247,7 @@ public class GuiDetectionReportPromptTest {
 
         /** Inspects an already built dialog passed to the confirmation boundary. */
         Choice(JComponent panel) {
-            this(new GuiDetectionReportPrompt.ReportChoice(panel, null, null, null, null, null, null, null));
+            this(new GuiDetectionReportPrompt.ReportChoice(panel, null, null, null, null, null, null, null, null));
         }
 
         /** Retains the panel and its category grid for row-specific assertions. */

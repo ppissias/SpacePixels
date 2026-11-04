@@ -39,7 +39,7 @@ public class FindingCategoryTest {
 
     /** Each report option maps to exactly its measured category; photometry keeps both confidence tiers. */
     @Test public void summaryCountsAndInclusionUseTheSameCategories() {
-        var summary = new DetectionSummary(0, 2, 3, 5, 7, 11, 13, 17, "READY", 19, 23, 29, 0, 31);
+        var summary = new DetectionSummary(0, 2, 3, 5, 7, 11, 13, 17, "READY", 19, 23, 29, 0, 31, 0);
         assertEquals(5, FindingCategory.MOVING_TARGET.count(summary));
         assertEquals(3, FindingCategory.STREAK_TRACK.count(summary));
         assertEquals(2, FindingCategory.SINGLE_STREAK.count(summary));
@@ -50,12 +50,12 @@ public class FindingCategoryTest {
         assertEquals(42, FindingCategory.VARIABLE_STAR.count(summary));
         assertEquals(29, FindingCategory.COMMON_MOTION.count(summary));
         assertEquals(31, FindingCategory.CAMERA_FIXED.count(summary));
-        ReportInclusion none = new ReportInclusion(false, false, false, false, false, false, false);
+        ReportInclusion none = new ReportInclusion(false, false, false, false, false, false, false, false);
         for (FindingCategory category : FindingCategory.values()) {
             assertEquals(!category.optional(), category.included(none));
             assertTrue(category.included(ReportInclusion.all()));
         }
-        ReportInclusion anomalies = new ReportInclusion(true, false, false, false, false, false, false);
+        ReportInclusion anomalies = new ReportInclusion(true, false, false, false, false, false, false, false);
         for (FindingCategory category : FindingCategory.values()) {
             assertEquals(!category.optional() || category == FindingCategory.ANOMALY, category.included(anomalies));
         }
@@ -68,7 +68,7 @@ public class FindingCategoryTest {
         config.enableLocalRescueCandidates = true;
         config.enableCommonMotionRejection = true;
         config.enableVariableStarDetection = true;
-        var summary = new DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, "NOT_RUN", 0, 0, 0, 0, 0);
+        var summary = new DetectionSummary(0, 0, 0, 0, 0, 0, 0, 0, "NOT_RUN", 0, 0, 0, 0, 0, 0);
         assertFalse(FindingCategory.LOCAL_RESCUE.computed(config, summary));
         assertTrue(FindingCategory.COMMON_MOTION.computed(config, summary));
         assertFalse(FindingCategory.VARIABLE_STAR.computed(config, summary));

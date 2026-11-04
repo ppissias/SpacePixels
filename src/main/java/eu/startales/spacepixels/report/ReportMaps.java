@@ -291,6 +291,9 @@ final class ReportMaps {
             drawDeepStackCandidate(g2d, candidate, GLOBAL_MAP_DEEP_STACK_COLOR, context.findingId(FindingCategory.SLOW_MOVER, dsCounter));
             dsCounter++;
         }
+        for (var candidate : context.faintMoverPresentation) {
+            drawFaintMoverCandidate(g2d, candidate);
+        }
 
         int aCounter = 1;
         for (AnomalyDetection anomaly : anomalies) {
@@ -305,6 +308,17 @@ final class ReportMaps {
         return rgbMap;
     }
 
+
+    /** Draws a fitted reference position without manufacturing a per-frame detected object. */
+    private static void drawFaintMoverCandidate(Graphics2D graphics, FaintMoverPresentation.Entry candidate) {
+        int x = (int) Math.round(candidate.x()), y = (int) Math.round(candidate.y());
+        graphics.setColor(FindingCategory.FAINT_MOVER.color());
+        graphics.setStroke(new BasicStroke(2.5f));
+        graphics.drawOval(x - 20, y - 20, 40, 40);
+        graphics.setColor(Color.WHITE);
+        graphics.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        graphics.drawString(candidate.id(), x + 25, y - 25);
+    }
 
     private static void drawSingleFindingMarker(Graphics2D g2d, DetectedObject pt, Color color, String label, int radius) {
         if (pt == null) {

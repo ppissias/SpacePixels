@@ -21,8 +21,10 @@ import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
  * @param folder     the session's folder; a run on frames in another folder reads that folder's files instead
  * @param correction the correction, switched on or off; null when there is none
  * @param catalogue  the catalogue; null when there is none
+ * @param solarSystem the saved or session-owned known-object predictions; null when unavailable
  */
-public record SkySnapshot(File folder, PlateSolutionCorrection correction, SkyCatalogue catalogue) {
+public record SkySnapshot(File folder, PlateSolutionCorrection correction, SkyCatalogue catalogue,
+                          eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem) {
 
     /** Whether this is the sky data of {@code directory}, the folder of a run's frames. */
     public boolean belongsTo(File directory) {

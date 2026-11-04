@@ -34,11 +34,15 @@ final class ReportData {
     private final eu.startales.spacepixels.config.VariableStarReportOptions variableStarOptions;
     private final Map<Integer, Finding> variablesByStar;
     private final Map<String, Finding> findingsById;
+    private final List<FaintMoverPresentation.Entry> faintMovers;
+    private final Map<String, Object> faintMoverSearch;
 
     private ReportData(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
                        List<ResidualTransientAnalysis.CommonMotionGroup> groups, ReportInclusion inclusion) {
         this.inclusion = inclusion;
         variableStarOptions = context.settings.getVariableStarReportOptions();
+        faintMovers = context.faintMoverPresentation;
+        faintMoverSearch = FaintMoverPresentation.search(context);
         totalFrames = context.rawFrames.size();
         Set<Integer> rejected = new HashSet<>(UnclassifiedTransientSectionWriter.rejectedFrameIndices(telemetry));
         if (telemetry != null) for (var frame : telemetry.frameQualityStats) if (frame.rejected) rejected.add(frame.frameIndex);
@@ -54,6 +58,9 @@ final class ReportData {
         for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
             var a = context.slowMoverCandidates.get(i);
             add(output, context, FindingCategory.SLOW_MOVER.id(i + 1), a.x, a.y, List.of(), null, "Candidate");
+        }
+        for (var candidate : faintMovers) {
+            add(output, context, candidate.id(), candidate.x(), candidate.y(), List.of(), null, "Unverified");
         }
         for (int i = 0; i < context.localRescueCandidates.size(); i++) {
             var a = context.localRescueCandidates.get(i);
@@ -169,7 +176,17 @@ final class ReportData {
         data.put("frameCount", totalFrames);
         data.put("frameNumbering", "one-based; empty frames on stack candidates means per-frame evidence is unavailable");
         data.put("rejectedFrames", rejectedFrames.stream().sorted().map(i -> i + 1).toList());
-        data.put("includedGroups", inclusion); data.put("findings", findings);
+        var groups = new LinkedHashMap<String, Boolean>();
+        groups.put("anomalies", inclusion.anomalies); groups.put("slowMovers", inclusion.slowMovers);
+        groups.put("localRescue", inclusion.localRescue); groups.put("localActivity", inclusion.localActivity);
+        groups.put("commonMotion", inclusion.commonMotion); groups.put("cameraFixed", inclusion.cameraFixed);
+        groups.put("variableStars", inclusion.variableStars);
+        if (faintMoverSearch != null) groups.put("faintMovers", inclusion.faintMovers);
+        data.put("includedGroups", groups); data.put("findings", findings);
+        if (faintMoverSearch != null) {
+            data.put("faintMoverSearch", faintMoverSearch);
+            data.put("faintMovers", faintMovers);
+        }
         data.put("streakObservations", streakObservations);
         data.put("variableStarPresentation", variableStarOptions);
         try (var file = new AtomicReportFile(new File(directory, "report-data.json"))) {

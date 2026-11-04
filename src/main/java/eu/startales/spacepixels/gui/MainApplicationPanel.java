@@ -1740,6 +1740,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             blinkFrame.open(completed.result(), files, getImportedFiles(), stretch,
                     sessions.current() == null ? null : sessions.current().getTrackOverlay(),
                     sessions.current() == null ? null : sessions.current().getVariableStarOverlay());
+            blinkFrame.setFaintMoverOverlay(sessions.current() == null ? null : sessions.current().getFaintMoverOverlay());
             return;
         }
         // Stopped, or failed: hides the window if it still shows the loading progress.

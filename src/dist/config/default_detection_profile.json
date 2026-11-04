@@ -107,6 +107,11 @@
   "variableSystematicsResponseFactor": 2.0,
   "variableLocalRadiusPixels": 100.0,
   "variableMaxLocalCorrelation": 0.3,
+  "enableFaintMoverSearch": false,
+  "faintMoverMinDisplacementFwhm": 2.0,
+  "faintMoverMaxSpeedPixelsPerMinute": 1.0,
+  "faintMoverMinScore": 8.0,
+  "faintMoverMaxSeconds": 600.0,
   "autoTuneMaxCandidateFrames": 30,
   "variableStarMaxCandidateCards": 40,
   "variableStarSortOrder": "OBSERVED_CHANGES"

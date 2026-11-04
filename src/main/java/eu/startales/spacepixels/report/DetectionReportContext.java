@@ -38,6 +38,9 @@ final class DetectionReportContext {
     final boolean[][] slowMoverMedianVetoMask;
     final List<SlowMoverCandidateResult> slowMoverCandidateResults;
     final List<DetectedObject> slowMoverCandidates;
+    final List<io.github.ppissias.jtransient.core.FaintMoverCandidate> faintMoverCandidates;
+    final List<Integer> faintMoverFrames;
+    final List<FaintMoverPresentation.Entry> faintMoverPresentation;
     final SlowMoverSummaryTelemetry slowMoverTelemetry;
     final List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates;
     final List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters;
@@ -90,6 +93,10 @@ final class DetectionReportContext {
                 ? sortAnomaliesForDisplay(result.anomalies)
                 : new ArrayList<>();
         this.pipelineTelemetry = result.telemetry;
+        this.faintMoverCandidates = FindingCategory.FAINT_MOVER.included(inclusion) ? result.faintMoverCandidates : List.of();
+        var faintTelemetry = pipelineTelemetry == null ? null : pipelineTelemetry.faintMoverSearchTelemetry;
+        this.faintMoverFrames = faintTelemetry == null || faintTelemetry.skippedReason != null ? List.of()
+                : faintTelemetry.searchedFrameIndices.stream().filter(i -> i >= 0 && i < rawFrames.size()).toList();
         this.masterStackData = result.masterStackData;
         this.maximumStackData = result.maximumStackData;
         this.masterVetoMask = result.masterVetoMask;
@@ -158,6 +165,7 @@ final class DetectionReportContext {
                 ? result.cameraFixedGroups : Collections.emptyList();
         this.dataAreaText = DataAreaPresentation.describe(result.dataArea, pipelineTelemetry);
         this.animations = new AnimationRegistry();
+        this.faintMoverPresentation = FaintMoverPresentation.entries(this);
         this.data = ReportData.create(this, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
         EnhancedStack stack = null;
         String problem = null;

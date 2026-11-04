@@ -77,6 +77,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                     + Math.round(scale() * 100) + " percent zoom. "
                     + (skyMarks == null ? "Catalogue annotations off. " : "Catalogue annotations on. ")
                     + (overlayVisible && overlay != null ? "Tracks on. " : "")
+                    + (faintMoversVisible && faintMoverOverlay != null ? "Faint movers on. " : "")
                     + (variableStarsVisible && variableStarOverlay != null ? "Variable candidates on." : ""));
         }
     }
@@ -155,6 +156,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     /** The catalogue marks drawn last, for {@link #skyMarkAt}. */
     private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
     private VariableStarOverlay variableStarOverlay;
+    private eu.startales.spacepixels.detection.FaintMoverOverlay faintMoverOverlay;
+    private boolean faintMoversVisible;
     private boolean variableStarsVisible = true;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
@@ -253,6 +256,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         copy.detections = detections == null ? null : List.copyOf(detections); copy.detectionsVisible = detectionsVisible;
         VisualizationSettings markers = markerSettings.get(); copy.markerSettings = () -> markers;
         copy.variableStarOverlay = variableStarOverlay; copy.variableStarsVisible = variableStarsVisible;
+        copy.faintMoverOverlay = faintMoverOverlay; copy.faintMoversVisible = faintMoversVisible;
         copy.skyMarks = skyMarks == null ? null : List.copyOf(skyMarks); copy.skyStarLimit = skyStarLimit;
         copy.skyStars = skyStars; copy.skyDeepSky = skyDeepSky; copy.skyVariables = skyVariables;
         copy.skySolarSystem = skySolarSystem; copy.skyPreferences = skyPreferences;
@@ -346,6 +350,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         bufferPixels = null;
         overlay = null;
         variableStarOverlay = null;
+        faintMoverOverlay = null;
         detections = null;
         skyMarks = null;
         drawnSkyMarks = new java.util.ArrayList<>();
@@ -385,6 +390,15 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         variableStarOverlay = overlay;
         repaint();
     }
+
+    /** Installs detached fitted paths from the completed run; called on the EDT. */
+    void setFaintMoverOverlay(eu.startales.spacepixels.detection.FaintMoverOverlay overlay) {
+        faintMoverOverlay = overlay;
+        repaint();
+    }
+
+    /** Changes only the experimental fitted-path display layer. */
+    void setFaintMoversVisible(boolean visible) { faintMoversVisible = visible; repaint(); }
 
     void setVariableStarsVisible(boolean visible) {
         variableStarsVisible = visible;
@@ -703,6 +717,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 drawOverlay(g2);
             }
             if (hasVariableStars()) drawVariableStars(g2);
+            if (faintMoversVisible && faintMoverOverlay != null) drawFaintMovers(g2);
             drawZoomLabel(g2);
         } finally {
             g2.dispose();
@@ -1083,6 +1098,27 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             TrackOverlay.Point labelled = here.get(0);
             g2.drawString(track.label, (float) (left + (labelled.x + 0.5) * scale + ring + 3),
                     (float) (top + (labelled.y + 0.5) * scale - ring));
+        }
+    }
+
+    /** Draws dashed fitted paths and exposure-midpoint rings only on frames actually searched by the engine. */
+    private void drawFaintMovers(Graphics2D g2) {
+        if (frame == null) return;
+        Long midpoint = faintMoverOverlay.midpoint(frame.getInfo());
+        var times = faintMoverOverlay.times();
+        if (midpoint == null || times.isEmpty()) return;
+        double scale = scale(), left = left(scale), top = top(scale), radius = Math.max(9, scale * 4);
+        g2.setColor(eu.startales.spacepixels.report.FindingCategory.FAINT_MOVER.color());
+        g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+        g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10, new float[]{5, 4}, 0));
+        for (var candidate : faintMoverOverlay.candidates()) {
+            double[] start = candidate.positionAt(times.getFirst()), end = candidate.positionAt(times.getLast());
+            double[] here = candidate.positionAt(midpoint);
+            double x = left + (here[0] + .5) * scale, y = top + (here[1] + .5) * scale;
+            g2.draw(new java.awt.geom.Line2D.Double(left + (start[0] + .5) * scale, top + (start[1] + .5) * scale,
+                    left + (end[0] + .5) * scale, top + (end[1] + .5) * scale));
+            g2.draw(new Ellipse2D.Double(x - radius, y - radius, radius * 2, radius * 2));
+            g2.drawString(candidate.id(), (float) (x + radius + 3), (float) (y - radius));
         }
     }
 

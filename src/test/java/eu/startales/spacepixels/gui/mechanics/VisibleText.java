@@ -33,7 +33,7 @@ final class VisibleText {
         return new GenericTypeMatcher<>(JCheckBox.class, true) {
             @Override
             protected boolean isMatching(JCheckBox component) {
-                return text.equals(component.getText());
+                return text.equals(component.getText()) || text.equals(component.getAccessibleContext().getAccessibleName());
             }
         };
     }

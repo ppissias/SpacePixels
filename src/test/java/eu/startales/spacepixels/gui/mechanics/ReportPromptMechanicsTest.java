@@ -29,7 +29,7 @@ public class ReportPromptMechanicsTest extends MechanicsTestCase {
         GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(application().getFrame());
         DetectionConfig config = new DetectionConfig();
         DetectionSummary summary = new DetectionSummary(
-                60, 0, 0, 1, 59, 0, 0, 0, null, 0, 0, 0, 0, 0);
+                60, 0, 0, 1, 59, 0, 0, 0, null, 0, 0, 0, 0, 0, 0);
         CompletableFuture<Boolean> accepted = startReportQuestion(prompt, summary, true, "Iterative pass: 5 frames", config);
         DialogFixture dialog = dialog("Detection summary");
         dialog.label(VisibleText.labelContaining("Iterative pass: 5 frames — This run found 60 detections.")).requireVisible();

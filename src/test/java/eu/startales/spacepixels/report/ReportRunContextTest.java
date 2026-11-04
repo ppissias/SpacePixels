@@ -102,7 +102,7 @@ public class ReportRunContextTest {
         SkyCatalogueStore.save(directory, catalogue(transformer, files[0], "saved catalogue"));
         PlateSolutionCorrection.save(directory, correction(transformer, files[0], false));
         SkySnapshot sky = new SkySnapshot(directory, correction(transformer, files[0], true),
-                catalogue(transformer, files[0], "unsaved catalogue"));
+                catalogue(transformer, files[0], "unsaved catalogue"), null);
 
         ReportRunContext fromSession = ReportRunContext.capture(DetectionRunOptions.defaults(), files, sky);
         ReportRunContext fromFiles = ReportRunContext.capture(DetectionRunOptions.defaults(), files);
@@ -120,7 +120,7 @@ public class ReportRunContextTest {
         var transformer = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
         SkyCatalogueStore.save(directory, catalogue(transformer, files[0], "the copy's catalogue"));
         SkySnapshot elsewhere = new SkySnapshot(folder.newFolder("session"), correction(transformer, files[0], true),
-                catalogue(transformer, files[0], "the session's catalogue"));
+                catalogue(transformer, files[0], "the session's catalogue"), null);
 
         ReportRunContext context = ReportRunContext.capture(DetectionRunOptions.defaults(), files, elsewhere);
 

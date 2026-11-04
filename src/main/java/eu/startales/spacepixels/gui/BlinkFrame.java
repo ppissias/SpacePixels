@@ -63,6 +63,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final JCheckBox skipBox = new JCheckBox("Skip this frame");
     private final JCheckBox tracksBox = new JCheckBox("Show tracks");
     private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
+    private final JCheckBox faintMoversBox = new JCheckBox("Show faint movers", true);
     /** Holds the stretch row, which is made when the first blink brings the Image Stretch tab. */
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JLabel frameLabel = new JLabel(" ");
@@ -301,6 +302,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     /** Stops and lets go of the frames of the current blink, if any. */
     private void release() {
+        view.setFaintMoverOverlay(null);
         gifExport.release();
         open = false;
         loading = false;
@@ -316,6 +318,15 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         cursorPixel = null;
         view.clear();
         frameModel.fireTableDataChanged();
+    }
+
+    /** Installs the last completed run's fitted paths after a blink opens, using full frame identities. */
+    void setFaintMoverOverlay(eu.startales.spacepixels.detection.FaintMoverOverlay overlay) {
+        boolean available = overlay != null && overlay.coversAnyOf(files);
+        faintMoversBox.setEnabled(available);
+        faintMoversBox.setToolTipText("Experimental FM candidates: dashed fitted paths and current exposure-midpoint positions. These are unverified.");
+        view.setFaintMoverOverlay(available ? overlay : null);
+        view.setFaintMoversVisible(faintMoversBox.isSelected());
     }
 
     // ==========================================
@@ -345,6 +356,8 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
         variablesBox.setEnabled(false);
         variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
+        faintMoversBox.setEnabled(false);
+        faintMoversBox.addActionListener(e -> view.setFaintMoversVisible(faintMoversBox.isSelected()));
 
         // Wraps onto a second line when the window is narrow, so no control is cut off.
         JPanel playbackRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 0));
@@ -359,6 +372,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         playbackRow.add(skipBox);
         playbackRow.add(tracksBox);
         playbackRow.add(variablesBox);
+        playbackRow.add(faintMoversBox);
         playbackRow.add(Box.createHorizontalStrut(10));
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             playbackRow.add(zoomControl);

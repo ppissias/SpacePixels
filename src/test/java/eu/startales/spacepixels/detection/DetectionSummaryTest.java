@@ -13,7 +13,7 @@ public class DetectionSummaryTest {
     @Test
     public void largestGroupNamesTheBiggestKindOfResult() {
         DetectionSummary summary = new DetectionSummary(
-                80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3);
+                80, 2, 1, 4, 50, 5, 6, 2, "READY", 3, 1, 4, 12, 3, 0);
 
         assertEquals("single-frame anomalies (50)", summary.largestGroup());
     }
@@ -30,8 +30,8 @@ public class DetectionSummaryTest {
     @Test
     public void compatibilityConfirmationDeclinesLargeReportsWithoutInteraction() {
         DetectionSummary summary = new DetectionSummary(
-                51, 0, 0, 51, 0, 0, 0, 0, null, 0, 0, 0, 0, 0);
-        ReportInclusion selected = new ReportInclusion(false, true, true, true, true, true, true);
+                51, 0, 0, 51, 0, 0, 0, 0, null, 0, 0, 0, 0, 0, 0);
+        ReportInclusion selected = new ReportInclusion(false, true, true, true, true, true, true, false);
         summary.includeInReport(selected);
         org.junit.Assert.assertSame(selected, summary.reportInclusion());
         assertEquals(51, summary.totalDetections);

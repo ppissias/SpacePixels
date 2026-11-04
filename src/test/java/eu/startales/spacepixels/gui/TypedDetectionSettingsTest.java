@@ -44,7 +44,7 @@ public class TypedDetectionSettingsTest {
             assertEquals(setting.title(), DetectionSettingsPresentation.title(setting.id()));
             checkOwnership(setting);
         }
-        assertEquals(79, identities.size());
+        assertEquals(84, identities.size());
     }
 
     /** Invalid numeric input is rejected before mutation and the engine remains the source of issue identities. */

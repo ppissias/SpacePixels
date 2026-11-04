@@ -183,6 +183,10 @@ final class PipelineDiagnosticsSectionWriter {
         addResult(cards, empty, summary.movingTargetCount, "Moving-object tracks", "moving-targets");
         addResult(cards, empty, summary.streakTrackCount, "Streak tracks", "streak-tracks");
         addResult(cards, empty, summary.singleStreakCount, "Single-frame streaks", "single-streaks");
+        if (reportContext.config.enableFaintMoverSearch) {
+            if (inclusion.faintMovers) addResult(cards, empty, reportContext.faintMoverCandidates.size(), "Faint mover candidates (experimental)", "faint-movers");
+            else empty.add("faint movers (left out of this report)");
+        }
         if (!inclusion.anomalies) {
             empty.add("single-frame anomalies (left out of this report)");
         } else {

@@ -22,6 +22,7 @@ public final class ReportInclusion {
     public final boolean commonMotion;
     public final boolean cameraFixed;
     public final boolean variableStars;
+    public final boolean faintMovers;
 
     public ReportInclusion(boolean anomalies,
                            boolean slowMovers,
@@ -29,7 +30,7 @@ public final class ReportInclusion {
                            boolean localActivity,
                            boolean commonMotion,
                            boolean cameraFixed,
-                           boolean variableStars) {
+                           boolean variableStars, boolean faintMovers) {
         this.anomalies = anomalies;
         this.slowMovers = slowMovers;
         this.localRescue = localRescue;
@@ -37,10 +38,11 @@ public final class ReportInclusion {
         this.commonMotion = commonMotion;
         this.cameraFixed = cameraFixed;
         this.variableStars = variableStars;
+        this.faintMovers = faintMovers;
     }
 
     /** Every optional group is written. */
     public static ReportInclusion all() {
-        return new ReportInclusion(true, true, true, true, true, true, true);
+        return new ReportInclusion(true, true, true, true, true, true, true, true);
     }
 }

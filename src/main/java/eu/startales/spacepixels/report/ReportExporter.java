@@ -96,6 +96,13 @@ public final class ReportExporter {
                 DeepStackReportSectionWriter.writeSection(report, reportContext);
                 report.println("</section>");
             }
+            if (FindingCategory.FAINT_MOVER.included(inclusion) && reportContext.pipelineTelemetry != null
+                    && reportContext.pipelineTelemetry.faintMoverSearchTelemetry != null) {
+                progress.step(27, 28, "faint mover candidates");
+                report.println("<section id='faint-movers'>");
+                FaintMoverSectionWriter.writeSection(report, reportContext);
+                report.println("</section>");
+            }
 
             if (FindingCategory.LOCAL_RESCUE.included(inclusion) || FindingCategory.LOCAL_ACTIVITY.included(inclusion)) {
                 progress.step(27, 28, "residual review");
@@ -161,6 +168,11 @@ public final class ReportExporter {
                                                                                  ReportInclusion inclusion) {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
+        if (FindingCategory.FAINT_MOVER.included(inclusion) && pipelineTelemetry != null && pipelineTelemetry.faintMoverSearchTelemetry != null) {
+            var faint = pipelineTelemetry.faintMoverSearchTelemetry;
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("faint-movers", "Faint movers",
+                    faint.skippedReason != null ? "skipped" : faint.truncated ? "partial" : Integer.toString(context.faintMoverCandidates.size()), false));
+        }
         int movingObjects = summary.movingTargetCount + summary.streakTrackCount + summary.singleStreakCount
                 + summary.anomalyCount;
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("moving-objects", "Moving objects & events",

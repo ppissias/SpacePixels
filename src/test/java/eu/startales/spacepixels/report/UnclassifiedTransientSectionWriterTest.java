@@ -142,7 +142,7 @@ public class UnclassifiedTransientSectionWriterTest {
                 Collections.singletonList(trackPoint), Arrays.asList(commonMotion, rescued), Collections.singletonList(left));
         List<List<DetectedObject>> unclassified = Arrays.asList(
                 Collections.emptyList(), Collections.singletonList(rescued), Collections.singletonList(left));
-        ReportInclusion leftOut = new ReportInclusion(true, true, false, true, false, false, true);
+        ReportInclusion leftOut = new ReportInclusion(true, true, false, true, false, false, true, false);
 
         String html = inspectorHtml(allTransients, unclassified, residual, cameraFixed, leftOut);
 

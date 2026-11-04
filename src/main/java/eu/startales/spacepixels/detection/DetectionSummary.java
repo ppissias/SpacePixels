@@ -21,6 +21,8 @@ public final class DetectionSummary {
     public final int movingTargets;
     public final int anomalies;
     public final int slowMoverCandidates;
+    /** Unverified candidates of the experimental digital-tracking search. */
+    public final int faintMoverCandidates;
     public final int localRescueCandidates;
     public final int localActivityClusters;
     /** Compact sources that share one displacement. Included in {@link #totalDetections}. */
@@ -50,13 +52,14 @@ public final class DetectionSummary {
                      int possibleVariableStars,
                      int commonMotionGroups,
                      int unclassifiedDetections,
-                     int cameraFixedGroups) {
+                     int cameraFixedGroups, int faintMoverCandidates) {
         this.totalDetections = totalDetections;
         this.singleStreaks = singleStreaks;
         this.streakTracks = streakTracks;
         this.movingTargets = movingTargets;
         this.anomalies = anomalies;
         this.slowMoverCandidates = slowMoverCandidates;
+        this.faintMoverCandidates = faintMoverCandidates;
         this.localRescueCandidates = localRescueCandidates;
         this.localActivityClusters = localActivityClusters;
         this.photometryVerdict = photometryVerdict;
@@ -85,10 +88,10 @@ public final class DetectionSummary {
     /** Describes the largest classified group, preserving the existing tie order. */
     public String largestGroup() {
         String[] names = {"moving objects", "single-frame anomalies", "slow-mover candidates",
-                "residual analysis", "common-motion groups", "camera-fixed groups"};
+                "residual analysis", "common-motion groups", "camera-fixed groups", "faint-mover candidates"};
         int[] counts = {movingTargets + streakTracks + singleStreaks, anomalies,
                 slowMoverCandidates, localRescueCandidates + localActivityClusters, commonMotionGroups,
-                cameraFixedGroups};
+                cameraFixedGroups, faintMoverCandidates};
         int best = 0;
         for (int i = 1; i < counts.length; i++) {
             if (counts[i] > counts[best]) {

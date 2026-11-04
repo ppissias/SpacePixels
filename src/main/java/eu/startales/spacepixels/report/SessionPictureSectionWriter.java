@@ -238,6 +238,10 @@ final class SessionPictureSectionWriter {
             circle(svg, candidate.x, candidate.y, marker, ReportMaps.GLOBAL_MAP_DEEP_STACK_COLOR, context.findingId(FindingCategory.SLOW_MOVER, index++), false);
             count++;
         }
+        for (var candidate : context.faintMoverPresentation) {
+            circle(svg, candidate.x(), candidate.y(), marker, FindingCategory.FAINT_MOVER.color(), candidate.id(), true);
+            count++;
+        }
         index = 1;
         for (AnomalyDetection anomaly : context.anomalies) {
             if (anomaly.object != null) {

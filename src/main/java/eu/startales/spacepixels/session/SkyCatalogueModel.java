@@ -133,7 +133,7 @@ public final class SkyCatalogueModel {
      * catalogue is replaced, never changed, once set, so the run keeps what it was given.
      */
     public SkySnapshot snapshot() {
-        return new SkySnapshot(sessionFolder, correction == null ? null : correction.copy(), catalogue);
+        return new SkySnapshot(sessionFolder, correction == null ? null : correction.copy(), catalogue, solarSystem);
     }
 
     private void fireCorrectionChanged() {

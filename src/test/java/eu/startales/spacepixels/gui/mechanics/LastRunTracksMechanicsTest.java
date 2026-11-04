@@ -55,10 +55,15 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         JCheckBoxFixture previewTracks = preview.checkBox(VisibleText.checkBox("Show tracks"));
         assertFalse("Show tracks needs a detection run", previewTracks.target().isEnabled());
 
-        endARunWithOneTrack();
+        endARunWithOverlays();
         waitFor("the run's tracks become available", () -> previewTracks.target().isEnabled());
         assertFalse(previewTracks.target().isSelected());
         JComponent image = image(preview, "Preview Frame image");
+        JCheckBoxFixture faintMovers = preview.checkBox(VisibleText.checkBox("Show faint movers"));
+        faintMovers.requireEnabled().requireSelected();
+        waitForDescription(image, "Faint movers on.", "Preview Frame describes the fitted paths");
+        faintMovers.uncheck().requireNotSelected();
+        assertFalse(GuiActionRunner.execute(() -> image.getAccessibleContext().getAccessibleDescription()).contains("Faint movers on."));
         focus(image);
         robot().pressAndReleaseKeys(KeyEvent.VK_T);
         waitFor("T shows the tracks", () -> previewTracks.target().isSelected());
@@ -119,7 +124,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
 
         TrackOverlay late = TrackOverlay.from(PipelineResult.builder().build());
         GuiActionRunner.execute(() -> application().getMainApplicationPanel().showDetectionOverlays(first,
-                new DetectionOverlays(late, null)));
+                new DetectionOverlays(late, null, null)));
         assertNull("the closed session takes nothing", first.getTrackOverlay());
         assertNull("the new session keeps its own (none)", second.getTrackOverlay());
     }
@@ -170,7 +175,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
      * Stands in for a detection run: a job that ends with a track through the first three frames of the session. Its
      * end unlocks the window and hands the track to the window as a run's end does.
      */
-    private void endARunWithOneTrack() throws Exception {
+    private void endARunWithOverlays() throws Exception {
         FitsFileInformation[] files = GuiActionRunner.execute(() -> application().getSession().getFiles());
         Track track = new Track();
         for (int frame = 0; frame < 3; frame++) {
@@ -180,11 +185,18 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
             track.addPoint(point);
         }
         TrackOverlay overlay = TrackOverlay.from(PipelineResult.builder().tracks(List.of(track)).build());
+        var telemetry = new io.github.ppissias.jtransient.telemetry.PipelineTelemetry();
+        telemetry.faintMoverSearchTelemetry = new io.github.ppissias.jtransient.telemetry.FaintMoverSearchTelemetry();
+        telemetry.faintMoverSearchTelemetry.searchedFrameIndices = List.of(0, 1, 2);
+        var candidate = new com.google.gson.Gson().fromJson("{\"x\":50,\"y\":40,\"vx\":0.4,\"vy\":0,\"referenceTimeMillis\":"
+                + files[0].getObservationTimestamp() + "}", io.github.ppissias.jtransient.core.FaintMoverCandidate.class);
+        var faint = eu.startales.spacepixels.detection.FaintMoverOverlay.from(PipelineResult.builder()
+                .telemetry(telemetry).faintMoverCandidates(List.of(candidate)).build(), files);
         CountDownLatch ended = new CountDownLatch(1);
         var admission = GuiActionRunner.execute(() -> application().getJobCoordinator().start(JobKind.DETECTION,
                 application().getSession(), context -> JobOutcome.completed(Boolean.TRUE), (handle, outcome) -> {
                     application().getMainApplicationPanel().showDetectionOverlays(handle.session(),
-                            new DetectionOverlays(overlay, null));
+                            new DetectionOverlays(overlay, null, faint));
                     ended.countDown();
                 }));
         assertTrue(admission.admitted());

@@ -48,7 +48,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("79 engine fields, 12 application fields and the rejection preset", 92, inputs.size());
+        assertEquals("84 engine fields, 12 application fields and the rejection preset", 97, inputs.size());
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
             assertNotNull(setting.id(), controls.get(setting.id()));
             assertEquals(setting.expert(), controls.get(setting.id()).expert());
@@ -82,7 +82,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             saved = SpacePixelsDetectionProfileIO.load(reader);
         }
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
-            sameValue(setting.id(), expected.get(setting.id()), setting.read(saved.getDetectionConfig()));
+            sameValue(setting.id(), canonicalValue(setting.id(), expected.get(setting.id())), setting.read(saved.getDetectionConfig()));
         }
         assertEquals(expected.get("autoTuneMaxCandidateFrames"), saved.getAutoTuneMaxCandidateFrames());
         assertEquals(expected.get("variableStarMaxCandidateCards"), saved.getVariableStarReportOptions().maxCandidateCards());
@@ -108,7 +108,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, Object> defaults = GuiActionRunner.execute(() -> values(inputs));
         DetectionConfig defaultConfig = new DetectionConfig();
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
-            sameValue(setting.id(), setting.read(defaultConfig), defaults.get(setting.id()));
+            sameValue(setting.id(), setting.read(defaultConfig), canonicalValue(setting.id(), defaults.get(setting.id())));
         }
         sameValue("default report card limit", VariableStarReportOptions.DEFAULT.maxCandidateCards(), defaults.get("variableStarMaxCandidateCards"));
         assertEquals(VariableStarReportOptions.DEFAULT.sortOrder(), defaults.get("variableStarSortOrder"));
@@ -201,6 +201,11 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             else if (input instanceof JComboBox<?> choice) result.put(id, choice.getSelectedItem());
         });
         return result;
+    }
+
+    /** Converts the time control's displayed minutes into the engine/profile seconds for persistence checks. */
+    private static Object canonicalValue(String id, Object value) {
+        return id.equals("faintMoverMaxSeconds") ? ((Number) value).doubleValue() * 60 : value;
     }
 
     /** Compares all controls while allowing integer/double wrapper differences in Swing number models. */

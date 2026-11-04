@@ -134,7 +134,8 @@ public final class GuiDetectionReportPrompt {
                 OptionalRow.category(FindingCategory.LOCAL_RESCUE, config, summary),
                 OptionalRow.category(FindingCategory.LOCAL_ACTIVITY, config, summary),
                 OptionalRow.category(FindingCategory.COMMON_MOTION, config, summary),
-                OptionalRow.category(FindingCategory.CAMERA_FIXED, config, summary)
+                OptionalRow.category(FindingCategory.CAMERA_FIXED, config, summary),
+                OptionalRow.category(FindingCategory.FAINT_MOVER, config, summary)
         };
         JCheckBox anomaliesBox = null;
         JCheckBox slowMoversBox = null;
@@ -142,6 +143,7 @@ public final class GuiDetectionReportPrompt {
         JCheckBox localActivityBox = null;
         JCheckBox commonMotionBox = null;
         JCheckBox cameraFixedBox = null;
+        JCheckBox faintMoversBox = null;
         JCheckBox[] boxes = new JCheckBox[rows.length];
         if (offerInReport(anomaliesOn, summary.anomalies)) {
             anomaliesBox = includeBox();
@@ -166,6 +168,10 @@ public final class GuiDetectionReportPrompt {
         if (offerInReport(cameraFixedOn, summary.cameraFixedGroups)) {
             cameraFixedBox = includeBox();
             boxes[8] = cameraFixedBox;
+        }
+        if (offerInReport(config != null && config.enableFaintMoverSearch, summary.faintMoverCandidates)) {
+            faintMoversBox = includeBox();
+            boxes[9] = faintMoversBox;
         }
         JCheckBox variableStarsBox = offerInReport(variableStarsOn, 1) ? includeBox() : null;
 
@@ -220,7 +226,7 @@ public final class GuiDetectionReportPrompt {
             }
         }
         panel.add(grid);
-        JCheckBox[] watched = {anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox, cameraFixedBox};
+        JCheckBox[] watched = {anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox, cameraFixedBox, faintMoversBox};
         Runnable refreshIncluded = () -> included.setText(includedLine(summary, watched));
         for (JCheckBox box : watched) {
             if (box != null) {
@@ -248,7 +254,7 @@ public final class GuiDetectionReportPrompt {
         panel.add(Box.createVerticalStrut(10));
         panel.add(aligned(label("Generate the report?", true)));
         return new ReportChoice(panel, anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox,
-                cameraFixedBox, variableStarsBox);
+                cameraFixedBox, variableStarsBox, faintMoversBox);
     }
 
     /** Counts classified results still selected for export; photometry is reported separately. */
@@ -256,7 +262,7 @@ public final class GuiDetectionReportPrompt {
         int included = FindingCategory.MOVING_TARGET.count(summary) + FindingCategory.STREAK_TRACK.count(summary)
                 + FindingCategory.SINGLE_STREAK.count(summary);
         FindingCategory[] optional = {FindingCategory.ANOMALY, FindingCategory.SLOW_MOVER, FindingCategory.LOCAL_RESCUE,
-                FindingCategory.LOCAL_ACTIVITY, FindingCategory.COMMON_MOTION, FindingCategory.CAMERA_FIXED};
+                FindingCategory.LOCAL_ACTIVITY, FindingCategory.COMMON_MOTION, FindingCategory.CAMERA_FIXED, FindingCategory.FAINT_MOVER};
         for (int index = 0; index < optional.length; index++) {
             if (boxes[index] == null || boxes[index].isSelected()) included += optional[index].count(summary);
         }
@@ -373,10 +379,11 @@ public final class GuiDetectionReportPrompt {
         final JCheckBox commonMotion;
         final JCheckBox cameraFixed;
         final JCheckBox variableStars;
+        final JCheckBox faintMovers;
 
         /** Keeps the displayed controls until the user answers the dialog. */
         ReportChoice(JComponent panel, JCheckBox anomalies, JCheckBox slowMovers, JCheckBox localRescue,
-                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox cameraFixed, JCheckBox variableStars) {
+                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox cameraFixed, JCheckBox variableStars, JCheckBox faintMovers) {
             this.panel = panel;
             this.anomalies = anomalies;
             this.slowMovers = slowMovers;
@@ -385,6 +392,7 @@ public final class GuiDetectionReportPrompt {
             this.commonMotion = commonMotion;
             this.cameraFixed = cameraFixed;
             this.variableStars = variableStars;
+            this.faintMovers = faintMovers;
         }
 
         /** Reads report-only choices; absent controls retain their default inclusion. */
@@ -396,7 +404,7 @@ public final class GuiDetectionReportPrompt {
                     selected(localActivity),
                     selected(commonMotion),
                     selected(cameraFixed),
-                    selected(variableStars));
+                    selected(variableStars), selected(faintMovers));
         }
 
         /** Treats an unavailable choice as included for compatibility. */

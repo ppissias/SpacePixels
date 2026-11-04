@@ -28,6 +28,10 @@ import eu.startales.spacepixels.config.SlowMoversSettings;
 import eu.startales.spacepixels.config.AnomalyDetectionSettings;
 import eu.startales.spacepixels.config.MovingObjectsSettings;
 import eu.startales.spacepixels.config.StreakDetectionSettings;
+import eu.startales.spacepixels.config.FaintMoversSettings;
+import eu.startales.spacepixels.detection.FaintMoverRuntimeEstimate;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
@@ -82,6 +86,12 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private JSpinner spinDetectionSigma, spinMinPixels, spinGrowSigma;
     private JCheckBox chkEnableSlowMovers;
+    private JCheckBox chkEnableFaintMovers;
+    private JSpinner spinFaintMoverMaxSpeed;
+    private JLabel faintMoverSpeedUnit, faintMoverEstimate;
+    private double faintMoverSpeedScale = 1;
+    private eu.startales.spacepixels.session.SkyCatalogueModel faintMoverSky;
+    private final Runnable faintMoverSkyListener = () -> SwingUtilities.invokeLater(this::refreshFaintMoverContext);
     private JSpinner spinMasterSigma, spinMasterGrowSigma, spinMasterMinPix, spinMasterSlowMoverMinPixels, spinMasterSlowMoverSigma, spinMasterSlowMoverGrowSigma;
     private JSpinner spinSlowMoverMinAxisRatio, spinSlowMoverMaxAxisRatio, spinSlowMoverMinFillFactor;
     private JSpinner spinSlowMoverMedianSupportOverlapFraction, spinSlowMoverMedianSupportMaxOverlapFraction;
@@ -210,6 +220,7 @@ public class DetectionConfigurationPanel extends JPanel {
         navigator.addPage("MOVING OBJECTS", "Track Linking", buildMovingObjectsPanel(), List.of());
         navigator.addPage("MOVING OBJECTS", "Anomaly Detection", buildAnomalyDetectionPanel(), List.of());
         navigator.addPage("MOVING OBJECTS", "Slow Movers", buildSlowMoversPanel(), List.of());
+        navigator.addPage("MOVING OBJECTS", "Faint Movers (experimental)", buildFaintMoversPanel(), List.of());
         navigator.addPage("MOVING OBJECTS", "Residual Analysis", buildResidualAnalysisPanel(), List.of());
         navigator.addPage("VARIABLE STARS", "Variable Stars", buildVariableStarsPanel(), List.of());
         navigator.addPage("REPORT", "Report Visualization", buildAdvancedVisualizationPanel(), List.of());
@@ -280,6 +291,7 @@ public class DetectionConfigurationPanel extends JPanel {
         applySettingsToMemory();
         rememberSavedState();
         updateSavedState();
+        refreshFaintMoverContext();
     }
 
     /** The settings the Auto-Tuner chooses, shown on the Overview page. */
@@ -379,6 +391,8 @@ public class DetectionConfigurationPanel extends JPanel {
                 null, "Track Linking");
         overview.addAnalysis("Slow movers", "objects that barely move during the session (comets, distant asteroids), found in the stacked frames",
                 chkEnableSlowMovers.getModel(), "Slow Movers");
+        overview.addAnalysis("Faint movers (experimental)", "independent digital tracking of point-like movers too faint in individual frames; adds search time",
+                chkEnableFaintMovers.getModel(), "Faint Movers (experimental)");
         overview.addAnalysis("Anomaly rescue", "bright or large events seen in a single frame (flashes, glints)",
                 chkEnableAnomalyRescue.getModel(), "Anomaly Detection");
         overview.addAnalysis("Residual analysis", "a last look at leftover detections for weak candidates and local activity",
@@ -1491,6 +1505,83 @@ public class DetectionConfigurationPanel extends JPanel {
         bindings.add(binding);
     }
 
+    /** Builds the experimental stage's controls; conversions affect display only, while profiles keep engine units. */
+    private JPanel buildFaintMoversPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBorder(new EmptyBorder(10, 20, 20, 20));
+        panel.add(createTabIntro("Digital tracking adds weak signals along trial motions across the kept frames. "
+                + "It searches independently of known-object predictions and reports unverified FM candidates. "
+                + "Only the session with the most kept frames is searched when gaps exceed two hours. "
+                + "Auto-Tune preserves these experimental settings."));
+        chkEnableFaintMovers = addTypedCheckbox(panel, FaintMoversSettings.ENABLE);
+        addTypedDouble(panel, FaintMoversSettings.MIN_DISPLACEMENT, Double.MIN_VALUE, Double.MAX_VALUE, 0.1);
+        spinFaintMoverMaxSpeed = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSpeedPixelsPerMinute), Double.MIN_VALUE, Double.MAX_VALUE, 0.001));
+        registerTypedBinding(FaintMoversSettings.MAX_SPEED, spinFaintMoverMaxSpeed, () -> {
+            double displayed = ((Number) spinFaintMoverMaxSpeed.getValue()).doubleValue();
+            double current = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
+            return displayed == faintMoverDisplayNumber(current * faintMoverSpeedScale) ? current : displayed / faintMoverSpeedScale;
+        }, value -> setSpinnerValueClamped(spinFaintMoverMaxSpeed, faintMoverDisplayNumber(value * faintMoverSpeedScale)));
+        addSettingRow(panel, FaintMoversSettings.MAX_SPEED.id(), FaintMoversSettings.MAX_SPEED.title(), FaintMoversSettings.MAX_SPEED.help(), false, spinFaintMoverMaxSpeed);
+        faintMoverSpeedUnit = new JLabel("px/min");
+        ((JPanel) spinFaintMoverMaxSpeed.getParent()).add(faintMoverSpeedUnit, 1);
+        addTypedDouble(panel, FaintMoversSettings.MIN_SCORE, Double.MIN_VALUE, Double.MAX_VALUE, 0.5);
+        JSpinner time = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSeconds / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
+        registerTypedBinding(FaintMoversSettings.TIME_LIMIT, time, () -> {
+            double displayed = ((Number) time.getValue()).doubleValue();
+            double current = jTransientConfig.faintMoverMaxSeconds;
+            return displayed == faintMoverDisplayNumber(current / 60) ? current : displayed * 60;
+        }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
+        addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), "Time limit (minutes)", FaintMoversSettings.TIME_LIMIT.help(), false, time);
+        faintMoverEstimate = new WrappingHelpLabel("", 560);
+        faintMoverEstimate.setForeground(UiStyle.helpColor());
+        faintMoverEstimate.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(faintMoverEstimate);
+        panel.addHierarchyListener(event -> {
+            if ((event.getChangeFlags() & java.awt.event.HierarchyEvent.SHOWING_CHANGED) != 0 && panel.isShowing()) refreshFaintMoverContext();
+        });
+        return panel;
+    }
+
+    /** Keeps converted controls readable; unchanged display values retain the exact canonical profile value. */
+    private static double faintMoverDisplayNumber(double value) {
+        double bounded = Math.max(Double.MIN_VALUE, Math.min(Double.MAX_VALUE, value));
+        return BigDecimal.valueOf(bounded).round(new java.math.MathContext(6, java.math.RoundingMode.HALF_UP)).doubleValue();
+    }
+
+    /** Refreshes metadata-only units and estimates on the EDT, preserving the canonical setting and saved baseline. */
+    private void refreshFaintMoverContext() {
+        if (spinFaintMoverMaxSpeed == null || faintMoverSpeedUnit == null) return;
+        var owner = sessions.current();
+        var files = owner == null ? new FitsFileInformation[0] : owner.getFiles();
+        double scale = 1;
+        boolean angular = false;
+        for (var file : files) {
+            var wcs = WcsCoordinateTransformer.fromHeader(file.getFitsHeader());
+            if (wcs == null) continue;
+            var a = wcs.pixelToSky(file.getSizeWidth() / 2.0, file.getSizeHeight() / 2.0);
+            var b = wcs.pixelToSky(file.getSizeWidth() / 2.0 + 1, file.getSizeHeight() / 2.0);
+            if (a == null || b == null) continue;
+            double measured = SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
+            if (Double.isFinite(measured) && measured > 0) { scale = measured; angular = true; break; }
+        }
+        if (Double.compare(scale, faintMoverSpeedScale) != 0) {
+            boolean previous = suppressAutoApply;
+            suppressAutoApply = true;
+            try {
+                double canonical = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
+                faintMoverSpeedScale = scale;
+                setSpinnerValueClamped(spinFaintMoverMaxSpeed, faintMoverDisplayNumber(canonical * scale));
+                for (var row : settingRows) if (row.input == spinFaintMoverMaxSpeed && savedConfig != null) {
+                    row.setSavedValue(faintMoverDisplayNumber(savedConfig.faintMoverMaxSpeedPixelsPerMinute * scale));
+                    row.refresh();
+                }
+            } finally { suppressAutoApply = previous; }
+        }
+        faintMoverSpeedUnit.setText(angular ? "arcsec/min" : "px/min");
+        faintMoverEstimate.setText("<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig) + "</html>");
+    }
+
     /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */
     private JCheckBox addTypedCheckbox(JPanel parent, DetectionSetting<Boolean> setting) {
         JCheckBox input = new JCheckBox();
@@ -1579,6 +1670,10 @@ public class DetectionConfigurationPanel extends JPanel {
         }
         readout.showEnabledAnalyses(AnalysisScopeText.analyses(jTransientConfig));
         readout.showActiveDetectionSettings(jTransientConfig);
+        if (faintMoverEstimate != null) {
+            var owner = sessions.current();
+            faintMoverEstimate.setText("<html>" + FaintMoverRuntimeEstimate.describe(owner == null ? null : owner.getFiles(), jTransientConfig) + "</html>");
+        }
     }
 
     /** Puts each pair of settings back in order by moving the one its rule names, and says what was moved. */
@@ -1655,6 +1750,11 @@ public class DetectionConfigurationPanel extends JPanel {
     /** A new session, or none: the Overview shows it, and the master stack of the last one is dropped. */
     void sessionChanged(FitsFileInformation[] filesInfo) {
         stretchSamples.sourceChanged();
+        if (faintMoverSky != null) faintMoverSky.removeListener(faintMoverSkyListener);
+        var owner = sessions.current();
+        faintMoverSky = owner == null ? null : owner.getSkyCatalogue();
+        if (faintMoverSky != null) faintMoverSky.addListener(faintMoverSkyListener);
+        refreshFaintMoverContext();
         if (filesInfo.length == 0) {
             overviewPanel.setSession(sessions.current(), null, 0, 0, 0, false, null, new ArrayList<>());
             return;
