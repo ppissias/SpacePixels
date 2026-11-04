@@ -7,11 +7,15 @@ import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.model.Track;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateDiagnostics;
 import io.github.ppissias.jtransient.core.SlowMoverCandidateResult;
+import io.github.ppissias.jtransient.core.SlowMoverMotionEvidence;
+import io.github.ppissias.jtransient.core.SlowMoverTrackMatcher;
 
 import java.awt.Color;
 import java.awt.image.BufferedImage;
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -92,8 +96,8 @@ final class DeepStackReportSectionWriter {
         report.println("<div class='flex-container'>");
         for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
             DetectedObject detection = context.slowMoverCandidates.get(i);
-            List<SlowMoverTrackMatch> matchedTracks = findMatchingReportedTracks(detection, reportTrackReferences);
             SlowMoverCandidateDiagnostics candidateDiagnostics = resolveCandidateDiagnostics(context, detection, i);
+            List<SlowMoverTrackMatch> matchedTracks = findMatchingReportedTracks(detection, candidateDiagnostics, reportTrackReferences);
             exportDeepStackDetectionCard(report, context, detection, matchedTracks, candidateDiagnostics, i + 1);
         }
         report.println("</div>");
@@ -206,15 +210,16 @@ final class DeepStackReportSectionWriter {
         }
 
         report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
-        String trackBadge = matchedTracks.isEmpty() ? "" : ReportPresentation.trackBadge("Already tracked: " + matchedTracks.get(0).label
+        String trackBadge = matchedTracks.isEmpty() ? "" : ReportPresentation.trackBadge("Track overlap: " + matchedTracks.get(0).label
                 + (matchedTracks.size() > 1 ? " +" + (matchedTracks.size() - 1) : ""), matchedTracks.get(0).label);
         report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate " + FindingCategory.SLOW_MOVER.id(candidateNumber) + trackBadge + "</div>");
         if (!matchedTracks.isEmpty()) {
-            report.println("<div class='track-link-note'><strong>Already reported as track"
+            report.println("<div class='track-link-note'><strong>Nearby reported track"
                     + (matchedTracks.size() == 1 ? " " : "s ")
                     + buildSlowMoverTrackLinksHtml(matchedTracks)
                     + ".</strong> "
                     + buildSlowMoverTrackMatchSummaryHtml(matchedTracks)
+                    + " Overlap alone does not establish that the findings are the same source."
                     + "</div>");
         }
         report.println("<div class='image-container' style='margin-bottom: 10px;'>");
@@ -281,6 +286,7 @@ final class DeepStackReportSectionWriter {
                 .append("</span>");
         deepStackStats.append("</div>");
         report.println(deepStackStats);
+        writeMotionEvidence(report, context, candidateDiagnostics, prefix);
         report.print(DetectionReportAstrometry.buildDeepStackIdentificationHtml(
                 context.astrometryContext,
                 detection,
@@ -302,11 +308,52 @@ final class DeepStackReportSectionWriter {
         return references;
     }
 
+    /** Writes copied centroid evidence and a CSV; the fit is inspection data, never a confidence or detection gate. */
+    private static void writeMotionEvidence(PrintWriter report, DetectionReportContext context,
+                                             SlowMoverCandidateDiagnostics diagnostics, String prefix) throws IOException {
+        SlowMoverMotionEvidence evidence = diagnostics == null ? null : diagnostics.motionEvidence;
+        report.print("<details class='slow-mover-motion-evidence'><summary>Original-frame centroid drift (inspection)</summary>");
+        if (evidence != null && !evidence.positions.isEmpty()) {
+            String csv = ReportFiles.link(FindingCategory.SLOW_MOVER, prefix + "_positions.csv");
+            try (var writer = Files.newBufferedWriter(context.file(csv).toPath(), StandardCharsets.UTF_8)) {
+                writer.write("original_frame_number,retained_frame_number,timestamp_ms,x_px,y_px,aperture_snr\n");
+                for (var p : evidence.positions) {
+                    writer.write(String.format(Locale.US, "%d,%d,%s,%.6f,%.6f,%.6f%n",
+                            (long) p.sourceFrameIndex() + 1, p.retainedFrameIndex() + 1,
+                            p.timestamp() >= 0 ? Long.toString(p.timestamp()) : "", p.x(), p.y(), p.signalToNoise()));
+                }
+            }
+            report.printf(Locale.US, "<p>%d supported aperture centroids. <a href='%s' download>Download positions CSV</a>.</p>",
+                    evidence.positions.size(), csv);
+        }
+        if (evidence != null && evidence.fitAvailable) {
+            report.printf(Locale.US,
+                    "<p>Timed fit over %.2f of %.2f min (%.1f%% of the session span). Fitted drift: %.3f px/min; %.2f px over the supported span. RMS residual: %.2f px. ",
+                    evidence.supportedSpanMinutes, evidence.sessionSpanMinutes, 100 * evidence.sessionSpanFraction,
+                    evidence.speedPixelsPerMinute, evidence.displacementPixels, evidence.rmsPixels);
+            if (evidence.correlationAvailable) {
+                report.printf(Locale.US, "|r| along the footprint axis: %.3f.</p>", Math.abs(evidence.projectedCorrelation));
+            } else {
+                report.print("Correlation unavailable: no measurable position variance along the footprint axis.</p>");
+            }
+        } else {
+            report.print("<p>Timed fit unavailable: " + ReportFormat.escapeHtml(evidence == null
+                    ? "Original-frame positions are unavailable" : evidence.unavailableReason) + ".</p>");
+        }
+        report.print("<p>These are the strongest aperture positions inside the footprint. A star, seeing or registration trend may dominate. "
+                + "The fit and correlation do not confirm a moving source.</p></details>");
+    }
+
+    /** Measures possible correspondences only after reported tracks exist; neither finding is suppressed. */
     private static List<SlowMoverTrackMatch> findMatchingReportedTracks(DetectedObject detection,
+                                                                        SlowMoverCandidateDiagnostics diagnostics,
                                                                         List<ReportTrackReference> trackReferences) {
         List<SlowMoverTrackMatch> matches = new ArrayList<>();
         for (ReportTrackReference trackReference : trackReferences) {
-            SlowMoverTrackMatch match = computeSlowMoverTrackMatch(detection, trackReference);
+            SlowMoverTrackMatcher.Match comparison = SlowMoverTrackMatcher.match(detection,
+                    diagnostics == null ? null : diagnostics.motionEvidence, trackReference.track);
+            SlowMoverTrackMatch match = comparison == null ? null
+                    : new SlowMoverTrackMatch(trackReference.label, trackReference.categoryLabel, comparison);
             if (match != null) {
                 matches.add(match);
             }
@@ -317,67 +364,6 @@ final class DeepStackReportSectionWriter {
                 .thenComparingDouble(match -> match.bestDistancePixels)
                 .thenComparing(match -> match.label));
         return matches;
-    }
-
-    private static SlowMoverTrackMatch computeSlowMoverTrackMatch(DetectedObject detection,
-                                                                  ReportTrackReference trackReference) {
-        if (trackReference.track == null || trackReference.track.points == null || trackReference.track.points.isEmpty()) {
-            return null;
-        }
-
-        double footprintRadius = computeDetectionFootprintRadius(detection);
-        double matchTolerancePixels = Math.max(3.0, Math.min(10.0, footprintRadius * 0.55 + 2.0));
-        int overlappingTrackPoints = 0;
-        double bestDistancePixels = Double.POSITIVE_INFINITY;
-
-        for (DetectedObject point : trackReference.track.points) {
-            if (point == null) {
-                continue;
-            }
-            double pointDistance = computePointToDetectionDistance(point, detection);
-            bestDistancePixels = Math.min(bestDistancePixels, pointDistance);
-            if (pointDistance <= matchTolerancePixels) {
-                overlappingTrackPoints++;
-            }
-        }
-
-        if (overlappingTrackPoints == 0 || !Double.isFinite(bestDistancePixels)) {
-            return null;
-        }
-
-        return new SlowMoverTrackMatch(
-                trackReference.label,
-                trackReference.categoryLabel,
-                overlappingTrackPoints,
-                bestDistancePixels);
-    }
-
-    private static double computeDetectionFootprintRadius(DetectedObject detection) {
-        double area = detection.pixelArea > 0.0 ? detection.pixelArea : 0.0;
-        if (area <= 0.0 && detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
-            area = detection.rawPixels.size();
-        }
-        if (area <= 0.0) {
-            area = 1.0;
-        }
-        return Math.sqrt(area / Math.PI);
-    }
-
-    private static double computePointToDetectionDistance(DetectedObject point,
-                                                          DetectedObject detection) {
-        if (detection.rawPixels != null && !detection.rawPixels.isEmpty()) {
-            double bestDistancePixels = Double.POSITIVE_INFINITY;
-            for (Pixel pixel : detection.rawPixels) {
-                double dx = point.x - pixel.x;
-                double dy = point.y - pixel.y;
-                bestDistancePixels = Math.min(bestDistancePixels, Math.hypot(dx, dy));
-            }
-            if (Double.isFinite(bestDistancePixels)) {
-                return bestDistancePixels;
-            }
-        }
-
-        return Math.hypot(point.x - detection.x, point.y - detection.y);
     }
 
     private static String buildSlowMoverTrackLinksHtml(List<SlowMoverTrackMatch> matches) {
@@ -391,6 +377,7 @@ final class DeepStackReportSectionWriter {
         return html.toString();
     }
 
+    /** Describes spatial screening and actual common-frame distances without assigning source identity. */
     private static String buildSlowMoverTrackMatchSummaryHtml(List<SlowMoverTrackMatch> matches) {
         StringBuilder html = new StringBuilder();
         int displayedMatches = Math.min(matches.size(), 3);
@@ -405,9 +392,22 @@ final class DeepStackReportSectionWriter {
                     .append(") has ")
                     .append(match.overlappingTrackPoints)
                     .append(match.overlappingTrackPoints == 1 ? " detection" : " detections")
-                    .append(" on this smear, the closest ")
+                    .append(" near this footprint, the closest ")
                     .append(String.format(Locale.US, "%.1f px", match.bestDistancePixels))
                     .append(" from it.");
+            var comparison = match.comparison;
+            if (comparison.frameComparisonAvailable()) {
+                html.append(String.format(Locale.US,
+                        " %d common supported frame%s: RMS centroid separation %.2f px, maximum %.2f px.",
+                        comparison.comparedFrames(), comparison.comparedFrames() == 1 ? "" : "s",
+                        comparison.framePositionRmsPixels(), comparison.maxFramePositionDistancePixels()));
+            } else {
+                html.append(" Common-frame centroid comparison unavailable; spatial overlap only.");
+            }
+            if (comparison.ambiguousFrames() > 0 || comparison.timestampMismatches() > 0) {
+                html.append(String.format(Locale.US, " Excluded %d ambiguous frame IDs and %d conflicting capture times.",
+                        comparison.ambiguousFrames(), comparison.timestampMismatches()));
+            }
         }
         if (matches.size() > displayedMatches) {
             html.append(" ")
@@ -520,20 +520,23 @@ final class DeepStackReportSectionWriter {
         }
     }
 
+    /** Presentation labels and immutable engine measurements for one possible correspondence. */
     private static final class SlowMoverTrackMatch {
         private final String label;
         private final String categoryLabel;
         private final int overlappingTrackPoints;
         private final double bestDistancePixels;
+        private final SlowMoverTrackMatcher.Match comparison;
 
+        /** Adds report labels to an engine-owned comparison, without retaining mutable track objects. */
         private SlowMoverTrackMatch(String label,
                                     String categoryLabel,
-                                    int overlappingTrackPoints,
-                                    double bestDistancePixels) {
+                                    SlowMoverTrackMatcher.Match comparison) {
             this.label = label;
             this.categoryLabel = categoryLabel;
-            this.overlappingTrackPoints = overlappingTrackPoints;
-            this.bestDistancePixels = bestDistancePixels;
+            this.overlappingTrackPoints = comparison.overlappingTrackPoints();
+            this.bestDistancePixels = comparison.closestDistancePixels();
+            this.comparison = comparison;
         }
     }
 }

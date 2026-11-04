@@ -287,6 +287,8 @@ Profiles: `LOW`, `MEDIUM`, `HIGH` and `MAXIMUM` (as sensitive as possible; on la
 - `getCalibrationWarning()`
 - `hasCalibrationWarning()`
 
+The raw result's `slowMoverAnalysis.candidates` entries include `diagnostics.motionEvidence`: copied supported centroid positions, original sequence identities/capture times, descriptive timed drift/RMS/correlation and explicit availability. These do not confirm motion or change candidate selection. `SlowMoverTrackMatcher.match(candidate.object, candidate.diagnostics.motionEvidence, track)` measures a possible post-tracking correspondence using spatial screening and actual common frames; it neither merges findings nor establishes identity. See [JTransient's API contract](../JTransient/PIPELINE.md#jtransientenginerunpipeline) and [algorithm reference](../JTransient/ALGORITHM.md#temporal-review-and-track-correspondence). Generated slow-mover cards link their original-frame position CSVs; report finding identities remain unchanged.
+
 Typical usage patterns:
 
 - inspect `getPipelineResult()` for downstream integration with JTransient-level results

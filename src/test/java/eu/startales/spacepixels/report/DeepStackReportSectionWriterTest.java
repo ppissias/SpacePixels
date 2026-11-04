@@ -24,6 +24,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+/** Checks maximum-stack review evidence, availability and cautious track-overlap presentation. */
 public class DeepStackReportSectionWriterTest {
 
     @Rule
@@ -103,9 +104,52 @@ public class DeepStackReportSectionWriterTest {
             track.points.add(point);
         }
         String html = render(analysis, config, List.of(track));
-        assertTrue(html.contains("<a class='track-link-badge' href='#finding-t1'>Already tracked: T1</a>"));
-        assertTrue(html.contains("<div class='track-link-note'><strong>Already reported as track <a href='#finding-t1'>T1</a>.</strong>"));
-        assertTrue(html.contains("T1 (moving object track) has 3 detections on this smear"));
+        assertTrue(html.contains("<a class='track-link-badge' href='#finding-t1'>Track overlap: T1</a>"));
+        assertTrue(html.contains("<div class='track-link-note'><strong>Nearby reported track <a href='#finding-t1'>T1</a>.</strong>"));
+        assertTrue(html.contains("T1 (moving object track) has 3 detections near this footprint"));
+        assertTrue(html.contains("Common-frame centroid comparison unavailable; spatial overlap only."));
+        assertFalse(html.contains("Already tracked"));
+    }
+
+    /** Timed supported positions retain original frame numbering in the exported CSV and measured comparison. */
+    @Test public void exportsTimedCentroidsAndCommonFrameDistancesWithoutClaimingIdentity() throws Exception {
+        DetectionConfig config = new DetectionConfig();
+        config.masterSlowMoverMinPixels = 10;
+        config.masterSlowMoverSigmaMultiplier = 4;
+        config.masterSlowMoverGrowSigmaMultiplier = 3.5;
+        config.slowMoverMedianSupportMaxOverlapFraction = 1;
+        config.slowMoverMinFrameSupport = 0;
+        config.slowMoverMaxStationaryLikelihood = 100;
+        List<ImageFrame> frames = new ArrayList<>();
+        var originals = createFrames();
+        for (int i = 0; i < originals.size(); i++) frames.add(new ImageFrame(100 + 40 * i,
+                "timed-" + i, originals.get(i).pixelData, i * 60_000L, 1000));
+        var analysis = SlowMoverAnalyzer.analyze(MasterMapGenerator.createMaximumMasterStack(frames),
+                MasterMapGenerator.createMedianMasterStack(frames), frames, config);
+        assertEquals(1, analysis.candidates.size());
+        var evidence = analysis.candidates.get(0).diagnostics.motionEvidence;
+        assertTrue(evidence.fitAvailable);
+        Track track = new Track();
+        for (var p : evidence.positions) {
+            var point = new DetectedObject(p.x(), p.y(), 1000, 9);
+            point.sourceFrameIndex = p.sourceFrameIndex();
+            point.timestamp = p.timestamp();
+            track.points.add(point);
+        }
+        String html = render(analysis, config, List.of(track));
+        assertTrue(html.contains("Timed fit over 8.00 of 8.00 min"));
+        assertTrue(html.contains("9 common supported frames: RMS centroid separation 0.00 px"));
+        assertTrue(html.contains("Overlap alone does not establish"));
+        assertTrue(html.contains("The fit and correlation do not confirm a moving source."));
+        assertFalse(html.contains("Already tracked"));
+        try (var files = java.nio.file.Files.walk(temporaryFolder.getRoot().toPath())) {
+            var csv = files.filter(p -> p.getFileName().toString().endsWith("_positions.csv")).findFirst().orElseThrow();
+            var lines = java.nio.file.Files.readAllLines(csv);
+            assertEquals(10, lines.size());
+            assertEquals("original_frame_number,retained_frame_number,timestamp_ms,x_px,y_px,aperture_snr", lines.get(0));
+            assertTrue(lines.get(1).startsWith("101,1,0,"));
+            assertTrue(lines.get(9).startsWith("421,9,480000,"));
+        }
     }
 
     private String render(SlowMoverAnalysis analysis, DetectionConfig config) throws Exception {
