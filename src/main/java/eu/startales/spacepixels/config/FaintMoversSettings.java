@@ -16,8 +16,9 @@ public final class FaintMoversSettings {
             false, Double.class, c -> c.faintMoverMinDisplacementFwhm, (c, v) -> c.faintMoverMinDisplacementFwhm = v);
     public static final DetectionSetting<Double> MAX_SPEED = new DetectionSetting<>(
             "faintMoverMaxSpeedPixelsPerMinute", "Fastest motion", "",
-            "Largest motion searched. Stored in pixels per minute; displayed in arcseconds per minute when image WCS is available. "
-                    + "Cost grows approximately with the square of this value.",
+            "Largest motion searched, displayed as FWHM over the imported session using its timing span and an assumed seeing width. "
+                    + "This displacement is an estimate; the stored maximum remains pixels per minute. Pixel and angular rates are shown below. "
+                    + "Without usable session times the control shows its stored px/min value. Cost grows approximately with the square of that speed.",
             false, Double.class, c -> c.faintMoverMaxSpeedPixelsPerMinute, (c, v) -> c.faintMoverMaxSpeedPixelsPerMinute = v);
     public static final DetectionSetting<Double> MIN_SCORE = new DetectionSetting<>(
             "faintMoverMinScore", "Minimum score", "",

@@ -108,7 +108,10 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, Object> defaults = GuiActionRunner.execute(() -> values(inputs));
         DetectionConfig defaultConfig = new DetectionConfig();
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
-            sameValue(setting.id(), setting.read(defaultConfig), canonicalValue(setting.id(), defaults.get(setting.id())));
+            if (setting.id().equals("faintMoverMaxSpeedPixelsPerMinute")) {
+                double expectedMotion = defaultConfig.faintMoverMaxSpeedPixelsPerMinute * faintMoverDisplayScale();
+                assertEquals(expectedMotion, ((Number) defaults.get(setting.id())).doubleValue(), expectedMotion * 0.000005);
+            } else sameValue(setting.id(), setting.read(defaultConfig), canonicalValue(setting.id(), defaults.get(setting.id())));
         }
         sameValue("default report card limit", VariableStarReportOptions.DEFAULT.maxCandidateCards(), defaults.get("variableStarMaxCandidateCards"));
         assertEquals(VariableStarReportOptions.DEFAULT.sortOrder(), defaults.get("variableStarSortOrder"));
@@ -116,6 +119,9 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> window().button(VisibleText.button("Revert")).target().doClick());
         assertValues(expected, GuiActionRunner.execute(() -> values(inputs)));
         reopenWindow();
+        GuiActionRunner.execute(() -> application().importFolder(directory));
+        waitFor("session reimported for context-dependent motion display", () -> GuiActionRunner.execute(() ->
+                application().getSession() != null && application().getJobCoordinator().current() == null));
         Map<String, Object> reloaded = GuiActionRunner.execute(() -> values(inputs(application().getDetectionConfigurationPanel())));
         assertValues(expected, reloaded);
     }
@@ -203,9 +209,24 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         return result;
     }
 
-    /** Converts the time control's displayed minutes into the engine/profile seconds for persistence checks. */
-    private static Object canonicalValue(String id, Object value) {
-        return id.equals("faintMoverMaxSeconds") ? ((Number) value).doubleValue() * 60 : value;
+    /** Converts displayed motion/time units into canonical profile values for persistence checks. */
+    private Object canonicalValue(String id, Object value) {
+        if (id.equals("faintMoverMaxSeconds")) return ((Number) value).doubleValue() * 60;
+        if (id.equals("faintMoverMaxSpeedPixelsPerMinute")) return ((Number) value).doubleValue() / faintMoverDisplayScale();
+        return value;
+    }
+
+    /** Computes the continuous fixture's timing span independently of the production display converter. */
+    private double faintMoverDisplayScale() {
+        return GuiActionRunner.execute(() -> {
+            var files = application().getSession().getFiles();
+            long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
+            for (var file : files) {
+                long midpoint = file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2;
+                first = Math.min(first, midpoint); last = Math.max(last, midpoint);
+            }
+            return (last - first) / 60_000.0 / 2.5;
+        });
     }
 
     /** Compares all controls while allowing integer/double wrapper differences in Swing number models. */

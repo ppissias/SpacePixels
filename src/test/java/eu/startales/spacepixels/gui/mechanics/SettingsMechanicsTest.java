@@ -118,7 +118,11 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
         window().checkBox(VisibleText.checkBox("Search for faint movers")).requireNotSelected().check();
-        assertEquals(1.0, number(spinner("Fastest motion")), 0.001);
+        double originalScale = faintMoverDisplayScale();
+        assertEquals(originalScale, number(spinner("Fastest motion")), originalScale * 0.000005);
+        assertTrue(motionInfo("Slowest motion equivalents").contains("FWHM/session"));
+        assertTrue(motionInfo("Fastest motion equivalents").contains("FWHM/session"));
+        assertTrue(motionInfo("Fastest motion equivalents").contains("arcsec/min: unavailable"));
         assertEquals(10.0, number(spinner("Time limit (minutes)")), 0.001);
         field(spinner("Time limit (minutes)")).setText("0.5");
         field(spinner("Fastest motion")).setText("0.123");
@@ -129,7 +133,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
             var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
             assertTrue(config.enableFaintMoverSearch);
             assertEquals(30, config.faintMoverMaxSeconds, 1e-9);
-            assertEquals(0.123, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
+            assertEquals(0.123 / originalScale, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
         }
         showPage("Overview");
         window().checkBox(VisibleText.checkBox("Faint movers (experimental)")).requireSelected().uncheck();
@@ -152,19 +156,21 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
                 && application().getJobCoordinator().current() == null));
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
-        assertTrue(controlIsShowing("arcsec/min"));
         var file = GuiActionRunner.execute(() -> application().getSession().getFiles()[0]);
         var wcs = eu.startales.spacepixels.fits.WcsCoordinateTransformer.fromHeader(file.getFitsHeader());
         var a = wcs.pixelToSky(file.getSizeWidth() / 2.0, file.getSizeHeight() / 2.0);
         var b = wcs.pixelToSky(file.getSizeWidth() / 2.0 + 1, file.getSizeHeight() / 2.0);
         double scale = eu.startales.spacepixels.util.SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
-        assertEquals(0.123 * scale, number(spinner("Fastest motion")), 1e-9);
+        double canonicalRate = 0.123 / originalScale;
+        double expectedMotion = canonicalRate * faintMoverDisplayScale();
+        assertEquals(expectedMotion, number(spinner("Fastest motion")), expectedMotion * 0.000005);
+        assertTrue(motionInfo("Fastest motion equivalents").contains(String.format(java.util.Locale.ROOT, "%.5g arcsec/min", canonicalRate * scale)));
         window().button(VisibleText.button("Save")).click();
         waitFor("converted units saved", () -> showingLabel("Saved settings").contains("Saved settings"));
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
                 eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
             var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
-            assertEquals(0.123, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
+            assertEquals(canonicalRate, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
         }
     }
 
@@ -183,7 +189,8 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         importSyntheticSequence();
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
-        assertEquals(0.123457, number(spinner("Fastest motion")), 0);
+        double expectedMotion = precise.faintMoverMaxSpeedPixelsPerMinute * faintMoverDisplayScale();
+        assertEquals(expectedMotion, number(spinner("Fastest motion")), expectedMotion * 0.000005);
         assertEquals(0.0166667, number(spinner("Time limit (minutes)")), 0);
         window().button(VisibleText.button("Save")).click();
         waitFor("precise canonical values saved", () -> showingLabel("Saved settings").contains("Saved settings"));
@@ -193,6 +200,30 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
             assertEquals(precise.faintMoverMaxSpeedPixelsPerMinute, config.faintMoverMaxSpeedPixelsPerMinute, 0);
             assertEquals(precise.faintMoverMaxSeconds, config.faintMoverMaxSeconds, 0);
         }
+    }
+
+    /** Computes this continuous fixture's independent expected px/min to FWHM/session conversion. */
+    private double faintMoverDisplayScale() {
+        return GuiActionRunner.execute(() -> {
+            var files = application().getSession().getFiles();
+            long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
+            for (var file : files) {
+                long midpoint = file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2;
+                first = Math.min(first, midpoint); last = Math.max(last, midpoint);
+            }
+            return (last - first) / 60_000.0 / 2.5;
+        });
+    }
+
+    /** Reads one motion control's actual unit/equivalent guidance through its accessible label on the EDT. */
+    private String motionInfo(String name) {
+        var label = window().label(new GenericTypeMatcher<>(JLabel.class, true) {
+            /** Selects the named motion-equivalent label, independent of changing numeric text. */
+            @Override protected boolean isMatching(JLabel candidate) {
+                return name.equals(candidate.getAccessibleContext().getAccessibleName());
+            }
+        }).target();
+        return GuiActionRunner.execute(label::getText);
     }
 
     /** Opens the page and requires one of its controls to be on screen. */

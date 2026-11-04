@@ -14,6 +14,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
 | [F27](#f27-associate-local-rescue-candidates-with-moving-tracks) | Associate local rescue candidates with moving tracks | Investigation requested: the Lagoon example shows one mover split between a track and two local rescue candidates |
+| [F28](#f28-faint-mover-live-preview-and-phase-progress) | Faint-mover live preview and phase progress | Requested: refresh the processing display roughly every three seconds and show progress within the faint-mover phase |
 
 The other investigations from 2026-11-02 are owned by JTransient: [remaining deferred photometry work](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [readiness policy](../JTransient/FEATURE-REQUESTS.md#vs-9-selected-stars-and-the-linearity-check-minimum), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -231,3 +232,11 @@ The saved Gaia star model contains source identity when available, position, pro
 **Investigation.** Start with that existing report. Identify the track and both rescue groups, their original frames, midpoint times, positions and motion. Trace the linking, rescue and consolidation decisions, including any time/position/velocity or evidence gates, before attributing the split to a defect. Determine whether the intended outcome is a shared report association or a change to engine linking/consolidation. Avoid merging distinct objects merely because their paths align.
 
 **Ownership and decision.** Captured as a pending investigation, separate from F26. SpacePixels owns report associations and consistent presentation; any scientific linking or merging rule belongs to JTransient and must be reviewed with its application callers. No rule, threshold or implementation is agreed. Preserve the original findings and evidence while assessing recovery, false associations and regression coverage.
+
+## F28. Faint-mover live preview and phase progress
+
+**Request (2026-11-04).** While the faint-mover search is running, refresh the live processing display roughly every three seconds, like the other phases, and show progress specific to the faint-mover search.
+
+**Scope to investigate.** Review the existing stage progress and preview handoff before choosing the lightweight evidence to show. Keep previews bounded and coalesced, avoid preparing them while the display is hidden, and preserve cancellation, session identity and EDT delivery. Distinguish trial motions or partial tile coverage from retained candidates. Preview generation must respect the search budget and must not alter scientific outputs.
+
+**Status.** Captured as a pending request, separate from F26 and the motion-unit adjustment. No preview representation or implementation is agreed. Check full-size searches for sustained updates during long tiles, understandable phase-local progress, hidden-view cost and clear skipped/truncated outcomes.

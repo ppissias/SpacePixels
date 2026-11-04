@@ -44,6 +44,8 @@
 
 ### Changed
 
+- **Consistent faint-mover motion units.** Both controls display FWHM over the session, with pixel and angular rates underneath. Timing/seeing conversions are labelled estimates, missing metadata remains explicit, and the maximum retains a stored-px/min fallback without usable timing. Profile values and detection semantics are unchanged; Save/Revert and session changes preserve the exact stored maximum.
+
 - **Faint-mover review (F26).** Compact evidence cards add native-intensity Normal/Strong/Adjustable stretches, synchronized source/residual blinks, frame stepping, zoom, annotation visibility, a motion-centred view, shared-scale half stacks and actual scoring-path support. Offline assets are bounded and missing evidence stays explicit; CSV/JSON gain finite sample metadata without changing existing score or fitted-position definitions. JTransient supplies the residual/support cutouts. Search thresholds and candidate-selection rules are unchanged.
 - **Detailed settings alignment.** Category pages fit a shared column to their inputs and units, reserve Reset space beside each input and keep a consistent scrollbar width. Visualization sliders sit below their number fields and do not widen other pages; checkboxes use their natural size. Faint-mover guidance distinguishes profile/default policy settings, WCS unit conversion, estimated minimum speed and assumed versus measured seeing.
 
