@@ -9,7 +9,6 @@
  */
 package eu.startales.spacepixels.gui;
 
-import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SpinnerNumberModel;
@@ -32,16 +31,16 @@ final class SpinnerSlider {
     }
 
     /**
-     * Puts a slider before {@code spinner} in the panel that holds it. {@code changed} runs after every move of either
+     * Creates a slider linked to {@code spinner}; its caller places it below the setting's input line. {@code changed} runs after every move of either
      * control and while a number is typed, for a preview that follows the value as it is being chosen.
      */
-    static JSlider attach(JSpinner spinner, String title, Runnable changed) {
+    static JSlider create(JSpinner spinner, String title, Runnable changed) {
         SpinnerNumberModel model = (SpinnerNumberModel) spinner.getModel();
         BigDecimal minimum = BigDecimal.valueOf(((Number) model.getMinimum()).doubleValue());
         BigDecimal step = BigDecimal.valueOf(model.getStepSize().doubleValue());
         JSlider slider = new JSlider(0, notch(((Number) model.getMaximum()).doubleValue(), minimum, step),
                 notch(((Number) spinner.getValue()).doubleValue(), minimum, step));
-        slider.setPreferredSize(new Dimension(UiStyle.space(220), slider.getPreferredSize().height));
+        slider.setPreferredSize(new Dimension(UiStyle.space(160), slider.getPreferredSize().height));
         slider.getAccessibleContext().setAccessibleName(title);
         // Set while one control moves the other, so that the slider does not round a typed value to its notch.
         boolean[] syncing = {false};
@@ -92,7 +91,6 @@ final class SpinnerSlider {
         };
         spinner.addPropertyChangeListener("editor", listenToEditor);
         listenToEditor.propertyChange(null);
-        ((JPanel) spinner.getParent()).add(slider, 0);
         return slider;
     }
 

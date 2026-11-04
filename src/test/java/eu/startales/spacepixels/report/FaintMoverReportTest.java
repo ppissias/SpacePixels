@@ -60,7 +60,7 @@ public class FaintMoverReportTest {
         }
         assertTrue("The standalone map contains the FM reference marker", coloured);
         assertTrue(html.contains("Search truncated at its time limit"));
-        assertTrue(html.contains("camera-fixed N/A"));
+        assertTrue(html.contains("<dt>Camera-fixed score</dt><dd>N/A</dd>"));
         assertTrue(html.contains("score units"));
         assertTrue(html.contains("unavailable for this field or reference time"));
         assertTrue(html.contains("not individual frame detections"));
@@ -72,6 +72,59 @@ public class FaintMoverReportTest {
         assertFalse(csv.toString().contains("NaN"));
         assertFalse(csv.toString().contains("Infinity"));
         assertTrue(data.getAsJsonArray("findings").toString().contains("finding-fm1"));
+        assertTrue(html.contains("No saved engine review evidence"));
+        assertTrue(html.contains("data-fm-stretch"));
+        assertTrue(html.contains("Motion-centred"));
+        assertTrue(output.toPath().resolve("faint_movers/fm1_view.js").toFile().isFile());
+    }
+
+    /** Native source samples, engine frame identities and missing halves survive the offline review export. */
+    @Test public void reviewExportsNativeSamplesAndActualMaskSupportWithoutEmbeddingPixelsInSummaryJson() throws Exception {
+        var files = files();
+        var c = candidate(files[0].getObservationTimestamp() + 60_000);
+        var tree = new com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create().toJsonTree(c).getAsJsonObject();
+        var d = new com.google.gson.JsonObject();
+        d.addProperty("x", 49); d.addProperty("y", 49); d.addProperty("width", 3); d.addProperty("height", 3);
+        d.addProperty("scoreX", 50); d.addProperty("scoreY", 50);
+        var frames = new com.google.gson.JsonArray();
+        for (int index : new int[]{0, 2}) {
+            var f = new com.google.gson.JsonObject();
+            f.addProperty("sequenceIndex", index); f.addProperty("midpointMillis", files[index].getObservationTimestamp() + 60_000);
+            f.addProperty("sampleX", 50); f.addProperty("sampleY", 50); f.addProperty("unmasked", index == 2);
+            f.addProperty("signal", index == 0 ? -0.5f : 1.25f);
+            f.add("residual", new Gson().toJsonTree(new float[]{0, 0, 0, 0, index == 0 ? -0.5f : 1.25f, 0, 0, 0, 0}));
+            frames.add(f);
+        }
+        d.add("frames", frames); d.add("secondHalf", new Gson().toJsonTree(c.cutout)); tree.add("diagnostics", d);
+        c = new Gson().fromJson(tree, FaintMoverCandidate.class);
+        File output = export(files, c, telemetry(), ReportInclusion.all());
+        String summary = Files.readString(output.toPath().resolve("report-data.json"));
+        assertFalse(summary.contains("\"residual\""));
+        var review = com.google.gson.JsonParser.parseString(summary).getAsJsonObject().getAsJsonArray("faintMovers")
+                .get(0).getAsJsonObject().getAsJsonObject("review");
+        assertEquals(1, review.get("unmaskedFrames").getAsInt());
+        assertFalse(review.has("firstHalfStack"));
+        assertTrue(output.toPath().resolve(review.get("secondHalfStack").getAsString()).toFile().isFile());
+        String asset = Files.readString(output.toPath().resolve(review.get("data").getAsString()));
+        var payload = com.google.gson.JsonParser.parseString(asset.substring(asset.indexOf(',') + 1, asset.length() - 2)).getAsJsonObject();
+        assertEquals(3, payload.getAsJsonArray("frames").get(1).getAsJsonObject().get("number").getAsInt());
+        var source = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(payload.get("source").getAsString()))
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(768 + (49 * 49) % 100, Short.toUnsignedInt(source.getShort()));
+        var residual = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(payload.get("residual").getAsString()))
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(-0.5f, residual.getFloat(4 * 4), 0);
+        assertEquals(1.25f, residual.getFloat((9 + 4) * 4), 0);
+        var samples = review.getAsJsonArray("pathSamples");
+        assertFalse(samples.get(0).getAsJsonObject().get("unmasked").getAsBoolean());
+        assertEquals(1.25, samples.get(1).getAsJsonObject().get("processedSignal").getAsDouble(), 0);
+        var csv = Files.readAllLines(output.toPath().resolve("faint_movers/faint_movers.csv"));
+        assertTrue(csv.getFirst().endsWith("scoring_sample_x,scoring_sample_y,centre_unmasked,processed_residual_signal"));
+        assertTrue(csv.get(1).endsWith(",50,50,false,-0.5"));
+        assertTrue(csv.get(2).endsWith(",50,50,true,1.25"));
+        String html = Files.readString(output.toPath().resolve("detection_report.html"));
+        assertTrue(html.contains("First half: insufficient unmasked support"));
+        assertTrue(html.contains("not a count of individual detections"));
     }
 
     /** A skip is distinct from a completed empty search, while report omission removes candidates and their assets. */

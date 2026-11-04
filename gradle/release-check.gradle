@@ -6,7 +6,8 @@ def reportJavascriptTest = tasks.register('reportJavascriptTest', Exec) {
     commandLine providers.environmentVariable('NODE_EXECUTABLE').orElse('node').get(), '--test',
             'src/test/javascript/catalogue-comparison.test.js',
             'src/test/javascript/report-lookups.test.js',
-            'src/test/javascript/report-interactions.test.js'
+            'src/test/javascript/report-interactions.test.js',
+            'src/test/javascript/faint-mover-review.test.js'
     shouldRunAfter tasks.named('test')
 }
 

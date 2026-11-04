@@ -12,7 +12,6 @@ import java.io.PrintWriter;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
-import javax.imageio.ImageIO;
 
 /** Writes experimental fitted-path cards and streamed, fixed-stretch animations from the captured report inputs. */
 final class FaintMoverSectionWriter {
@@ -30,6 +29,7 @@ final class FaintMoverSectionWriter {
             out.println("<p><strong>Search skipped:</strong> " + escape(telemetry.skippedReason) + "</p>");
             return;
         }
+        if (!c.faintMoverPresentation.isEmpty()) FaintMoverReviewWriter.appendStyle(out);
         out.printf(Locale.ROOT, "<p><strong>%s</strong>: %d of %d tiles; %,d searched pixels; %d frames over %.2f min "
                         + "(%d kept frames outside the searched session). Motion %.4f–%.4f px/min, %d coarse trials. "
                         + "FWHM %.2f px (%s); elapsed %.1f s.</p>%n",
@@ -37,10 +37,13 @@ final class FaintMoverSectionWriter {
                 telemetry.searchedPixels, telemetry.frames, telemetry.sessionMinutes, telemetry.framesOutsideSession,
                 telemetry.minSpeedPixelsPerMinute, telemetry.maxSpeedPixelsPerMinute, telemetry.coarseMotions,
                 telemetry.fwhmPixels, telemetry.fwhmFromStars ? "measured" : "fallback", telemetry.elapsedMs / 1000.0);
-        out.printf(Locale.ROOT, "<p>Candidate checks: %d below score, %d split-half, %d stationary, %d camera-fixed, "
+        out.printf(Locale.ROOT, "<details><summary>Search checks and diagnostic coverage</summary><p>Candidate checks: %d below score, %d split-half, %d stationary, %d camera-fixed, "
                         + "%d duplicates, %d matching tracks, %d near stronger paths; %d candidates retained.</p>%n",
                 telemetry.belowScore, telemetry.rejectedSplitHalf, telemetry.rejectedStationary, telemetry.followingCamera,
                 telemetry.duplicates, telemetry.matchedTracks, telemetry.nearStronger, telemetry.candidates);
+        out.printf(Locale.ROOT, "<p>Bounded residual/support evidence: %d / %d candidates, %.2f MiB. "
+                        + "Resource-limited evidence is labelled on each card; it does not change candidate selection.</p></details>%n",
+                telemetry.diagnosticsAvailable, telemetry.candidates, telemetry.diagnosticBytes / (1024.0 * 1024));
         var objects = c.runContext.solarSystem();
         if (objects == null) out.println("<p>No matching saved known-object predictions are available for this run.</p>");
         else out.printf(Locale.ROOT, "<p>Catalogue comparisons use the saved fetch to predicted magnitude %.2f, within %.2f px "
@@ -52,7 +55,7 @@ final class FaintMoverSectionWriter {
         }
         out.println("<p><a href='faint_movers/faint_movers.csv'>Download candidate and fitted-position CSV</a></p>");
         try (var csv = new PrintWriter(c.file("faint_movers/faint_movers.csv"), java.nio.charset.StandardCharsets.UTF_8)) {
-            csv.println("id,reference_time_utc,x,y,vx_px_min,vy_px_min,score,first_half_score,second_half_score,stationary_score,camera_score,ra_deg,dec_deg,speed_arcsec_min,position_angle_deg,possible_catalogue_matches,frame,midpoint_utc,fitted_x,fitted_y,fitted_ra_deg,fitted_dec_deg");
+            csv.println("id,reference_time_utc,x,y,vx_px_min,vy_px_min,score,first_half_score,second_half_score,stationary_score,camera_score,ra_deg,dec_deg,speed_arcsec_min,position_angle_deg,possible_catalogue_matches,frame,midpoint_utc,fitted_x,fitted_y,fitted_ra_deg,fitted_dec_deg,scoring_sample_x,scoring_sample_y,centre_unmasked,processed_residual_signal");
             c.progress.expect(c.faintMoverPresentation.size());
             for (int i = 0; i < c.faintMoverPresentation.size(); i++) {
                 c.progress.next();
@@ -62,53 +65,81 @@ final class FaintMoverSectionWriter {
                 String anchor = c.findingAnchor(FindingCategory.FAINT_MOVER, i + 1);
                 out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:#50e1d2'>");
                 out.println("<div class='detection-title'>Faint mover " + entry.id() + " · Unverified</div>");
-                out.printf(Locale.ROOT, "<p>Reference: %s; position (%.2f, %.2f) px. Motion (%.4f, %.4f) px/min; speed %.4f px/min.</p>%n",
-                        Instant.ofEpochMilli(entry.referenceTimeMillis()), entry.x(), entry.y(), entry.vxPixelsPerMinute(), entry.vyPixelsPerMinute(), entry.speedPixelsPerMinute());
-                out.printf(Locale.ROOT, "<p>Score %s; first / second half %s / %s; stationary %s; camera-fixed %s. "
-                                + "Unavailable half scores mean insufficient unmasked support; unavailable camera evidence means no usable registration.</p>%n",
-                        number(entry.score()), number(entry.firstHalfScore()), number(entry.secondHalfScore()), number(entry.stationaryScore()), number(entry.cameraScore()));
-                out.println("<p>RA / Dec: " + number(entry.sky().raDegrees()) + " / " + number(entry.sky().decDegrees())
-                        + " deg; sky speed " + number(entry.sky().speedArcsecPerMinute()) + " arcsec/min; position angle "
-                        + number(entry.sky().positionAngleDegrees()) + " deg east of north.</p>");
+                writeSummary(out, c, entry);
                 String comparisons = entry.catalogueComparisons().stream().map(FaintMoverPresentation.Match::name).collect(java.util.stream.Collectors.joining("; "));
                 out.println("<p>Possible catalogue matches: " + (!entry.catalogueComparisonAvailable()
                         ? "unavailable for this field or reference time" : comparisons.isEmpty()
                         ? "none within the comparison tolerances" : escape(comparisons)) + ".</p>");
-                for (var match : entry.catalogueComparisons()) out.printf(Locale.ROOT,
-                        "<p>%s: position residual %.3f px; motion residual %.4f px/min; predicted magnitude %s.</p>%n",
-                        escape(match.name()), match.positionResidualPixels(), match.motionResidualPixelsPerMinute(), number(match.predictedMagnitude()));
-                ImageIO.write(DisplayImageRenderer.createAsinhDisplayImage(candidate.cutout), "png", c.file(entry.cutout()));
-                out.println("<div class='image-container'><div><img src='" + entry.cutout() + "' width='248' height='248' "
-                        + "alt='" + entry.id() + " PSF-filtered shift stack' style='image-rendering:pixelated'><p>31 × 31 px shift stack; score units, asinh display.</p></div>");
-                if (!entry.fittedPositions().isEmpty()) {
-                    writeBlink(c, entry);
-                    out.println("<div><img src='" + entry.blink() + "' style='width:248px;max-width:100%;height:auto;image-rendering:pixelated' alt='" + entry.id() + " source-frame blink with fitted path'>"
-                            + "<p>Searched source frames, shared display levels; dashed line and ring show the fitted path.</p></div>");
+                if (!entry.catalogueComparisons().isEmpty()) {
+                    out.println("<details><summary>Catalogue position and motion comparisons</summary><table><thead><tr><th>Possible match</th><th>Position residual (px)</th><th>Motion residual (px/min)</th><th>Predicted magnitude</th></tr></thead><tbody>");
+                    for (var match : entry.catalogueComparisons()) out.printf(Locale.ROOT,
+                            "<tr><td>%s</td><td>%.3f</td><td>%.4f</td><td>%s</td></tr>%n",
+                            escape(match.name()), match.positionResidualPixels(), match.motionResidualPixelsPerMinute(), number(match.predictedMagnitude()));
+                    out.println("</tbody></table></details>");
                 }
-                out.println("</div></div>");
+                if (entry.blink() != null) writeBlink(c, entry);
+                FaintMoverReviewWriter.write(out, c, entry, candidate);
+                out.println("</div>");
                 var positions = entry.fittedPositions().isEmpty() ? java.util.Collections.<FaintMoverPresentation.Position>singletonList(null) : entry.fittedPositions();
                 for (var p : positions) {
-                    csv.printf(Locale.ROOT, "%s,%s,%.6f,%.6f,%.6f,%.6f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s%n",
+                    var sample = p == null ? null : entry.review().pathSamples().stream().filter(s -> s.frameNumber() == p.frameNumber()).findFirst().orElse(null);
+                    csv.printf(Locale.ROOT, "%s,%s,%.6f,%.6f,%.6f,%.6f,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s%n",
                             entry.id(), Instant.ofEpochMilli(entry.referenceTimeMillis()), entry.x(), entry.y(), entry.vxPixelsPerMinute(), entry.vyPixelsPerMinute(),
                             cell(entry.score()), cell(entry.firstHalfScore()), cell(entry.secondHalfScore()), cell(entry.stationaryScore()), cell(entry.cameraScore()),
                             cell(entry.sky().raDegrees()), cell(entry.sky().decDegrees()), cell(entry.sky().speedArcsecPerMinute()), cell(entry.sky().positionAngleDegrees()),
                             "\"" + comparisons.replace("\"", "\"\"") + "\"", p == null ? "" : p.frameNumber(), p == null ? "" : Instant.ofEpochMilli(p.midpointMillis()),
-                            p == null ? "" : cell(p.x()), p == null ? "" : cell(p.y()), p == null ? "" : cell(p.raDegrees()), p == null ? "" : cell(p.decDegrees()));
+                            p == null ? "" : cell(p.x()), p == null ? "" : cell(p.y()), p == null ? "" : cell(p.raDegrees()), p == null ? "" : cell(p.decDegrees()),
+                            sample == null ? "" : sample.sampleX(), sample == null ? "" : sample.sampleY(), sample == null ? "" : sample.unmasked(),
+                            sample == null ? "" : cell(sample.processedSignal()));
                 }
             }
         }
     }
 
+    /** Presents fitted motion and existing scores with the same summary and coordinate conventions as other cards. */
+    private static void writeSummary(PrintWriter out, DetectionReportContext c, FaintMoverPresentation.Entry e) {
+        var t = c.pipelineTelemetry.faintMoverSearchTelemetry;
+        var first = e.fittedPositions().stream().min(java.util.Comparator.comparingLong(FaintMoverPresentation.Position::midpointMillis));
+        var last = e.fittedPositions().stream().max(java.util.Comparator.comparingLong(FaintMoverPresentation.Position::midpointMillis));
+        Double minutes = first.isPresent() && last.isPresent() ? (last.get().midpointMillis() - first.get().midpointMillis()) / 60000.0 : null;
+        double exposure = e.fittedPositions().stream().mapToLong(p -> c.fitsFiles[p.frameNumber() - 1].getExposureDurationMillis())
+                .filter(v -> v > 0).average().orElse(Double.NaN) / 60000;
+        out.println("<dl class='anomaly-summary fm-summary'>");
+        metric(out, "Whole-stack score", number(e.score()));
+        metric(out, "Sky speed", number(e.sky().speedArcsecPerMinute()) + " arcsec/min");
+        metric(out, "Position angle", number(e.sky().positionAngleDegrees()) + "° E of N");
+        metric(out, "Pixel speed", number(e.speedPixelsPerMinute()) + " px/min");
+        metric(out, "Fitted displacement", number(minutes == null ? null : minutes * e.speedPixelsPerMinute()) + " px");
+        metric(out, "Motion / mean exposure", number(exposure * e.speedPixelsPerMinute()) + " px");
+        metric(out, "Searched frames", Integer.toString(e.fittedPositions().size()));
+        metric(out, "Unmasked path centres", e.review().unmaskedFrames() == null ? "N/A" : e.review().unmaskedFrames() + " / " + e.fittedPositions().size());
+        metric(out, "Search coverage", t.tilesSearched + " / " + t.tiles + " tiles · " + (t.truncated ? "partial" : "complete"));
+        out.println("</dl><div class='coord-line'>" + escape(DetectionReportAstrometry.formatPixelCoordinateWithSky(c.astrometryContext, e.x(), e.y()))
+                + " · reference " + Instant.ofEpochMilli(e.referenceTimeMillis()) + "</div>");
+        out.println("<details><summary>Scores, timing and fitted motion</summary><dl class='anomaly-summary fm-summary'>");
+        metric(out, "First / second half", number(e.firstHalfScore()) + " / " + number(e.secondHalfScore()));
+        metric(out, "Stationary score", number(e.stationaryScore()));
+        metric(out, "Camera-fixed score", number(e.cameraScore()));
+        metric(out, "Motion minus stationary", number(e.stationaryScore() == null ? null : e.score() - e.stationaryScore()));
+        metric(out, "Motion minus camera", number(e.cameraScore() == null ? null : e.score() - e.cameraScore()));
+        metric(out, "vx / vy (px/min)", number(e.vxPixelsPerMinute()) + " / " + number(e.vyPixelsPerMinute()));
+        metric(out, "First / last midpoint", first.map(p -> Instant.ofEpochMilli(p.midpointMillis()).toString()).orElse("N/A")
+                + " / " + last.map(p -> Instant.ofEpochMilli(p.midpointMillis()).toString()).orElse("N/A"));
+        out.println("</dl><p>Unavailable half scores mean insufficient unmasked support; unavailable camera evidence means no usable registration. "
+                + "The paths use exposure midpoints. Image coordinates increase rightwards and downwards.</p></details>");
+    }
+
+    /** Escapes both parts of one compact evidence row. */
+    private static void metric(PrintWriter out, String title, String value) {
+        out.println("<div><dt>" + escape(title) + "</dt><dd>" + escape(value) + "</dd></div>");
+    }
+
     /** Streams one source-frame crop at a time, using one shared stretch for a faithful blink. */
     private static void writeBlink(DetectionReportContext c, FaintMoverPresentation.Entry entry) throws IOException {
-        int height = c.rawFrames.getFirst().length, width = c.rawFrames.getFirst()[0].length;
-        double minX = entry.x(), maxX = minX, minY = entry.y(), maxY = minY;
-        for (var p : entry.fittedPositions()) { minX = Math.min(minX, p.x()); maxX = Math.max(maxX, p.x()); minY = Math.min(minY, p.y()); maxY = Math.max(maxY, p.y()); }
-        int x = Math.max(0, (int) Math.floor(minX - 35)), y = Math.max(0, (int) Math.floor(minY - 35));
-        int w = Math.max(1, Math.min(width, (int) Math.ceil(maxX + 36)) - x);
-        int h = Math.max(1, Math.min(height, (int) Math.ceil(maxY + 36)) - y);
+        var review = entry.review();
+        int x = review.x(), y = review.y(), w = review.width(), h = review.height();
         Iterable<short[][]> crops = () -> entry.fittedPositions().stream().map(p -> crop(c.rawFrames.get(p.frameNumber() - 1), x, y, w, h)).iterator();
-        double[] levels = DisplayImageRenderer.sharedDisplayLevels(crops, 3, 12);
+        double[] levels = DisplayImageRenderer.sharedDisplayLevels(crops, c.settings.getAutoStretchBlackSigma(), c.settings.getAutoStretchWhiteSigma());
         final var first = entry.fittedPositions().getFirst();
         final var last = entry.fittedPositions().getLast();
         var frames = entry.fittedPositions().stream().map(p -> {

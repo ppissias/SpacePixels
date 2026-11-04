@@ -466,6 +466,8 @@
     getPaused: function() { return paused; },
     getSpeed: function() { return currentSpeed; },
     getActivePlayers: function() { return activePlayers; },
+    // Bounded native-pixel viewers use the same pause, speed and frame-step clock as sprite-sheet players.
+    registerPlayer: function(player) { activePlayers.push(player); },
     getFallbackGifs: function() { return fallbackGifs; },
     getUnconvertedGifs: function() { return allUnconvertedGifs; },
     pauseAnimations: pauseAnimations,

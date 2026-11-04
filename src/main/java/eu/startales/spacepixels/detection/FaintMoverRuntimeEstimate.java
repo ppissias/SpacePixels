@@ -39,7 +39,9 @@ public final class FaintMoverRuntimeEstimate {
                 Math.max(0.1, seconds / 120), Math.max(0.1, seconds / 30));
         return String.format(Locale.ROOT,
                 "Approximate extra time: %s; limit %.1f min. About %.0f MiB per search worker. "
-                        + "Based on %d imported frames and an assumed 2.5 px FWHM; CPU, seeing, masks and kept frames change this estimate.",
-                time, config.faintMoverMaxSeconds / 60, mib, n);
+                        + "Based on %d imported frames and an assumed 2.5 px FWHM over %.2f min. "
+                        + "Estimated minimum speed = %.2f FWHM × 2.5 px / span = %.5f px/min. "
+                        + "CPU, seeing, masks and kept frames change this estimate.",
+                time, config.faintMoverMaxSeconds / 60, mib, n, span, config.faintMoverMinDisplacementFwhm, min);
     }
 }

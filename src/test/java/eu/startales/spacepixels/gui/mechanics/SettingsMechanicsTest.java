@@ -27,6 +27,31 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
     private static final String DECIMAL = "Detection Sigma";
     private static final String WHOLE = "Streak Min Pixels";
 
+    /** Actual category pages keep a common input origin while a checkbox reveals and hides Reset. */
+    @Test(timeout = 180_000) public void detailedPagesKeepInputColumnFixed() throws Exception {
+        importSyntheticSequence();
+        window().tabbedPane().selectTab("Detection Settings");
+        window().checkBox(VisibleText.checkBox("Show expert settings")).check();
+        showPage("Faint Movers (experimental)");
+        var checkbox = window().checkBox(VisibleText.checkBox("Search for faint movers")).target();
+        int origin = inputX(checkbox);
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).check();
+        waitFor("a checkbox change preserves the input origin", () -> inputX(checkbox) == origin);
+        assertEquals(origin, inputX(spinner("Fastest motion")));
+        window().button(VisibleText.button("Reset")).click();
+        assertEquals(origin, inputX(checkbox));
+        showPage("Streak Detection");
+        assertEquals(origin, inputX(spinner(WHOLE)));
+        showPage("Report Visualization");
+        assertEquals(origin, inputX(spinner("Auto Stretch Black Sigma")));
+    }
+
+    /** Reads a control's horizontal position relative to the shared settings panel on the EDT. */
+    private int inputX(Component input) {
+        return GuiActionRunner.execute(() -> javax.swing.SwingUtilities.convertPoint(input, 0, 0,
+                application().getDetectionConfigurationPanel()).x);
+    }
+
     @Test(timeout = 180_000)
     public void pagesOpenAndInvalidTextRevertsAndSaves() throws Exception {
         importSyntheticSequence();

@@ -10,6 +10,59 @@ public class SettingsRowLayoutTest {
     private static final String LONG_HELP = "This description includes <b>important units in pixels</b> and several "
             + "lines of guidance about the effect of a setting. ".repeat(12);
 
+    /** Input origins stay fixed across detailed pages, checkbox edits, Reset visibility and larger fonts. */
+    @Test public void sharedColumnReservesResetAndAlignsDifferentControls() throws Exception {
+        EventQueue.invokeAndWait(() -> {
+            var column = new SettingsRowPanel.ControlColumn();
+            var checkbox = new JCheckBox();
+            var spinner = new JSpinner(new SpinnerNumberModel(1, 0, 100, 1));
+            var units = new JLabel("arcsec/min");
+            var input = new JPanel(new FlowLayout(FlowLayout.LEFT, 4, 0));
+            input.add(spinner); input.add(units);
+            var first = new SettingsRowPanel(new JLabel("Enable"), "Toggle this analysis", checkbox, column);
+            var second = new SettingsRowPanel(new JLabel("Speed"), LONG_HELP, input, column);
+            var reset = new JButton("Reset");
+            first.setResetButton(reset);
+            for (int font : new int[]{13, 20, 26}) {
+                reset.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, font));
+                units.setFont(reset.getFont());
+                for (int width : new int[]{650, 1000}) {
+                    first.setSize(width, first.getPreferredSize().height);
+                    second.setSize(width, second.getPreferredSize().height);
+                    layoutChildren(first); layoutChildren(second);
+                    int origin = SwingUtilities.convertPoint(checkbox, 0, 0, first).x;
+                    assertEquals(origin, SwingUtilities.convertPoint(input, 0, 0, second).x);
+                    for (boolean dirty : new boolean[]{false, true, false}) {
+                        checkbox.setSelected(dirty); reset.setVisible(dirty);
+                        first.setSize(width, first.getPreferredSize().height); layoutChildren(first);
+                        assertEquals("Reset must not shift the checkbox", origin, SwingUtilities.convertPoint(checkbox, 0, 0, first).x);
+                        assertTrue(reset.getParent().getWidth() >= reset.getPreferredSize().width);
+                        if (dirty) assertTrue("Reset stays beside the input instead of at the column's far edge",
+                                SwingUtilities.convertPoint(reset, 0, 0, first).x - origin - checkbox.getWidth() <= UiStyle.space(12));
+                    }
+                }
+            }
+        });
+    }
+
+    /** A wide auxiliary slider fits below its number field without widening the shared input column. */
+    @Test public void auxiliarySliderUsesExistingWidthBelowInput() throws Exception {
+        EventQueue.invokeAndWait(() -> {
+            var column = new SettingsRowPanel.ControlColumn();
+            var spinner = new JSpinner(new SpinnerNumberModel(2.0, 0, 10, 0.1));
+            var row = new SettingsRowPanel(new JLabel("Stretch"), LONG_HELP, spinner, column);
+            var reset = new JButton("Reset"); row.setResetButton(reset);
+            row.setSize(800, row.getPreferredSize().height); layoutChildren(row);
+            int inputX = SwingUtilities.convertPoint(spinner, 0, 0, row).x;
+            var slider = new JSlider(); slider.setPreferredSize(new Dimension(900, slider.getPreferredSize().height));
+            row.setAccessory(slider);
+            row.setSize(800, row.getPreferredSize().height); layoutChildren(row);
+            assertEquals("Sliders must not move the input column", inputX, SwingUtilities.convertPoint(spinner, 0, 0, row).x);
+            assertTrue(slider.getWidth() < 900);
+            assertTrue(SwingUtilities.convertPoint(slider, 0, 0, row).y >= SwingUtilities.convertPoint(spinner, 0, spinner.getHeight(), row).y);
+        });
+    }
+
     /** Long descriptions grow in narrow forms, retain all lines and keep controls inside the allocated row. */
     @Test public void rowsReflowInsteadOfClippingDescriptions() throws Exception {
         EventQueue.invokeAndWait(() -> {
@@ -20,7 +73,8 @@ public class SettingsRowLayoutTest {
                     JPanel parent = new JPanel();
                     parent.setLayout(new BoxLayout(parent, BoxLayout.Y_AXIS));
                     JSpinner editor = new JSpinner(new SpinnerNumberModel(1, 0, 100, 1));
-                    SettingsRowPanel row = new SettingsRowPanel(new JLabel("A setting (pixels)"), LONG_HELP, editor);
+                    SettingsRowPanel row = new SettingsRowPanel(new JLabel("A setting (pixels)"), LONG_HELP, editor,
+                            new SettingsRowPanel.ControlColumn());
                     parent.add(row);
                     parent.setSize(UiStyle.space(1000), 10000);
                     int wideHeight = row.getPreferredSize().height;

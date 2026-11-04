@@ -55,8 +55,22 @@ public final class DisplayImageRenderer {
      * one at a time, so a lazy sequence that makes each crop on demand never holds them all.
      */
     public static double[] sharedDisplayLevels(Iterable<short[][]> frames, double blackSigma, double whiteSigma) {
+        return sharedDisplayStatistics(frames).levels(blackSigma, whiteSigma);
+    }
+
+    /** Shared robust source-intensity statistics for interactive, temporally consistent cutout displays. */
+    public record DisplayStatistics(double sky, double noise, int maximum) {
+        /** Converts the captured statistics to unsigned 16-bit display levels without modifying pixels. */
+        public double[] levels(double blackSigma, double whiteSigma) {
+            return new double[]{Math.max(0, sky - blackSigma * noise),
+                    noise > 0 ? Math.min(maximum, sky + whiteSigma * noise) : maximum};
+        }
+    }
+
+    /** Measures crops lazily, preserving the same median-of-frames calculation used by shared display levels. */
+    public static DisplayStatistics sharedDisplayStatistics(Iterable<short[][]> frames) {
         if (frames == null) {
-            return new double[]{0.0, 0.0};
+            return new DisplayStatistics(0, 0, 0);
         }
         float[] skies = new float[16];
         float[] noises = new float[16];
@@ -82,13 +96,11 @@ public final class DisplayImageRenderer {
             }
         }
         if (validFrames == 0) {
-            return new double[]{0.0, 0.0};
+            return new DisplayStatistics(0, 0, 0);
         }
         double sky = median(skies, validFrames);
         double noise = median(noises, validFrames);
-        double blackPoint = Math.max(0.0, sky - (blackSigma * noise));
-        double whitePoint = noise > 0.0 ? Math.min(maxActual, sky + (whiteSigma * noise)) : maxActual;
-        return new double[]{blackPoint, whitePoint};
+        return new DisplayStatistics(sky, noise, maxActual);
     }
 
     private record FrameStats(boolean valid, double sky, double noise, int actualMax) {

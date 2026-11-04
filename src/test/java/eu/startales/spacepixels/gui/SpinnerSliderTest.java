@@ -2,14 +2,12 @@ package eu.startales.spacepixels.gui;
 
 import org.junit.Test;
 
-import javax.swing.JPanel;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
 import javax.swing.SwingUtilities;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /** A setting's slider and number field move together, and typing moves the slider without committing the value. */
@@ -19,11 +17,8 @@ public class SpinnerSliderTest {
         SwingUtilities.invokeAndWait(() -> {
             JSpinner spinner = UiStyle.spinner(new DecimalSpinnerModel(20.0, 0.1, 100.0, 0.1));
             spinner.setEditor(new CheckedNumberEditor(spinner, "#0.0", () -> { }));
-            JPanel row = new JPanel();
-            row.add(spinner);
             AtomicInteger changes = new AtomicInteger();
-            JSlider slider = SpinnerSlider.attach(spinner, "White Sigma", changes::incrementAndGet);
-            assertSame(slider, row.getComponent(0));
+            JSlider slider = SpinnerSlider.create(spinner, "White Sigma", changes::incrementAndGet);
             assertEquals(999, slider.getMaximum());
             assertEquals(199, slider.getValue());
 

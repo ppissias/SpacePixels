@@ -74,6 +74,7 @@ public class DetectionConfigurationPanel extends JPanel {
     private final Runnable showThisTab;
     private final ActiveSettingsReadout readout;
     private final FrameList frames;
+    private final SettingsRowPanel.ControlColumn settingsControlColumn = new SettingsRowPanel.ControlColumn();
 
     private volatile DetectionConfig jTransientConfig;
     private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
@@ -1187,11 +1188,11 @@ public class DetectionConfigurationPanel extends JPanel {
         // The preview follows both values while they are dragged or typed, before they are committed.
         Runnable preview = () -> stretchSamples.setSigmas(SpinnerSlider.typedOrValue(spinAutoBlackSigma),
                 SpinnerSlider.typedOrValue(spinAutoWhiteSigma));
-        SpinnerSlider.attach(spinAutoBlackSigma, "Auto Stretch Black Sigma", preview);
-        SpinnerSlider.attach(spinAutoWhiteSigma, "Auto Stretch White Sigma", preview);
+        SettingsRowPanel blackRow = (SettingsRowPanel) rowOf(spinAutoBlackSigma).row;
+        SettingsRowPanel whiteRow = (SettingsRowPanel) rowOf(spinAutoWhiteSigma).row;
+        blackRow.setAccessory(SpinnerSlider.create(spinAutoBlackSigma, "Auto Stretch Black Sigma", preview));
+        whiteRow.setAccessory(SpinnerSlider.create(spinAutoWhiteSigma, "Auto Stretch White Sigma", preview));
         // The preview shows while either of its settings does; a search or the unsaved-changes filter can hide both.
-        JPanel blackRow = rowOf(spinAutoBlackSigma).row;
-        JPanel whiteRow = rowOf(spinAutoWhiteSigma).row;
         java.awt.event.ComponentAdapter followRows = new java.awt.event.ComponentAdapter() {
             @Override
             public void componentShown(java.awt.event.ComponentEvent e) {
@@ -1478,7 +1479,6 @@ public class DetectionConfigurationPanel extends JPanel {
             java.util.function.Supplier<Boolean> getter, java.util.function.Consumer<Boolean> setter) {
         JCheckBox input = new JCheckBox();
         input.setSelected(getter.get());
-        UiStyle.inputWidth(input, 80);
         addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
                 id, title, "", description, expert, Boolean.class, getter, setter,
                 input::isSelected, input::setSelected), input);
@@ -1510,10 +1510,16 @@ public class DetectionConfigurationPanel extends JPanel {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
+        DetectionConfig defaults = new DetectionConfig();
         panel.add(createTabIntro("Digital tracking adds weak signals along trial motions across the kept frames. "
                 + "It searches independently of known-object predictions and reports unverified FM candidates. "
                 + "Only the session with the most kept frames is searched when gaps exceed two hours. "
-                + "Auto-Tune preserves these experimental settings."));
+                + "Controls start from your saved profile, with engine defaults for absent values. They are policy choices, "
+                + "not measurements from the imported frames. Auto-Tune preserves these settings. "
+                + "Defaults: " + (defaults.enableFaintMoverSearch ? "on" : "off") + "; "
+                + defaults.faintMoverMinDisplacementFwhm + " FWHM minimum displacement; "
+                + defaults.faintMoverMaxSpeedPixelsPerMinute + " px/min maximum speed; score "
+                + defaults.faintMoverMinScore + "; " + defaults.faintMoverMaxSeconds / 60 + " minute limit."));
         chkEnableFaintMovers = addTypedCheckbox(panel, FaintMoversSettings.ENABLE);
         addTypedDouble(panel, FaintMoversSettings.MIN_DISPLACEMENT, Double.MIN_VALUE, Double.MAX_VALUE, 0.1);
         spinFaintMoverMaxSpeed = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSpeedPixelsPerMinute), Double.MIN_VALUE, Double.MAX_VALUE, 0.001));
@@ -1579,14 +1585,22 @@ public class DetectionConfigurationPanel extends JPanel {
             } finally { suppressAutoApply = previous; }
         }
         faintMoverSpeedUnit.setText(angular ? "arcsec/min" : "px/min");
-        faintMoverEstimate.setText("<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig) + "</html>");
+        faintMoverEstimate.setText(faintMoverEstimateText(files));
+    }
+
+    /** Explains metadata estimates and display-only WCS conversion, distinct from the final measured search domain. */
+    private String faintMoverEstimateText(FitsFileInformation[] files) {
+        String units = faintMoverSpeedScale == 1 && "px/min".equals(faintMoverSpeedUnit.getText())
+                ? "No usable WCS: speed is shown in stored px/min."
+                : String.format(java.util.Locale.ROOT, "Speed display uses %.6f arcsec/pixel from the first usable WCS at its image centre; profiles store px/min.", faintMoverSpeedScale);
+        return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig) + "<br>" + units
+                + " The report gives the final domain from kept frames and measured seeing (or its labelled fallback).</html>";
     }
 
     /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */
     private JCheckBox addTypedCheckbox(JPanel parent, DetectionSetting<Boolean> setting) {
         JCheckBox input = new JCheckBox();
         input.setSelected(setting.read(jTransientConfig));
-        UiStyle.inputWidth(input, 80);
         addTypedBinding(parent, setting, input, input::isSelected, input::setSelected);
         return input;
     }
@@ -1628,9 +1642,9 @@ public class DetectionConfigurationPanel extends JPanel {
         JLabel titleLabel = new JLabel(title);
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(4), 0));
         inputWrapper.add(input);
-        JPanel row = new SettingsRowPanel(titleLabel, description, inputWrapper);
+        SettingsRowPanel row = new SettingsRowPanel(titleLabel, description, inputWrapper, settingsControlColumn);
         SettingRow setting = new SettingRow(parent, row, titleLabel, id, title, description, expert, input);
-        inputWrapper.add(setting.resetButton());
+        row.setResetButton(setting.resetButton());
         parent.add(row);
         settingRows.add(setting);
         if (input instanceof JSpinner) {
@@ -1672,7 +1686,7 @@ public class DetectionConfigurationPanel extends JPanel {
         readout.showActiveDetectionSettings(jTransientConfig);
         if (faintMoverEstimate != null) {
             var owner = sessions.current();
-            faintMoverEstimate.setText("<html>" + FaintMoverRuntimeEstimate.describe(owner == null ? null : owner.getFiles(), jTransientConfig) + "</html>");
+            faintMoverEstimate.setText(faintMoverEstimateText(owner == null ? null : owner.getFiles()));
         }
     }
 

@@ -210,6 +210,8 @@ final class SettingsNavigator extends JPanel {
         JPanel holder = new WidthTrackingPanel();
         holder.add(content, BorderLayout.NORTH);
         JScrollPane scrollPane = new JScrollPane(holder);
+        // Every detailed page keeps the same viewport width, including pages that need no scrolling.
+        if (!"Overview".equals(title)) scrollPane.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
         cardPanel.add(scrollPane, title);

@@ -77,6 +77,7 @@ public class ConfigurationPanel extends JPanel {
     private final JLabel latStatus = statusLabel();
     private final JLabel longStatus = statusLabel();
     private final JLabel footerStateLabel = new JLabel(" ");
+    private final SettingsRowPanel.ControlColumn settingsControlColumn = new SettingsRowPanel.ControlColumn();
     private final JLabel footerMessageLabel = new JLabel(" ");
     private final JSpinner starDepthSpinner = UiStyle.spinner(new DecimalSpinnerModel(
             AppConfig.DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE, AppConfig.MIN_SKY_CATALOGUE_STAR_MAGNITUDE,
@@ -824,6 +825,6 @@ public class ConfigurationPanel extends JPanel {
         AccessibleControls.label(titleLabel, inputControl, description);
         JPanel inputWrapper = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         inputWrapper.add(inputControl);
-        return new SettingsRowPanel(titleLabel, description, inputWrapper);
+        return new SettingsRowPanel(titleLabel, description, inputWrapper, settingsControlColumn);
     }
 }

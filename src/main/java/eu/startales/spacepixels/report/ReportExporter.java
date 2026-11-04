@@ -151,6 +151,7 @@ public final class ReportExporter {
             ReportClientScriptWriter.appendLiveReportRenderingScript(report);
             ReportPresentation.appendAnimationsData(report, reportContext);
             ReportPresentation.appendScript(report);
+            if (!reportContext.faintMoverPresentation.isEmpty()) FaintMoverReviewWriter.appendScript(report);
             report.printf(Locale.US, "<p class='astro-note'>SpacePixels %s · JTransient %s · Generated %s · Report preparation %.2f s</p>%n",
                     ReportPresentation.version("spacepixels"), ReportPresentation.version("jtransient"), reportContext.data.generatedAtUtc,
                     (System.nanoTime() - reportStarted) / 1e9);
