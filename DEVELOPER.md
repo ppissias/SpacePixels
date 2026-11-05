@@ -76,6 +76,7 @@ These apply to everyone, including coding agents.
 - **Refer to the maintainer and other people as they/them.**
 - **Document new Java types** (including nested types and tests) with their responsibility, and give methods a short Javadoc covering purpose and any ownership, units or threading contract. Update the Javadoc when behaviour changes.
 - **Keep documentation current in the same change:** behaviour in MANUAL.md, design in this guide or HIGH_LEVEL_DESIGN.md, and pending work only in DESIGN-IMPROVEMENTS.md or FEATURE-REQUESTS.md. When an item is done, describe the result and remove the item; git history keeps the record.
+- **Experiment documentation:** default to a short decision, limitation or next step. Publish detailed protocols, result tables and experiment histories only when the maintainer explicitly asks. Keep algorithm references focused on current behavior; include research only when needed to explain a current design or limitation, without dataset-specific diaries. Existing evidence archives may remain linked separately.
 - **Diagnostic programs** go in a scratch folder outside the repository, never in it.
 
 ## Build and run
