@@ -11,6 +11,7 @@ How SpacePixels is built, how its code is organised, the principles it follows, 
 | [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md) | Pending functional requests and their decisions |
 | [PUBLISHING.md](PUBLISHING.md) | Desktop packages, Maven publication and the API consumer test |
 | [docs/features/](docs/features/) | Technical notes on individual features |
+| [Research evidence](docs/research/README.md) | Coordinated slow-mover investigation archive and code-delivery history |
 
 Machine-specific paths (tools, test datasets, scratch folders, memory limits) are not in this repository. Each machine keeps them in a git-ignored `LOCAL-ENVIRONMENT.txt` at the repository root (see [AGENTS.md](AGENTS.md)).
 
