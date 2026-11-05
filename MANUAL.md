@@ -1,6 +1,6 @@
 # SpacePixels User Manual
 
-<sub><i>Many thanks to Klangwolke at Cloudynights, Austral Wiki at Cloudynights and Duncan Warren for providing some of the test data used in this manual.</i></sub>
+<sub><i>Many thanks to Klangwolke at Cloudynights and Duncan Warren for providing some of the test data used in this manual.</i></sub>
 
 SpacePixels searches your astrophotography exposures for moving objects and brightness changes. Give it a sequence of aligned sub-exposures to obtain an HTML report with candidate tracks, crops, animations, maps and optional variable-star light curves. Catalogue searches help investigate candidates; a detection or catalogue association is not, by itself, a confirmed discovery.
 
@@ -248,6 +248,8 @@ Under the title, one line describes the session: field, date and time span, fram
 ![The session, with the catalogue and the detections: NGC 2236, NGC 2251, IC 448 and the Monoceros Nebula](docs/images/manual/report-session-picture.png)
 
 Below the cards is **the session**: the enhanced stack of the frames kept (their median stack when **Enhanced Stack** is off), with switches over it.
+
+The session and **Map of All Detections** use translucent annotations so the sky remains visible through the labels and markers. Category colours, symbols and clickable identifiers stay the same. Variable-candidate field maps also use translucent annotations and smaller labels.
 
 - **Detections** (on at first) draws every result with its label and colour, as on the detection map. The legend below the picture explains the prefixes and gives their counts: T for moving-object tracks, ST for confirmed streak tracks, A for single-frame anomalies, and so on. The number identifies the object; A12 is single-frame anomaly 12.
 - **Detected variables** marks the measured variable-star candidates V1, V2 and so on in magenta. Click a label to open its candidate card. These measured candidates are separate from the known variables on the Catalogue layer.
@@ -518,6 +520,10 @@ The GUI explains which values are policy settings from the saved profile or defa
 
 Saved **Known Asteroids & Comets** predictions from the same field are captured when the run starts. Comparisons use position within two FWHM at the reference time and motion within 0.1 px/min over the searched session; all compatible names are retained. These heuristic tolerances do not establish identity or a confidence probability. Missing comparison coverage and incomplete saved fetches are explicit. The report shows the fetch's magnitude limit; an unmatched candidate is not evidence of a new object. No network fetch is started by detection.
 
+Compatible names appear as **Possible identification** (or explicitly ambiguous identifications), with JPL object-detail links, while the candidate remains **Unverified**. Each FM card also offers the same SkyBoT, JPL and Stellarium identification controls as a moving-object track, using the fitted reference position at its reference UTC epoch. These online position searches do not apply the saved catalogue fetch's magnitude limit; provider coverage can still be incomplete.
+
+**Zoom** starts at **Fit**, which enlarges each crop to fill its panel; **2× Fit** and **4× Fit** enlarge that view further. **Native pixels (1:1)** displays one image pixel per CSS pixel in the source, residual and stack panels. The whole-session and half-session stacks contain only 31 × 31 pixels, so they appear small in Native pixels. Zoom changes the display scale, not the amount of surrounding sky captured in the cutouts.
+
 In **Blink Selected** and **Preview Frame**, **Show faint movers** draws the last run's fitted paths and positions only on frames included in its search. The overlays stay with that imported session and contain no image buffers. Use the switch to inspect the unmarked pixels. These are experimental, unverified candidates: bright-star residuals can still survive, and the initial score calibration does not promise the same false-candidate rate in every dataset.
 
 ### Variable stars
@@ -669,7 +675,7 @@ If a viewer is open when the catalogue arrives, the frame does not change: the *
 
 Once one frame is plate-solved, **Fetch Asteroids and Comets** in **2 Astrometry** asks NASA JPL which known asteroids and comets cross the field of your frames during the session, and where each one is at every frame's time. It sends JPL the field, the frame times and your observing site (or your IAU observatory code); the site comes from the FITS headers, or from the **Astrometry Config** tab when they have none. The frames need their capture times (`DATE-OBS`).
 
-- JPL's field search finds the objects brighter than the **Asteroid and Comet Depth** on the Astrometry Config tab (V 19 by default). For comets JPL predicts the total magnitude, which can be off by a magnitude or more. A second search looks for near-Earth objects up to 5° around the field: fast ones can cross the field during the night.
+- JPL's field search finds the objects brighter than the **Asteroid and Comet Depth** on the Astrometry Config tab (V 19 by default; configurable from 8 to 23). To compare detections around magnitude 20.5 or fainter, select a sufficiently deep value and fetch again; changing the setting alone does not update saved predictions. For comets JPL predicts the total magnitude, which can be off by a magnitude or more. A second search looks for near-Earth objects up to 5° around the field: fast ones can cross the field during the night.
 - JPL Horizons then gives each object that passes over the frame its position, predicted magnitude and position uncertainty every 10 minutes over the session (every 2 minutes for very fast ones). The viewers place the object at the middle of each exposure. Both services compute from today's orbits with the planets' pull included, so frames taken years ago are covered too, and objects discovered since are shown as well.
 - The fetch runs in the background and usually takes from half a minute to a few minutes: JPL's field search is slow, more so for frames from many years ago and for a deep magnitude limit. Meanwhile the button reads **Cancel Asteroids and Comets**, and the status bar shows each step. The predictions are saved next to the frames as `solar_system.json` and come back by themselves when you import the folder again; they work without an internet connection from then on. Fetch again after changing the depth.
 
@@ -678,6 +684,8 @@ In every viewer, **Annotate** (A) then draws each object in green: a ring where 
 These are predictions, not detections: an asteroid may be too faint to see, and a detected track is not identified just because a prediction is near it. On a plate-solved frame the predictions agree with detected known asteroids to well under a pixel when **Correct plate solution** (C) is on; the FITS header solution alone can be several pixels off. If all known objects sit along their paths ahead of or behind the detections, the frame times are probably off, for example camera local time written as `DATE-OBS`.
 
 Reports with saved predictions include **Known asteroids and comets in the field**. The table shows predicted magnitude ranges, sampled path coverage, kept frames with data, star-mask intersections, ordinary-track comparisons and the existing FM fitted-path comparisons. Predicted V or comet total magnitudes and the sampled stellar Gaia G field depth have different passbands and detection requirements. An object with no compatible reported finding is not a measured completeness failure: blends, masks, aperture coverage, rejected frames, disabled or truncated searches, catalogue limits and omitted report categories can matter.
+
+The table includes objects predicted inside the image at one or more exposure midpoints across the session. The saved fetch also allows a 5% field border and extra time around the session, so its total can be larger than the in-field count. Entries without an in-field midpoint are omitted from the table; the complete inventory and comparison evidence remain in `report-data.json`. This sampled coverage does not test every instant within an exposure.
 
 Each object has a **JPL object details** link built from its saved number or designation; opening it needs an internet connection, but generating the report needs no additional fetch. Finding badges open the corresponding report card, and expandable evidence keeps the measured distances and clock diagnostics available. Moving-object track cards show **Possible identification** with the compatible asteroid or comet names when position and motion agree at the recorded times. Competing names remain explicitly ambiguous; agreement that requires a trial time shift is shown only in the comparison table.
 

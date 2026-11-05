@@ -103,6 +103,8 @@ Many thanks to Cloudynights user TheStarsabove for providing data.
 
 Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
 
+Many thanks to Austral Kiwi at Cloudynights for providing data.
+
 **Check out sample reports.**
 
 <a href="https://startales.eu/various_files/detections_20261015_144623/detection_report.html" target="_blank">Sample SpacePixels session report</a><br/>

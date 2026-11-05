@@ -92,13 +92,13 @@ public class ReportAssociationsIntegrationTest {
         assertFalse(text.contains("NaN")); assertFalse(text.contains("Infinity"));
     }
 
-    /** An uncertain orbit remains in the inventory without labelling every visible track as a possible identity. */
+    /** A nominally in-field uncertain orbit remains in the inventory without labelling tracks as possible identities. */
     @Test public void fieldWideOrbitErrorsRemainVisibleWithoutTrackIdentifications() throws Exception {
         var c = context(ReportInclusion.all(), false, catalogue -> {
             var broad = new SolarSystemObjects.Body(); broad.name = "(2010 DR82)"; broad.orbitSolution = "JPL#8";
             for (var source : catalogue.bodies.getFirst().samples) {
                 var sample = new SolarSystemObjects.Sample(); sample.timeMillis = source.timeMillis;
-                sample.ra = source.ra + 1.5; sample.dec = source.dec + 1.5;
+                sample.ra = source.ra; sample.dec = source.dec;
                 sample.raSigmaArcsec = 43_680_000.0; sample.decSigmaArcsec = 10_182_000.0;
                 broad.samples.add(sample);
             }

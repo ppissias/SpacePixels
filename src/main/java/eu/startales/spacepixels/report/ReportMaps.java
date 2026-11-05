@@ -54,6 +54,8 @@ final class ReportMaps {
     static final Color GLOBAL_MAP_LOCAL_RESCUE_COLOR = FindingCategory.LOCAL_RESCUE.color();
     static final Color GLOBAL_MAP_LOCAL_ACTIVITY_COLOR = FindingCategory.LOCAL_ACTIVITY.color();
     static final Color GLOBAL_MAP_DEEP_STACK_COLOR = FindingCategory.SLOW_MOVER.color();
+    /** Keeps full-field annotations readable while allowing the sky beneath them to show through. */
+    static final float ANNOTATION_OPACITY = 0.65f;
 
     // =================================================================
     // IMAGE RENDERING & CROPPING
@@ -268,6 +270,7 @@ final class ReportMaps {
         g2d.drawImage(grayBg, 0, 0, null);
         g2d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
 
+        g2d.setComposite(AlphaComposite.SrcOver.derive(ANNOTATION_OPACITY));
         for (Track t : streakTracks) {
             drawMultiFrameTrack(g2d, t, GLOBAL_MAP_STREAK_TRACK_COLOR, context.trackFindings.id(t));
         }

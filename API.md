@@ -291,6 +291,8 @@ The raw result's `slowMoverAnalysis.candidates` entries include `diagnostics.mot
 
 Reports optionally add `knownSolarSystem` (saved prediction provenance, sampled coverage, measured multi-frame track comparisons and a diagnostic clock suggestion) and `rescueAssociations` (possible report-only continuations with measured residuals). These are additive schema-version-1 fields. Their frame numbers are one-based; rates use px/min and suggested clock offsets use seconds to add to stored capture times. Neither model confirms identity, merges engine findings or changes timestamps. Missing ephemeris errors and ambiguity remain explicit. The request/result Java signatures are unchanged.
 
+The HTML known-object table shows only bodies with `inFieldFrames > 0` at the sampled exposure midpoints. `knownSolarSystem.bodies` retains the full saved inventory, including off-field border objects and their comparison evidence; consumers must use the coverage fields when selecting in-field entries.
+
 The known-object summary additionally records `fieldDiagonalPixels`; each body has an optional JPL `informationUrl`, optional `maximumEphemerisThreeSigmaPixels` over the sampled exposure midpoints, and `ephemerisUncertaintyTooBroad`. A supplied uncertainty at least as large as the field diagonal leaves the object visible but disables ordinary-track and clock comparisons for that body. Nominal-time position/rate agreements supply possible-identification names on track cards; shifted-time-only comparisons do not. These remain report-only additions within schema version 1.
 
 Typical usage patterns:

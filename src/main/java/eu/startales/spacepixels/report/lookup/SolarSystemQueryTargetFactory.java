@@ -13,6 +13,15 @@ public final class SolarSystemQueryTargetFactory {
     private SolarSystemQueryTargetFactory() {
     }
 
+    /** Uses the fitted reference position at its own UTC epoch; it is not a measured frame detection. */
+    public static SolarSystemQueryTarget buildFaintMoverQueryTarget(DetectionReportAstrometry.Context context,
+                                                                  double x, double y, long referenceTimeMillis) {
+        if (context == null || !Double.isFinite(x) || !Double.isFinite(y) || referenceTimeMillis <= 0) return null;
+        return new SolarSystemQueryTarget(x, y, referenceTimeMillis,
+                estimateSkybotSearchRadiusDegrees(context, x, y, 0, 1),
+                "Fitted reference position; not an individual frame detection");
+    }
+
     public static SolarSystemQueryTarget buildSingleDetectionQueryTarget(DetectionReportAstrometry.Context astrometryContext,
                                                                   DetectedObject detection) {
         if (astrometryContext == null || detection == null) {

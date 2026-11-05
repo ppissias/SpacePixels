@@ -1,5 +1,9 @@
 # Investigation evidence
 
+Application report investigations:
+
+- [Field inventory, faint-mover identification and display scale (2026-11-05)](2026-11-05-report-review.md): Klangwolke-2's 11-versus-nine catalogue discrepancy, query depth and report presentation.
+
 The coordinated slow-mover collection is maintained with the detection engine:
 
 - [JTransient investigation archive](https://github.com/ppissias/JTransient/tree/main/docs/research/slow-movers): nine dated studies, protocols, conclusions, numerical case tables, figures, provenance and byte hashes.

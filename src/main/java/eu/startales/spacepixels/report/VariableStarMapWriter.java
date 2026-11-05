@@ -95,6 +95,7 @@ final class VariableStarMapWriter {
             // Embedding the display image keeps both SVGs self-contained, including when copied or opened offline.
             out.println("<image width='" + width + "' height='" + height + "' href='data:image/jpeg;base64,"
                     + jpeg(image) + "'/>");
+            out.println("<g opacity='" + ReportMaps.ANNOTATION_OPACITY + "'>");
             List<Rectangle2D.Double> occupied = new ArrayList<>();
             if (curves) {
                 for (int i = 0; i < candidates.size(); i++) {
@@ -117,7 +118,7 @@ final class VariableStarMapWriter {
                 StarLightCurve star = candidates.get(i);
                 if (!onImage(star, width, height)) continue;
                 double radius = curves ? Math.max(6, Math.min(14, width / 500.0)) : Math.max(6, width / 140.0);
-                double font = curves ? 16 : Math.max(12, width / 90.0);
+                double font = curves ? 14 : Math.max(10, width / 120.0);
                 String labelText = names.get(i) == null ? FindingCategory.VARIABLE_STAR.id(i + 1) : names.get(i);
                 font = Math.min(font, Math.max(9, width / (3.0 * .65 * labelText.length())));
                 out.printf(Locale.US, "<g class='variable-map-marker' data-candidate='%s'><title>%s · %s · star #%d · %s</title>"
@@ -131,7 +132,7 @@ final class VariableStarMapWriter {
                 out.printf(Locale.US, "<text x='%.2f' y='%.2f' fill='%s' font-size='%.2f' stroke='#000' stroke-width='3' paint-order='stroke'>%s</text></g>%n",
                         label.x, label.y + font, color(star), font, ReportFormat.escapeHtml(labelText));
             }
-            out.println("</g></svg>");
+            out.println("</g></g></svg>");
             artifact.commit();
         }
     }

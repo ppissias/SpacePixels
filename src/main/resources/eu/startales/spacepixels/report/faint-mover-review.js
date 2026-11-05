@@ -47,7 +47,12 @@
     return sum;
   }
 
-  const api = {decodeSamples, displayLevels, tone, sample};
+  // Native pixels map one image pixel to one CSS pixel; Fit and its multiples keep the existing panel size.
+  function displayScale(zoom, width, height) {
+    return zoom === 'native' ? 1 : 318 * Number(zoom) / Math.max(width, height);
+  }
+
+  const api = {decodeSamples, displayLevels, tone, sample, displayScale};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   const doc = root.document;
   if (!doc) return;
@@ -120,7 +125,7 @@
         context.stroke(); context.setLineDash([]); context.beginPath();
         context.arc(frame.x - dx, frame.y - dy, 6, 0, Math.PI * 2); context.stroke();
       }
-      const factor = 318 * Number(zoom.value) / Math.max(data.width, data.height);
+      const factor = displayScale(zoom.value, data.width, data.height);
       canvas.style.width = (factor * data.width) + 'px'; canvas.style.height = (factor * data.height) + 'px';
     }
 
@@ -148,7 +153,9 @@
       const levels = displayLevels(data.stats, blackSigma, whiteSigma), frame = data.frames[frameIndex];
       drawCanvas(sourceCanvas, data.source, false, levels, amount);
       drawCanvas(residualCanvas, data.residual, true, levels, amount);
-      element.style.setProperty('--fm-stack-size', (318 * Number(zoom.value)) + 'px');
+      const stackScale = displayScale(zoom.value, data.stackWidth, data.stackHeight);
+      element.style.setProperty('--fm-stack-width', (data.stackWidth * stackScale) + 'px');
+      element.style.setProperty('--fm-stack-height', (data.stackHeight * stackScale) + 'px');
       element.classList.toggle('fm-no-annotations', !annotations.checked);
       query('.fm-frame-label').textContent = 'Frame ' + frame.number + ' · midpoint ' + frame.midpoint + ' · ' + (frameIndex + 1) + ' / ' + data.frames.length
           + (centred.checked ? ' · motion-centred (bilinear resampling)' : ' · fixed registered coordinates')
@@ -163,6 +170,7 @@
           + 'Current source frame clipped: ' + (valid ? 100 * low / valid : 0).toFixed(1) + '% black / '
           + (valid ? 100 * high / valid : 0).toFixed(1) + '% white; fill excluded. '
           + (data.residual ? 'Residual mapping: signed asinh, ±' + residualRange.value + ' processed units; fixed across frames. ' : '')
+          + (zoom.value === 'native' ? 'Native pixels: one image pixel per CSS pixel. ' : 'Fit zoom enlarges each crop to the panel. ')
           + 'Enhancement changes display only; strong stretches also expose noise and artifacts.';
       signalPlot();
     }

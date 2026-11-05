@@ -56,7 +56,8 @@ public class FaintMoverReportTest {
         var map = javax.imageio.ImageIO.read(output.toPath().resolve("field/global_track_map.png").toFile());
         boolean coloured = false;
         for (int y = 0; y < map.getHeight(); y++) for (int x = 0; x < map.getWidth(); x++) {
-            if ((map.getRGB(x, y) & 0xffffff) == 0x50e1d2) coloured = true;
+            int rgb = map.getRGB(x, y), red = (rgb >> 16) & 255, green = (rgb >> 8) & 255, blue = rgb & 255;
+            if (green > red + 20 && blue > red + 20 && rgb != 0xff50e1d2) coloured = true;
         }
         assertTrue("The standalone map contains the FM reference marker", coloured);
         assertTrue(html.contains("Search truncated at its time limit"));
@@ -74,6 +75,8 @@ public class FaintMoverReportTest {
         assertTrue(data.getAsJsonArray("findings").toString().contains("finding-fm1"));
         assertTrue(html.contains("No saved engine review evidence"));
         assertTrue(html.contains("data-fm-stretch"));
+        assertTrue(html.contains("Native pixels (1:1)"));
+        assertTrue(html.contains("value='1' selected>Fit"));
         assertTrue(html.contains("Motion-centred"));
         assertTrue(output.toPath().resolve("faint_movers/fm1_view.js").toFile().isFile());
     }
@@ -199,7 +202,47 @@ public class FaintMoverReportTest {
         String html = Files.readString(output.toPath().resolve("detection_report.html"));
         assertTrue(html.contains("Saved prediction fetch was incomplete"));
         assertTrue(html.contains("One &lt;request&gt; failed"));
-        assertTrue(html.contains("First comparison; Second comparison"));
+        assertTrue(html.contains("Possible identifications (ambiguous):"));
+        assertTrue(html.contains("sstr=First%20comparison"));
+        assertTrue(html.contains("sstr=Second%20comparison"));
+        assertTrue(html.contains("Faint mover FM1 · Unverified"));
+        assertTrue(html.contains("Reference epoch for fitted-path lookup"));
+        assertTrue(html.contains("2026-10-01T00:01:00"));
+        assertTrue(html.contains("Search SkyBoT (Fitted Reference)"));
+        assertTrue(html.contains("Render JPL Results Here"));
+        assertTrue(html.contains("Stellarium Web (RA/Dec)"));
+        assertTrue(html.contains("faint-mover-jpl-FM1"));
+        assertTrue(html.contains("not an individual frame detection"));
+    }
+
+    /** In-field rows cover the whole sequence, while a fetched border object stays available only in the saved inventory. */
+    @Test public void fieldInventoryOmitsBorderObjectsAndKeepsObjectsEnteringLater() throws Exception {
+        var files = files();
+        var wcs = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
+        var c = candidate(files[0].getObservationTimestamp() + 60_000);
+        var objects = predictions(c, wcs, files[0]);
+        objects.endMillis = files[2].getObservationTimestamp() + files[2].getExposureDurationMillis() / 2;
+        for (String name : List.of("Outside border object", "Entering later")) {
+            var body = new SolarSystemObjects.Body(); body.name = name;
+            for (long time : new long[]{objects.startMillis, objects.endMillis}) {
+                double x = name.startsWith("Outside") ? 104 : 110 - 20 * (time - objects.startMillis) / (double) (objects.endMillis - objects.startMillis);
+                var sky = wcs.pixelToSky(x, 50);
+                var sample = new SolarSystemObjects.Sample(); sample.timeMillis = time;
+                sample.ra = sky.getRaDegrees(); sample.dec = sky.getDecDegrees();
+                body.samples.add(sample);
+            }
+            objects.bodies.add(body);
+        }
+        eu.startales.spacepixels.solarsystem.SolarSystemStore.save(folder.getRoot(), objects);
+        File output = export(files, c, telemetry(), ReportInclusion.all());
+        String html = Files.readString(output.toPath().resolve("detection_report.html"));
+        assertFalse(html.contains("Outside border object"));
+        assertTrue(html.contains("Entering later"));
+        assertTrue(html.contains("Saved inventory entries without an in-field midpoint omitted from this table: 1"));
+        assertTrue(html.contains("Known asteroids &amp; comets<span class='nav-count'>4</span>"));
+        var data = JsonParser.parseString(Files.readString(output.toPath().resolve("report-data.json"))).getAsJsonObject();
+        assertEquals(5, data.getAsJsonObject("knownSolarSystem").getAsJsonArray("bodies").size());
+        assertTrue(data.toString().contains("Outside border object"));
     }
 
     /** Creates a tiny solved sequence whose RA crosses zero, without writing input images. */
@@ -209,6 +252,7 @@ public class FaintMoverReportTest {
             var header = new HashMap<String, String>();
             header.put("DATE-OBS", "2026-10-01T00:0" + (i * 2) + ":00");
             header.put("EXPTIME", "120");
+            header.put("SITELAT", "0"); header.put("SITELONG", "0");
             header.put("CTYPE1", "RA---TAN"); header.put("CTYPE2", "DEC--TAN");
             header.put("CRPIX1", "51"); header.put("CRPIX2", "51");
             header.put("CRVAL1", "0.00001"); header.put("CRVAL2", "0");

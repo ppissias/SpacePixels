@@ -1,0 +1,158 @@
+{
+  "correctedWcs": true,
+  "bodies": [
+    {
+      "inFieldMidpoints": 33,
+      "name": "194 Prokne (A879 FA)",
+      "xRange": [
+        1754.3244930592139,
+        1761.0691191177932
+      ],
+      "yRange": [
+        1041.835286444085,
+        1056.497636176227
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "611 Valeria (A906 SM)",
+      "xRange": [
+        8801.679027524924,
+        8819.407268229392
+      ],
+      "yRange": [
+        2002.1060497813558,
+        2014.4026815067582
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 0,
+      "name": "2606 Odessa (1976 GX2)",
+      "xRange": [
+        9817.711948169088,
+        9834.974445194923
+      ],
+      "yRange": [
+        1422.463202507267,
+        1434.8743241562427
+      ],
+      "nearestImageDistancePixels": 274.2119481690879
+    },
+    {
+      "inFieldMidpoints": 0,
+      "name": "4332 Milton (1983 RC)",
+      "xRange": [
+        7835.355682351116,
+        7852.118876029858
+      ],
+      "yRange": [
+        6432.526705826026,
+        6451.614845577787
+      ],
+      "nearestImageDistancePixels": 72.02670582602605
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "4767 Sutoku (1987 GC)",
+      "xRange": [
+        2078.0329525992165,
+        2088.6045852700845
+      ],
+      "yRange": [
+        3282.59452679412,
+        3294.876245449485
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "25729 (2000 AV187)",
+      "xRange": [
+        5172.3957156319475,
+        5186.266293376583
+      ],
+      "yRange": [
+        5820.7238025206525,
+        5835.54180812644
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "74326 (1998 UU37)",
+      "xRange": [
+        5879.239015822343,
+        5902.523328347019
+      ],
+      "yRange": [
+        3623.119500846039,
+        3636.309840003764
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "77716 (2001 OF50)",
+      "xRange": [
+        3054.8570876813137,
+        3071.8340729949778
+      ],
+      "yRange": [
+        2107.443314389895,
+        2133.885523774846
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "43283 Robinbock (2000 EC143)",
+      "xRange": [
+        4757.424764929435,
+        4776.1468218163445
+      ],
+      "yRange": [
+        6070.191489303331,
+        6081.611269308607
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "26239 (1998 QP33)",
+      "xRange": [
+        595.0518243176101,
+        615.043789671504
+      ],
+      "yRange": [
+        2937.413272770485,
+        2956.335625735446
+      ],
+      "nearestImageDistancePixels": 0.0
+    },
+    {
+      "inFieldMidpoints": 33,
+      "name": "(2010 DR82)",
+      "xRange": [
+        6972.397281121562,
+        6989.832055043669
+      ],
+      "yRange": [
+        5557.887459160856,
+        5585.603763207532
+      ],
+      "nearestImageDistancePixels": 0.0
+    }
+  ],
+  "width": 9544,
+  "height": 6361,
+  "frames": 33,
+  "savedMagnitudeLimit": 19.0,
+  "dataset": "klangwolke-2",
+  "auditDate": "2026-11-05",
+  "sourceDataSha256": {
+    "solar_system.json": "2e7717d06b05dda8f70fed1c9ea5863e48008000f7934b75ce6493345bc738e3",
+    "plate_correction.json": "92e78b8d03e02c17a39a87412ca04c2667f1f7ad53cd6f921e47ea556df8e13a"
+  }
+}

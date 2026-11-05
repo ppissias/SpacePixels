@@ -198,6 +198,7 @@ final class SessionPictureSectionWriter {
 
     private static String svgStart(String layer, int width, int height, boolean visible) {
         return "<svg class='sp-layer' data-layer='" + layer + "' viewBox='0 0 " + width + " " + height
+                + (layer.equals("area") ? "" : "' opacity='" + ReportMaps.ANNOTATION_OPACITY)
                 + "' preserveAspectRatio='none' style='display:" + (visible ? "block" : "none") + ";' font-family='Segoe UI, sans-serif' font-size='"
                 + fontSize(width) + "'>";
     }
@@ -313,7 +314,7 @@ final class SessionPictureSectionWriter {
             svg.append("<a class='variable-mark' href='#").append(f.anchor()).append("'><circle cx='").append(f.x() + .5).append("' cy='").append(f.y() + .5)
                     .append("' r='").append(width / 140.0).append("' fill='transparent' stroke='#ff5ad2' stroke-width='2' vector-effect='non-scaling-stroke'><title>")
                     .append(f.id()).append(" · ").append(f.tier()).append("</title></circle><text x='").append(f.x() + width / 110.0)
-                    .append("' y='").append(f.y()).append("' fill='#ff5ad2' stroke='#000' stroke-width='3' paint-order='stroke'>").append(f.id()).append("</text></a>");
+                    .append("' y='").append(f.y()).append("' fill='#ff5ad2' font-size='0.8em' stroke='#000' stroke-width='3' paint-order='stroke'>").append(f.id()).append("</text></a>");
         }
         return svg.append("</svg>").toString();
     }

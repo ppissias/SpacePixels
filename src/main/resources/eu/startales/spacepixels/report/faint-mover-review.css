@@ -14,8 +14,9 @@
 .fm-viewport canvas, .fm-viewport img { display: block; image-rendering: pixelated; max-width: none; }
 .fm-viewport canvas { margin: 0 auto; }
 .fm-fallback { width: 100%; }
-.fm-stack img { width: var(--fm-stack-size, 318px); height: var(--fm-stack-size, 318px); }
-.fm-reticle { position: absolute; left: calc(var(--fm-stack-size, 318px) / 2); top: calc(var(--fm-stack-size, 318px) / 2); transform: translate(-50%, -50%); color: #50e1d2; font: 24px monospace; pointer-events: none; }
+.fm-stack-content { width: var(--fm-stack-width, 318px); height: var(--fm-stack-height, 318px); position: relative; margin: 0 auto; }
+.fm-stack img { width: 100%; height: 100%; }
+.fm-reticle { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #50e1d2; font: 24px monospace; pointer-events: none; }
 .fm-review.fm-no-annotations .fm-reticle { display: none; }
 .fm-review figcaption { color: #bbb; font-size: 12px; line-height: 1.5; margin-top: 7px; text-align: center; }
 .fm-frame-label { font-family: monospace; color: #ddd; overflow-wrap: anywhere; }

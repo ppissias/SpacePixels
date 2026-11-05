@@ -65,9 +65,10 @@ final class FaintMoverSectionWriter {
                 String anchor = c.findingAnchor(FindingCategory.FAINT_MOVER, i + 1);
                 out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:#50e1d2'>");
                 out.println("<div class='detection-title'>Faint mover " + entry.id() + " · Unverified</div>");
+                KnownSolarSystemReport.writeFaintMoverIdentification(out, c, entry);
                 writeSummary(out, c, entry);
                 String comparisons = entry.catalogueComparisons().stream().map(FaintMoverPresentation.Match::name).collect(java.util.stream.Collectors.joining("; "));
-                out.println("<p>Possible catalogue matches: " + (!entry.catalogueComparisonAvailable()
+                if (entry.catalogueComparisons().isEmpty()) out.println("<p>Possible catalogue matches: " + (!entry.catalogueComparisonAvailable()
                         ? "unavailable for this field or reference time" : comparisons.isEmpty()
                         ? "none within the comparison tolerances" : escape(comparisons)) + ".</p>");
                 if (!entry.catalogueComparisons().isEmpty()) {
@@ -79,6 +80,7 @@ final class FaintMoverSectionWriter {
                 }
                 if (entry.blink() != null) writeBlink(c, entry);
                 FaintMoverReviewWriter.write(out, c, entry, candidate);
+                out.print(DetectionReportAstrometry.buildFaintMoverIdentificationHtml(c.astrometryContext, entry));
                 out.println("</div>");
                 var positions = entry.fittedPositions().isEmpty() ? java.util.Collections.<FaintMoverPresentation.Position>singletonList(null) : entry.fittedPositions();
                 for (var p : positions) {

@@ -171,7 +171,7 @@ public final class ReportExporter {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
         if (context.knownSolarSystem != null) items.add(new PipelineDiagnosticsSectionWriter.NavItem(
-                "known-solar-system", "Known asteroids & comets", Integer.toString(context.knownSolarSystem.bodies().size()), false));
+                "known-solar-system", "Known asteroids & comets", Integer.toString(KnownSolarSystemReport.inFieldBodies(context.knownSolarSystem).size()), false));
         if (FindingCategory.FAINT_MOVER.included(inclusion) && pipelineTelemetry != null && pipelineTelemetry.faintMoverSearchTelemetry != null) {
             var faint = pipelineTelemetry.faintMoverSearchTelemetry;
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("faint-movers", "Faint movers",

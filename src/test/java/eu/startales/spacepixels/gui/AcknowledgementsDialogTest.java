@@ -43,7 +43,7 @@ public class AcknowledgementsDialogTest {
                 // Verify Tab 1 (Test Data) includes the contributors credited in README and MANUAL.
                 String tab1Text = extractEditorText(tabs.getComponentAt(0));
                 assertTrue(tab1Text.contains("Klangwolke"));
-                assertTrue(tab1Text.contains("Austral Wiki"));
+                assertTrue(tab1Text.contains("Austral Kiwi"));
                 assertTrue(tab1Text.contains("Duncan Warren"));
                 assertTrue(tab1Text.contains("TheStarsabove"));
                 assertTrue(tab1Text.contains("Kumar"));

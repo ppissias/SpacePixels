@@ -186,6 +186,14 @@ public final class DetectionReportAstrometry {
     private DetectionReportAstrometry() {
     }
 
+    /** Offers the ordinary moving-track lookups at the candidate's fitted position and actual reference epoch. */
+    static String buildFaintMoverIdentificationHtml(Context context, FaintMoverPresentation.Entry entry) {
+        return buildSolarSystemIdentificationHtml(context,
+                SolarSystemQueryTargetFactory.buildFaintMoverQueryTarget(context, entry.x(), entry.y(), entry.referenceTimeMillis()),
+                "Reference epoch for fitted-path lookup", "Search SkyBoT (Fitted Reference)", "SkyBoT search radius",
+                "faint-mover-jpl-" + entry.id(), "jpl_faint_mover_" + entry.id().toLowerCase(java.util.Locale.ROOT), true);
+    }
+
     static String buildDeepStackIdentificationHtml(Context astrometryContext,
                                                    DetectedObject detection) {
         return buildDeepStackIdentificationHtml(astrometryContext, detection, null);

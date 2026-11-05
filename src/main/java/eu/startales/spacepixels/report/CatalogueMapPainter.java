@@ -63,6 +63,7 @@ final class CatalogueMapPainter {
         int width = map.getWidth();
         int height = map.getHeight();
         Graphics2D g = map.createGraphics();
+        g.setComposite(java.awt.AlphaComposite.SrcOver.derive(ReportMaps.ANNOTATION_OPACITY));
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         float stroke = Math.max(2f, width / 2400f);

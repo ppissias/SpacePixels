@@ -132,9 +132,10 @@ final class GlobalMapsSectionWriter {
         if (data.variableCandidates.isEmpty()) return;
         var graphics = map.createGraphics();
         try {
+            graphics.setComposite(java.awt.AlphaComposite.SrcOver.derive(ReportMaps.ANNOTATION_OPACITY));
             graphics.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
             graphics.setStroke(new java.awt.BasicStroke(Math.max(2f, map.getWidth() / 2400f)));
-            graphics.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, Math.max(18, map.getWidth() / 220)));
+            graphics.setFont(new java.awt.Font("Segoe UI", java.awt.Font.BOLD, Math.max(15, map.getWidth() / 275)));
             int radius = Math.max(10, map.getWidth() / 180);
             for (var star : data.variableCandidates) {
                 var finding = data.variable(star.id);

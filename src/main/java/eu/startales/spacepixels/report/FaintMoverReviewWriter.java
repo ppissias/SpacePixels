@@ -64,7 +64,8 @@ final class FaintMoverReviewWriter {
                     + "<label>White (sky σ) <input data-fm-white type='range' min='1' max='30' step='0.25' value='6' disabled></label>"
                     + "<label>Asinh strength <input data-fm-strength type='range' min='1' max='100' value='5' disabled></label>"
                     + "<label>Residual range ±<input data-fm-residual-range type='range' min='0.5' max='8' step='0.25' value='3'> units</label>"
-                    + "<label>Zoom <select data-fm-zoom><option value='1'>1×</option><option value='2'>2×</option><option value='4'>4×</option></select></label>"
+                    + "<label>Zoom <select data-fm-zoom><option value='native'>Native pixels (1:1)</option><option value='1' selected>Fit</option>"
+                    + "<option value='2'>2× Fit</option><option value='4'>4× Fit</option></select></label>"
                     + "<label><input data-fm-annotations type='checkbox' checked>Fitted path</label>"
                     + "<label><input data-fm-centred type='checkbox'>Motion-centred</label></div>");
         }
@@ -140,6 +141,7 @@ final class FaintMoverReviewWriter {
         var stats = DisplayImageRenderer.sharedDisplayStatistics(crops);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("version", 1); data.put("width", r.width()); data.put("height", r.height());
+        data.put("stackWidth", candidate.cutout[0].length); data.put("stackHeight", candidate.cutout.length);
         data.put("frames", frameData); data.put("source", Base64.getEncoder().encodeToString(source.array()));
         if (residual != null) data.put("residual", Base64.getEncoder().encodeToString(residual.array()));
         data.put("stats", stats); data.put("fillMaximum", DataArea.FILL_LEVEL);
@@ -159,8 +161,8 @@ final class FaintMoverReviewWriter {
 
     /** Writes an image-only score panel with a separate, toggleable fitted-position reticle. */
     private static void scoreFigure(PrintWriter out, String path, String title, String caption) {
-        out.println("<figure><div class='fm-viewport fm-stack'><img src='" + path + "' alt='" + title
-                + "'><span class='fm-reticle' aria-hidden='true'>+</span></div><figcaption>" + title + "<br>" + caption + "</figcaption></figure>");
+        out.println("<figure><div class='fm-viewport fm-stack'><div class='fm-stack-content'><img src='" + path + "' alt='" + title
+                + "'><span class='fm-reticle' aria-hidden='true'>+</span></div></div><figcaption>" + title + "<br>" + caption + "</figcaption></figure>");
     }
 
     /** Finds a finite common absolute score limit for the related stack panels. */

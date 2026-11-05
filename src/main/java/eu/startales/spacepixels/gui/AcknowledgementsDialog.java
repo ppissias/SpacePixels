@@ -129,7 +129,7 @@ final class AcknowledgementsDialog extends JDialog {
                 + "calibrate Auto-Tune algorithms, verify variable-star photometry, and refine star masking.</p>"
                 + "<p>Many thanks to <b>Klangwolke at Cloudynights</b>, "
                 + "<b>Duncan Warren</b>, <b>TheStarsabove at Cloudynights</b>,  "
-                + "<a href='https://github.com/chvvkumar'><b>Kumar</b></a> and <b>Austral Wiki at Cloudynights</b> "
+                + "<a href='https://github.com/chvvkumar'><b>Kumar</b></a> and <b>Austral Kiwi at Cloudynights</b> "
                 + "for providing some of the test data used by SpacePixels.</p>"
                 + "<p class='muted'>If you have sub-exposure sequences of moving objects (asteroids, comets), optical transients, "
                 + "or variable stars that you would like to contribute for testing and algorithm development, please reach out via "

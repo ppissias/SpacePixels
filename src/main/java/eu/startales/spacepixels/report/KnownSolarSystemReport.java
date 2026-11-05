@@ -263,6 +263,7 @@ final class KnownSolarSystemReport {
     static void write(PrintWriter out, DetectionReportContext c, FieldDepth depth) {
         var s = c.knownSolarSystem;
         if (s == null) return;
+        var inField = inFieldBodies(s);
         out.print("<section id='known-solar-system'><h2>Known asteroids and comets in the field</h2>");
         out.printf(Locale.US, "<p>Saved predictions: %s; fetched %s; magnitude limit %s. %s</p>",
                 escape(s.source()), escape(s.fetchedAtUtc()), s.magnitudeLimit() == null ? "unknown" : String.format(Locale.US, "%.2f", s.magnitudeLimit()),
@@ -275,7 +276,7 @@ final class KnownSolarSystemReport {
                 + "search limits and report exclusions can hide objects. No compatible finding does not establish a missed detection. Faint-mover search: " + escape(s.faintSearchStatus()) + ".</p>");
         out.print("<div class='known-objects-table-wrap'><table class='known-objects-table'><thead><tr>"
                 + "<th>Predicted object</th><th>Magnitude</th><th>Path coverage</th><th>Compatible report findings (review)</th></tr></thead><tbody>");
-        for (var body : s.bodies()) {
+        for (var body : inField) {
             out.print("<tr><td><span class='known-object-name'>" + escape(body.name()) + "</span><span class='known-object-meta'>"
                     + (body.comet() ? "Comet" : "Asteroid") + " · " + escape(body.orbitSolution()) + "</span>");
             if (body.informationUrl() != null) out.print("<a class='known-object-info' href='" + escape(body.informationUrl())
@@ -305,7 +306,12 @@ final class KnownSolarSystemReport {
                     + anchor(c, id) + "'>" + escape(id) + "</a> <span>Possible fitted-path match</span></div>");
             out.print("</td></tr>");
         }
-        out.print("</tbody></table></div><p>All plausible comparisons remain visible. Ordinary tracks require at least three actual frames and agreeing measured rates. "
+        out.print("</tbody></table></div>");
+        out.printf(Locale.US, "<p>Objects predicted inside the image at one or more exposure midpoints: %d. "
+                        + "Saved inventory entries without an in-field midpoint omitted from this table: %d; "
+                        + "the complete saved inventory and comparison evidence remain in report-data.json.</p>",
+                inField.size(), s.bodies().size() - inField.size());
+        out.print("<p>All plausible comparisons for the listed objects remain visible. Ordinary tracks require at least three actual frames and agreeing measured rates. "
                 + "The screen combines the supplied ephemeris 3-sigma RSS with an empirical pixel floor of max(1, star jitter); "
                 + "centroid and plate-solution uncertainties and ephemeris covariance are not modelled. Uncertainty at least as large as the field diagonal "
                 + "cannot support a field-local comparison. Agreement is not an identity confirmation.</p>");
@@ -314,6 +320,11 @@ final class KnownSolarSystemReport {
                 "<p>%d independent comparisons suggest adding %+.1f s (review interval %+.1f to %+.1f s) to the recorded time.</p>",
                 s.clock().independentObjects(), s.clock().suggestedOffsetSeconds(), s.clock().minimumSeconds(), s.clock().maximumSeconds());
         out.print("</details></section>");
+    }
+
+    /** Selects nominally in-field objects across all sampled exposure midpoints for both the table and navigation count. */
+    static List<Body> inFieldBodies(Summary summary) {
+        return summary.bodies().stream().filter(body -> body.inFieldFrames() > 0).toList();
     }
 
     /** Places nominal-time compatible names on a track card; clock-shift-only evidence never labels an identity. */
@@ -333,6 +344,25 @@ final class KnownSolarSystemReport {
             out.print(body.comet() ? " (comet)" : " (asteroid)");
         }
         out.print("<span class='known-object-meta'>Position and motion agree with saved predictions. "
+                + "<a href='#known-solar-system'>Review the catalogue comparison</a>; identity is unconfirmed.</span></div>");
+    }
+
+    /** Labels every fitted-path comparison just as explicitly as a track, without promoting it to a confirmed identity. */
+    static void writeFaintMoverIdentification(PrintWriter out, DetectionReportContext c, FaintMoverPresentation.Entry entry) {
+        if (entry.catalogueComparisons().isEmpty()) return;
+        out.print("<div class='track-link-note known-object-identification'><strong>"
+                + (entry.catalogueComparisons().size() == 1 ? "Possible identification: " : "Possible identifications (ambiguous): ") + "</strong>");
+        for (int i = 0; i < entry.catalogueComparisons().size(); i++) {
+            if (i > 0) out.print("; ");
+            var match = entry.catalogueComparisons().get(i);
+            var body = c.knownSolarSystem.bodies().stream()
+                    .filter(b -> java.util.Objects.equals(b.name(), match.name())).findFirst().orElseThrow();
+            if (body.informationUrl() != null) out.print("<a href='" + escape(body.informationUrl())
+                    + "' target='_blank' rel='noopener noreferrer'>" + escape(match.name()) + "</a>");
+            else out.print(escape(match.name()));
+            out.print(body.comet() ? " (comet)" : " (asteroid)");
+        }
+        out.print("<span class='known-object-meta'>Fitted position and motion agree with saved predictions. "
                 + "<a href='#known-solar-system'>Review the catalogue comparison</a>; identity is unconfirmed.</span></div>");
     }
 

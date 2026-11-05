@@ -1,6 +1,15 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
-const {decodeSamples, displayLevels, tone, sample} = require('../../main/resources/eu/startales/spacepixels/report/faint-mover-review.js');
+const {decodeSamples, displayLevels, tone, sample, displayScale} = require('../../main/resources/eu/startales/spacepixels/report/faint-mover-review.js');
+
+test('native view preserves pixel size for both source crops and small stacks; Fit keeps its existing enlargement', () => {
+  assert.equal(displayScale('native', 91, 71), 1);
+  assert.equal(displayScale('native', 31, 31), 1);
+  assert.equal(91 * displayScale('1', 91, 71), 318);
+  assert.equal(31 * displayScale('1', 31, 31), 318);
+  assert.equal(31 * displayScale('2', 31, 31), 636);
+  assert.equal(31 * displayScale('4', 31, 31), 1272);
+});
 
 test('offline binary assets preserve unsigned 16-bit intensities and signed residuals', () => {
   const source = Buffer.alloc(8);
