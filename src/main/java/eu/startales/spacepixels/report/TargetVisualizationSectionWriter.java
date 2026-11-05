@@ -294,6 +294,7 @@ final class TargetVisualizationSectionWriter {
             report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.MOVING_TARGET, counter) + "'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
             report.println("<div class='detection-title'>Moving Target Track " + FindingCategory.MOVING_TARGET.id(counter) + timeBadge + "</div>");
+            KnownSolarSystemReport.writeTrackIdentification(report, context, FindingCategory.MOVING_TARGET.id(counter));
             RescueTrackAssociations.write(report, context, FindingCategory.MOVING_TARGET.id(counter));
             report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
 

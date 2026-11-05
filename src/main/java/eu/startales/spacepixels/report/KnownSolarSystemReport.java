@@ -5,6 +5,8 @@ import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.util.SkyMath;
 
 import java.io.PrintWriter;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,13 +26,15 @@ final class KnownSolarSystemReport {
     /** Predicted field/path inventory and every compatible visible finding; absence is not a completeness measurement. */
     record Body(String name, boolean comet, String orbitSolution, Double minimumMagnitude, Double maximumMagnitude,
                 int predictedFrames, int inFieldFrames, int usablePathFrames, int starMaskFrames,
-                List<Comparison> trackComparisons, List<String> faintMoverComparisons) { }
+                List<Comparison> trackComparisons, List<String> faintMoverComparisons, String informationUrl,
+                Double maximumEphemerisThreeSigmaPixels, boolean ephemerisUncertaintyTooBroad) { }
     /** Common time-offset evidence from at least two independent, unambiguous objects; never a correction command. */
     record Clock(String status, Double suggestedOffsetSeconds, Double minimumSeconds, Double maximumSeconds,
                  int independentObjects, String explanation) { }
     /** Buffer-free offline provenance, coverage and comparisons from the admitted run's catalogue/WCS snapshot. */
     record Summary(String source, String fetchedAtUtc, Double magnitudeLimit, long startMillis, long endMillis,
-                   List<String> problems, List<String> imageFilters, String faintSearchStatus, List<Body> bodies, Clock clock) { }
+                   List<String> problems, List<String> imageFilters, String faintSearchStatus, double fieldDiagonalPixels,
+                   List<Body> bodies, Clock clock) { }
 
     /** Static report calculations retain no live settings or source buffers. */
     private KnownSolarSystemReport() { }
@@ -40,6 +44,8 @@ final class KnownSolarSystemReport {
         var catalogue = c.runContext.solarSystem();
         var wcs = c.astrometryContext == null ? null : c.astrometryContext.getTransformer();
         if (catalogue == null || catalogue.bodies == null || wcs == null) return null;
+        int[] dimensions = c.frameDimensions();
+        double fieldDiagonal = Math.hypot(dimensions[0], dimensions[1]);
         var rejectedFrames = new java.util.HashSet<>(UnclassifiedTransientSectionWriter.rejectedFrameIndices(c.pipelineTelemetry));
         if (c.pipelineTelemetry != null) for (var f : c.pipelineTelemetry.frameQualityStats) if (f.rejected) rejectedFrames.add(f.frameIndex);
         var bodies = new ArrayList<Body>();
@@ -47,7 +53,7 @@ final class KnownSolarSystemReport {
             io.github.ppissias.jtransient.execution.CancellationScope.check();
             if (body == null || body.samples == null || body.samples.isEmpty()) continue;
             int predicted = 0, inField = 0, usable = 0, masked = 0;
-            Double minimum = null, maximum = null;
+            Double minimum = null, maximum = null, maximumUncertainty = null;
             for (int i = 0; i < c.fitsFiles.length; i++) {
                 var file = c.fitsFiles[i];
                 if (file == null || file.getObservationTimestamp() == -1 || file.getExposureDurationMillis() <= 0) continue;
@@ -63,6 +69,9 @@ final class KnownSolarSystemReport {
                 }
                 var pixel = wcs.skyToPixel(p.ra(), p.dec());
                 if (!finite(pixel)) continue;
+                Double uncertainty = uncertaintyPixels(p, wcs, pixel);
+                if (uncertainty != null) maximumUncertainty = maximumUncertainty == null
+                        ? uncertainty : Math.max(maximumUncertainty, uncertainty);
                 int x = (int) Math.floor(pixel[0] + .5), y = (int) Math.floor(pixel[1] + .5);
                 if (x < 0 || y < 0 || x >= file.getSizeWidth() || y >= file.getSizeHeight()) continue;
                 inField++;
@@ -75,16 +84,18 @@ final class KnownSolarSystemReport {
                 if (c.masterVetoMask != null && y < c.masterVetoMask.length && x < c.masterVetoMask[y].length
                         && c.masterVetoMask[y][x]) masked++;
             }
+            boolean uncertaintyTooBroad = maximumUncertainty != null && maximumUncertainty >= fieldDiagonal;
             var comparisons = new ArrayList<Comparison>();
-            for (var track : c.movingTargets) {
+            if (!uncertaintyTooBroad) for (var track : c.movingTargets) {
                 var match = compare(c.trackFindings.id(track), ReportTrackMotion.points(track.points, c.fitsFiles), body, wcs,
-                        c.config == null ? 1 : Math.max(1, c.config.maxStarJitter));
+                        c.config == null ? 1 : Math.max(1, c.config.maxStarJitter), fieldDiagonal);
                 if (match != null) comparisons.add(match);
             }
             var faint = c.faintMoverPresentation.stream().filter(entry -> entry.catalogueComparisons().stream()
                     .anyMatch(m -> java.util.Objects.equals(m.name(), body.name))).map(FaintMoverPresentation.Entry::id).toList();
             bodies.add(new Body(body.name == null ? "Unnamed catalogue object" : body.name, body.comet, body.orbitSolution,
-                    minimum, maximum, predicted, inField, usable, masked, List.copyOf(comparisons), faint));
+                    minimum, maximum, predicted, inField, usable, masked, List.copyOf(comparisons), faint,
+                    informationUrl(body.name, body.comet), maximumUncertainty, uncertaintyTooBroad));
         }
         var t = c.pipelineTelemetry == null ? null : c.pipelineTelemetry.faintMoverSearchTelemetry;
         String faint = t == null ? "off" : t.skippedReason != null ? "skipped: " + t.skippedReason
@@ -95,14 +106,15 @@ final class KnownSolarSystemReport {
         return new Summary(catalogue.source, catalogue.fetchedAtUtc,
                 Double.isFinite(catalogue.magnitudeLimit) ? catalogue.magnitudeLimit : null, catalogue.startMillis,
                 catalogue.endMillis, catalogue.problems == null ? List.of() : catalogue.problems.stream().filter(java.util.Objects::nonNull).toList(), filters, faint,
-                List.copyOf(bodies), clock(bodies));
+                fieldDiagonal, List.copyOf(bodies), clock(bodies));
     }
 
-    /** Compares at least three actual frames and measured rates, retaining missing ephemeris errors as unavailable. */
+    /** Compares actual centroids/rates; field-wide ephemeris uncertainty cannot support a local association or clock check. */
     static Comparison compare(String id, List<ReportTrackMotion.Point> points, SolarSystemObjects.Body body,
-                              WcsCoordinateTransformer wcs, double reviewFloor) {
+                              WcsCoordinateTransformer wcs, double reviewFloor, double fieldDiagonalPixels) {
         if (points.size() < 3 || body == null || body.samples == null || body.samples.isEmpty()
-                || wcs == null || !Double.isFinite(reviewFloor) || reviewFloor <= 0) return null;
+                || wcs == null || !Double.isFinite(reviewFloor) || reviewFloor <= 0
+                || !Double.isFinite(fieldDiagonalPixels) || fieldDiagonalPixels <= 0) return null;
         var observedFit = ReportTrackMotion.fit(points);
         if (observedFit == null) return null;
         var predicted = new ArrayList<ReportTrackMotion.Point>();
@@ -116,6 +128,7 @@ final class KnownSolarSystemReport {
             if (!finite(q)) return null;
             predicted.add(new ReportTrackMotion.Point(p.frameIndex(), p.midpointMillis(), q[0], q[1]));
             Double uncertainty = uncertaintyPixels(sky, wcs, q);
+            if (uncertainty != null && uncertainty >= fieldDiagonalPixels) return null;
             errorsAvailable &= uncertainty != null;
             double limit = uncertainty == null ? reviewFloor : Math.hypot(reviewFloor, uncertainty);
             tolerance = Math.max(tolerance, limit);
@@ -163,6 +176,10 @@ final class KnownSolarSystemReport {
                 shiftedFrames++;
                 double distance = Math.hypot(p.x() - q[0], p.y() - q[1]);
                 Double uncertainty = uncertaintyPixels(sky, wcs, q);
+                if (uncertainty != null && uncertainty >= fieldDiagonalPixels) {
+                    shiftedAgreement = false;
+                    continue;
+                }
                 shiftedErrorsAvailable &= uncertainty != null;
                 double limit = uncertainty == null ? reviewFloor : Math.hypot(reviewFloor, uncertainty);
                 shiftedTolerance = Math.max(shiftedTolerance, limit);
@@ -256,34 +273,97 @@ final class KnownSolarSystemReport {
                 + ". Gaia G depth is a stellar, sampled-field estimate in a different passband; it is not a moving-object completeness limit. "
                 + "Coverage counts sample known UTC exposure midpoints, not the whole exposure or source aperture. Masks, blends, rejected frames, "
                 + "search limits and report exclusions can hide objects. No compatible finding does not establish a missed detection. Faint-mover search: " + escape(s.faintSearchStatus()) + ".</p>");
-        out.print("<div style='overflow-x:auto'><table><thead><tr><th>Predicted object</th><th>Predicted magnitude</th><th>Path coverage</th><th>Compatible report findings (review)</th></tr></thead><tbody>");
+        out.print("<div class='known-objects-table-wrap'><table class='known-objects-table'><thead><tr>"
+                + "<th>Predicted object</th><th>Magnitude</th><th>Path coverage</th><th>Compatible report findings (review)</th></tr></thead><tbody>");
         for (var body : s.bodies()) {
-            out.print("<tr><td>" + escape(body.name()) + (body.comet() ? " (comet)" : "") + "<br><small>" + escape(body.orbitSolution()) + "</small></td><td>");
+            out.print("<tr><td><span class='known-object-name'>" + escape(body.name()) + "</span><span class='known-object-meta'>"
+                    + (body.comet() ? "Comet" : "Asteroid") + " · " + escape(body.orbitSolution()) + "</span>");
+            if (body.informationUrl() != null) out.print("<a class='known-object-info' href='" + escape(body.informationUrl())
+                    + "' target='_blank' rel='noopener noreferrer'>JPL object details ↗</a>");
+            out.print("</td><td class='known-object-magnitude'>");
             if (body.minimumMagnitude() == null) out.print("Unknown");
             else out.printf(Locale.US, "%.2f–%.2f", body.minimumMagnitude(), body.maximumMagnitude());
-            out.printf(Locale.US, "</td><td>%d predicted / %d frames; %d in field; %d kept with data; %d on star-mask pixels</td><td>",
-                    body.predictedFrames(), c.fitsFiles.length, body.inFieldFrames(), body.usablePathFrames(), body.starMaskFrames());
-            if (body.trackComparisons().isEmpty() && body.faintMoverComparisons().isEmpty()) out.print("No compatible reported finding");
-            for (var m : body.trackComparisons()) {
-                out.printf(Locale.US, "<p><a href='#%s'>%s</a>: %s over %d measured frames; RMS %.2f px, maximum %.2f px; position screen up to %.2f px; rate difference %.4f px/min (screen %.4f). %s</p>",
-                        anchor(c, m.trackId()), m.trackId(), m.positionAgreement() ? "position/rate agreement" : "agreement only after a trial time shift",
-                        m.frames(), m.rmsPixels(), m.maximumPixels(), m.reviewTolerancePixels(), m.motionDifferencePixelsPerMinute(), m.motionTolerancePixelsPerMinute(),
-                        m.ephemerisUncertaintyAvailable() ? "Includes supplied ephemeris 3-sigma RSS." : "Ephemeris uncertainty incomplete or unavailable; heuristic comparison only.");
-                if (m.suggestedTimeOffsetSeconds() != null) out.printf(Locale.US,
-                        "<small>Along-path time diagnostic: add %+.1f s; position-tolerance equivalent %.1f s; %d shifted frames checked, RMS %.2f px, maximum %.2f px. Original and trial times/positions are saved in report-data.json.</small>",
-                        m.suggestedTimeOffsetSeconds(), m.timeToleranceSeconds(), m.shiftedFrames(), m.shiftedRmsPixels(), m.shiftedMaximumPixels());
+            out.printf(Locale.US, "</td><td><strong>%d kept frames with data</strong><span class='known-object-meta'>"
+                            + "%d / %d predicted · %d in field<br>%d on star-mask pixels</span></td><td>",
+                    body.usablePathFrames(), body.predictedFrames(), c.fitsFiles.length, body.inFieldFrames(), body.starMaskFrames());
+            if (body.ephemerisUncertaintyTooBroad()) {
+                out.print("<span class='known-object-warning'>Orbit too uncertain for comparison</span>");
+                out.printf(Locale.US, "<details class='known-object-evidence'><summary>Why no identification?</summary>"
+                                + "<p>Supplied ephemeris 3-sigma RSS reaches %,.0f px; the field diagonal is %,.0f px. "
+                                + "This uncertainty cannot distinguish tracks within the field. No track identification or clock comparison is made.</p></details>",
+                        body.maximumEphemerisThreeSigmaPixels(), s.fieldDiagonalPixels());
+            } else if (body.trackComparisons().isEmpty() && body.faintMoverComparisons().isEmpty()) {
+                out.print("<span class='known-object-meta'>No compatible reported finding</span>");
             }
-            for (var id : body.faintMoverComparisons()) out.print("<p><a href='#" + anchor(c, id) + "'>" + id + "</a>: fitted-path heuristic comparison</p>");
+            for (var m : body.trackComparisons()) {
+                out.print("<div class='known-object-finding'><a class='known-finding-link' href='#" + anchor(c, m.trackId()) + "'>"
+                        + escape(m.trackId()) + "</a> <span>" + (m.positionAgreement() ? "Position and motion agree" : "Trial clock shift only") + "</span>");
+                writeComparisonDetails(out, m);
+                out.print("</div>");
+            }
+            for (var id : body.faintMoverComparisons()) out.print("<div class='known-object-finding'><a class='known-finding-link' href='#"
+                    + anchor(c, id) + "'>" + escape(id) + "</a> <span>Possible fitted-path match</span></div>");
             out.print("</td></tr>");
         }
         out.print("</tbody></table></div><p>All plausible comparisons remain visible. Ordinary tracks require at least three actual frames and agreeing measured rates. "
                 + "The screen combines the supplied ephemeris 3-sigma RSS with an empirical pixel floor of max(1, star jitter); "
-                + "centroid and plate-solution uncertainties and ephemeris covariance are not modelled. Agreement is not an identity confirmation.</p>");
+                + "centroid and plate-solution uncertainties and ephemeris covariance are not modelled. Uncertainty at least as large as the field diagonal "
+                + "cannot support a field-local comparison. Agreement is not an identity confirmation.</p>");
         out.print("<details><summary>Clock check</summary><p>" + escape(s.clock().explanation()) + "</p>");
         if (s.clock().suggestedOffsetSeconds() != null) out.printf(Locale.US,
                 "<p>%d independent comparisons suggest adding %+.1f s (review interval %+.1f to %+.1f s) to the recorded time.</p>",
                 s.clock().independentObjects(), s.clock().suggestedOffsetSeconds(), s.clock().minimumSeconds(), s.clock().maximumSeconds());
         out.print("</details></section>");
+    }
+
+    /** Places nominal-time compatible names on a track card; clock-shift-only evidence never labels an identity. */
+    static void writeTrackIdentification(PrintWriter out, DetectionReportContext c, String trackId) {
+        if (c.knownSolarSystem == null) return;
+        var bodies = c.knownSolarSystem.bodies().stream().filter(body -> !body.ephemerisUncertaintyTooBroad()
+                && body.trackComparisons().stream().anyMatch(m -> m.trackId().equals(trackId) && m.positionAgreement())).toList();
+        if (bodies.isEmpty()) return;
+        out.print("<div class='track-link-note known-object-identification'><strong>"
+                + (bodies.size() == 1 ? "Possible identification: " : "Possible identifications (ambiguous): ") + "</strong>");
+        for (int i = 0; i < bodies.size(); i++) {
+            if (i > 0) out.print("; ");
+            var body = bodies.get(i);
+            if (body.informationUrl() != null) out.print("<a href='" + escape(body.informationUrl())
+                    + "' target='_blank' rel='noopener noreferrer'>" + escape(body.name()) + "</a>");
+            else out.print(escape(body.name()));
+            out.print(body.comet() ? " (comet)" : " (asteroid)");
+        }
+        out.print("<span class='known-object-meta'>Position and motion agree with saved predictions. "
+                + "<a href='#known-solar-system'>Review the catalogue comparison</a>; identity is unconfirmed.</span></div>");
+    }
+
+    /** Keeps the numerical comparison and clock evidence available without making each inventory row a paragraph. */
+    private static void writeComparisonDetails(PrintWriter out, Comparison m) {
+        out.printf(Locale.US, "<details class='known-object-evidence'><summary>%d measured frames · RMS %.2f px</summary>"
+                        + "<p>Maximum %.2f px; position screen up to %.2f px. Rate difference %.4f px/min (screen %.4f). %s</p>",
+                m.frames(), m.rmsPixels(), m.maximumPixels(), m.reviewTolerancePixels(), m.motionDifferencePixelsPerMinute(),
+                m.motionTolerancePixelsPerMinute(), m.ephemerisUncertaintyAvailable()
+                        ? "Includes supplied ephemeris 3-sigma RSS." : "Ephemeris uncertainty incomplete or unavailable; heuristic comparison only.");
+        if (m.suggestedTimeOffsetSeconds() != null) out.printf(Locale.US,
+                "<p>Along-path time diagnostic: add %+.1f s; position-tolerance equivalent %.1f s; %d shifted frames checked, "
+                        + "RMS %.2f px, maximum %.2f px. Original and trial times/positions are saved in report-data.json.</p>",
+                m.suggestedTimeOffsetSeconds(), m.timeToleranceSeconds(), m.shiftedFrames(), m.shiftedRmsPixels(), m.shiftedMaximumPixels());
+        out.print("</details>");
+    }
+
+    /** Builds a JPL SBDB lookup from the saved designation; no network request or extra catalogue fetch is needed. */
+    static String informationUrl(String name, boolean comet) {
+        if (name == null || name.isBlank()) return null;
+        String search = name.trim();
+        if (!comet && search.matches("\\(?\\d{4} (?:[A-Z]{2}\\d*|[PT]-[L123])\\)?")) {
+            search = search.replace("(", "").replace(")", "");
+        } else if (!comet && search.matches("\\d+(?: .*)?")) {
+            search = search.split(" ", 2)[0];
+        } else if (comet) {
+            search = search.split(" \\(", 2)[0];
+            if (search.matches("\\d+[PDCXAI](?:-[A-Z0-9]+)?/.*")) search = search.substring(0, search.indexOf('/'));
+        }
+        return "https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr="
+                + URLEncoder.encode(search, StandardCharsets.UTF_8).replace("+", "%20");
     }
 
     /** Resolves only visible report identities so every generated link opens an exported finding. */

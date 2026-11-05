@@ -47,6 +47,7 @@ public class ReportAssociationsIntegrationTest {
         RescueTrackAssociations.write(out, c, "LR1");
         RescueTrackAssociations.write(out, c, "T1");
         KnownSolarSystemReport.write(out, c, new FieldDepth());
+        KnownSolarSystemReport.writeTrackIdentification(out, c, "T1");
         out.flush();
         String html = text.toString();
         for (var id : List.of("t1", "t2", "lr1")) assertTrue(html.contains("href='#finding-" + id + "'"));
@@ -55,6 +56,9 @@ public class ReportAssociationsIntegrationTest {
         assertTrue(html.contains("Partial fetch: one &lt;request&gt; failed"));
         assertTrue(html.contains("Image FILTER metadata: L"));
         assertTrue(html.contains("not a moving-object completeness limit"));
+        assertTrue(html.contains("Possible identification: "));
+        assertTrue(html.contains("known-object-identification"));
+        assertTrue(html.contains("rel='noopener noreferrer'"));
         c.data.writeJson(folder.getRoot());
         var json = JsonParser.parseString(Files.readString(folder.getRoot().toPath().resolve("report-data.json"))).getAsJsonObject();
         assertEquals(1, json.get("schemaVersion").getAsInt());
@@ -88,8 +92,79 @@ public class ReportAssociationsIntegrationTest {
         assertFalse(text.contains("NaN")); assertFalse(text.contains("Infinity"));
     }
 
-    /** Builds a tiny admitted sequence and provider snapshot with deliberately competing tracks and separate rescue frames. */
+    /** An uncertain orbit remains in the inventory without labelling every visible track as a possible identity. */
+    @Test public void fieldWideOrbitErrorsRemainVisibleWithoutTrackIdentifications() throws Exception {
+        var c = context(ReportInclusion.all(), false, catalogue -> {
+            var broad = new SolarSystemObjects.Body(); broad.name = "(2010 DR82)"; broad.orbitSolution = "JPL#8";
+            for (var source : catalogue.bodies.getFirst().samples) {
+                var sample = new SolarSystemObjects.Sample(); sample.timeMillis = source.timeMillis;
+                sample.ra = source.ra + 1.5; sample.dec = source.dec + 1.5;
+                sample.raSigmaArcsec = 43_680_000.0; sample.decSigmaArcsec = 10_182_000.0;
+                broad.samples.add(sample);
+            }
+            catalogue.bodies.add(broad);
+        });
+        var broad = c.knownSolarSystem.bodies().getLast();
+        assertTrue(broad.ephemerisUncertaintyTooBroad());
+        assertTrue(broad.maximumEphemerisThreeSigmaPixels() > c.knownSolarSystem.fieldDiagonalPixels());
+        assertTrue(broad.trackComparisons().isEmpty());
+        assertTrue(broad.informationUrl().endsWith("sstr=2010%20DR82"));
+        var table = new StringWriter(); KnownSolarSystemReport.write(new PrintWriter(table), c, new FieldDepth());
+        assertTrue(table.toString().contains("Orbit too uncertain for comparison"));
+        assertTrue(table.toString().contains("(2010 DR82)"));
+        var note = new StringWriter(); KnownSolarSystemReport.writeTrackIdentification(new PrintWriter(note), c, "T1");
+        assertTrue(note.toString().contains("&lt;synthetic object&gt;"));
+        assertFalse(note.toString().contains("2010 DR82"));
+        c.data.writeJson(folder.getRoot());
+        String json = Files.readString(folder.getRoot().toPath().resolve("report-data.json"));
+        assertTrue(json.contains("ephemerisUncertaintyTooBroad"));
+        assertFalse(json.contains("NaN")); assertFalse(json.contains("Infinity"));
+    }
+
+    /** Competing nominal predictions remain explicitly ambiguous on the card instead of selecting one name. */
+    @Test public void trackNamesPreserveCompetingCatalogueAssociations() throws Exception {
+        var c = context(ReportInclusion.all(), false, catalogue -> {
+            var second = new SolarSystemObjects.Body(); second.name = "Competing <comet>"; second.comet = true;
+            second.samples.addAll(catalogue.bodies.getFirst().samples);
+            catalogue.bodies.add(second);
+        });
+        var note = new StringWriter(); KnownSolarSystemReport.writeTrackIdentification(new PrintWriter(note), c, "T1");
+        assertTrue(note.toString().contains("Possible identifications (ambiguous)"));
+        assertTrue(note.toString().contains("&lt;synthetic object&gt;"));
+        assertTrue(note.toString().contains("Competing &lt;comet&gt;"));
+        assertTrue(note.toString().contains("(comet)"));
+        var missing = new StringWriter(); KnownSolarSystemReport.writeTrackIdentification(new PrintWriter(missing), c, "T99");
+        assertEquals("", missing.toString());
+    }
+
+    /** Clock-shift-only comparisons stay available in the table but cannot label a nominal-time track identity. */
+    @Test public void trialClockShiftDoesNotBecomeTrackIdentification() throws Exception {
+        var c = context(ReportInclusion.all(), false, catalogue -> {
+            var samples = catalogue.bodies.getFirst().samples;
+            var first = samples.getFirst(); var last = samples.getLast();
+            double raStep = last.ra - first.ra, decStep = last.dec - first.dec;
+            first.timeMillis -= 600_000; first.ra -= raStep; first.dec -= decStep;
+            last.timeMillis += 600_000; last.ra += raStep; last.dec += decStep;
+            for (var sample : samples) sample.timeMillis += 600_000;
+        });
+        var comparisons = c.knownSolarSystem.bodies().getFirst().trackComparisons();
+        assertEquals(2, comparisons.size());
+        assertTrue(comparisons.stream().noneMatch(KnownSolarSystemReport.Comparison::positionAgreement));
+        assertTrue(comparisons.stream().allMatch(m -> m.suggestedTimeOffsetSeconds() != null));
+        var note = new StringWriter(); KnownSolarSystemReport.writeTrackIdentification(new PrintWriter(note), c, "T1");
+        assertEquals("", note.toString());
+        var table = new StringWriter(); KnownSolarSystemReport.write(new PrintWriter(table), c, new FieldDepth());
+        assertTrue(table.toString().contains("Trial clock shift only"));
+    }
+
+    /** Builds the normal fixture while retaining a seam for malformed and competing provider snapshots. */
     private DetectionReportContext context(ReportInclusion inclusion, boolean invalid) throws Exception {
+        return context(inclusion, invalid, catalogue -> { });
+    }
+
+    /** Captures a tiny admitted sequence after the caller has configured its run-owned provider fixture. */
+    private DetectionReportContext context(ReportInclusion inclusion, boolean invalid,
+                                          java.util.function.Consumer<SolarSystemObjects> configure) throws Exception {
         var files = new FitsFileInformation[5];
         var raw = new ArrayList<short[][]>();
         for (int i = 0; i < files.length; i++) {
@@ -137,6 +212,7 @@ public class ReportAssociationsIntegrationTest {
             sample.ra = sky.getRaDegrees(); sample.dec = sky.getDecDegrees(); edgeBody.samples.add(sample);
         }
         catalogue.bodies.add(edgeBody);
+        configure.accept(catalogue);
         var run = ReportRunContext.capture(DetectionRunOptions.defaults(), files, new SkySnapshot(folder.getRoot(), null, null, catalogue));
         return DetectionReportContext.create(new ReportRequest(result, raw, files, folder.getRoot(), new DetectionConfig(), run, inclusion, null),
                 folder.getRoot(), new ReportProgress(null));
