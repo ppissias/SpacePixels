@@ -33,7 +33,9 @@ The [SM-F6 deeper candidate review](../JTransient/ALGORITHM.md#faint-mover-valid
 
 The same SM-F6 milestone now completes 462 matched searches over six existing observations, plus blind disjoint K2 thirds and 12 targeted encounters. All selected M81 footprints finish at the original full speed range. Mask/clipping/score relaxations show control costs, while source/availability limits prevent blanket redundancy claims. The [engine results and remaining acceptance](../JTransient/FEATURE-REQUESTS.md#sm-f6-faint-mover-validation-and-candidate-review) retain current behavior and supply the baseline for separate SM-F7 temporal-bin and PSF-filtered proposal comparisons. No application implementation or default change follows from these research results.
 
-The [research evidence index](docs/research/README.md) links the committed dated collection, detailed numerical tables/figures and production code-change history. Current behavior and pending decisions remain in their existing documents.
+The [SM-F7 matched-verifier comparison](../JTransient/ALGORITHM.md#faint-mover-complementary-proposals) now completes 644 result rows on four other existing observations, with 240 available moving histories. Temporal-bin proposals add six targeted close companions after combined selection; five remain additional beyond ordinary tracks and digital tracking when all upstream processing is rerun. The general grid gains none, frame-point methods mostly reach their seed boundary, and repeated-path review cost remains explicit. Current gates/defaults remain. Independent observing examples, source attribution and an agreed engine/application contract are required before integration; no application implementation follows from this bounded milestone.
+
+The [research evidence index](docs/research/README.md) links the ten-study committed collection, detailed numerical tables/figures and production code-change history. Current behavior and pending decisions remain in their existing documents.
 
 ## F04. MCP agent services
 
