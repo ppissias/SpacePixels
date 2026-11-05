@@ -35,7 +35,9 @@ The same SM-F6 milestone now completes 462 matched searches over six existing ob
 
 The [SM-F7 matched-verifier comparison](../JTransient/ALGORITHM.md#faint-mover-complementary-proposals) now completes 644 result rows on four other existing observations, with 240 available moving histories. Temporal-bin proposals add six targeted close companions after combined selection; five remain additional beyond ordinary tracks and digital tracking when all upstream processing is rerun. The general grid gains none, frame-point methods mostly reach their seed boundary, and repeated-path review cost remains explicit. Current gates/defaults remain. Independent observing examples, source attribution and an agreed engine/application contract are required before integration; no application implementation follows from this bounded milestone.
 
-The [research evidence index](docs/research/README.md) links the ten-study committed collection, detailed numerical tables/figures and production code-change history. Current behavior and pending decisions remain in their existing documents.
+The subsequent [uninjected native K2 application](../JTransient/docs/research/slow-movers/11-klangwolke-native/CONCLUSION.md) completes all 247 production tiles in D and T4. The combined result is the same eleven existing digital candidates with byte-identical owned review data; T4 finds seven of those and adds no detection. This supplies the requested real-data comparison without changing production behavior, gates or defaults.
+
+The [research evidence index](docs/research/README.md) links the eleven-study committed collection, detailed numerical tables/figures and production code-change history. Current behavior and pending decisions remain in their existing documents.
 
 ## F04. MCP agent services
 
