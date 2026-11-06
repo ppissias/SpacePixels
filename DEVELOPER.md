@@ -7,7 +7,7 @@ How SpacePixels is built, how its code is organised, the principles it follows, 
 | [MANUAL.md](MANUAL.md) | What the application does, for users |
 | [API.md](API.md) | The supported Java API and its requests and results |
 | [HIGH_LEVEL_DESIGN.md](HIGH_LEVEL_DESIGN.md) | Components, processing flows and data contracts in detail |
-| [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) | Pending design and refactoring work, and the latest code review |
+| [DESIGN-IMPROVEMENTS.md](DESIGN-IMPROVEMENTS.md) | Pending design and refactoring work |
 | [FEATURE-REQUESTS.md](FEATURE-REQUESTS.md) | Pending functional requests and their decisions |
 | [PUBLISHING.md](PUBLISHING.md) | Desktop packages, Maven publication and the API consumer test |
 | [docs/features/](docs/features/) | Technical notes on individual features |
@@ -111,7 +111,7 @@ Add `-PspacepixelsDebug` (or `-Dspacepixels.debug=true` on a plain `java` comman
 
 ### Dependencies
 
-The build uses Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2. `UiStyle.spinner` keeps the caret where the user puts it when a number field gains focus.
+The build uses Gradle 9.8.2, nom-tam-fits 1.23.0, Gson 2.14.0 and FlatLaf 3.7.2.
 
 FITS HDU creation uses the public `Fits.makeHDU(Object)` API in pixel conversion, XISF import, artificial-star injection and test fixtures.
 
@@ -173,7 +173,7 @@ Interactive import can decline before session replacement. Both desktop detectio
 
 ## How a user action runs
 
-Twelve workflows use the job pattern: observing-session preparation, import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection and the Test Star Mask stack.
+The job pattern covers observing-session preparation, import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection, standalone quality control and the Test Star Mask stack.
 
 Batch Stretch is an explicit whole-dataset action on Image Stretch, sharing the normal command/job lock and capturing its stretch settings at admission. Convert to Mono writes linear copies only. Successful colour import offers conversion, followed by the existing optional import of the mono output; these follow-ups check the session and shutdown state before starting another job.
 
