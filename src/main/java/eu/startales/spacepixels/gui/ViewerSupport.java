@@ -89,30 +89,90 @@ final class ViewerSupport {
         return separator;
     }
 
-    /** The frame description in the middle, the cursor on the right and the keys underneath. */
-    static JComponent statusBar(JLabel frameLabel, JLabel cursorLabel, String keyHint) {
-        WrappingHelpLabel hint = new WrappingHelpLabel(keyHint, 1400);
-        hint.setForeground(UiStyle.helpColor());
-        // Footer height follows the actual window width rather than the original wide-window hint width.
-        JPanel status = new JPanel(new BorderLayout(12, 2)) {
-            /** Wraps the shortcut help before measuring a narrow window's footer. */
-            @Override public Dimension getPreferredSize() {
-                int width = getWidth() > 0 ? getWidth() : UiStyle.space(600);
-                hint.wrapAt(Math.max(100, width - getInsets().left - getInsets().right));
-                return super.getPreferredSize();
-            }
+    /** One key or mouse action of a viewer and what it does, for the Shortcuts window. */
+    record Shortcut(String keys, String action) { }
 
-            /** A smaller height must not clip the frame information or wrapped shortcut text. */
-            @Override public Dimension getMinimumSize() {
-                Dimension size = super.getMinimumSize();
-                size.height = Math.max(size.height, getPreferredSize().height);
-                return size;
-            }
-        };
+    /**
+     * The one-line status bar: the frame on the left; the cursor readout and the Shortcuts button on the right. The
+     * button and the ? key open the viewer's list of keys, which its controls' tooltips also name.
+     */
+    static JComponent statusBar(JLabel frameLabel, JLabel cursorLabel, JRootPane rootPane, String viewer, List<Shortcut> shortcuts) {
+        JButton help = new JButton("? Shortcuts");
+        help.putClientProperty("JButton.buttonType", "borderless");
+        help.setToolTipText("The keys and mouse actions of this window (?).");
+        help.addActionListener(e -> showShortcuts(rootPane, viewer, shortcuts));
+        bind(rootPane, "typed ?", "shortcuts", () -> showShortcuts(rootPane, viewer, shortcuts));
+        cursorLabel.setHorizontalAlignment(SwingConstants.RIGHT);
+        JPanel right = new JPanel(new BorderLayout(UiStyle.space(12), 0));
+        right.add(cursorLabel, BorderLayout.CENTER);
+        right.add(help, BorderLayout.EAST);
+        JPanel status = new JPanel(new BorderLayout(UiStyle.space(12), 0));
         status.add(frameLabel, BorderLayout.CENTER);
-        status.add(cursorLabel, BorderLayout.EAST);
-        status.add(hint, BorderLayout.SOUTH);
+        status.add(right, BorderLayout.EAST);
         return status;
+    }
+
+    /** Shows a viewer's keys and mouse actions in a small window; Esc or Close closes it. */
+    static void showShortcuts(Component owner, String viewer, List<Shortcut> shortcuts) {
+        shortcutsDialog(owner, viewer, shortcuts).setVisible(true);
+    }
+
+    /** The Shortcuts window of a viewer, laid out but not shown. */
+    static JDialog shortcutsDialog(Component owner, String viewer, List<Shortcut> shortcuts) {
+        Window window = owner instanceof Window w ? w : SwingUtilities.getWindowAncestor(owner);
+        JDialog dialog = new JDialog(window, viewer + " · Shortcuts", Dialog.ModalityType.MODELESS);
+        dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+        JPanel list = new JPanel(new GridBagLayout());
+        list.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(12), UiStyle.space(16), UiStyle.space(8), UiStyle.space(16)));
+        int row = 0;
+        for (Shortcut shortcut : shortcuts) {
+            GridBagConstraints c = new GridBagConstraints();
+            c.gridy = row++;
+            c.anchor = GridBagConstraints.WEST;
+            c.insets = new Insets(UiStyle.space(2), 0, UiStyle.space(2), UiStyle.space(16));
+            JLabel keys = new JLabel(shortcut.keys());
+            keys.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+            list.add(keys, c);
+            c.gridx = 1;
+            c.weightx = 1;
+            c.insets = new Insets(UiStyle.space(2), 0, UiStyle.space(2), 0);
+            list.add(new JLabel(shortcut.action()), c);
+        }
+        JLabel note = new JLabel("The keys work while the image has the keyboard focus; click the image to give it back.");
+        note.setForeground(UiStyle.helpColor());
+        JButton close = new JButton("Close");
+        close.addActionListener(e -> dialog.dispose());
+        JPanel bottom = new JPanel(new BorderLayout(UiStyle.space(12), 0));
+        bottom.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(16), UiStyle.space(12), UiStyle.space(16)));
+        bottom.add(note, BorderLayout.CENTER);
+        bottom.add(close, BorderLayout.EAST);
+        JPanel content = new JPanel(new BorderLayout());
+        content.add(list, BorderLayout.CENTER);
+        content.add(bottom, BorderLayout.SOUTH);
+        dialog.setContentPane(content);
+        dialog.getRootPane().setDefaultButton(close);
+        dialog.getRootPane().registerKeyboardAction(e -> dialog.dispose(), KeyStroke.getKeyStroke("ESCAPE"),
+                JComponent.WHEN_IN_FOCUSED_WINDOW);
+        AppIcon.apply(dialog);
+        dialog.pack();
+        dialog.setLocationRelativeTo(window);
+        return dialog;
+    }
+
+    /** The keys and mouse actions every frame viewer shares, after its own. */
+    static List<Shortcut> commonShortcuts() {
+        return List.of(
+                new Shortcut("T", "Show or hide the tracks"),
+                new Shortcut("V", "Show or hide the variable-star candidates"),
+                new Shortcut("A", "Show or hide the catalog annotations"),
+                new Shortcut("C", "Align markers to the corrected plate solution"),
+                new Shortcut("F", "Fit the whole frame"),
+                new Shortcut("1", "100 % zoom"),
+                new Shortcut("Scroll", "Zoom around the cursor"),
+                new Shortcut("Drag", "Pan"),
+                new Shortcut("Double-click", "Switch between fit and 100 %"),
+                new Shortcut("Tab", "Reach the controls; Esc returns to the image"),
+                new Shortcut("?", "This list"));
     }
 
     /** F fits, 1 shows 100 %; the stepping keys are bound by each viewer. */
@@ -247,22 +307,21 @@ final class ViewerSupport {
             skyCoordinates.clear();
         }
 
-        /** "x 120  y 340  value 1204  RA …  Dec …", or a blank when the cursor is not over the frame. */
+        /** "x 120, y 340 · RA …, Dec … · value 1204", or a blank when the cursor is not over the frame. */
         String describe(BlinkSequence.Frame frame, Point pixel) {
             if (frame == null || pixel == null || pixel.x >= frame.getWidth() || pixel.y >= frame.getHeight()) {
                 return " ";
             }
-            StringBuilder text = new StringBuilder(String.format(Locale.US, "x %d  y %d  value %d",
-                    pixel.x, pixel.y, frame.valueAt(pixel.x, pixel.y)));
+            StringBuilder text = new StringBuilder(String.format(Locale.US, "x %d, y %d", pixel.x, pixel.y));
             WcsCoordinateTransformer transformer = skyCoordinatesOf(frame.getInfo());
             if (transformer != null) {
                 WcsCoordinateTransformer.SkyCoordinate sky = transformer.pixelToSky(pixel.x, pixel.y);
                 if (sky != null) {
-                    text.append("  RA ").append(WcsCoordinateTransformer.formatRa(sky.getRaDegrees()))
-                            .append("  Dec ").append(WcsCoordinateTransformer.formatDec(sky.getDecDegrees()));
+                    text.append(" · RA ").append(WcsCoordinateTransformer.formatRa(sky.getRaDegrees()))
+                            .append(", Dec ").append(WcsCoordinateTransformer.formatDec(sky.getDecDegrees()));
                 }
             }
-            return text.toString();
+            return text.append(String.format(Locale.US, " · value %d", frame.valueAt(pixel.x, pixel.y))).toString();
         }
 
         private WcsCoordinateTransformer skyCoordinatesOf(FitsFileInformation info) {

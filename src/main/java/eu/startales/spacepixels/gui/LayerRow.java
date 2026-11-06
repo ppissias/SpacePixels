@@ -32,6 +32,8 @@ final class LayerRow extends JPanel {
     private final JCheckBox eye;
     private boolean available = true;
     private String tooltip;
+    /** The key that switches the layer, named in the eye's tooltip; null for none. */
+    private String key;
 
     /** {@code leading} is put before the name, for example the expand arrow of a group; may be null. */
     LayerRow(ViewerLayer layer, ViewerLayerState state, JComponent leading, int indent) {
@@ -110,13 +112,20 @@ final class LayerRow extends JPanel {
         setToolTipText(hint);
         name.setToolTipText(hint);
         count.setToolTipText(hint);
-        eye.setToolTipText((state.isVisible(layer) ? "Hide " : "Show ") + layer.title.toLowerCase(Locale.ROOT) + ".");
+        eye.setToolTipText((state.isVisible(layer) ? "Hide " : "Show ") + layer.title.toLowerCase(Locale.ROOT)
+                + (key == null ? "." : " (" + key + ")."));
         labels.setToolTipText((state.isLabelled(layer) ? "Hide" : "Show") + " the labels of " + layer.title.toLowerCase(Locale.ROOT) + ".");
         repaint();
     }
 
-    /** The show/hide switch, for tooltips with a key, for example "(T)". */
+    /** The show/hide switch. */
     JCheckBox eye() {
         return eye;
+    }
+
+    /** Names the key that switches this layer in the eye's tooltip, for example "T". */
+    void setKey(String key) {
+        this.key = key;
+        refresh();
     }
 }

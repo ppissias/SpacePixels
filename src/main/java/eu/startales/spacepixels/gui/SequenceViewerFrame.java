@@ -128,8 +128,12 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         contentPane.setBorder(new EmptyBorder(6, 6, 6, 6));
         setContentPane(contentPane);
         JComponent controls = buildControls();
-        JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
-                + (showsDetections ? "D detections · T tracks · " : "") + "A annotate · C align to corrected plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+        java.util.List<ViewerSupport.Shortcut> shortcuts = new java.util.ArrayList<>();
+        shortcuts.add(new ViewerSupport.Shortcut("← →", "Previous / next frame"));
+        if (showsDetections) shortcuts.add(new ViewerSupport.Shortcut("D", "Show or hide the raw detections"));
+        shortcuts.addAll(ViewerSupport.commonShortcuts());
+        shortcuts.add(new ViewerSupport.Shortcut("Esc", "Close the window (from the image)"));
+        JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, getRootPane(), windowName, shortcuts);
         findings.section().setVisible(false);
         stretchHolder.setOpaque(false);
         sidePanel.add(findings.section());

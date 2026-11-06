@@ -70,8 +70,8 @@ final class FindingsSection {
         add(body, children);
         section = new SidePanelSection("Report findings", body);
         setExpanded(false);
-        rows.get(ViewerLayer.VARIABLE_STARS).eye().setToolTipText("Show or hide the variable-star candidates (V).");
-        rows.get(ViewerLayer.TRACKS).eye().setToolTipText("Show or hide the tracks (T).");
+        rows.get(ViewerLayer.VARIABLE_STARS).setKey("V");
+        rows.get(ViewerLayer.TRACKS).setKey("T");
         setTracks(null, false);
         setVariableStars(null, false);
         setFaintMovers(null, false);

@@ -560,8 +560,16 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     }
 
     private JComponent buildStatusBar() {
-        return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed, or step while paused · "
-                + "S leave out of the loop (paused) · T tracks · A annotate · C align to corrected plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · G export GIF · Esc cancel/close");
+        java.util.List<ViewerSupport.Shortcut> shortcuts = new java.util.ArrayList<>(java.util.List.of(
+                new ViewerSupport.Shortcut("Space", "Play or pause"),
+                new ViewerSupport.Shortcut("← →", "Previous / next frame of the loop"),
+                new ViewerSupport.Shortcut("↑ ↓", "Faster / slower while playing; previous / next frame while paused"),
+                new ViewerSupport.Shortcut("S", "Leave the frame out of the loop, or put it back (while paused)"),
+                new ViewerSupport.Shortcut("G", "Export GIF: drag a rectangle on the image"),
+                new ViewerSupport.Shortcut("Ctrl+E", "Export the selected region as a GIF")));
+        shortcuts.addAll(ViewerSupport.commonShortcuts());
+        shortcuts.add(new ViewerSupport.Shortcut("Esc", "Stop an export, leave Export GIF, or close the window"));
+        return ViewerSupport.statusBar(frameLabel, cursorLabel, getRootPane(), "Blink", shortcuts);
     }
 
     private void installKeyBindings() {
