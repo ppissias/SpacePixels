@@ -35,6 +35,7 @@ final class StretchControls {
     private final JCheckBox displayStretchCheckbox = SidePanelIcons.onOff("Stretch display");
     private final JButton resetButton = new JButton("Reset display");
     private final JLabel functionLabel = new JLabel("Function");
+    private final StretchHistogram histogram = new StretchHistogram();
     private final JSlider primarySlider;
     private final JSlider secondarySlider;
     private final JSpinner primarySpinner;
@@ -99,10 +100,18 @@ final class StretchControls {
         c.weightx = 1;
         c.insets = new Insets(0, 0, UiStyle.space(6), 0);
         body.add(algorithmCombo, c);
-        addParameter(body, 1, primaryLabel, primarySlider, primarySpinner);
-        addParameter(body, 3, secondaryLabel, secondarySlider, secondarySpinner);
         c = new GridBagConstraints();
-        c.gridy = 5;
+        c.gridy = 1;
+        c.gridx = 0;
+        c.gridwidth = 3;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        c.insets = new Insets(0, 0, UiStyle.space(4), 0);
+        body.add(histogram, c);
+        addParameter(body, 2, primaryLabel, primarySlider, primarySpinner);
+        addParameter(body, 4, secondaryLabel, secondarySlider, secondarySpinner);
+        c = new GridBagConstraints();
+        c.gridy = 6;
         c.gridx = 0;
         c.gridwidth = 3;
         c.anchor = GridBagConstraints.WEST;
@@ -181,7 +190,11 @@ final class StretchControls {
 
     /** The stretch table of each channel of this frame, for the current stretch. */
     byte[][] tablesFor(BlinkSequence.Frame frame) {
-        return tables.computeIfAbsent(frame, f -> snapshot().tablesFor(f));
+        byte[][] frameTables = tables.computeIfAbsent(frame, f -> snapshot().tablesFor(f));
+        // The histogram follows the frame drawn: the green channel of a colour frame, else the only one.
+        int channel = frameTables.length == 3 ? 1 : 0;
+        histogram.setData(frame.getHistogram(channel), frameTables[channel]);
+        return frameTables;
     }
 
     /** Captures controls on the EDT so an export worker never consults live Swing models. */
@@ -213,6 +226,7 @@ final class StretchControls {
 
     void clearTables() {
         tables.clear();
+        histogram.setData(null, null);
     }
 
     /**
@@ -231,6 +245,7 @@ final class StretchControls {
         }
         algorithmCombo.setModel(new DefaultComboBoxModel<>());
         tables.clear();
+        histogram.setData(null, null);
     }
 
     /** Redraws once after a burst of changes (a slider drag, or an algorithm switch that moves the sliders). */
@@ -258,6 +273,7 @@ final class StretchControls {
         primaryLabel.setEnabled(enabled);
         secondaryLabel.setEnabled(enabled);
         resetButton.setEnabled(enabled);
+        histogram.setEnabled(enabled);
         StretchAlgorithm algorithm = panel.getStretchAlgorithm();
         if (algorithm == null) {
             return;
