@@ -141,6 +141,8 @@ Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and 
 
 ### `eu.startales.spacepixels.session`
 
+`QualityControlSnapshot` holds detached all-frame quality measurements, exact engine limits and captured input/settings identities. `ProcessingSession` owns the last completed snapshot; the table retains a read-only reference and marks it stale when detection settings or quality-relevant metadata change. `QualityControlTask` delegates to `QualityControlService` and the engine's quality-only API on workers. Two-pass file loading bounds image memory and verifies stable file attributes. No automatic frame removal or new quality policy is introduced.
+
 The imported dataset and its handover, without Swing dependencies. `ProcessingSession` owns the session identity,
 state and metadata-save completion lifetime; `SessionOwner` installs a candidate only for the expected current
 session. `SkyCatalogueModel` shares catalogue/correction changes with viewers. `ApplicationStorage` is owned by the

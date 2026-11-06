@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.session;
 
 import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.detection.QualityControlSnapshot;
 import eu.startales.spacepixels.fits.FitsBatchService;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
@@ -45,6 +46,8 @@ public final class ProcessingSession implements AutoCloseable {
     private File lastReport;
     /** The overlays of the last detection run; written on the EDT when a run ends, read by the viewers. */
     private volatile DetectionOverlays lastRun;
+    /** Last completed all-frame QC, detached from images and live settings; updated on the session's UI owner. */
+    private QualityControlSnapshot qualityControl;
     private String masterStackKey;
     private JTransientEngine.MasterStackResult masterStack;
     /** Non-blocking shutdown supplied by the desktop workflow; the session has no dependency on its GUI owner. */
@@ -151,6 +154,16 @@ public final class ProcessingSession implements AutoCloseable {
     public SkyCatalogueModel getSkyCatalogue() { return skyCatalogue; }
     public AutoTuneState getAutoTune() { return autoTune; }
     public File getLastReport() { return lastReport; }
+    /** Latest completed QC; null until one succeeds. Consumers compare captured settings before using its verdict. */
+    public QualityControlSnapshot getQualityControl() { return qualityControl; }
+
+    /** Replaces only a complete result for this cohort; cancelled or failed jobs never call this method. */
+    public void setQualityControl(QualityControlSnapshot result) {
+        requireOpen();
+        if (!result.inputs().equals(QualityControlSnapshot.inputs(files)))
+            throw new IllegalArgumentException("Quality result belongs to another input cohort");
+        qualityControl = result;
+    }
     public void setLastReport(File report) { requireOpen(); lastReport = report; }
     public List<FitsFileInformation> getSelection() { return selection; }
 
@@ -299,6 +312,7 @@ public final class ProcessingSession implements AutoCloseable {
                 files = new FitsFileInformation[0];
                 lastReport = null;
                 lastRun = null;
+                qualityControl = null;
             }
         }
     }

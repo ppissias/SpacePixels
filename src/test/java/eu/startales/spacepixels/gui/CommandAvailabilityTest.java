@@ -12,6 +12,14 @@ import static org.junit.Assert.assertTrue;
 /** The rules the workflow commands are enabled by: the same as the buttons had, now in one place. */
 public class CommandAvailabilityTest {
 
+    /** QC measures every monochrome input even with no selection or fewer than three frames. */
+    @Test public void qualityControlNeedsOnlyAnIdleMonochromeImport() {
+        assertTrue(enabled(Command.QUALITY_CONTROL, session().frames(1).selected(0).build()));
+        assertFalse(enabled(Command.QUALITY_CONTROL, session().colour().build()));
+        assertFalse(enabled(Command.QUALITY_CONTROL, session().busy().build()));
+        assertFalse(enabled(Command.QUALITY_CONTROL, session().frames(0).build()));
+    }
+
     private static final int ENOUGH = SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
 
     @Test

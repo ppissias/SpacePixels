@@ -19,6 +19,7 @@ public enum JobKind {
     DETECTION("Detect Moving Targets", true),
     ITERATIVE_DETECTION("Detect Iteratively", true),
     TRANSIENT_INSPECTION("Manual Transient Inspection", true),
+    QUALITY_CONTROL("Quality control", true),
     STAR_MASK_STACK("Test Star Mask", true),
     CONVERT_TO_MONO("Convert to Mono", true),
     BATCH_STRETCH("Batch Stretch", true),

@@ -22,7 +22,7 @@ final class CommandAvailability {
     /** The application workflow commands, including Batch Stretch on the Image Stretch tab. */
     enum Command {
         PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, SOLAR_SYSTEM, BLINK, PREVIEW, INSPECTION,
-        AUTO_TUNE, DETECT, DETECT_ITERATIVELY
+        AUTO_TUNE, DETECT, DETECT_ITERATIVELY, QUALITY_CONTROL
     }
 
     /**

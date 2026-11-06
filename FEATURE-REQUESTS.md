@@ -20,6 +20,8 @@ The other investigations from 2026-11-02 are owned by JTransient: [remaining def
 
 Only the engine's deferred [SM-F7 extension item](../JTransient/FEATURE-REQUESTS.md#sm-f7-slow-and-faint-mover-extensions) remains for concrete missed-source or coverage needs; it schedules no further experiment or integration. Any agreed engine extension must update application settings, result provenance and review together. The [existing research collection](docs/research/README.md) preserves the completed evidence and delivery history.
 
+The engine's [XC-3 background proposal](../JTransient/FEATURE-REQUESTS.md#xc-3-local-background-and-noise-for-frame-extraction) remains open and parked at the maintainer's request. Its current decision and proposed local-sky-only next step are kept there; the verified restart bundle is recorded in the ignored machine environment notes. No extraction change is selected.
+
 ## F04. MCP agent services
 
 AI agents operate SpacePixels through an MCP server, beginning with what the [Java API](API.md) does. Use the headless application services, with the public API as the starting boundary; never drive `ApplicationWindow`.

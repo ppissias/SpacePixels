@@ -97,6 +97,16 @@ The window has five tabs:
 
 The **User Manual** link at the right end of the tab bar opens this manual in your browser.
 
+### Frame quality control
+
+Before detection, **3 Inspect → Run quality control** checks **every imported monochrome frame**, regardless of the table selection, with the same quality settings and rejection rules as the detection engine. It measures registration coverage, stars, FWHM, elongation and sky/noise without running stacks, tracking or photometry. You can cancel it from the progress window.
+
+The frame table brings **Quality**, **FWHM (px)**, **Stars**, **Elongation** and **QC reason** beside the filename. **Would keep** rows have a light green tint; **Would reject** rows have a light red tint. Every imported frame remains listed and selected frames stay selected; this check does not remove files or alter the input for a later detection run. That run evaluates quality again using its captured settings.
+
+Select one frame and click **Quality details…** for the full reason, measurements and session limits, including bright-star elongation, reference-star counts, sky median/noise and common image area. Missing evidence is shown as unavailable. The registration edge-fit RMS describes padding geometry, not residual alignment of stars. With too few frames, statistical session limits may be unavailable; registration/coverage exclusions still apply. If fewer than three frames would remain, detection would stop after QC.
+
+Results belong to the open session. Changing detection settings marks them **Stale** and removes the verdict tint until you rerun QC (or restore the captured settings). Importing another session clears them. A cancelled or failed check preserves the last completed result.
+
 ### Appearance and readable text
 
 Open **Appearance**, which is available before importing frames. Choose **Dark**, **High contrast dark** (white text and clear borders on a near-black background), or **Light**. **Interface size (%)** ranges from 100 to 300 and enlarges text and controls together. It applies in addition to operating-system display scaling and any launcher scaling option.

@@ -14,6 +14,7 @@ import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
 import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.detection.DetectionOverlays;
+import eu.startales.spacepixels.detection.QualityControlSnapshot;
 import eu.startales.spacepixels.detection.RunPreviewSink;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.IterativeDetectionRequest;
@@ -92,6 +93,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JButton solarSystemButton = new JButton(FETCH_SOLAR_SYSTEM);
     private final JButton detectSingleButton = new JButton("Preview Frame");
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
+    private final JButton qualityControlButton = new JButton("Run quality control");
+    private final JButton qualityDetailsButton = new JButton("Quality details…");
+    private String activeQualitySettingsKey;
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
     // The newest report of the session, under the Detect buttons; hidden when there is none.
@@ -160,12 +164,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             "Extract purified transients from all frames against the master background and navigate through them using arrow keys. "
                     + "Uses the normal extraction only, without the faint-streak search.",
             CommandAvailability.Command.INSPECTION, this::commandFacts, this::startTransientInspection);
+    private final CommandAction qualityControlAction = new CommandAction("Run quality control",
+            "Measure every imported frame with the same quality checks and settings as detection. Shows which frames would be rejected and why.",
+            CommandAvailability.Command.QUALITY_CONTROL, this::commandFacts, this::startQualityControl);
     private final CommandAction iterativeAction = new CommandAction("Detect Iteratively (large datasets)",
             "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.",
             CommandAvailability.Command.DETECT_ITERATIVELY, this::commandFacts, this::startIterativeDetection);
     private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, solveAction,
             skyCatalogueAction, solarSystemAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction,
-            iterativeAction);
+            iterativeAction, qualityControlAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
 
@@ -317,6 +324,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         skyCatalogueButton.setAction(skyCatalogueAction);
         solarSystemButton.setAction(solarSystemAction);
         manualTransientInspectionButton.setAction(inspectionAction);
+        qualityControlButton.setAction(qualityControlAction);
+        qualityDetailsButton.addActionListener(event -> showQualityDetails());
+        qualityDetailsButton.setToolTipText("Measurements, rejection reason and session limits for one selected frame.");
         detectIterativelyButton.setAction(iterativeAction);
         solveButton.setAction(solveAction);
         blinkButton.setAction(blinkAction);
@@ -348,6 +358,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
         JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
+                buttonRow(qualityControlButton, qualityDetailsButton),
                 buttonRow(manualTransientInspectionButton));
         detectStatus.setForeground(UiStyle.helpColor());
         detectStatus.setBorder(BorderFactory.createEmptyBorder(6, 2, 0, 0));
@@ -467,7 +478,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         statusBar.add(statusRight, BorderLayout.EAST);
         add(statusBar, BorderLayout.SOUTH);
 
-        table = new JTable();
+        table = new QualityControlTable();
         scrollPane.setViewportView(table);
         installEarthLinkSupport();
         installTableContextMenu();
@@ -519,7 +530,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     }
 
     private boolean isSolvedRow(int row) {
-        return "Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(row, FitsFileTableModel.COL_SOLVED)));
+        return "Yes".equalsIgnoreCase(String.valueOf(table.getModel().getValueAt(
+                table.convertRowIndexToModel(row), FitsFileTableModel.COL_SOLVED)));
     }
 
     /**
@@ -536,6 +548,55 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : BLINK_SELECTED);
         skyCatalogueAction.putValue(Action.NAME, facts.skyFetching() ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
         solarSystemAction.putValue(Action.NAME, facts.solarSystemFetching() ? "Cancel Asteroids and Comets" : FETCH_SOLAR_SYSTEM);
+        qualityDetailsButton.setEnabled(!facts.busy() && table != null && table.getSelectedRowCount() == 1
+                && table.getModel() instanceof FitsFileTableModel model
+                && model.qualityAt(table.convertRowIndexToModel(table.getSelectedRow())) != null);
+    }
+
+    /** Runs exact engine QC on all imported frames with a detached profile, independent of selection. EDT only. */
+    private void startQualityControl() {
+        DetectionConfig settings = detectionSettings.checkedSettings("Quality control did not start.");
+        if (settings == null) return;
+        ProcessingSession owner = sessions.current();
+        if (owner == null) return;
+        startJob(JobKind.QUALITY_CONTROL, owner, new QualityControlTask(owner.getFiles(), settings), (handle, outcome) -> {
+            if (outcome instanceof JobOutcome.Completed<QualityControlSnapshot> completed) {
+                owner.setQualityControl(completed.result());
+                if (table.getModel() instanceof FitsFileTableModel model) {
+                    model.showQuality(completed.result(), activeQualitySettingsKey);
+                    prioritizeQualityColumns();
+                    resizeTableColumns(table);
+                }
+                refreshWorkflowStatus();
+                showStatus(qualityStatusText());
+            } else {
+                showDetectionProblem(outcome);
+            }
+        });
+    }
+
+    /** Shows one original frame's quality and limits even when the captured settings are now stale. */
+    private void showQualityDetails() {
+        if (uiLocked || table.getSelectedRowCount() != 1 || !(table.getModel() instanceof FitsFileTableModel model)) return;
+        var frame = model.qualityAt(table.convertRowIndexToModel(table.getSelectedRow()));
+        if (frame != null) QualityControlDetails.show(this, model.quality(), frame, model.isQualityCurrent());
+    }
+
+    /** Brings the measured quality alongside the filename without changing model indices or selected rows. */
+    private void prioritizeQualityColumns() {
+        int[] columns = {FitsFileTableModel.COL_QUALITY, FitsFileTableModel.COL_FWHM, FitsFileTableModel.COL_STARS,
+                FitsFileTableModel.COL_ELONGATION, FitsFileTableModel.COL_QUALITY_REASON};
+        for (int index = 0; index < columns.length; index++)
+            table.moveColumn(table.convertColumnIndexToView(columns[index]), index + 1);
+    }
+
+    /** Compact session verdict; fewer than three retained frames is an engine stop, not a successful detection. */
+    private String qualityStatusText() {
+        if (!(table.getModel() instanceof FitsFileTableModel model) || model.quality() == null) return "Quality not measured";
+        var result = model.quality().result();
+        if (!model.isQualityCurrent()) return "QC stale — rerun quality control";
+        return "QC: " + result.keptFrames() + " keep · " + result.rejectedFrames() + " reject / " + result.frames().size()
+                + (result.tooFewFrames() ? " · too few for detection" : "");
     }
 
     /** Wires the independent preparation window and its job lock without taking the application window as a dependency. */
@@ -761,13 +822,16 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 width = Math.max(cellComp.getPreferredSize().width, width);
             }
 
+            int modelColumn = table.convertColumnIndexToModel(column);
+            if (modelColumn == FitsFileTableModel.COL_QUALITY_REASON) width = Math.min(width, 280);
             table.getColumnModel().getColumn(column).setPreferredWidth(width + 15);
         }
 
         if (table.getColumnModel().getColumnCount() > FitsFileTableModel.COL_EARTH) {
-            table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setMinWidth(65);
-            table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setPreferredWidth(65);
-            table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setMaxWidth(90);
+            var earth = table.getColumnModel().getColumn(table.convertColumnIndexToView(FitsFileTableModel.COL_EARTH));
+            earth.setMinWidth(65);
+            earth.setPreferredWidth(65);
+            earth.setMaxWidth(90);
         }
     }
 
@@ -778,6 +842,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         resizeTableColumns(table);
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
+        ProcessingSession owner = sessions.current();
+        model.showQuality(owner == null ? null : owner.getQualityControl(), activeQualitySettingsKey);
+        if (model.quality() != null) prioritizeQualityColumns();
         if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
         subscribedSkyCatalogue = skyCatalogue();
         subscribedSkyCatalogue.addCorrectionListener(correctionChanged);
@@ -899,7 +966,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             prepareStatus.setText(containsColorImages ? "Colour frames: convert first" : "✓ Monochrome, " + frames + " frames");
             int solved = 0;
             for (int row = 0; row < frames; row++) {
-                if ("Yes".equalsIgnoreCase(String.valueOf(table.getValueAt(row, FitsFileTableModel.COL_SOLVED)))) {
+                if (isSolvedRow(row)) {
                     solved++;
                 }
             }
@@ -916,7 +983,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                         + "and " + FETCH_SOLAR_SYSTEM + " ask JPL for the asteroids and comets that cross it.</html>");
             }
             int selected = table.getSelectedRowCount();
-            inspectStatus.setText(selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"));
+            inspectStatus.setText("<html>" + (selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"))
+                    + "<br>" + qualityStatusText() + "</html>");
             if (containsColorImages) {
                 setDetectStatus("Convert to monochrome first");
             } else {
@@ -957,10 +1025,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     }
 
     /**
-     * Copies the eight Overview values during this EDT call and does not retain {@code config}.
+     * Copies the eight Overview values and QC settings identity on the EDT; never retains the live configuration.
      */
     @Override
     public void showActiveDetectionSettings(DetectionConfig config) {
+        activeQualitySettingsKey = QualityControlSnapshot.settingsKey(config);
+        if (table != null && table.getModel() instanceof FitsFileTableModel model)
+            model.activeSettingsChanged(activeQualitySettingsKey);
         activeDetectionValue.setText(String.format(Locale.US, "%.2f / %.2f / %d",
                 config.detectionSigmaMultiplier, config.growSigmaMultiplier, config.minDetectionPixels));
         activeMaskValue.setText(String.format(Locale.US, "%.2f / %.2f / %d",
@@ -1450,7 +1521,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             FitsFileTableModel model = (FitsFileTableModel) table.getModel();
 
             for (int i = 0; i < selected_rows.length; i++) {
-                ret[i] = model.getFitsFileAt(selected_rows[i]);
+                ret[i] = model.getFitsFileAt(table.convertRowIndexToModel(selected_rows[i]));
             }
             return ret;
         }
@@ -1462,7 +1533,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (row < 0) return null;
 
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
-        return model.getFitsFileAt(row);
+        return model.getFitsFileAt(table.convertRowIndexToModel(row));
     }
 
     /** Moves the frame selection by {@code delta} rows (one frame selected), staying within the table. */
@@ -1964,6 +2035,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 case BATCH_STRETCH -> new JobTexts("Batch stretch started", "Initializing batch stretch...", false, "Batch stretch finished");
                 case PLATE_SOLVE -> new JobTexts("Plate solving image...", "Plate solving selected image...", true, "Plate solve finished");
                 case AUTO_TUNE -> new JobTexts("Auto-Tuning mathematical sequence...", "Initializing Auto-Tuner...", false, "Auto-Tune finished");
+                case QUALITY_CONTROL -> new JobTexts("Checking all imported frames...", "Measuring registration and frame quality...", false, "Quality control finished");
                 default -> new JobTexts("Object detection started...", "Initializing object detection...", false, "Object detection completed");
             };
         }
