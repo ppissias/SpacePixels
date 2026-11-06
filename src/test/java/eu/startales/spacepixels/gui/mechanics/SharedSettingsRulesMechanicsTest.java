@@ -35,7 +35,7 @@ public class SharedSettingsRulesMechanicsTest extends MechanicsTestCase {
             field(panel, "chkEnableVariableStarDetection", JCheckBox.class).setSelected(true);
             field(panel, "spinPhotometryMaxStars", JSpinner.class).setValue(9);
             field(panel, "spinVariableMinAmplitudeMag", JSpinner.class).setValue(0.1);
-            field(panel, "spinVariableLimitedMinAmplitudeMag", JSpinner.class).setValue(0.02);
+            field(panel, "jTransientConfig", DetectionConfig.class).variableLimitedMinAmplitudeMag = 0.02;
         });
         window().button(VisibleText.button("Review rules…")).click();
         DialogFixture review = reviewDialog();

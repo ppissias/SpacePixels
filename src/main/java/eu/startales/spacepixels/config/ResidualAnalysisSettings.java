@@ -11,7 +11,7 @@ public final class ResidualAnalysisSettings {
             (config, value) -> config.enableResidualTransientAnalysis = value);
     public static final DetectionSetting<Boolean> ENABLE_RESCUE = new DetectionSetting<>(
             "enableLocalRescueCandidates", "Enable Local Rescue Candidates", "",
-            "Runs the object-like rescue pass on leftover point detections to surface weak local motion or repeaters that did not become normal tracks.",
+            "Runs the object-like rescue pass on leftover point detections to surface weak local motion or repeaters that did not become normal tracks. Requires at least three detections; clustered detections can share a frame.",
             false, Boolean.class, config -> config.enableLocalRescueCandidates,
             (config, value) -> config.enableLocalRescueCandidates = value);
     public static final DetectionSetting<Boolean> ENABLE_CLUSTERS = new DetectionSetting<>(

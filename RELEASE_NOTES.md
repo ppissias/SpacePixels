@@ -58,6 +58,9 @@
 
 ### Changed
 
+- **Simpler variable-star settings.** Eight expert numeric controls remain for candidate requirements and measurement/comparison choices. Ten linearity and artifact-gate controls are hidden from the GUI while their `DetectionConfig` fields, defaults and saved values remain unchanged. The enable switch and report presentation controls are unchanged.
+- **Local rescue (#32).** Local repeats now need at least three detections instead of two. The check still counts detections rather than distinct frames; clustered detections may share a frame. Other rescue thresholds are unchanged.
+
 - **Night & Equipment optics readings (#27, #28).** Tooltips explicitly identify each region's measured stretch or light-to-core offset. Captions distinguish local maxima from shared or fitted field-wide components, and an uncertain radial coma fit is labelled unresolved. Small overall components no longer imply that every region is undistorted. Measurements and detection results are unchanged.
 
 - **Viewer side panel (F29, first part).** Blink, Preview Frame, Manual Transient Inspection and Show full size move their layer switches, catalogue annotations and display stretch into a side panel on the right. Each layer has a row with a swatch matching its marks, its count, a label switch (**Aa**) and an eye; a layer without anything to show says why. Other findings unfold into the report's categories. Catalogue objects are drawn in off-white and findings in their report colours. The choices are shared by all viewers and remembered; the panel can be resized and hidden. In Blink, ↑ and ↓ step through the frames while paused and still change the speed while playing.

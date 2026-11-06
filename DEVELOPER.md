@@ -225,6 +225,8 @@ Standalone frame QC runs as a cancellable `QualityControlTask` under Inspect. It
 - **Expert** sections start with `createExpertSectionHeader`. They are shown only while "Show expert settings" is on, but search and "Show only unsaved changes" always find them. Each page says how many of its expert settings are hidden and how many of those are changed.
 - **Hidden** settings have no row. They stay in `DetectionConfig` and in the profile, keep their loaded values on Apply, and are reset by Load Defaults and Revert. Do not add rows for them without asking the maintainer.
 
+Variable-star numeric rows are limited to score threshold, minimum amplitude/frames/time span/persistence, maximum measured stars, minimum SNR and local comparison radius. The four linearity thresholds and six other candidate-gate thresholds have no GUI bindings; their engine fields, defaults, validation and profile keys remain unchanged. Hidden custom values survive unrelated edits, Save, Revert and reload; Load Defaults restores engine defaults. The hidden Limited amplitude floor is adjusted only through the explicit reviewed-consistency policy, preserving existing behavior.
+
 **The pages.**
 
 `WrappingControlsPanel` uses `WrapLayout` and re-measures enclosing layouts after width changes, so wrapped viewer rows receive their full height. `WidthTrackingPanel` shares viewport-width tracking between settings, Astrometry, the workflow strip and the star-mask sidebar. It reveals focused descendants without changing focus ownership and detaches its focus listener when removed. The workflow scroll area reserves table space; the sidebar retains natural content height. The Auto-Tune table scrolls locally rather than imposing its full column width on the page.

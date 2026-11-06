@@ -35,6 +35,16 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
     @Test(timeout = 180_000) public void allPagesSaveRevertLoadDefaultsAndReloadWithoutLosingHiddenFields() throws Exception {
         DetectionConfig seed = new DetectionConfig();
         seed.qualityGrowSigmaMultiplier = 1.234;
+        seed.linearityMaxConcentrationDrift = 0.041;
+        seed.linearityMinRangeMag = 2.3;
+        seed.linearityMaxFrameSlope = 0.015;
+        seed.linearityMaxFailingFrameFraction = 0.25;
+        seed.variableLimitedMinAmplitudeMag = 0.4;
+        seed.variableAmplitudeNoiseFactor = 4.5;
+        seed.variableMinSplitHalfCorrelation = 0.55;
+        seed.variableMaxApertureAmplitudeDifference = 0.35;
+        seed.variableMaxSystematicsCorrelation = 0.65;
+        seed.variableMaxLocalCorrelation = 0.35;
         try (FileWriter writer = new FileWriter(profileFile())) {
             SpacePixelsDetectionProfileIO.write(writer, new SpacePixelsDetectionProfile(seed, 30));
         }
@@ -48,7 +58,13 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("84 engine fields, 12 application fields and the rejection preset", 97, inputs.size());
+        assertEquals("74 engine fields, 12 application fields and the rejection preset", 87, inputs.size());
+        for (String hidden : Set.of("linearityMaxConcentrationDrift", "linearityMinRangeMag", "linearityMaxFrameSlope",
+                "linearityMaxFailingFrameFraction", "variableLimitedMinAmplitudeMag", "variableAmplitudeNoiseFactor",
+                "variableMinSplitHalfCorrelation", "variableMaxApertureAmplitudeDifference",
+                "variableMaxSystematicsCorrelation", "variableMaxLocalCorrelation")) {
+            assertFalse("No GUI control for hidden profile field " + hidden, inputs.containsKey(hidden));
+        }
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
             assertNotNull(setting.id(), controls.get(setting.id()));
             assertEquals(setting.expert(), controls.get(setting.id()).expert());
@@ -107,6 +123,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> window().button(VisibleText.button("Load Defaults")).target().doClick());
         Map<String, Object> defaults = GuiActionRunner.execute(() -> values(inputs));
         DetectionConfig defaultConfig = new DetectionConfig();
+        assertHiddenValues(new Gson().toJsonTree(defaultConfig).getAsJsonObject(), visible);
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
             if (setting.id().equals("faintMoverMaxSpeedPixelsPerMinute") || setting.id().equals("faintMoverMinDisplacementFwhm")) {
                 double expectedMotion = setting.id().equals("faintMoverMaxSpeedPixelsPerMinute")
@@ -120,12 +137,31 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         sameValue("tuning limit is independent of detection defaults", expected.get("autoTuneMaxCandidateFrames"), defaults.get("autoTuneMaxCandidateFrames"));
         GuiActionRunner.execute(() -> window().button(VisibleText.button("Revert")).target().doClick());
         assertValues(expected, GuiActionRunner.execute(() -> values(inputs)));
+        assertHiddenValues(before, visible);
         reopenWindow();
         GuiActionRunner.execute(() -> application().importFolder(directory));
         waitFor("session reimported for context-dependent motion display", () -> GuiActionRunner.execute(() ->
                 application().getSession() != null && application().getJobCoordinator().current() == null));
         Map<String, Object> reloaded = GuiActionRunner.execute(() -> values(inputs(application().getDetectionConfigurationPanel())));
         assertValues(expected, reloaded);
+        assertHiddenValues(before, visible);
+    }
+
+    /** Checks hidden configuration after defaults, Revert and reload without depending on removed GUI widgets. */
+    private void assertHiddenValues(JsonObject expected, Set<String> visible) {
+        JsonObject actual = GuiActionRunner.execute(() -> {
+            Object panel = application().getDetectionConfigurationPanel();
+            try {
+                var config = panel.getClass().getDeclaredField("jTransientConfig");
+                config.setAccessible(true);
+                return new Gson().toJsonTree(config.get(panel)).getAsJsonObject();
+            } catch (ReflectiveOperationException failure) {
+                throw new IllegalStateException(failure);
+            }
+        });
+        for (String field : expected.keySet()) {
+            if (!visible.contains(field)) assertEquals("Hidden field " + field, expected.get(field), actual.get(field));
+        }
     }
 
     /** Carries a mounted control and its direct expert-disclosure metadata from the settings panel. */

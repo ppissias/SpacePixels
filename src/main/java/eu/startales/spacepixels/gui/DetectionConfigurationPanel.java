@@ -136,13 +136,8 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinVariableMaxCandidateCards;
     private JComboBox<VariableStarReportOptions.SortOrder> cmbVariableStarSortOrder;
     private JSpinner spinPhotometryMaxStars, spinPhotometryMinSnr;
-    private JSpinner spinLinearityMaxConcentrationDrift, spinLinearityMinRangeMag;
-    private JSpinner spinLinearityMaxFrameSlope;
-    private JSpinner spinLinearityMaxFailingFrameFraction;
     private JSpinner spinVariableMinFrames, spinVariableMinSpanMinutes, spinVariableScoreSigma;
-    private JSpinner spinVariableMinAmplitudeMag, spinVariableLimitedMinAmplitudeMag, spinVariableAmplitudeNoiseFactor;
-    private JSpinner spinVariableMinPersistenceFrames, spinVariableMinSplitHalfCorrelation, spinVariableMaxApertureAmplitudeDifference;
-    private JSpinner spinVariableMaxSystematicsCorrelation, spinVariableLocalRadiusPixels, spinVariableMaxLocalCorrelation;
+    private JSpinner spinVariableMinAmplitudeMag, spinVariableMinPersistenceFrames, spinVariableLocalRadiusPixels;
 
     private JSpinner spinAutoTuneMaxCandidateFrames;
 
@@ -1105,31 +1100,18 @@ public class DetectionConfigurationPanel extends JPanel {
                 VariableStarReportOptions.SortOrder.values());
 
         panel.add(Box.createVerticalStrut(10));
-        panel.add(createExpertSectionHeader("Candidate Thresholds"));
+        panel.add(createExpertSectionHeader("Candidate Requirements"));
         spinVariableScoreSigma = addTypedDouble(panel, VariableStarsSettings.VARIABLE_SCORE_SIGMA, 1.0, 50.0, 0.5);
         spinVariableMinAmplitudeMag = addTypedDouble(panel, VariableStarsSettings.VARIABLE_MIN_AMPLITUDE_MAG, 0.0, 5.0, 0.01);
         spinVariableMinFrames = addTypedInteger(panel, VariableStarsSettings.VARIABLE_MIN_FRAMES, 3, 10000, 1);
         spinVariableMinSpanMinutes = addTypedDouble(panel, VariableStarsSettings.VARIABLE_MIN_SPAN_MINUTES, 0.0, 1440.0, 5.0);
+        spinVariableMinPersistenceFrames = addTypedInteger(panel, VariableStarsSettings.VARIABLE_MIN_PERSISTENCE_FRAMES, 1, 1000, 1);
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Measurement and Comparisons"));
         spinPhotometryMaxStars = addTypedInteger(panel, VariableStarsSettings.PHOTOMETRY_MAX_STARS, 0, 200000, 500);
         spinPhotometryMinSnr = addTypedDouble(panel, VariableStarsSettings.PHOTOMETRY_MIN_SNR, 0.0, 1000.0, 1.0);
-
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createExpertSectionHeader("Linearity Checks"));
-        spinLinearityMaxConcentrationDrift = addTypedDouble(panel, VariableStarsSettings.LINEARITY_MAX_CONCENTRATION_DRIFT, 0.0, 0.5, 0.005);
-        spinLinearityMinRangeMag = addTypedDouble(panel, VariableStarsSettings.LINEARITY_MIN_RANGE_MAG, 0.0, 10.0, 0.1);
-        spinLinearityMaxFrameSlope = addTypedDouble(panel, VariableStarsSettings.LINEARITY_MAX_FRAME_SLOPE, 0.0, 0.5, 0.001);
-        spinLinearityMaxFailingFrameFraction = addTypedDouble(panel, VariableStarsSettings.LINEARITY_MAX_FAILING_FRAME_FRACTION, 0.0, 1.0, 0.05);
-
-        panel.add(Box.createVerticalStrut(10));
-        panel.add(createExpertSectionHeader("Candidate Gates"));
-        spinVariableLimitedMinAmplitudeMag = addTypedDouble(panel, VariableStarsSettings.VARIABLE_LIMITED_MIN_AMPLITUDE_MAG, 0.0, 5.0, 0.01);
-        spinVariableAmplitudeNoiseFactor = addTypedDouble(panel, VariableStarsSettings.VARIABLE_AMPLITUDE_NOISE_FACTOR, 0.0, 50.0, 0.5);
-        spinVariableMinPersistenceFrames = addTypedInteger(panel, VariableStarsSettings.VARIABLE_MIN_PERSISTENCE_FRAMES, 1, 1000, 1);
-        spinVariableMinSplitHalfCorrelation = addTypedDouble(panel, VariableStarsSettings.VARIABLE_MIN_SPLIT_HALF_CORRELATION, -1.0, 1.0, 0.05);
-        spinVariableMaxApertureAmplitudeDifference = addTypedDouble(panel, VariableStarsSettings.VARIABLE_MAX_APERTURE_AMPLITUDE_DIFFERENCE, 0.0, 5.0, 0.05);
-        spinVariableMaxSystematicsCorrelation = addTypedDouble(panel, VariableStarsSettings.VARIABLE_MAX_SYSTEMATICS_CORRELATION, 0.0, 1.0, 0.05);
         spinVariableLocalRadiusPixels = addTypedDouble(panel, VariableStarsSettings.VARIABLE_LOCAL_RADIUS_PIXELS, 0.0, 5000.0, 10.0);
-        spinVariableMaxLocalCorrelation = addTypedDouble(panel, VariableStarsSettings.VARIABLE_MAX_LOCAL_CORRELATION, 0.0, 1.0, 0.05);
 
         return panel;
     }
