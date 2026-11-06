@@ -684,6 +684,8 @@ MainApplicationPanel
 
 ### Report Export Flow
 
+On import, `SavedReportOverlays` reads compatible completed exports on the worker and supplies the new session's initial `DetectionOverlays`. New schema-version-1 metadata adds ordered basename/dimension/timing identities, measured per-frame finding positions and captured variable hover descriptions. Existing exports can supply explicit reference positions where full geometry was never saved. Preview and Blink share the restored layers and default visibility; a later completed run replaces them. `FindingOverlay` supplies single-frame, stack/reference, rescue/activity and artifact categories in addition to the dedicated track, variable and fitted-mover models. Invalid report data is an overlay-availability problem, not a failed image import.
+
 ```text
 PipelineResult + raw frames + metadata + config + app config
 -> ReportExporter

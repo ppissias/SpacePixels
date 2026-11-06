@@ -68,9 +68,10 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     private final JButton previousButton = new JButton("◀");
     private final JButton nextButton = new JButton("▶");
     private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
-    private final JCheckBox tracksBox = new JCheckBox("Show tracks");
+    private final JCheckBox tracksBox = new JCheckBox("Show tracks", true);
     private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
     private final JCheckBox faintMoversBox = new JCheckBox("Show faint movers", true);
+    private final JCheckBox findingsBox = new JCheckBox("Show other findings", true);
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JPanel controlRows = new JPanel();
     private final JLabel frameLabel = new JLabel(" ");
@@ -240,6 +241,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         }
         boolean available = overlay != null && overlay.coversAnyOf(names);
         tracksBox.setVisible(true);
+        if (available && !tracksBox.isEnabled()) tracksBox.setSelected(true);
         tracksBox.setEnabled(available);
         if (!available) {
             tracksBox.setSelected(false);
@@ -271,6 +273,15 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         faintMoversBox.setToolTipText("Experimental FM candidates: dashed fitted paths and current exposure-midpoint positions. These are unverified.");
         view.setFaintMoverOverlay(available ? overlay : null);
         view.setFaintMoversVisible(faintMoversBox.isSelected());
+    }
+
+    /** Offers all additional report categories, with explicit stack/reference markers where measurements are unavailable. */
+    protected void setFindingOverlay(eu.startales.spacepixels.detection.FindingOverlay overlay, FitsFileInformation[] files) {
+        boolean available = overlay != null && overlay.coversAnyOf(files);
+        findingsBox.setVisible(true);findingsBox.setEnabled(available);
+        findingsBox.setToolTipText("Single-frame streaks/anomalies, slow-mover references, rescue/activity groups and artifacts. Dashed squares marked ref are report references, not per-frame detections.");
+        view.setFindingOverlay(available ? overlay : null);
+        view.setFindingsVisible(findingsBox.isSelected());
     }
 
     // ==========================================
@@ -387,6 +398,8 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
         faintMoversBox.setVisible(false);
         faintMoversBox.addActionListener(e -> view.setFaintMoversVisible(faintMoversBox.isSelected()));
+        findingsBox.setVisible(false);
+        findingsBox.addActionListener(e -> view.setFindingsVisible(findingsBox.isSelected()));
         previousButton.setToolTipText("Previous frame (←).");
         previousButton.addActionListener(e -> step(-1));
         nextButton.setToolTipText("Next frame (→).");
@@ -404,6 +417,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
             row.add(tracksBox);
             row.add(variablesBox);
             row.add(faintMoversBox);
+            row.add(findingsBox);
             row.add(Box.createHorizontalStrut(10));
         }
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {

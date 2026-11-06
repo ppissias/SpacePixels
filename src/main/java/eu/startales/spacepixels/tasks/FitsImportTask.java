@@ -30,14 +30,15 @@ import java.util.logging.Logger;
 /**
  * Imports a folder of aligned frames. A conversion that writes a new folder, or the choice of one exposure time,
  * continues the import with that folder. The result is the frames, the newest report beside them and the saved session
- * data that match them; the window builds the session from it. Each attempt closes its metadata readers before it
+ * data and detached report findings that match them; the window builds the session from it. Each attempt closes its metadata readers before it
  * returns or redirects, so a result holds no resources. The import is declined when no frames were loaded, for example
  * because a conversion was declined.
  */
 public class FitsImportTask implements Job<FitsImportTask.Result> {
 
-    /** The imported frames, the newest report beside them (or null) and the saved session data that match them. */
-    public record Result(FitsFileInformation[] files, File lastReport, SessionMetadata metadata) {
+    /** Imported frames and session metadata, the newest report, and any compatible restored findings/availability note. */
+    public record Result(FitsFileInformation[] files, File lastReport, SessionMetadata metadata,
+                         eu.startales.spacepixels.detection.DetectionOverlays overlays, String overlayNotice) {
     }
 
     private static final Logger LOGGER = Logger.getLogger(FitsImportTask.class.getName());
@@ -97,8 +98,9 @@ public class FitsImportTask implements Job<FitsImportTask.Result> {
                 SessionMetadata metadata = storage == null
                         ? SessionMetadataStore.filesystem().load(sessionFolder, filesInfo)
                         : storage.submit(() -> storage.store().load(sessionFolder, filesInfo)).get();
+                var overlays = eu.startales.spacepixels.detection.SavedReportOverlays.latest(sessionFolder, filesInfo);
                 context.progress(100, "Import complete.");
-                return JobOutcome.completed(new Result(filesInfo, lastReport, metadata));
+                return JobOutcome.completed(new Result(filesInfo, lastReport, metadata, overlays.overlays(), overlays.notice()));
 
             } catch (eu.startales.spacepixels.fits.ImageScaling.DecisionCancelledException declined) {
                 return JobOutcome.declined("The import was cancelled.");

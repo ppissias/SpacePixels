@@ -257,7 +257,7 @@ public class ProcessingSessionTest {
             }
         });
         session.setSelection(session.getFiles());
-        DetectionOverlays lastRun = new DetectionOverlays(TrackOverlay.from(PipelineResult.builder().build()), null, null);
+        DetectionOverlays lastRun = new DetectionOverlays(TrackOverlay.from(PipelineResult.builder().build()), null, null, null);
         session.setLastRun(lastRun);
         assertSame(lastRun.tracks(), session.getTrackOverlay());
         AtomicInteger shutdowns = new AtomicInteger();

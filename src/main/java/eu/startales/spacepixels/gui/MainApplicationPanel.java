@@ -175,6 +175,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             + "Blink and stretch in colour; convert to mono<br>for Preview, Auto-Tune and detection.</html>",
             UIManager.getIcon("OptionPane.informationIcon"), SwingConstants.LEFT);
     private final JLabel astrometryStatus = new JLabel();
+    private final JCheckBox applyCorrection = new JCheckBox("Apply");
     private final JLabel inspectStatus = new JLabel();
     private final JLabel detectStatus = new JLabel();
     /** Readout of the settings the calibrated auto-tuner sets, shown beside Detect Moving Targets. */
@@ -340,7 +341,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 buttonRow(prepareFramesButton),
                 buttonRow(importButton),
                 buttonRow(convertMonoButton));
-        JPanel astrometryGroup = workflowGroup("2  Astrometry", astrometryStatus,
+        JPanel astrometryGroup = workflowGroup("2  Astrometry", correctionStatusRow(),
                 buttonRow(solveButton),
                 buttonRow(skyCatalogueButton),
                 buttonRow(solarSystemButton),
@@ -812,7 +813,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     // WORKFLOW STRIP
     // ==========================================
 
-    private JPanel workflowGroup(String title, JLabel status, JComponent... rows) {
+    private JPanel workflowGroup(String title, JComponent status, JComponent... rows) {
         // Every group is as tall as the tallest one, so the tops and the status lines line up.
         JPanel group = new JPanel() {
             @Override
@@ -843,6 +844,32 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             group.add(status);
         }
         return group;
+    }
+
+    /** Keeps the compact correction switch beside the final astrometry-status line, on the EDT. */
+    private JPanel correctionStatusRow() {
+        JPanel row = new JPanel(new GridBagLayout());
+        row.setOpaque(false);
+        astrometryStatus.setForeground(UiStyle.helpColor());
+        applyCorrection.setOpaque(false);
+        applyCorrection.getAccessibleContext().setAccessibleName("Apply plate-solution correction");
+        applyCorrection.setToolTipText("Use the fitted correction in viewers and future reports. FITS headers are unchanged.");
+        applyCorrection.addActionListener(event -> {
+            try {
+                if (!uiLocked) skyCatalogue().setCorrectionEnabled(applyCorrection.isSelected());
+            } catch (java.io.IOException failure) {
+                showStatus("Cannot save the correction setting: " + failure.getMessage());
+            }
+            refreshWorkflowStatus();
+        });
+        GridBagConstraints layout = new GridBagConstraints();
+        layout.anchor = GridBagConstraints.SOUTHWEST;
+        layout.weightx = 1;
+        row.add(astrometryStatus, layout);
+        layout.weightx = 0;
+        layout.insets = new Insets(0, 4, 0, 0);
+        row.add(applyCorrection, layout);
+        return row;
     }
 
     private static JPanel buttonRow(JComponent... components) {
@@ -879,8 +906,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             // One solved frame is enough: the frames are aligned, so the report uses its solution for all of them.
             hasSolvedFrame = solved > 0;
             if (hasSolvedFrame) {
-                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved<br>" + skyCatalogueStatusText()
-                        + "<br>" + solarSystemStatusText() + "</html>");
+                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved<br>" + skyCatalogueStatusText() + "</html>");
                 astrometryStatus.setToolTipText(skyCatalogueTooltip());
             } else {
                 astrometryStatus.setText("Solve one frame to identify objects");
@@ -899,6 +925,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                         : "Settings: " + detectionSettingsSummary() + "<br>" + saved);
             }
         }
+        PlateSolutionCorrection correction = skyCatalogue().getCorrection();
+        boolean usefulCorrection = frames > 0 && hasSolvedFrame && correction != null && correction.isNeeded();
+        applyCorrection.setVisible(usefulCorrection);
+        applyCorrection.setSelected(usefulCorrection && correction.enabled);
+        applyCorrection.setEnabled(usefulCorrection && !uiLocked && (skyController == null || !skyController.isRunning()));
         updateAutoTuneTooltip();
         refreshAnalysisScope();
         refreshCommands();
@@ -1300,12 +1331,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         return skyController == null ? null : skyController.correctionProblem();
     }
 
-    /** The second line of the Astrometry status, and a third for the plate-solution correction. */
+    /** The saved catalogue/predictions and, last, the correction line beside its Apply switch. */
     private String skyCatalogueStatusText() {
-        String catalogueText = catalogueStatusText();
+        String catalogueText = catalogueStatusText() + "<br>" + solarSystemStatusText();
         PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (skyCatalogue().getSaveFailure() != null) {
-            return catalogueText + "<br>⚠ Correction could not be saved; the last saved setting is in use";
+            return catalogueText + "<br>⚠ Correction setting not saved; "
+                    + (skyCatalogue().isCorrectionEnabled() ? "in use for this session" : "disabled for this session");
         }
         if (correction != null) {
             return catalogueText + "<br>" + (!correction.isNeeded()
@@ -1360,7 +1392,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (skyCatalogue().getSaveFailure() != null) {
             text.append("<br><br><b>Correction save failed:</b> ")
                     .append(escapeHtml(String.valueOf(skyCatalogue().getSaveFailure().getMessage())))
-                    .append(". The last saved setting is in use.");
+                    .append(". The current setting remains in use for this session; reopen will use the last saved setting.");
         }
         PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (correction != null && !correction.isNeeded()) {
@@ -1376,7 +1408,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     correction.afterMedianPx, correction.afterP90Px));
             text.append(correction.enabled
                     ? "<br>The correction is <b>in use</b>: in the viewers, the cursor RA/Dec and the report of the next Detect Moving Targets."
-                    : "<br>The correction is <b>not in use</b>. Switch it on in a viewer (Correct plate solution, C).");
+                    : "<br>The correction is <b>not in use</b>. Use Apply beside the correction status, or Correct plate solution (C) in a viewer.");
             text.append("<br>New fits are applied automatically when median accuracy improves by more than 1 px"
                     + "<br>and the 90th-percentile error also improves. A manual on/off choice is kept when refitting.");
             text.append("<br>The FITS files are not changed.");
@@ -1741,6 +1773,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     sessions.current() == null ? null : sessions.current().getTrackOverlay(),
                     sessions.current() == null ? null : sessions.current().getVariableStarOverlay());
             blinkFrame.setFaintMoverOverlay(sessions.current() == null ? null : sessions.current().getFaintMoverOverlay());
+            blinkFrame.setFindingOverlay(sessions.current() == null ? null : sessions.current().getFindingOverlay());
             return;
         }
         // Stopped, or failed: hides the window if it still shows the loading progress.

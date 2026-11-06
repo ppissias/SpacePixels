@@ -57,7 +57,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
 
         endARunWithOverlays();
         waitFor("the run's tracks become available", () -> previewTracks.target().isEnabled());
-        assertFalse(previewTracks.target().isSelected());
+        assertTrue("Completed findings are visible by default", previewTracks.target().isSelected());
         JComponent image = image(preview, "Preview Frame image");
         JCheckBoxFixture faintMovers = preview.checkBox(VisibleText.checkBox("Show faint movers"));
         faintMovers.requireEnabled().requireSelected();
@@ -65,6 +65,8 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         faintMovers.uncheck().requireNotSelected();
         assertFalse(GuiActionRunner.execute(() -> image.getAccessibleContext().getAccessibleDescription()).contains("Faint movers on."));
         focus(image);
+        robot().pressAndReleaseKeys(KeyEvent.VK_T);
+        waitFor("T hides the default-visible tracks", () -> !previewTracks.target().isSelected());
         robot().pressAndReleaseKeys(KeyEvent.VK_T);
         waitFor("T shows the tracks", () -> previewTracks.target().isSelected());
         waitForDescription(image, "Tracks on.", "Preview Frame describes its tracks");
@@ -124,7 +126,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
 
         TrackOverlay late = TrackOverlay.from(PipelineResult.builder().build());
         GuiActionRunner.execute(() -> application().getMainApplicationPanel().showDetectionOverlays(first,
-                new DetectionOverlays(late, null, null)));
+                new DetectionOverlays(late, null, null, null)));
         assertNull("the closed session takes nothing", first.getTrackOverlay());
         assertNull("the new session keeps its own (none)", second.getTrackOverlay());
     }
@@ -196,7 +198,7 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         var admission = GuiActionRunner.execute(() -> application().getJobCoordinator().start(JobKind.DETECTION,
                 application().getSession(), context -> JobOutcome.completed(Boolean.TRUE), (handle, outcome) -> {
                     application().getMainApplicationPanel().showDetectionOverlays(handle.session(),
-                            new DetectionOverlays(overlay, null, faint));
+                            new DetectionOverlays(overlay, null, faint, null));
                     ended.countDown();
                 }));
         assertTrue(admission.admitted());

@@ -26,7 +26,7 @@ public final class FaintMoverOverlay {
     private final int height;
 
     /** Owns small immutable copies of fitted paths and searched-frame identities. */
-    private FaintMoverOverlay(List<Candidate> candidates, Map<String, Long> midpoints, int width, int height) {
+    FaintMoverOverlay(List<Candidate> candidates, Map<String, Long> midpoints, int width, int height) {
         this.candidates = List.copyOf(candidates);
         this.midpoints = Map.copyOf(midpoints);
         this.width = width;

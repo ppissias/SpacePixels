@@ -61,9 +61,10 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final JSlider speedSlider = new JSlider(0, SPEED_STEPS);
     private final JLabel speedLabel = new JLabel();
     private final JCheckBox skipBox = new JCheckBox("Skip this frame");
-    private final JCheckBox tracksBox = new JCheckBox("Show tracks");
+    private final JCheckBox tracksBox = new JCheckBox("Show tracks", true);
     private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
     private final JCheckBox faintMoversBox = new JCheckBox("Show faint movers", true);
+    private final JCheckBox findingsBox = new JCheckBox("Show other findings", true);
     /** Holds the stretch row, which is made when the first blink brings the Image Stretch tab. */
     private final JPanel stretchRow = new JPanel(new BorderLayout());
     private final JLabel frameLabel = new JLabel(" ");
@@ -187,6 +188,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         }
         boolean hasTracks = overlay != null && overlay.coversAnyOf(names);
         view.setOverlay(hasTracks ? overlay : null);
+        if (hasTracks && !tracksBox.isEnabled()) tracksBox.setSelected(true);
         tracksBox.setEnabled(hasTracks);
         if (!hasTracks) {
             tracksBox.setSelected(false);
@@ -303,6 +305,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     /** Stops and lets go of the frames of the current blink, if any. */
     private void release() {
         view.setFaintMoverOverlay(null);
+        view.setFindingOverlay(null);
         gifExport.release();
         open = false;
         loading = false;
@@ -327,6 +330,15 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         faintMoversBox.setToolTipText("Experimental FM candidates: dashed fitted paths and current exposure-midpoint positions. These are unverified.");
         view.setFaintMoverOverlay(available ? overlay : null);
         view.setFaintMoversVisible(faintMoversBox.isSelected());
+    }
+
+    /** Installs the saved or completed run's remaining categories after a blink opens. */
+    void setFindingOverlay(eu.startales.spacepixels.detection.FindingOverlay overlay) {
+        boolean available = overlay != null && overlay.coversAnyOf(files);
+        findingsBox.setEnabled(available);
+        findingsBox.setToolTipText("Other report categories; dashed squares marked ref are reference positions, not per-frame detections.");
+        view.setFindingOverlay(available ? overlay : null);
+        view.setFindingsVisible(findingsBox.isSelected());
     }
 
     // ==========================================
@@ -354,6 +366,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
             }
         });
         tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
+        findingsBox.addActionListener(e -> view.setFindingsVisible(findingsBox.isSelected()));
         variablesBox.setEnabled(false);
         variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
         faintMoversBox.setEnabled(false);
@@ -371,6 +384,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         playbackRow.add(Box.createHorizontalStrut(10));
         playbackRow.add(skipBox);
         playbackRow.add(tracksBox);
+        playbackRow.add(findingsBox);
         playbackRow.add(variablesBox);
         playbackRow.add(faintMoversBox);
         playbackRow.add(Box.createHorizontalStrut(10));

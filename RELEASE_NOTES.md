@@ -37,6 +37,9 @@
 
 ## Unreleased
 
+- **Main-window correction control.** A compact Apply checkbox beside plate-correction status shares the viewer setting and its saved state. Save failures accurately describe the current session choice.
+- **Saved findings in viewers.** Import restores the newest compatible completed report's findings, including compatible iterative passes. Preview and Blink show all available categories by default, with measured positions, fitted faint-mover paths and explicitly labelled reference markers. Reports add portable frame identities, measured geometry and variable hover text; older exports retain limited reference display. `DetectionOverlays` gains a fourth constructor component for other findings.
+
 - **Faint-mover review and motion controls.** The report pixel allowance increases to 96 MiB alongside the 64 MiB engine pool. Catalogue comparisons check every searched fitted epoch and show fitted-frame counts/residuals, distinct from measured tracks. Both motion controls show arcsec/min with WCS, with explicit fallback units and a 2-FWHM/session floor; reports show the completed search's angular range.
 
 ### Added

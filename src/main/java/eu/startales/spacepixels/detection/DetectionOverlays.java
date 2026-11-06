@@ -9,19 +9,22 @@ package eu.startales.spacepixels.detection;
 
 /**
  * What a completed detection leaves for the viewers: its tracks and its variable-star candidates, numbered as in its
- * report, plus its faint-mover paths. It holds no image buffers. A run hands it over as soon as its detection finishes, whatever then happens to
+ * report, plus its faint-mover paths and other measured/reference findings. It holds no image buffers. A run hands it over as soon as its detection finishes, whatever then happens to
  * the report.
  *
  * @param tracks    the run's moving objects and streak tracks, possibly none
  * @param variables the run's variable-star candidates, possibly none
  * @param faintMovers the run's detached experimental fitted paths, possibly none
+ * @param findings other categories and explicitly labelled stack/reference positions, possibly none
  */
-public record DetectionOverlays(TrackOverlay tracks, VariableStarOverlay variables, FaintMoverOverlay faintMovers) {
+public record DetectionOverlays(TrackOverlay tracks, VariableStarOverlay variables, FaintMoverOverlay faintMovers,
+                                FindingOverlay findings) {
 
     /** The overlays of a finished detection, built as its report builds its maps and numbers. */
     public static DetectionOverlays of(PipelineExecutionData execution) {
         return new DetectionOverlays(TrackOverlay.from(execution.getPipelineResult()),
                 execution.getReportContext().variableStarOverlay(execution.getPipelineResult()),
-                FaintMoverOverlay.from(execution.getPipelineResult(), execution.getReportContext().filesInformation()));
+                FaintMoverOverlay.from(execution.getPipelineResult(), execution.getReportContext().filesInformation()),
+                FindingOverlay.from(execution.getPipelineResult(), execution.getFilesInformation()));
     }
 }

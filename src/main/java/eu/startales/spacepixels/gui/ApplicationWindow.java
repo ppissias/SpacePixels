@@ -453,9 +453,11 @@ public class ApplicationWindow {
             ProcessingSession imported = new ProcessingSession(new PlateSolveService(applicationSettings.getConfig()),
                     completed.result().files(), completed.result().lastReport(), completed.result().metadata(),
                     storage, EventQueue::invokeLater);
+            if (completed.result().overlays() != null) imported.setLastRun(completed.result().overlays());
             if (sessions.replace(expectedSession, imported)) {
                 installSession(imported);
                 mainApplicationPanel.showLastReport(imported.getLastReport());
+                if (completed.result().overlayNotice() != null) mainApplicationPanel.showStatus(completed.result().overlayNotice());
                 afterImport.accept(imported);
                 EventQueue.invokeLater(() -> offerMonochromeConversion(imported));
             }

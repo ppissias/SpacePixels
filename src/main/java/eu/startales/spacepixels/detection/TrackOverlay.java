@@ -68,6 +68,9 @@ public final class TrackOverlay {
         this.tracks = Collections.unmodifiableList(tracks);
     }
 
+    /** Restores copied measured positions after report/frame validation, without fabricating engine tracks. */
+    static TrackOverlay restored(List<Track> tracks) { return new TrackOverlay(List.copyOf(tracks)); }
+
     public List<Track> getTracks() {
         return tracks;
     }

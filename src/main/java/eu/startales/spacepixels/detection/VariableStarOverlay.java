@@ -38,6 +38,18 @@ public final class VariableStarOverlay {
                     + (highConfidence ? "High confidence" : "Possible variable")
                     + (Double.isFinite(star.amplitude) ? String.format(Locale.US, " · variation %.3f mag", star.amplitude) : "");
         }
+
+        /** Restores a report's candidate marker without implying that its light curve was measured again. */
+        Candidate(String label, double x, double y, boolean highConfidence) {
+            this(label, null, label + " · " + (highConfidence ? "High confidence" : "Possible variable") + " · saved report", x, y, highConfidence);
+        }
+
+        /** Restores captured catalogue text and variation alongside an already validated report position. */
+        Candidate(String label, String name, String description, double x, double y, boolean highConfidence) {
+            this.label = label; this.x = x; this.y = y; this.highConfidence = highConfidence;
+            this.name = name;
+            this.description = description;
+        }
     }
 
     private final List<Candidate> candidates;
@@ -45,7 +57,7 @@ public final class VariableStarOverlay {
     private final int width;
     private final int height;
 
-    private VariableStarOverlay(List<Candidate> candidates, Set<String> framePaths, int width, int height) {
+    VariableStarOverlay(List<Candidate> candidates, Set<String> framePaths, int width, int height) {
         this.candidates = Collections.unmodifiableList(candidates);
         this.framePaths = Collections.unmodifiableSet(framePaths);
         this.width = width;
@@ -76,7 +88,7 @@ public final class VariableStarOverlay {
     }
 
     /** Copies candidate display state using only the supplied metadata and read-only catalogue. */
-    static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files,
+    public static VariableStarOverlay fromCandidates(List<StarLightCurve> stars, FitsFileInformation[] files,
             WcsCoordinateTransformer transformer, SkyCatalogue catalogue) {
         List<Candidate> candidates = new ArrayList<>();
         Set<String> paths = new HashSet<>();

@@ -88,6 +88,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         setTrackOverlay(session == null ? null : session.getTrackOverlay(), files);
         setVariableStarOverlay(session == null ? null : session.getVariableStarOverlay(), files);
         setFaintMoverOverlay(session == null ? null : session.getFaintMoverOverlay(), files);
+        setFindingOverlay(session == null ? null : session.getFindingOverlay(), files);
     }
 
     /** Enables trial edits and Apply only while the application has no active job or blink. */

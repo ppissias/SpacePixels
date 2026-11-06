@@ -121,11 +121,13 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         double originalScale = faintMoverDisplayScale();
         assertEquals(originalScale, number(spinner("Fastest motion")), originalScale * 0.000005);
         assertTrue(motionInfo("Slowest motion equivalents").contains("FWHM/session"));
-        assertTrue(motionInfo("Fastest motion equivalents").contains("FWHM/session"));
-        assertTrue(motionInfo("Fastest motion equivalents").contains("arcsec/min: unavailable"));
+        assertTrue(motionInfo("Fastest motion equivalents").contains("px/min"));
+        assertTrue(motionInfo("Fastest motion equivalents").contains("No usable WCS"));
         assertEquals(10.0, number(spinner("Time limit (minutes)")), 0.001);
         field(spinner("Time limit (minutes)")).setText("0.5");
-        field(spinner("Fastest motion")).setText("0.123");
+        field(spinner("Fastest motion")).setText("123.123");
+        assertTrue("The round-trip fixture must exceed its short session's speed floor", 123.123
+                > ((Number) ((SpinnerNumberModel) spinner("Fastest motion").getModel()).getMinimum()).doubleValue());
         window().button(VisibleText.button("Save")).click();
         waitFor("faint mover settings saved", () -> showingLabel("Saved settings").contains("Saved settings"));
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
@@ -133,7 +135,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
             var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
             assertTrue(config.enableFaintMoverSearch);
             assertEquals(30, config.faintMoverMaxSeconds, 1e-9);
-            assertEquals(0.123 / originalScale, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
+            assertEquals(123.123 / originalScale, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
         }
         showPage("Overview");
         window().checkBox(VisibleText.checkBox("Faint movers (experimental)")).requireSelected().uncheck();
@@ -147,7 +149,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         showPage("Faint Movers (experimental)");
         window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
         assertEquals(0.5, number(spinner("Time limit (minutes)")), 1e-9);
-        assertEquals(0.123, number(spinner("Fastest motion")), 1e-9);
+        assertEquals(123.123, number(spinner("Fastest motion")), 1e-9);
         var solved = eu.startales.spacepixels.testsupport.SyntheticDatasetFactory.createSolvedMono16FitsSequence(
                 folder.getRoot().toPath(), "solved", 8).toFile();
         GuiActionRunner.execute(() -> application().importFolder(solved));
@@ -161,10 +163,11 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         var a = wcs.pixelToSky(file.getSizeWidth() / 2.0, file.getSizeHeight() / 2.0);
         var b = wcs.pixelToSky(file.getSizeWidth() / 2.0 + 1, file.getSizeHeight() / 2.0);
         double scale = eu.startales.spacepixels.util.SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
-        double canonicalRate = 0.123 / originalScale;
+        double canonicalRate = 123.123 / originalScale;
         double expectedMotion = canonicalRate * faintMoverDisplayScale();
         assertEquals(expectedMotion, number(spinner("Fastest motion")), expectedMotion * 0.000005);
-        assertTrue(motionInfo("Fastest motion equivalents").contains(String.format(java.util.Locale.ROOT, "%.5g arcsec/min", canonicalRate * scale)));
+        assertEquals(canonicalRate * scale, number(spinner("Fastest motion")), canonicalRate * scale * 0.000005);
+        assertTrue(motionInfo("Fastest motion equivalents").contains("arcsec/min"));
         window().button(VisibleText.button("Save")).click();
         waitFor("converted units saved", () -> showingLabel("Saved settings").contains("Saved settings"));
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
@@ -179,7 +182,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
     public void unchangedConvertedControlsRetainPreciseCanonicalValues() throws Exception {
         var precise = new io.github.ppissias.jtransient.config.DetectionConfig();
         precise.enableFaintMoverSearch = true;
-        precise.faintMoverMaxSpeedPixelsPerMinute = 0.1234567890123;
+        precise.faintMoverMaxSpeedPixelsPerMinute = 123.1234567890123;
         precise.faintMoverMaxSeconds = 1;
         try (var writer = java.nio.file.Files.newBufferedWriter(java.nio.file.Path.of(System.getProperty("user.home"),
                 eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
@@ -190,6 +193,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
         double expectedMotion = precise.faintMoverMaxSpeedPixelsPerMinute * faintMoverDisplayScale();
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
         assertEquals(expectedMotion, number(spinner("Fastest motion")), expectedMotion * 0.000005);
         assertEquals(0.0166667, number(spinner("Time limit (minutes)")), 0);
         window().button(VisibleText.button("Save")).click();
@@ -197,21 +201,25 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
                 eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
             var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
+            assertTrue(config.enableFaintMoverSearch);
             assertEquals(precise.faintMoverMaxSpeedPixelsPerMinute, config.faintMoverMaxSpeedPixelsPerMinute, 0);
             assertEquals(precise.faintMoverMaxSeconds, config.faintMoverMaxSeconds, 0);
         }
     }
 
-    /** Computes this continuous fixture's independent expected px/min to FWHM/session conversion. */
+    /** Computes the field-centre angular conversion independently; without WCS the control keeps px/min. */
     private double faintMoverDisplayScale() {
         return GuiActionRunner.execute(() -> {
             var files = application().getSession().getFiles();
-            long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
             for (var file : files) {
-                long midpoint = file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2;
-                first = Math.min(first, midpoint); last = Math.max(last, midpoint);
+                var wcs = eu.startales.spacepixels.fits.WcsCoordinateTransformer.fromHeader(file.getFitsHeader());
+                if (wcs == null) continue;
+                var a = wcs.pixelToSky(file.getSizeWidth()/2.0,file.getSizeHeight()/2.0);
+                var b = wcs.pixelToSky(file.getSizeWidth()/2.0+1,file.getSizeHeight()/2.0);
+                if (a != null && b != null) return eu.startales.spacepixels.util.SkyMath.separationArcsec(
+                        a.getRaDegrees(),a.getDecDegrees(),b.getRaDegrees(),b.getDecDegrees());
             }
-            return (last - first) / 60_000.0 / 2.5;
+            return 1.0;
         });
     }
 

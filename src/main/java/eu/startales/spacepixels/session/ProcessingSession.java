@@ -230,19 +230,25 @@ public final class ProcessingSession implements AutoCloseable {
         lastRun = Objects.requireNonNull(overlays);
     }
 
-    /** Tracks of the last detection run on this session, or null when none has finished. */
+    /** Tracks of the latest completed run or restored report, or null when neither is available. */
     public TrackOverlay getTrackOverlay() {
         DetectionOverlays run = lastRun;
         return run == null ? null : run.tracks();
     }
 
-    /** The last completed run's detached experimental paths, or null before detection. */
+    /** Detached experimental paths from the latest completed run or restored report, or null when unavailable. */
     public eu.startales.spacepixels.detection.FaintMoverOverlay getFaintMoverOverlay() {
         DetectionOverlays run = lastRun;
         return run == null ? null : run.faintMovers();
     }
 
-    /** Variable-star candidates of the last detection run, numbered as in its report, or null when none has finished. */
+    /** Other measured findings and stack/reference markers from the latest completed run or restored report. */
+    public eu.startales.spacepixels.detection.FindingOverlay getFindingOverlay() {
+        DetectionOverlays run = lastRun;
+        return run == null ? null : run.findings();
+    }
+
+    /** Variable-star candidates of the latest run or restored report, with that report's numbering. */
     public VariableStarOverlay getVariableStarOverlay() {
         DetectionOverlays run = lastRun;
         return run == null ? null : run.variables();

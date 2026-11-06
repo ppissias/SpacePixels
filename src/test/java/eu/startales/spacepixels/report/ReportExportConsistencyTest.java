@@ -72,6 +72,18 @@ public class ReportExportConsistencyTest {
         matcher = Pattern.compile("href=['\"]#([^'\"]+)['\"]").matcher(html);
         while (matcher.find()) assertTrue("Missing target: " + matcher.group(1), ids.contains(matcher.group(1)));
         JsonObject data = JsonParser.parseString(Files.readString(new File(included, "report-data.json").toPath())).getAsJsonObject();
+        var restored = eu.startales.spacepixels.detection.SavedReportOverlays.read(new File(included, "detection_report.html"), files).overlays();
+        assertEquals(3, data.getAsJsonArray("inputFrames").size());
+        assertEquals("T1", restored.tracks().getTracks().getFirst().label);
+        assertEquals(2, restored.tracks().getTracks().getFirst().points.size());
+        assertEquals(80, restored.tracks().getTracks().getFirst().points.getLast().x, 0);
+        assertEquals("frame2.fit", restored.tracks().getTracks().getFirst().points.getLast().fileName);
+        assertEquals("V1", restored.variables().getCandidates().getFirst().label);
+        assertTrue(restored.variables().getCandidates().getFirst().highConfidence);
+        assertTrue(restored.variables().covers(files[0]));
+        var wrongTiming = files.clone();
+        wrongTiming[0] = files[0].withFitsHeader(Map.of("DATE-OBS", "2026-10-02T00:00:00", "EXPTIME", "120"));
+        assertThrows(IOException.class, () -> eu.startales.spacepixels.detection.SavedReportOverlays.read(new File(included, "detection_report.html"), wrongTiming));
         for (var finding : data.getAsJsonArray("findings")) assertTrue(ids.contains(finding.getAsJsonObject().get("anchor").getAsString()));
         assertTrue(Files.readString(new File(included, "variable_stars/photometry_stars.csv").toPath()).contains(",candidate_label,ra_deg,dec_deg,vsx_matches,nearest_vsx_arcsec"));
         assertTrue(new File(included, "moving_targets/moving_track_1_star_centric.gif.poster.png").isFile());

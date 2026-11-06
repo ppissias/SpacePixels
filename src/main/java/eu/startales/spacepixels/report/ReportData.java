@@ -19,7 +19,7 @@ final class ReportData {
      */
     record Finding(String id, String category, String anchor, double x, double y,
                    Double raDegrees, Double decDegrees, List<Integer> frames, Integer starId, String tier,
-                   Integer faintSearchDetections) {
+                   Integer faintSearchDetections, List<eu.startales.spacepixels.detection.FindingOverlay.Position> positions) {
         /** Resolves category behavior without parsing a display label or creating another identity. */
         FindingCategory categoryDescriptor() { return FindingCategory.fromId(id); }
     }
@@ -38,10 +38,13 @@ final class ReportData {
     private final Map<String, Object> faintMoverSearch;
     private final List<RescueTrackAssociations.Match> rescueAssociations;
     private final KnownSolarSystemReport.Summary knownSolarSystem;
+    private final List<eu.startales.spacepixels.detection.SavedReportOverlays.FrameIdentity> inputFrames;
+    private final List<eu.startales.spacepixels.detection.VariableStarOverlay.Candidate> variableMarkers;
 
     private ReportData(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
                        List<ResidualTransientAnalysis.CommonMotionGroup> groups, ReportInclusion inclusion) {
         this.inclusion = inclusion;
+        inputFrames = eu.startales.spacepixels.detection.SavedReportOverlays.identities(context.fitsFiles);
         variableStarOptions = context.settings.getVariableStarReportOptions();
         faintMovers = context.faintMoverPresentation;
         faintMoverSearch = FaintMoverPresentation.search(context);
@@ -88,7 +91,7 @@ final class ReportData {
                     add(output, context, FindingCategory.VARIABLE_STAR.id(number), star.x, star.y, List.of(), star.id, star.tier.name());
                     Finding f = output.remove(output.size() - 1);
                     output.add(new Finding(f.id, f.category, FindingCategory.VARIABLE_STAR.anchor(number, presentation.hasCard(star)),
-                            f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier, f.faintSearchDetections));
+                            f.x, f.y, f.raDegrees, f.decDegrees, List.copyOf(frames), star.id, f.tier, f.faintSearchDetections, f.positions));
                 }
             }
         }
@@ -100,6 +103,8 @@ final class ReportData {
             addPoints(output, context, FindingCategory.COMMON_MOTION.id(i + 1), groups.get(i).sources.stream().flatMap(List::stream).toList());
         }
         variableCandidates = List.copyOf(candidates);
+        variableMarkers = eu.startales.spacepixels.detection.VariableStarOverlay.fromCandidates(variableCandidates, context.fitsFiles,
+                context.astrometryContext == null ? null : context.astrometryContext.getTransformer(),context.catalogue().catalogue).getCandidates();
         variablesByStar = new HashMap<>();
         for (var f : output) if (f.starId != null) variablesByStar.put(f.starId, f);
         findings = List.copyOf(output);
@@ -146,7 +151,8 @@ final class ReportData {
         int faint = (int) points.stream().filter(p -> p.fromFaintStreakSearch).count();
         FindingCategory category = FindingCategory.fromId(id);
         out.add(new Finding(id, category.label(), category.anchor(category.number(id)),
-                x, y, ra, dec, frames, starId, tier, faint > 0 ? faint : null));
+                x, y, ra, dec, frames, starId, tier, faint > 0 ? faint : null,
+                eu.startales.spacepixels.detection.FindingOverlay.positions(points)));
     }
 
     Finding variable(int starId) { return variablesByStar.get(starId); }
@@ -178,6 +184,7 @@ final class ReportData {
         data.put("spacePixelsVersion", ReportPresentation.version("spacepixels"));
         data.put("jTransientVersion", ReportPresentation.version("jtransient"));
         data.put("frameCount", totalFrames);
+        data.put("inputFrames", inputFrames);
         data.put("frameNumbering", "one-based; empty frames on stack candidates means per-frame evidence is unavailable");
         data.put("rejectedFrames", rejectedFrames.stream().sorted().map(i -> i + 1).toList());
         var groups = new LinkedHashMap<String, Boolean>();
@@ -187,6 +194,7 @@ final class ReportData {
         groups.put("variableStars", inclusion.variableStars);
         if (faintMoverSearch != null) groups.put("faintMovers", inclusion.faintMovers);
         data.put("includedGroups", groups); data.put("findings", findings);
+        data.put("variableMarkers", variableMarkers);
         if (faintMoverSearch != null) {
             data.put("faintMoverSearch", faintMoverSearch);
             data.put("faintMovers", faintMovers);

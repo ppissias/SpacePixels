@@ -78,6 +78,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                     + (skyMarks == null ? "Catalogue annotations off. " : "Catalogue annotations on. ")
                     + (overlayVisible && overlay != null ? "Tracks on. " : "")
                     + (faintMoversVisible && faintMoverOverlay != null ? "Faint movers on. " : "")
+                    + (findingsVisible && findingOverlay != null ? "Other findings on. " : "")
                     + (variableStarsVisible && variableStarOverlay != null ? "Variable candidates on." : ""));
         }
     }
@@ -157,6 +158,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
     private VariableStarOverlay variableStarOverlay;
     private eu.startales.spacepixels.detection.FaintMoverOverlay faintMoverOverlay;
+    private eu.startales.spacepixels.detection.FindingOverlay findingOverlay;
+    private boolean findingsVisible = true;
     private boolean faintMoversVisible;
     private boolean variableStarsVisible = true;
     private String placeholder = "Loading…";
@@ -351,6 +354,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         overlay = null;
         variableStarOverlay = null;
         faintMoverOverlay = null;
+        findingOverlay = null;
         detections = null;
         skyMarks = null;
         drawnSkyMarks = new java.util.ArrayList<>();
@@ -400,6 +404,12 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     /** Changes only the experimental fitted-path display layer. */
     void setFaintMoversVisible(boolean visible) { faintMoversVisible = visible; repaint(); }
 
+    /** Installs detached report markers; actual frame identities govern measured points, and references stay labelled. */
+    void setFindingOverlay(eu.startales.spacepixels.detection.FindingOverlay overlay) { findingOverlay = overlay; repaint(); }
+
+    /** Changes only the additional saved/run finding display layer. */
+    void setFindingsVisible(boolean visible) { findingsVisible = visible; repaint(); }
+
     void setVariableStarsVisible(boolean visible) {
         variableStarsVisible = visible;
         repaint();
@@ -411,6 +421,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         Point pixel = pixelAt(event.getX(), event.getY());
         VariableStarOverlay.Candidate candidate = variableStarAt(pixel);
         if (candidate != null) return candidate.description;
+        String finding = findingAt(pixel);
+        if (finding != null) return finding;
         SkyMark mark = skyMarkAt(pixel);
         return mark == null ? null : mark.description;
     }
@@ -718,6 +730,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             }
             if (hasVariableStars()) drawVariableStars(g2);
             if (faintMoversVisible && faintMoverOverlay != null) drawFaintMovers(g2);
+            if (findingsVisible && findingOverlay != null) drawFindings(g2);
             drawZoomLabel(g2);
         } finally {
             g2.dispose();
@@ -1099,6 +1112,45 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             g2.drawString(track.label, (float) (left + (labelled.x + 0.5) * scale + ring + 3),
                     (float) (top + (labelled.y + 0.5) * scale - ring));
         }
+    }
+
+    /** Draws report-category markers only at measured frame positions; dashed squares explicitly denote references. */
+    private void drawFindings(Graphics2D g2) {
+        if (frame == null) return;
+        Integer number = findingOverlay.frameNumber(frame.getInfo());
+        if (number == null) return;
+        double scale = scale(), left = left(scale), top = top(scale), radius = Math.max(5, scale * 2);
+        g2.setFont(UiStyle.bodyFont().deriveFont(Math.max(9f, UiStyle.bodyFont().getSize2D() - 1)));
+        for (var marker : findingOverlay.markers()) {
+            var category = eu.startales.spacepixels.report.FindingCategory.fromId(marker.id());
+            boolean reference = marker.positions().isEmpty();
+            var positions = reference ? java.util.List.of(new eu.startales.spacepixels.detection.FindingOverlay.Position(number,marker.x(),marker.y())) : marker.positions();
+            g2.setColor(withAlpha(category.color(), 190));
+            g2.setStroke(reference ? new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10,new float[]{3,3},0) : new BasicStroke(1.2f));
+            for (var point : positions) if (point.frameNumber() == number) {
+                double x = left + (point.x() + .5) * scale, y = top + (point.y() + .5) * scale;
+                if (reference) g2.draw(new java.awt.geom.Rectangle2D.Double(x-radius,y-radius,2*radius,2*radius));
+                else g2.draw(new Ellipse2D.Double(x-radius,y-radius,2*radius,2*radius));
+                g2.drawString(marker.id() + (reference ? " ref" : ""),(float)(x+radius+3),(float)(y-radius));
+            }
+        }
+    }
+
+    /** Returns a nearby additional finding's evidence kind without claiming a reference is a current-frame detection. */
+    private String findingAt(Point pixel) {
+        if (!findingsVisible || findingOverlay == null || frame == null || pixel == null) return null;
+        Integer number = findingOverlay.frameNumber(frame.getInfo());
+        if (number == null) return null;
+        double distance = 8 / scale();String found = null;
+        for (var marker : findingOverlay.markers()) {
+            var positions = marker.positions().isEmpty()
+                    ? java.util.List.of(new eu.startales.spacepixels.detection.FindingOverlay.Position(number,marker.x(),marker.y())) : marker.positions();
+            for (var point : positions) if (point.frameNumber() == number) {
+                double separation = Math.hypot(point.x()-pixel.x,point.y()-pixel.y);
+                if (separation <= distance) { distance = separation; found = marker.id() + " · " + marker.description(); }
+            }
+        }
+        return found;
     }
 
     /** Draws dashed fitted paths and exposure-midpoint rings only on frames actually searched by the engine. */
