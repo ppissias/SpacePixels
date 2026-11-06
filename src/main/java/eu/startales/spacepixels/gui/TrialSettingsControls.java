@@ -50,7 +50,7 @@ final class TrialSettingsControls {
             spinner.setEditor(editor);
             spinner.setRequestFocusEnabled(false);
             JFormattedTextField field = editor.getTextField();
-            field.setColumns(5);
+            UiStyle.numberInput(spinner);
             bind(field, "ENTER", () -> {
                 if (commit(this)) focusImage.run();
             });
@@ -148,7 +148,6 @@ final class TrialSettingsControls {
             c.weightx = 0;
             c.anchor = GridBagConstraints.EAST;
             c.insets = new Insets(UiStyle.space(3), 0, 0, 0);
-            UiStyle.inputWidth(entry.spinner, 80);
             form.add(entry.spinner, c);
             c.gridy = row + 1;
             c.insets = new Insets(0, 0, 0, 0);

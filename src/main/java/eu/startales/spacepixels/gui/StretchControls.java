@@ -145,7 +145,7 @@ final class StretchControls {
         c.weightx = 0;
         c.fill = GridBagConstraints.NONE;
         c.insets = new Insets(0, 0, UiStyle.space(4), 0);
-        UiStyle.inputWidth(spinner, 64);
+        UiStyle.numberInput(spinner);
         body.add(spinner, c);
     }
 

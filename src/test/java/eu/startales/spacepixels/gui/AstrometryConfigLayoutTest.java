@@ -40,9 +40,11 @@ public class AstrometryConfigLayoutTest {
                 JPasswordField key = named(panel, JPasswordField.class, "Astrometry.net Account");
                 JSpinner starDepth = named(panel, JSpinner.class, "Star Depth (Gaia G)");
                 JSpinner solarDepth = named(panel, JSpinner.class, "Asteroid and Comet Depth (V)");
-                assertEquals(5, code.getColumns());
-                assertEquals(12, latitude.getColumns());
-                assertEquals(12, longitude.getColumns());
+                // Short numeric text fields take the standard number width; the API key keeps its long field.
+                for (JTextField field : List.of(code, latitude, longitude)) {
+                    assertEquals(UiStyle.space(UiStyle.NUMBER_INPUT_WIDTH), field.getPreferredSize().width);
+                }
+                assertEquals(UiStyle.space(UiStyle.NUMBER_INPUT_WIDTH), starDepth.getPreferredSize().width);
                 assertEquals(18, key.getColumns());
 
                 assertEquals("Plate Solving", sectionTitle(key));
@@ -62,7 +64,7 @@ public class AstrometryConfigLayoutTest {
                 assertFits(solarDepth);
                 assertTrue(code.getWidth() < UiStyle.space(120));
                 assertTrue(latitude.getWidth() < UiStyle.space(190));
-                assertTrue(code.getWidth() < latitude.getWidth());
+                assertEquals("numeric text fields share one width", latitude.getWidth(), code.getWidth());
                 java.awt.Point codeAt = javax.swing.SwingUtilities.convertPoint(code.getParent(), code.getX(), code.getY(), panel);
                 java.awt.Point latAt = javax.swing.SwingUtilities.convertPoint(latitude.getParent(), latitude.getX(), latitude.getY(), panel);
                 java.awt.Point lonAt = javax.swing.SwingUtilities.convertPoint(longitude.getParent(), longitude.getX(), longitude.getY(), panel);
@@ -73,7 +75,7 @@ public class AstrometryConfigLayoutTest {
                 assertEquals(right, lonAt.x + longitude.getWidth());
                 assertEquals(right, starAt.x + starDepth.getWidth());
                 assertEquals(right, solarAt.x + solarDepth.getWidth());
-                assertTrue(codeAt.x > latAt.x);
+                assertEquals(latAt.x, codeAt.x);
                 for (String title : sectionTitles(panel)) {
                     JComponent box = section(panel, title);
                     assertTrue(box.getHeight() <= box.getPreferredSize().height + 2);

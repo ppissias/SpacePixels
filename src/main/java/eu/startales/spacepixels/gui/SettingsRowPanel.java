@@ -25,12 +25,20 @@ final class SettingsRowPanel extends JPanel {
         /** Creates one column owner for a settings navigator, without shared application state. */
         ControlColumn() { }
 
-        /** Fits the widest input and its Reset slot, without letting auxiliary sliders widen every page. */
+        /** Fits the widest input and the Reset slot, without letting auxiliary sliders widen every page. */
         int width() {
             int width = 0;
             for (var row : rows) {
-                int resetWidth = row.reset == null ? 0 : row.reset.getPreferredSize().width;
-                width = Math.max(width, row.controls.getPreferredSize().width + UiStyle.space(8) + resetWidth);
+                width = Math.max(width, row.controls.getPreferredSize().width + UiStyle.space(8) + resetWidth());
+            }
+            return width;
+        }
+
+        /** The widest Reset button; every row reserves it, so inputs end at the same place with or without one. */
+        int resetWidth() {
+            int width = 0;
+            for (var row : rows) {
+                if (row.reset != null) width = Math.max(width, row.reset.getPreferredSize().width);
             }
             return width;
         }
@@ -48,9 +56,12 @@ final class SettingsRowPanel extends JPanel {
         text.add(title, BorderLayout.NORTH);
         text.add(description, BorderLayout.CENTER);
         add(text, BorderLayout.CENTER);
+        // Inputs end at the same place on every row, just before the Reset slot.
         JPanel top = new JPanel(new BorderLayout(UiStyle.space(8), 0));
-        top.add(controls, BorderLayout.WEST);
-        top.add(resetSlot, BorderLayout.CENTER);
+        JPanel rightAligned = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        rightAligned.add(controls);
+        top.add(rightAligned, BorderLayout.CENTER);
+        top.add(resetSlot, BorderLayout.EAST);
         controlGroup.add(top, BorderLayout.NORTH);
         controlHolder.add(controlGroup, BorderLayout.NORTH);
         add(controlHolder, BorderLayout.EAST);
@@ -72,7 +83,8 @@ final class SettingsRowPanel extends JPanel {
     /** Re-measures text for the parent width before BoxLayout chooses this row's height. */
     @Override public Dimension getPreferredSize() {
         if (description != null) {
-            if (reset != null) resetSlot.setPreferredSize(reset.getPreferredSize());
+            int resetHeight = reset == null ? 0 : reset.getPreferredSize().height;
+            resetSlot.setPreferredSize(new Dimension(column.resetWidth(), resetHeight));
             controlHolder.setPreferredSize(new Dimension(column.width(), controlGroup.getPreferredSize().height));
             Insets insets = getInsets();
             int available = getParent() == null ? 0 : getParent().getWidth();

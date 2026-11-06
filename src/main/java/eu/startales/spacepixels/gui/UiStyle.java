@@ -59,6 +59,25 @@ final class UiStyle {
         control.setPreferredSize(new Dimension(Math.max(space(logicalWidth), natural.width), natural.height));
     }
 
+    /** Logical width of every numeric input: room for eight characters, such as "200000.0" or "-10.00". */
+    static final int NUMBER_INPUT_WIDTH = 104;
+
+    /**
+     * Gives a numeric input, a spinner or a short text field such as a coordinate, the one standard width of the
+     * application, whatever its range or decimal places, so the number fields of a page line up. The width is set on
+     * the component, so it stays when a spinner's editor is replaced.
+     */
+    static void numberInput(JComponent input) {
+        if (input instanceof JSpinner spinner && spinner.getEditor() instanceof JSpinner.DefaultEditor editor) {
+            editor.getTextField().setColumns(0);
+        }
+        if (input instanceof JTextField field) field.setColumns(0);
+        Dimension natural = input.getPreferredSize();
+        Dimension size = new Dimension(space(NUMBER_INPUT_WIDTH), natural.height);
+        input.setPreferredSize(size);
+        input.setMinimumSize(size);
+    }
+
     /**
      * A spinner whose text keeps the caret where the user puts it when it gains the focus. Since FlatLaf 3.6, focusing
      * a spinner by Tab or by a click selects its whole value; SpacePixels keeps the earlier behaviour.

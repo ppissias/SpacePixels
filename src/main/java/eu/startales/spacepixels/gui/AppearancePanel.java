@@ -38,7 +38,7 @@ final class AppearancePanel extends JPanel {
         clear.setToolTipText("Clear the custom style file selection. Save and restart to use the built-in theme.");
         save.setToolTipText("Save these appearance settings, then choose when to restart SpacePixels to apply them.");
         reset.setToolTipText("Select Dark at 100% and clear the custom style file. Save and restart to apply these defaults.");
-        ((JSpinner.DefaultEditor) scale.getEditor()).getTextField().setColumns(4);
+        UiStyle.numberInput(scale);
         Form form = new Form();
         JLabel title = new JLabel("Appearance");
         title.setFont(UiStyle.sectionFont());

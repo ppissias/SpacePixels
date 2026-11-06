@@ -291,15 +291,28 @@ final class SkyAnnotations {
     private void editMagnitudeLimits() {
         JSpinner stars = UiStyle.spinner(new DecimalSpinnerModel(preferences.faintestStar(), -10, 99, 0.5));
         JSpinner variables = UiStyle.spinner(new DecimalSpinnerModel(preferences.faintestVariable(), -10, 99, 0.5));
-        JPanel fields = new JPanel(new GridLayout(0, 2, 12, 8));
+        UiStyle.numberInput(stars);
+        UiStyle.numberInput(variables);
+        JPanel fields = new JPanel(new GridBagLayout());
         JLabel starLabel = new JLabel("Faintest star (Gaia G / named-star V):");
         starLabel.setLabelFor(stars);
-        fields.add(starLabel);
-        fields.add(stars);
+        GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(4, 0, 4, 12);
+        c.gridy = 0;
+        fields.add(starLabel, c);
+        c.anchor = GridBagConstraints.EAST;
+        c.insets = new Insets(4, 0, 4, 0);
+        fields.add(stars, c);
         JLabel variableLabel = new JLabel("Faintest variable (catalogue maximum):");
         variableLabel.setLabelFor(variables);
-        fields.add(variableLabel);
-        fields.add(variables);
+        c.gridy = 1;
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(4, 0, 4, 12);
+        fields.add(variableLabel, c);
+        c.anchor = GridBagConstraints.EAST;
+        c.insets = new Insets(4, 0, 4, 0);
+        fields.add(variables, c);
         Object[] message = {"99 shows all available magnitudes. Unknown magnitudes remain visible.", fields,
                 "These display filters do not change catalogue downloads, detection or reports."};
         while (JOptionPane.showConfirmDialog(view, message, "Catalogue magnitude limits",

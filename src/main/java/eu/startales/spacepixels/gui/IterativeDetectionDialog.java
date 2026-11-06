@@ -124,7 +124,9 @@ final class IterativeDetectionDialog extends JDialog {
         panel.add(label, constraints);
         constraints.gridx = 1;
         constraints.weightx = 1;
-        constraints.fill = GridBagConstraints.HORIZONTAL;
+        // Number fields keep the standard width; other controls fill the column.
+        if (control instanceof JSpinner spinner) UiStyle.numberInput(spinner);
+        else constraints.fill = GridBagConstraints.HORIZONTAL;
         panel.add(control, constraints);
     }
 

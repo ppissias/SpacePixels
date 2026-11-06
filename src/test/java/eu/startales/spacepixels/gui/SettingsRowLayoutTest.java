@@ -30,15 +30,16 @@ public class SettingsRowLayoutTest {
                     first.setSize(width, first.getPreferredSize().height);
                     second.setSize(width, second.getPreferredSize().height);
                     layoutChildren(first); layoutChildren(second);
-                    int origin = SwingUtilities.convertPoint(checkbox, 0, 0, first).x;
-                    assertEquals(origin, SwingUtilities.convertPoint(input, 0, 0, second).x);
+                    // Inputs are right-aligned: different controls end at the same place, just before the Reset slot.
+                    int end = SwingUtilities.convertPoint(checkbox, checkbox.getWidth(), 0, first).x;
+                    assertEquals(end, SwingUtilities.convertPoint(input, input.getWidth(), 0, second).x);
                     for (boolean dirty : new boolean[]{false, true, false}) {
                         checkbox.setSelected(dirty); reset.setVisible(dirty);
                         first.setSize(width, first.getPreferredSize().height); layoutChildren(first);
-                        assertEquals("Reset must not shift the checkbox", origin, SwingUtilities.convertPoint(checkbox, 0, 0, first).x);
+                        assertEquals("Reset must not shift the checkbox", end, SwingUtilities.convertPoint(checkbox, checkbox.getWidth(), 0, first).x);
                         assertTrue(reset.getParent().getWidth() >= reset.getPreferredSize().width);
                         if (dirty) assertTrue("Reset stays beside the input instead of at the column's far edge",
-                                SwingUtilities.convertPoint(reset, 0, 0, first).x - origin - checkbox.getWidth() <= UiStyle.space(12));
+                                SwingUtilities.convertPoint(reset, 0, 0, first).x - end <= UiStyle.space(12));
                     }
                 }
             }

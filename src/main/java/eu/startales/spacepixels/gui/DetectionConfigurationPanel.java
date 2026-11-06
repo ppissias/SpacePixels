@@ -1316,7 +1316,6 @@ public class DetectionConfigurationPanel extends JPanel {
         String pattern = decimals == 0 ? "#0" : "#0." + "0".repeat(decimals);
         CheckedNumberEditor editor = new CheckedNumberEditor(spinner, pattern, this::renderFooter);
         spinner.setEditor(editor);
-        editor.getTextField().setColumns(Math.max(5, decimals + 5));
         renderFooter();
     }
 
@@ -1446,7 +1445,7 @@ public class DetectionConfigurationPanel extends JPanel {
             configureSpinnerEditor(spinner);
             spinner.addChangeListener(e -> configureSpinnerEditor(spinner));
         }
-        UiStyle.inputWidth(spinner, 80);
+        UiStyle.numberInput(spinner);
         return spinner;
     }
 

@@ -36,10 +36,6 @@ import java.util.function.Function;
  * Edits apply to the session as soon as they are valid; Save keeps them for the next start.
  */
 public class ConfigurationPanel extends JPanel {
-    /** IAU observatory codes are three characters. */
-    private static final int OBSERVATORY_CODE_COLUMNS = 5;
-    /** Signed decimal degrees, with room for a hemisphere letter. */
-    private static final int COORDINATE_COLUMNS = 12;
     /** Wide enough for a normal Astrometry.net API key. A longer key scrolls inside the field. */
     private static final int API_KEY_COLUMNS = 18;
 
@@ -116,9 +112,9 @@ public class ConfigurationPanel extends JPanel {
 
         JPanel mainContent = new WidthTrackingPanel();
         mainContent.setLayout(new BoxLayout(mainContent, BoxLayout.Y_AXIS));
-        observatoryCodeTextField.setColumns(OBSERVATORY_CODE_COLUMNS);
-        latTextField.setColumns(COORDINATE_COLUMNS);
-        longTextField.setColumns(COORDINATE_COLUMNS);
+        UiStyle.numberInput(observatoryCodeTextField);
+        UiStyle.numberInput(latTextField);
+        UiStyle.numberInput(longTextField);
         astrometryKeyField.setColumns(API_KEY_COLUMNS);
 
         JPanel plateSolving = section("Plate Solving");
@@ -173,7 +169,7 @@ public class ConfigurationPanel extends JPanel {
 
         JPanel skyCatalogue = section("Sky Catalogue (Annotate)");
         starDepthSpinner.setEditor(new JSpinner.NumberEditor(starDepthSpinner, "0.0"));
-        UiStyle.inputWidth(starDepthSpinner, 80);
+        UiStyle.numberInput(starDepthSpinner);
         starDepthSpinner.addChangeListener(e -> starDepthChanged());
         skyCatalogue.add(createConfigRow(
                 "Star Depth (Gaia G)",
@@ -183,7 +179,7 @@ public class ConfigurationPanel extends JPanel {
                         + "A change applies to the next fetch.",
                 rightColumn(starDepthSpinner, starDepthStatus)));
         solarDepthSpinner.setEditor(new JSpinner.NumberEditor(solarDepthSpinner, "0.0"));
-        UiStyle.inputWidth(solarDepthSpinner, 80);
+        UiStyle.numberInput(solarDepthSpinner);
         solarDepthSpinner.addChangeListener(e -> solarDepthChanged());
         skyCatalogue.add(createConfigRow(
                 "Asteroid and Comet Depth (V)",
