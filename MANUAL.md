@@ -1033,18 +1033,23 @@ The report normally shows **Commands sent** with **Acceptance is unconfirmed**, 
 
 ## Annex: Scientific references and algorithms
 
-The references below describe methods and data actually used by SpacePixels and its libraries. Each entry identifies its role. Project-specific extensions, thresholds and selection gates are documented in [JTransient's algorithm guide](https://github.com/ppissias/JTransient/blob/master/ALGORITHM.md). The **Acknowledgements** link in the desktop window opens these references alongside the external services and software credits.
+References for methods and standards implemented in SpacePixels and its libraries. Service and catalogue credits are listed in the desktop Acknowledgements window and the [README acknowledgements](README.md#astronomical-services--data-providers). Each entry identifies its contribution; related literature is omitted unless it supplies an additional method used here. Implementation choices and empirical selection thresholds are described in [JTransient's algorithm guide](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md). The **Acknowledgements** link in the desktop window opens these references alongside the external services and software credits.
+
+### Digital tracking and faint-mover detection
+
+- **Heinze, A. N., Metchev, S., & Trollo, J. (2015).** "Digital Tracking Observations Can Discover Asteroids 10 Times Fainter than Conventional Searches". *AJ*, 150, 125. [doi:10.1088/0004-6256/150/4/125](https://doi.org/10.1088/0004-6256/150/4/125) ([author preprint](https://arxiv.org/abs/1508.01599)).
+  Method background for `FaintMoverSearch`: constant-velocity shift-and-stack detection, motion-grid spacing tied to image quality, and checking support in separate time subsets.
+
+The engine's residual preparation, empirical scores and selection rules are described in its algorithm documentation. Published survey sensitivity is not a SpacePixels performance claim. The [investigation archive](https://github.com/ppissias/JTransient/blob/main/docs/research/slow-movers/README.md) keeps experimental alternatives separate from delivered methods.
 
 ### Variable-star photometry
 
 - **Honeycutt, R. K. (1992).** "CCD Ensemble Photometry on an Inhomogeneous Set of Exposures". *PASP*, 104, 435–440. [doi:10.1086/133015](https://doi.org/10.1086/133015)
-  JTransient's `EnsembleSolver` uses the star-magnitude plus frame-zero-point model for differential light curves. Cauchy IRLS and spatial transparency planes are project extensions.
+  JTransient's `EnsembleSolver` uses the star-magnitude plus frame-zero-point model for differential light curves, adding robust Cauchy reweighting and spatial transparency planes.
 - **Stetson, P. B. (1996).** "On the Automatic Determination of Light-Curve Parameters for Cepheid Variables". *PASP*, 108, 851–876. [doi:10.1086/133808](https://doi.org/10.1086/133808)
   JTransient's `VariabilityScorer` adapts the $J$ statistic to consecutive usable residuals with a magnitude-neighbour noise estimate, alongside excess scatter, when selecting variable-star candidates.
 - **Howell, S. B. (1989).** "Two-dimensional aperture photometry: Signal-to-noise ratio of point-source observations and optimal data-extraction techniques". *PASP*, 101, 616–622. [doi:10.1086/132477](https://doi.org/10.1086/132477)
   The sky-background and finite-annulus terms inform `ApertureMeasurer`'s flux errors; JTransient also measures an empirical blank-sky correction. These are background-noise estimates, rather than the complete source-photon/read-noise CCD equation. The code also uses its own fractional-pixel apertures and seeing-based radii; it does not implement Howell's growth-curve correction.
-- **AAVSO observing guides.** [CCD/CMOS Photometry Guide](https://aavso.org/manuals/) and [VPhot User's Guide](https://www.aavso.org/sites/default/files/publications_files/VPHOT%20Users%20Guide%20V3.2.pdf).
-  Observational guidance for aperture/annulus choices and interpreting differential light curves. The VPhot guide is further reading in JTransient's variable-star documentation; SpacePixels performs its photometry in JTransient.
 
 ### Astrometry and World Coordinate Systems (WCS)
 
@@ -1054,20 +1059,9 @@ The references below describe methods and data actually used by SpacePixels and 
   `WcsCoordinateTransformer` uses the TAN (gnomonic) celestial projection for sky annotations, catalogue matching and report coordinates.
 - **Shupe, D. L., et al. (2005).** "The SIP Convention for Representing Distortion in FITS Image Headers". *ADASS XIV*, ASP Conf. Ser. 347, 491–495. [Caltech author record](https://authors.library.caltech.edu/records/fqnyw-qdw79)
   `WcsCoordinateTransformer` applies supplied SIP polynomial coefficients, with inverse iteration, in pixel/sky transformations for annotations and report coordinates. See also the [registered SIP specification](https://fits.gsfc.nasa.gov/registry/sip/SIP_distortion_v1_0.pdf).
-- **Lang, D., et al. (2010).** "Astrometry.net: Blind astrometric calibration of arbitrary astronomical images". *AJ*, 139, 1782–1800. [doi:10.1088/0004-6256/139/5/1782](https://doi.org/10.1088/0004-6256/139/5/1782)
-  The optional Nova Astrometry.net backend, called through JPlateSolve, supplies blind plate solutions used by SpacePixels.
 - **Meeus, J. (1998).** *Astronomical Algorithms*, 2nd ed., Willmann-Bell. [Publisher](https://shopatsky.com/products/astronomical-algorithms-2nd-edition)
   The report's local sidereal-time polynomial and equatorial-to-horizontal conversion follow the conventional formulae described in this reference. Displayed Alt/Az uses UTC as an approximation to UT1, without a full apparent-place or atmospheric-refraction correction.
 
-### Catalogue and data references
+### Implementation notes
 
-- **Gaia Collaboration (2016; 2023).** ["The Gaia mission", *A&A*, 595, A1](https://doi.org/10.1051/0004-6361/201629272); ["Gaia Data Release 3: Summary of the content and survey properties", *A&A*, 674, A1](https://doi.org/10.1051/0004-6361/202243940).
-  Gaia DR3 positions, proper motions, G magnitudes and BP−RP colours supply the sky catalogue, plate-solution correction and field-depth/observing-condition diagnostics. Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and Analysis Consortium](https://www.cosmos.esa.int/web/gaia/dpac/consortium), supported by national institutions through the Gaia Multilateral Agreement. See [Gaia's credit and citation guidance](https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/).
-- **Wenger, M., et al. (2000).** "The SIMBAD astronomical database". *A&AS*, 143, 9–22. [doi:10.1051/aas:2000332](https://doi.org/10.1051/aas:2000332)
-  SIMBAD supplies deep-sky and named-star entries in the sky catalogue and external object-search links in variable-star reports.
-- **Ochsenbein, F., Bauer, P., & Marcout, J. (2000).** "The VizieR database of astronomical catalogues". *A&AS*, 143, 23–32. [doi:10.1051/aas:2000169](https://doi.org/10.1051/aas:2000169)
-  VizieR hosts the Gaia DR3 and VSX tables queried by the sky-catalogue client and report lookups.
-- **AAVSO VSX (Watson et al., 2006–).** *International Variable Star Index*, [VizieR catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
-  Known-variable positions, types, periods and magnitude ranges support annotations and report catalogue comparisons. Retrieved data are recorded with the session or lookup.
-
-The viewer and report image stretch uses SpacePixels' normalized asinh **intensity** curve in `DisplayStretch`. It is separate from the differential-magnitude calculations above.
+The viewer and report image stretch uses SpacePixels' normalized asinh **intensity** curve in `DisplayStretch`. It is separate from the differential-magnitude calculations above. Maximum-stack slow-mover extraction, faint-streak filtering, robust frame-quality checks, calibrated Auto-Tune and optical-pattern diagnostics use the project implementations documented in the developer and engine guides; the references above identify specific methodological contributions rather than attributing every project heuristic to a paper.

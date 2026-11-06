@@ -309,33 +309,33 @@ These services supply catalogue data, predictions and optional plate solutions f
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/nasa.png" alt="NASA logo" width="48" height="40" /> NASA JPL (Jet Propulsion Laboratory)
 
 - [SB-Ident API](https://ssd-api.jpl.nasa.gov/doc/sb_ident.html): Searches for known asteroids and comets in the field and around report findings.
-- [Horizons System](https://ssd.jpl.nasa.gov/horizons/): Supplies observer ephemerides for known-object paths and exposure-midpoint annotations, including positional uncertainties when available.
+- [Horizons System](https://ssd.jpl.nasa.gov/horizons/): Supplies observer ephemerides for known-object paths and exposure-midpoint annotations, including positional uncertainties when available. [Data citation guidance](https://ssd.jpl.nasa.gov/about/).
 
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/esa.png" alt="ESA logo" width="72" height="28" /> European Space Agency (ESA)
 
 - [Gaia DR3](https://www.cosmos.esa.int/web/gaia): Star positions, proper motions, *G* magnitudes and *BP−RP* colours support sky overlays, plate-solution correction, field-depth and observing-condition diagnostics. Queried through VizieR TAP, with the ESA Gaia Archive as fallback for the main star catalogue.
 
-Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and Analysis Consortium](https://www.cosmos.esa.int/web/gaia/dpac/consortium); national institutions support DPAC through the Gaia Multilateral Agreement. [Gaia citation guidance](https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/).
+Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and Analysis Consortium](https://www.cosmos.esa.int/web/gaia/dpac/consortium); national institutions support DPAC through the Gaia Multilateral Agreement. Requested references: [Gaia Collaboration (2016), mission paper](https://doi.org/10.1051/0004-6361/201629272), and [Gaia Collaboration (2023), DR3 release paper](https://doi.org/10.1051/0004-6361/202243940). [Gaia citation guidance](https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/).
 
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/cds.png" alt="CDS logo" width="67" height="40" /> CDS (Centre de Données astronomiques de Strasbourg)
 
-- [SIMBAD](https://simbad.cds.unistra.fr/simbad/): Supplies deep-sky objects and named bright stars for sky annotations; reports also link to object searches.
-- [VizieR](https://vizier.cds.unistra.fr/): TAP access to Gaia DR3 (*I/355/gaiadr3*) and AAVSO VSX (*B/vsx/vsx*), including faint Gaia samples for field-depth estimates.
+- [SIMBAD](https://simbad.cds.unistra.fr/simbad/): Supplies deep-sky objects and named bright stars for sky annotations; reports also link to object searches. [Wenger et al. (2000)](https://doi.org/10.1051/aas:2000332).
+- [VizieR](https://vizier.cds.unistra.fr/): TAP access to Gaia DR3 (*I/355/gaiadr3*) and AAVSO VSX (*B/vsx/vsx*), including faint Gaia samples for field-depth estimates. [Ochsenbein, Bauer & Marcout (2000)](https://doi.org/10.1051/aas:2000169); [service DOI](https://doi.org/10.26093/cds/vizier).
 
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/astrometry.png" alt="Astrometry.net logo" width="72" height="22" /> Astrometry.net
 
-- [Nova Astrometry.net](https://nova.astrometry.net/): Optional online blind plate solving through JPlateSolve, using the user's configured account.
+- [Nova Astrometry.net](https://nova.astrometry.net/): Optional online blind plate solving through JPlateSolve, using the user's configured account. [Lang et al. (2010)](https://doi.org/10.1088/0004-6256/139/5/1782).
 
 #### Other Services & Data Providers
 
-- **AAVSO (American Association of Variable Star Observers)** — [International Variable Star Index (VSX)](https://vsx.aavso.org/): Variable-star positions, classifications, periods and brightness ranges, fetched via CDS VizieR for annotations and report cross-checks. Details open on AAVSO's site.
-- **IAU CPS (Centre for the Protection of the Dark and Quiet Sky from Satellite Constellation Interference)** — [SatChecker](https://satchecker.cps.iau.org/): On-demand satellite-pass and ephemeris queries for report lookups and measured streak speed/direction comparisons.
+- **AAVSO (American Association of Variable Star Observers)** — [International Variable Star Index (VSX)](https://vsx.aavso.org/): Variable-star positions, classifications, periods and brightness ranges, fetched via CDS VizieR for annotations and report cross-checks. Details open on AAVSO's site. [Watson et al. (2006–), catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
+- **IAU CPS (Centre for the Protection of the Dark and Quiet Sky from Satellite Constellation Interference)** — [SatChecker](https://satchecker.cps.iau.org/): On-demand satellite-pass and ephemeris queries for report lookups and measured streak speed/direction comparisons. [API documentation](https://satchecker.readthedocs.io/en/latest/).
 
 #### External Report Links
 
 These open additional checks or information in a browser:
 
-- **IMCCE / Observatoire de Paris** — [SkyBoT](https://ssp.imcce.fr/webservices/skybot/): Cone searches at a finding's sky position and observation epoch.
+- **IMCCE / Observatoire de Paris** — [SkyBoT](https://ssp.imcce.fr/webservices/skybot/): Cone searches at a finding's sky position and observation epoch. Reference: Berthier et al. (2006), *ADASS XV*, ASP Conf. Ser. 351, 367.
 - **NASA JPL** — [Small-Body Database (SBDB)](https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html): Object details for asteroid and comet lookup results.
 - [CelesTrak](https://celestrak.org/) & [N2YO](https://www.n2yo.com/): Catalogue and satellite-information links for returned NORAD identities.
 - [Stellarium Web](https://stellarium-web.org/): Sky views centred on report findings. Local Stellarium control is described in Software & Utilities.
@@ -366,7 +366,7 @@ SpacePixels is built with the following open-source Java libraries and component
 - **nom.tam.fits** — Java library for Flexible Image Transport System (FITS) I/O ([nom-tam-fits](https://nom-tam-fits.github.io/nom-tam-fits/)).
 - **Gson** by Google — Java library for JSON serialization and parsing ([github.com/google/gson](https://github.com/google/gson)).
 - **JTransient & JPlateSolve** by Petros Pissias — Detection, tracking and photometry engine; ASTAP and Astrometry.net plate-solving integration ([JTransient](https://github.com/ppissias/JTransient), [JPlateSolve](https://github.com/ppissias/JPlateSolve)).
-- **Java / OpenJDK** — Java 21 supplies the runtime, Swing/AWT desktop, image I/O and networking; Windows packages bundle a Java runtime ([OpenJDK](https://openjdk.org/)).
+- **Java / OpenJDK** — Java 21 runtime and Swing desktop; Windows packages bundle the runtime ([OpenJDK](https://openjdk.org/)).
 
 
 #### Development & Packaging
@@ -386,18 +386,23 @@ Logos are trademarks of their respective owners.
 
 ### Scientific References & Algorithms
 
-Each entry identifies its use in SpacePixels or its libraries. Project-specific extensions and selection thresholds are described separately in the [JTransient algorithm documentation](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md).
+References for methods and standards implemented in SpacePixels and its libraries. Service and catalogue credits are listed under [Astronomical Services & Data Providers](#astronomical-services--data-providers). Each entry identifies its contribution; related literature is omitted unless it supplies an additional method used here. Implementation choices and empirical selection thresholds are described in the [JTransient algorithm documentation](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md).
+
+#### Digital Tracking & Faint-Mover Detection
+
+- **Heinze, Metchev & Trollo (2015)** — *Digital Tracking Observations Can Discover Asteroids 10 Times Fainter than Conventional Searches*, [AJ 150, 125](https://doi.org/10.1088/0004-6256/150/4/125) ([author preprint](https://arxiv.org/abs/1508.01599)).
+  Method background for `FaintMoverSearch`: constant-velocity shift-and-stack detection, motion-grid spacing tied to image quality, and checking support in separate time subsets.
+
+The engine's residual preparation, empirical scores and selection rules are described in its algorithm documentation. Published survey sensitivity is not a SpacePixels performance claim. The [investigation archive](https://github.com/ppissias/JTransient/blob/main/docs/research/slow-movers/README.md) keeps experimental alternatives separate from delivered methods.
 
 #### Variable-Star Photometry
 
 - **Honeycutt (1992)** — *CCD Ensemble Photometry on an Inhomogeneous Set of Exposures*, [PASP 104, 435–440](https://doi.org/10.1086/133015).
-  JTransient's `EnsembleSolver` uses the star-magnitude plus frame-zero-point model for differential light curves; Cauchy IRLS and spatial transparency planes are project extensions.
+  JTransient's `EnsembleSolver` uses the star-magnitude plus frame-zero-point model for differential light curves, adding robust Cauchy reweighting and spatial transparency planes.
 - **Stetson (1996)** — *On the Automatic Determination of Light-Curve Parameters for Cepheid Variables*, [PASP 108, 851–876](https://doi.org/10.1086/133808).
   JTransient's `VariabilityScorer` adapts the J statistic to consecutive usable residuals with a magnitude-neighbour noise estimate, alongside excess scatter, when selecting variable-star candidates.
 - **Howell (1989)** — *Two-dimensional aperture photometry: Signal-to-noise ratio of point-source observations and optimal data-extraction techniques*, [PASP 101, 616–622](https://doi.org/10.1086/132477).
   The sky-background and finite-annulus terms inform `ApertureMeasurer`'s flux errors; JTransient also measures an empirical blank-sky correction. These are background-noise estimates, rather than the complete source-photon/read-noise CCD equation.
-- **AAVSO observing guides** — [CCD/CMOS Photometry Guide](https://aavso.org/manuals/) and [VPhot User's Guide](https://www.aavso.org/sites/default/files/publications_files/VPHOT%20Users%20Guide%20V3.2.pdf).
-  Observational guidance for aperture/annulus choices and interpreting differential light curves; the VPhot guide is further reading in JTransient's variable-star documentation.
 
 #### Astrometry & World Coordinate Systems (WCS)
 
@@ -407,18 +412,5 @@ Each entry identifies its use in SpacePixels or its libraries. Project-specific 
   `WcsCoordinateTransformer` uses the TAN (gnomonic) celestial projection for sky annotations, catalogue matching and report coordinates.
 - **Shupe et al. (2005)** — *The SIP Convention for Representing Distortion in FITS Image Headers*, [ASP Conf. Ser. 347, 491–495](https://authors.library.caltech.edu/records/fqnyw-qdw79).
   `WcsCoordinateTransformer` applies supplied SIP polynomial coefficients, with inverse iteration, in pixel/sky transformations for annotations and report coordinates.
-- **Lang et al. (2010)** — *Astrometry.net: Blind astrometric calibration of arbitrary astronomical images*, [AJ 139, 1782–1800](https://doi.org/10.1088/0004-6256/139/5/1782).
-  The optional Nova Astrometry.net backend, called through JPlateSolve, supplies blind plate solutions used by SpacePixels.
 - **Meeus (1998)** — [*Astronomical Algorithms*, 2nd ed.](https://shopatsky.com/products/astronomical-algorithms-2nd-edition), Willmann-Bell.
   The report's local sidereal-time polynomial and equatorial-to-horizontal conversion follow the conventional formulae described in this reference; displayed Alt/Az uses UTC as an approximation to UT1.
-
-#### Catalogue & Data References
-
-- **Gaia Collaboration (2016; 2023)** — [*The Gaia mission*, A&A 595, A1](https://doi.org/10.1051/0004-6361/201629272); [*Gaia Data Release 3: Summary of the content and survey properties*, A&A 674, A1](https://doi.org/10.1051/0004-6361/202243940).
-  Gaia DR3 positions, proper motions, G magnitudes and BP−RP colours supply the sky catalogue, plate-solution correction and field-depth/observing-condition diagnostics.
-- **Wenger et al. (2000)** — *The SIMBAD astronomical database*, [A&AS 143, 9–22](https://doi.org/10.1051/aas:2000332).
-  SIMBAD supplies deep-sky and named-star entries in the sky catalogue and external object-search links in variable-star reports.
-- **Ochsenbein, Bauer & Marcout (2000)** — *The VizieR database of astronomical catalogues*, [A&AS 143, 23–32](https://doi.org/10.1051/aas:2000169).
-  VizieR hosts the Gaia DR3 and VSX tables queried by the sky-catalogue client and report lookups.
-- **AAVSO VSX (Watson et al., 2006–)** — *International Variable Star Index*, [VizieR catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
-  Known-variable positions, types, periods and magnitude ranges support annotations and report catalogue comparisons; retrieved data are recorded with the session or lookup.
