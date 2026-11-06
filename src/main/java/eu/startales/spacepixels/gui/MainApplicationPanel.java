@@ -202,6 +202,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private AtomicBoolean blinkStop = new AtomicBoolean();
     /** The blink window is playing: it holds the window's lock until it closes. */
     private boolean blinkPlaying;
+    /** The frame the next blink starts on, or null for its first frame. */
+    private FitsFileInformation blinkStart;
 
     // Sky catalogue: fetched in the background, shown at the right of the status bar while it loads.
     private static final String FETCH_SKY_CATALOGUE = "Fetch Sky Catalogue";
@@ -250,6 +252,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             blinkWindowClosed();
             this.viewers.unregister(blink);
         });
+        blink.setOpenInPreview(this::previewFromBlink);
         jobs.setListener(new JobCoordinator.Listener() {
             @Override
             public void jobStarted(JobHandle handle) {
@@ -676,10 +679,41 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             blink.close();
             return;
         }
-        FitsFileInformation[] selectedFitsFilesInfo = getSelectedFilesInformation();
+        startBlink(getSelectedFilesInformation(), null);
+    }
+
+    /**
+     * Preview Frame's Blink button: blinks the frames selected in the table when at least three are, otherwise all
+     * frames of the session, starting on the frame Preview shows.
+     */
+    void blinkFromPreview(FitsFileInformation shown) {
+        if (uiLocked || blinkPlaying) {
+            statusLabel.setText("Wait until the current task has finished.");
+            return;
+        }
+        FitsFileInformation[] selected = getSelectedFilesInformation();
+        startBlink(selected != null && selected.length >= 3 ? selected : getImportedFiles(), shown);
+    }
+
+    /** Blink's Open in Preview button: ends the blink and opens Preview Frame on the frame it showed. */
+    private void previewFromBlink(FitsFileInformation shown) {
+        blink.close();
+        FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+        int row = 0;
+        for (int i = 0; model != null && i < model.getRowCount(); i++) {
+            if (shown != null && shown.getFilePath() != null && shown.getFilePath().equals(model.getFitsFileAt(i).getFilePath())) {
+                row = i;
+            }
+        }
+        previewFrame(row);
+    }
+
+    /** Reads {@code selectedFitsFilesInfo} and blinks them, from {@code startAt} when it is among them. */
+    private void startBlink(FitsFileInformation[] selectedFitsFilesInfo, FitsFileInformation startAt) {
         if (selectedFitsFilesInfo == null || selectedFitsFilesInfo.length == 0 || !confirmBlinkMemory(selectedFitsFilesInfo)) {
             return;
         }
+        blinkStart = startAt;
         AtomicBoolean stop = new AtomicBoolean();
         BlinkFrame blinkFrame = blink;
         viewers.register(blinkFrame);
@@ -1695,6 +1729,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
      * edited values into the current settings. The Detection Settings button uses this same window.
      */
     void previewSelectedFrame() {
+        previewFrame(table.getSelectedRow());
+    }
+
+    /** Opens Preview Frame on this row of the table, or on the first frame for -1. */
+    private void previewFrame(int row) {
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
         if (model == null || model.getRowCount() == 0) {
             return;
@@ -1705,10 +1744,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             allFiles[i] = model.getFitsFileAt(i);
         }
 
-        int startIndex = table.getSelectedRow();
-        if (startIndex < 0) {
-            startIndex = 0;
-        }
+        int startIndex = Math.max(0, row);
 
         // Invalid text in a settings field is shown there first, as for a run.
         if (detectionSettings.checkedSettings("Preview Frame did not open.") == null) {
@@ -1717,6 +1753,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (detectionSequenceFrame == null || !detectionSequenceFrame.isDisplayable()) {
             detectionSequenceFrame = viewers.register(new DetectionSequenceFrame(windowFrame, sessions, detectionSettings, viewers.layers()));
             detectionSequenceFrame.setSettingsEditable(!uiLocked);
+            detectionSequenceFrame.setBlinkAction(this::blinkFromPreview);
         }
 
         detectionSequenceFrame.openSequence(allFiles, startIndex, stretch);
@@ -1842,7 +1879,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             blinkFrame.setSkyCatalogueModel(skyCatalogue());
             blinkFrame.open(completed.result(), files, getImportedFiles(), stretch,
                     sessions.current() == null ? null : sessions.current().getTrackOverlay(),
-                    sessions.current() == null ? null : sessions.current().getVariableStarOverlay());
+                    sessions.current() == null ? null : sessions.current().getVariableStarOverlay(), blinkStart);
             blinkFrame.setFaintMoverOverlay(sessions.current() == null ? null : sessions.current().getFaintMoverOverlay());
             blinkFrame.setFindingOverlay(sessions.current() == null ? null : sessions.current().getFindingOverlay());
             return;

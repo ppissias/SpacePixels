@@ -152,6 +152,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private eu.startales.spacepixels.detection.FindingOverlay findingOverlay;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
+    /** Told when the zoom changes, for the zoom buttons. */
+    private Runnable zoomListener = () -> { };
     /** A prepared picture, used by the stretch previews and the star-mask stack instead of a FITS frame. */
     private BufferedImage picture;
     private java.util.List<BufferedImage> pictureLevels = java.util.List.of();
@@ -232,6 +234,15 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     void setCursorListener(CursorListener listener) {
         this.cursorListener = listener;
+    }
+
+    void setZoomListener(Runnable listener) {
+        this.zoomListener = java.util.Objects.requireNonNull(listener);
+    }
+
+    /** Whether the whole frame is shown, the zoom of Fit. */
+    boolean isFitted() {
+        return link.zoom <= 1.0;
     }
 
     /** Makes an export-owned view with frozen navigation, overlays and marker settings. Called and used only on EDT. */
@@ -495,6 +506,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         link.centerX = 0.5;
         link.centerY = 0.5;
         link.repaint();
+        zoomListener.run();
     }
 
     /** Zooms to this many screen pixels per frame pixel (1 is 100 %), keeping the centre. */
@@ -505,6 +517,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         }
         link.zoom = Math.max(1.0, Math.min(maxZoom(), pixelScale / fit));
         link.repaint();
+        zoomListener.run();
     }
 
     /** The zoom as a percentage (screen pixels per frame pixel). */
@@ -521,6 +534,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         link.centerX = clamp(pointX - (screenX - getWidth() / 2.0) / (after * shownWidth()));
         link.centerY = clamp(pointY - (screenY - getHeight() / 2.0) / (after * shownHeight()));
         link.repaint();
+        zoomListener.run();
     }
 
     private double maxZoom() {
@@ -698,7 +712,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             }
             if (hasVariableStars()) drawVariableStars(g2);
             if (layers.shows(ViewerLayer.FAINT_MOVERS) && faintMoverOverlay != null) drawFaintMovers(g2);
-            if (layers.shows(ViewerLayer.OTHER_FINDINGS) && findingOverlay != null) drawFindings(g2);
+            // Each marker follows its own layer: older reports give tracks as reference markers here too.
+            if (findingOverlay != null) drawFindings(g2);
             drawZoomLabel(g2);
         } finally {
             g2.dispose();
@@ -1105,7 +1120,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     /** Returns a nearby additional finding's evidence kind without claiming a reference is a current-frame detection. */
     private String findingAt(Point pixel) {
-        if (!layers.shows(ViewerLayer.OTHER_FINDINGS) || findingOverlay == null || frame == null || pixel == null) return null;
+        if (findingOverlay == null || frame == null || pixel == null) return null;
         Integer number = findingOverlay.frameNumber(frame.getInfo());
         if (number == null) return null;
         double distance = 8 / scale();String found = null;

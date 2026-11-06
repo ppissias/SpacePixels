@@ -170,7 +170,9 @@ public class AppearanceMechanicsTest extends MechanicsTestCase {
                 assertTrue(frame.getHeight() >= frame.getMinimumSize().height);
             });
             JSpinner trial = preview.spinner(named(JSpinner.class, "Detection Sigma")).target();
-            JButton apply = preview.button(VisibleText.button("Apply to Settings")).target();
+            JButton apply = preview.button(VisibleText.button("Save to settings")).target();
+            // Save to settings is enabled only once a trial value differs from the saved one.
+            GuiActionRunner.execute(() -> trial.setValue(((Number) trial.getValue()).doubleValue() + 0.5));
             GuiActionRunner.execute(() -> { ((JSpinner.DefaultEditor) trial.getEditor()).getTextField().requestFocusInWindow(); });
             for (int i = 0; i < 25 && !GuiActionRunner.execute(apply::isFocusOwner); i++) {
                 robot().pressAndReleaseKeys(java.awt.event.KeyEvent.VK_TAB);

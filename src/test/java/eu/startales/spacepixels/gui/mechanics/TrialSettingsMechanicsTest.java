@@ -47,7 +47,7 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
             grow.setValue(1.0);
             minimum.setValue(17);
             jitter.setValue(6.0);
-            preview.button(VisibleText.button("Apply to Settings")).target().doClick();
+            preview.button(VisibleText.button("Save to settings")).target().doClick();
         });
         assertNumber(sigma, 2);
         assertNumber(grow, 1);
@@ -56,7 +56,7 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
 
         GuiActionRunner.execute(() -> {
             sigma.setValue(7.0);
-            preview.button(VisibleText.button("Apply to Settings")).target().doClick();
+            preview.button(VisibleText.button("Save to settings")).target().doClick();
         });
         assertNumber(sigma, 7);
         GuiActionRunner.execute(() -> {
@@ -90,12 +90,12 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
         robot().pressAndReleaseKeys(KeyEvent.VK_ENTER);
         robot().waitForIdle();
         assertSame(field, KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner());
-        preview.button(VisibleText.button("Apply to Settings")).requireDisabled();
+        preview.button(VisibleText.button("Save to settings")).requireDisabled();
         assertNumber(live, original);
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape discards text and returns to the image", () -> KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == image);
         assertNumber(trial, 6.5);
-        preview.button(VisibleText.button("Apply to Settings")).requireEnabled();
+        preview.button(VisibleText.button("Save to settings")).requireEnabled();
         robot().pressAndReleaseKeys(KeyEvent.VK_RIGHT);
         waitFor("image navigation resumes", () -> preview.label(VisibleText.labelContaining("Frame 2 of")).target().isShowing());
     }
@@ -118,9 +118,9 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> {
             spinner(first, "Master Sigma").setValue(2.0);
             spinner(second, "Base Star Jitter Radius").setValue(5.0);
-            second.button(VisibleText.button("Apply to Settings")).target().doClick();
+            second.button(VisibleText.button("Save to settings")).target().doClick();
             grow.setValue(1.0);
-            first.button(VisibleText.button("Apply to Settings")).target().doClick();
+            first.button(VisibleText.button("Save to settings")).target().doClick();
         });
         assertNumber(sigma, 2);
         assertNumber(grow, 1);
@@ -145,12 +145,12 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
         focus(maskField);
         GuiActionRunner.execute(() -> maskField.setText("99999"));
         robot().pressAndReleaseKeys(KeyEvent.VK_ENTER);
-        first.button(VisibleText.button("Apply to Settings")).requireDisabled();
+        first.button(VisibleText.button("Save to settings")).requireDisabled();
         assertFalse(GuiActionRunner.execute(() -> ((JFrame) first.target()).getRootPane().getActionMap().get("hideMask").isEnabled()));
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("mask Escape discards text and returns to the image", () -> KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner() == maskImage);
         assertNumber(spinner(first, "Master Sigma"), 6);
-        first.button(VisibleText.button("Apply to Settings")).requireEnabled();
+        first.button(VisibleText.button("Save to settings")).requireEnabled();
 
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch finish = new CountDownLatch(1);
@@ -167,9 +167,9 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
                 assertFalse(spinner(preview, "Detection Sigma").isEnabled());
                 assertFalse(spinner(first, "Master Sigma").isEnabled());
                 assertFalse(spinner(second, "Base Star Jitter Radius").isEnabled());
-                assertFalse(preview.button(VisibleText.button("Apply to Settings")).target().isEnabled());
-                assertFalse(first.button(VisibleText.button("Apply to Settings")).target().isEnabled());
-                assertFalse(second.button(VisibleText.button("Apply to Settings")).target().isEnabled());
+                assertFalse(preview.button(VisibleText.button("Save to settings")).target().isEnabled());
+                assertFalse(first.button(VisibleText.button("Save to settings")).target().isEnabled());
+                assertFalse(second.button(VisibleText.button("Save to settings")).target().isEnabled());
             });
         } finally {
             finish.countDown();

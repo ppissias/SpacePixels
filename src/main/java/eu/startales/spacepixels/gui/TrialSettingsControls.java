@@ -15,7 +15,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.function.Function;
 
-/** EDT-owned trial inputs shared by the existing detection previews; computation stays with each viewer. */
+/**
+ * EDT-owned trial inputs shared by the detection previews; computation stays with each viewer. A value that differs
+ * from the saved setting has an amber outline and names the saved value; Revert returns to the saved settings, and
+ * Save to settings copies the edited values into them.
+ */
 final class TrialSettingsControls {
     /** A detached numeric input specification; no live spinner model is retained. */
     record Input(DetectionSetting<? extends Number> setting, Number value, Comparable<?> minimum,
@@ -32,16 +36,17 @@ final class TrialSettingsControls {
         final JSpinner spinner;
         final CheckedNumberEditor editor;
         final JLabel label;
-        Number initial;
+        /** "saved: 2.75", shown while the trial value differs from the saved setting. */
+        final JLabel saved = new JLabel(" ");
         Number baseline;
         boolean edited;
 
         /** Creates an independent editor with the common validation and image-focus rules. */
         Entry(Input input) {
             setting = input.setting();
-            initial = baseline = input.value();
-            spinner = UiStyle.spinner(new DecimalSpinnerModel(initial, input.minimum(), input.maximum(), input.step()));
-            editor = new CheckedNumberEditor(spinner, initial instanceof Integer ? "#0" : "#0.0", TrialSettingsControls.this::showNote);
+            baseline = input.value();
+            spinner = UiStyle.spinner(new DecimalSpinnerModel(baseline, input.minimum(), input.maximum(), input.step()));
+            editor = new CheckedNumberEditor(spinner, baseline instanceof Integer ? "#0" : "#0.0", TrialSettingsControls.this::showNote);
             spinner.setEditor(editor);
             spinner.setRequestFocusEnabled(false);
             JFormattedTextField field = editor.getTextField();
@@ -59,13 +64,26 @@ final class TrialSettingsControls {
             label.setToolTipText(help);
             spinner.setToolTipText(help);
             spinner.addChangeListener(event -> changed(this));
+            saved.setForeground(UiStyle.helpColor());
+            saved.setFont(UiStyle.bodyFont().deriveFont(UiStyle.bodyFont().getSize2D() - 1f));
+        }
+
+        /** Whether the value shown, typed or committed, differs from the saved setting. */
+        boolean differs() {
+            Number typed = editor.typedValue();
+            Number shown = typed != null ? typed : (Number) spinner.getValue();
+            return Double.compare(baseline.doubleValue(), shown.doubleValue()) != 0;
         }
     }
 
     private final List<Entry> entries = new ArrayList<>();
-    private final JButton apply = new JButton("Apply to Settings");
-    private final JButton reset = new JButton("Reset");
+    private final JButton apply = new JButton("Save to settings");
+    private final JButton reset = new JButton("Revert");
     private final JLabel note = new JLabel(" ");
+    /** Told after every change of a trial value or of the saved settings, for a "Not saved" mark. */
+    private Runnable onChange = () -> { };
+    /** Told when the user edits a trial value, for example to show the detections it changes. */
+    private Runnable onEdit = () -> { };
     private final Timer debounce;
     private final Runnable focusImage;
     private final Function<Map<String, Number>, DetectionConfig> applyChanges;
@@ -90,28 +108,71 @@ final class TrialSettingsControls {
         });
         debounce.setRepeats(false);
         for (Input input : inputs) entries.add(new Entry(input));
-        apply.setToolTipText("Apply only the values edited in this preview; other current settings are kept.");
+        apply.setToolTipText("Copy the values edited here into the Detection Settings; the other settings are kept.");
         apply.addActionListener(event -> apply());
-        reset.setToolTipText("Restore the values from when this preview opened. Apply to Settings copies the changes.");
+        reset.setToolTipText("Return to the saved Detection Settings values.");
         reset.addActionListener(event -> reset());
         showNote();
     }
 
-    /** Builds the horizontal input row used under Preview Frame's image controls. */
-    JComponent horizontal() {
-        JPanel inputs = new WrappingControlsPanel(6, 0);
+    void setOnChange(Runnable onChange) {
+        this.onChange = onChange;
+    }
+
+    void setOnEdit(Runnable onEdit) {
+        this.onEdit = onEdit;
+    }
+
+    /** Whether a trial value differs from the saved setting. */
+    boolean hasUnsavedChanges() {
+        return entries.stream().anyMatch(Entry::differs);
+    }
+
+    /**
+     * Builds the side-panel form: each setting's name and number field, the saved value under a changed field, the
+     * explanation and the Revert and Save to settings buttons.
+     */
+    JComponent form() {
+        JPanel form = new JPanel(new GridBagLayout());
+        form.setOpaque(false);
+        int row = 0;
         for (Entry entry : entries) {
-            inputs.add(entry.label);
-            inputs.add(entry.spinner);
-            inputs.add(Box.createHorizontalStrut(6));
+            GridBagConstraints c = new GridBagConstraints();
+            c.gridx = 0;
+            c.gridy = row;
+            c.weightx = 1;
+            c.anchor = GridBagConstraints.WEST;
+            c.insets = new Insets(UiStyle.space(3), 0, 0, UiStyle.space(8));
+            form.add(entry.label, c);
+            c.gridx = 1;
+            c.weightx = 0;
+            c.anchor = GridBagConstraints.EAST;
+            c.insets = new Insets(UiStyle.space(3), 0, 0, 0);
+            UiStyle.inputWidth(entry.spinner, 80);
+            form.add(entry.spinner, c);
+            c.gridy = row + 1;
+            c.insets = new Insets(0, 0, 0, 0);
+            form.add(entry.saved, c);
+            row += 2;
         }
-        inputs.add(reset);
-        inputs.add(apply);
-        JPanel panel = new JPanel(new BorderLayout(0, 3));
-        panel.add(inputs, BorderLayout.NORTH);
-        panel.add(note, BorderLayout.SOUTH);
-        ViewerSupport.prepareControls(panel);
-        return panel;
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridx = 0;
+        c.gridy = row++;
+        c.gridwidth = 2;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(UiStyle.space(6), 0, UiStyle.space(6), 0);
+        form.add(note, c);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        buttons.setOpaque(false);
+        buttons.add(reset);
+        buttons.add(Box.createHorizontalStrut(UiStyle.space(8)));
+        buttons.add(apply);
+        c.gridy = row;
+        c.insets = new Insets(0, 0, 0, 0);
+        form.add(buttons, c);
+        ViewerSupport.prepareControls(form);
+        return form;
     }
 
     /** Builds the two-column inputs used in the Star Mask Explorer sidebar. */
@@ -155,10 +216,10 @@ final class TrialSettingsControls {
         try {
             basis = settings.clone();
             for (Entry entry : entries) {
-                entry.initial = entry.baseline = entry.setting.read(settings);
+                entry.baseline = entry.setting.read(settings);
                 entry.edited = false;
-                entry.spinner.setValue(entry.initial);
-                entry.editor.getTextField().setValue(entry.initial);
+                entry.spinner.setValue(entry.baseline);
+                entry.editor.getTextField().setValue(entry.baseline);
             }
         } finally {
             adjusting = false;
@@ -189,7 +250,6 @@ final class TrialSettingsControls {
             entry.spinner.setEnabled(editable);
             entry.editor.getTextField().setEnabled(editable);
         }
-        reset.setEnabled(editable);
         if (!editable) debounce.stop();
         else if (active && refreshPending) debounce.restart();
         showNote();
@@ -213,6 +273,7 @@ final class TrialSettingsControls {
         refreshPending = true;
         if (active && editable) debounce.restart();
         showNote();
+        onEdit.run();
     }
 
     /** Aligns displayed trial pairs without treating an automatic adjustment as an edit of an untouched field. */
@@ -268,21 +329,21 @@ final class TrialSettingsControls {
             alignValues();
             refreshPending = true;
             debounce.restart();
-            message = "Edited values applied to the<br>Detection Settings.";
+            message = "Saved to the Detection Settings.";
         }
         showNote();
         focusImage.run();
     }
 
-    /** Restores opening trial values without changing the session settings. */
+    /** Returns to the saved values without changing the session settings. */
     private void reset() {
         if (!active || !editable) return;
         adjusting = true;
         try {
             for (Entry entry : entries) {
-                entry.spinner.setValue(entry.initial);
-                entry.editor.getTextField().setValue(entry.initial);
-                entry.edited = !Objects.equals(entry.baseline, entry.initial);
+                entry.spinner.setValue(entry.baseline);
+                entry.editor.getTextField().setValue(entry.baseline);
+                entry.edited = false;
             }
         } finally {
             adjusting = false;
@@ -324,8 +385,21 @@ final class TrialSettingsControls {
         return true;
     }
 
-    /** Explains invalid text and makes clear that Enter previews a value while Apply changes the session. */
+    /**
+     * Marks the fields that differ from the saved settings, explains invalid text, and makes clear that Enter
+     * previews a value while Save to settings changes the session.
+     */
     private void showNote() {
+        boolean unsaved = false;
+        for (Entry entry : entries) {
+            boolean differs = entry.differs();
+            unsaved |= differs;
+            // Invalid text keeps the editor's error outline.
+            if (entry.editor.isTextValid()) entry.spinner.putClientProperty("JComponent.outline", differs ? "warning" : null);
+            entry.saved.setText(differs ? "saved: " + format(entry.baseline) : " ");
+        }
+        reset.setEnabled(active && editable && unsaved);
+        onChange.run();
         for (Entry entry : entries) {
             if (!entry.editor.isTextValid()) {
                 Color error = UIManager.getColor("Actions.Red");
@@ -338,8 +412,13 @@ final class TrialSettingsControls {
         }
         note.setForeground(UiStyle.helpColor());
         note.setText("<html>" + (!editable ? "Trial settings are paused while a job runs."
-                : message != null ? message : "Trial values · Enter previews a typed value.<br>Apply to Settings copies only edited values.") + "</html>");
-        apply.setEnabled(active && editable);
+                : message != null ? message : "Previews on this frame only.<br>Typed values apply on Enter.") + "</html>");
+        apply.setEnabled(active && editable && unsaved);
+    }
+
+    private static String format(Number value) {
+        return value instanceof Integer || value instanceof Long ? String.valueOf(value)
+                : new java.text.DecimalFormat("0.0##", java.text.DecimalFormatSymbols.getInstance(java.util.Locale.US)).format(value);
     }
 
     /** Installs editor-local keys, so image navigation never consumes numeric editing keys. */

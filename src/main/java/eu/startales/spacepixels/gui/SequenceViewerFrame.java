@@ -67,7 +67,11 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     private final FrameView view = new FrameView();
     private final JButton previousButton = new JButton("◀");
     private final JButton nextButton = new JButton("▶");
-    private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
+    private final JTextField frameField = new JTextField(3);
+    private final JLabel frameCountLabel = new JLabel("of 0");
+    /** Toolbar buttons a viewer adds on the right, before the side panel's button. */
+    private final JPanel toolbarExtras = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiStyle.space(6), 0));
+    private RawDetectionsSection rawDetections;
     private final ViewerLayerState layerState;
     /** Kept here: the shared state holds its listeners weakly. */
     private final Runnable layerListener = this::layersChanged;
@@ -125,7 +129,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         setContentPane(contentPane);
         JComponent controls = buildControls();
         JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
-                + (showsDetections ? "D detections · T tracks · " : "") + "A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+                + (showsDetections ? "D detections · T tracks · " : "") + "A annotate · C align to corrected plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
         findings.section().setVisible(false);
         stretchHolder.setOpaque(false);
         sidePanel.add(findings.section());
@@ -193,7 +197,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     /** Follows the shared layer state, which this or another viewer changed. */
     private void layersChanged() {
         view.setLayers(layerState.snapshot());
-        detectionsBox.setSelected(layerState.isVisible(ViewerLayer.RAW_DETECTIONS));
+        if (rawDetections != null) rawDetections.refresh();
         findings.refresh();
         sky.layersChanged();
         updateCursorLabel();
@@ -291,7 +295,28 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     // OPEN AND CLOSE
     // ==========================================
 
-    /** Adds an editable control row under the first one; its keys stay with the focused editor. */
+    /**
+     * Adds the Raw detections section at the top of the side panel, with these trial thresholds; for viewers that
+     * extract the sources of their frames.
+     */
+    protected void setRawDetections(TrialSettingsControls trials) {
+        rawDetections = new RawDetectionsSection(layerState, trials);
+        sidePanel.addFirst(rawDetections.section());
+        ViewerSupport.prepareControls(rawDetections.section());
+    }
+
+    /** Adds a button to the right end of the toolbar, before the side panel's button. */
+    protected void addToolbarButton(AbstractButton button) {
+        button.setRequestFocusEnabled(false);
+        toolbarExtras.add(button);
+    }
+
+    /** The index of the frame shown, or being prepared. */
+    protected int currentIndex() {
+        return current;
+    }
+
+    /** Adds an editable control row under the toolbar; its keys stay with the focused editor. */
     protected void addControlRow(JComponent row) {
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
         controlRows.add(row, 1);
@@ -399,24 +424,33 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         previousButton.addActionListener(e -> step(-1));
         nextButton.setToolTipText("Next frame (→).");
         nextButton.addActionListener(e -> step(1));
-        detectionsBox.setToolTipText("Green boxes: point sources. Red lines: streaks. From 100 % zoom the detected "
-                + "pixels are tinted too (D).");
-        detectionsBox.setSelected(layerState.isVisible(ViewerLayer.RAW_DETECTIONS));
-        detectionsBox.addActionListener(e -> layerState.setVisible(ViewerLayer.RAW_DETECTIONS, detectionsBox.isSelected()));
+        frameField.setHorizontalAlignment(SwingConstants.CENTER);
+        frameField.setToolTipText("The frame shown; type a number and press Enter to go to it.");
+        frameField.getAccessibleContext().setAccessibleName("Frame number");
+        frameField.addActionListener(e -> jumpToTypedFrame());
+        frameField.getInputMap().put(KeyStroke.getKeyStroke("ESCAPE"), "restoreFrame");
+        frameField.getActionMap().put("restoreFrame", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                frameField.setText(String.valueOf(current + 1));
+                view.requestFocusInWindow();
+            }
+        });
 
-        JPanel row = new WrappingControlsPanel(6, 0);
-        row.add(previousButton);
-        row.add(nextButton);
-        row.add(Box.createHorizontalStrut(10));
-        if (showsDetections) {
-            row.add(detectionsBox);
-            row.add(Box.createHorizontalStrut(10));
-        }
-        for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
-            row.add(zoomControl);
-        }
-        row.add(Box.createHorizontalStrut(10));
-        row.add(sidePanel.toggleButton());
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        left.add(previousButton);
+        left.add(new JLabel("Frame"));
+        left.add(frameField);
+        left.add(frameCountLabel);
+        left.add(nextButton);
+        left.add(ViewerSupport.toolbarSeparator());
+        left.add(ViewerSupport.zoomControl(view));
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiStyle.space(6), 0));
+        right.add(toolbarExtras);
+        right.add(sidePanel.toggleButton());
+        JPanel row = new JPanel(new BorderLayout());
+        row.add(left, BorderLayout.WEST);
+        row.add(right, BorderLayout.EAST);
 
         controlRows.setLayout(new BoxLayout(controlRows, BoxLayout.Y_AXIS));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -427,6 +461,18 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     // ==========================================
     // STEPPING
     // ==========================================
+
+    /** Goes to the frame typed in the toolbar; a number out of range goes to the nearest frame. */
+    private void jumpToTypedFrame() {
+        try {
+            int typed = Integer.parseInt(frameField.getText().trim());
+            if (open) goTo(Math.max(0, Math.min(frameCount() - 1, typed - 1)));
+        } catch (NumberFormatException notANumber) {
+            Toolkit.getDefaultToolkit().beep();
+        }
+        frameField.setText(String.valueOf(current + 1));
+        view.requestFocusInWindow();
+    }
 
     /** Moves one frame back or forward; stops at the first and last frame. */
     private void step(int direction) {
@@ -442,6 +488,9 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         current = index;
         previousButton.setEnabled(index > 0);
         nextButton.setEnabled(index < frameCount() - 1);
+        frameField.setText(String.valueOf(index + 1));
+        frameCountLabel.setText("of " + frameCount());
+        if (rawDetections != null) rawDetections.setSummary(null);
         frameLabel.setText(frameText(index, null) + " · " + busyText);
         prepareCurrent();
     }
@@ -532,6 +581,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
                 view.fit();
             }
             frameLabel.setText(frameText(index, result.summary));
+            if (rawDetections != null) rawDetections.setSummary(result.summary);
         }
         updateCursorLabel();
     }

@@ -62,6 +62,8 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final JSlider speedSlider = new JSlider(0, SPEED_STEPS);
     private final JLabel speedLabel = new JLabel();
     private final JCheckBox skipBox = new JCheckBox("Skip this frame");
+    private final JButton previewButton = new JButton("Open in Preview ↗");
+    private java.util.function.Consumer<FitsFileInformation> openInPreview = shown -> { };
     private final ViewerLayerState layerState;
     /** Kept here: the shared state holds its listeners weakly. */
     private final Runnable layerListener = this::layersChanged;
@@ -184,7 +186,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     }
 
     void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
-              StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables) {
+              StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables, FitsFileInformation startAt) {
         stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::showCurrent, stretchHolder);
         release();
         this.sequence = sequence;
@@ -194,6 +196,10 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         sky.attach(alignedFiles);
         this.skipped = new boolean[sequence.getFrames().size()];
         this.current = 0;
+        for (int i = 0; startAt != null && i < sequence.getFrames().size(); i++) {
+            String path = sequence.getFrames().get(i).getInfo().getFilePath();
+            if (path != null && path.equals(startAt.getFilePath())) this.current = i;
+        }
         this.open = true;
 
         Set<String> names = new HashSet<>();
@@ -300,6 +306,11 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         }
     }
 
+    /** Sets what Open in Preview does with the frame shown. */
+    void setOpenInPreview(java.util.function.Consumer<FitsFileInformation> openInPreview) {
+        this.openInPreview = openInPreview;
+    }
+
     /** Sets what to do when the window ends a blink or its loading. */
     void setOnClose(Runnable onClose) {
         this.onClose = onClose;
@@ -392,10 +403,13 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         playbackRow.add(Box.createHorizontalStrut(10));
         playbackRow.add(skipBox);
         playbackRow.add(Box.createHorizontalStrut(10));
-        for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
-            playbackRow.add(zoomControl);
-        }
+        playbackRow.add(ViewerSupport.zoomControl(view));
         playbackRow.add(Box.createHorizontalStrut(10));
+        previewButton.setToolTipText("End the blink and open Preview Frame on this frame.");
+        previewButton.addActionListener(e -> {
+            if (open) openInPreview.accept(sequence.getFrames().get(current).getInfo());
+        });
+        playbackRow.add(previewButton);
         playbackRow.add(sidePanel.toggleButton());
 
         JPanel controls = new JPanel();

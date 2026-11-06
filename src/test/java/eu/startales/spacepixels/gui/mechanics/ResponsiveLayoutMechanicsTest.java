@@ -43,7 +43,7 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         close(preview);
     }
 
-    /** Tab must reveal the sidebar's Apply action even when the content exceeds the window height. */
+    /** Tab must reveal the sidebar's Save to settings action even when the content exceeds the window height. */
     @Test(timeout = 180_000) public void starMaskActionsRemainReachableByKeyboard() throws Exception {
         importSyntheticSequence();
         GuiActionRunner.execute(() -> {
@@ -53,7 +53,7 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         FrameFixture mask = viewer("Star Mask Explorer");
         resize(mask.target(), 1100);
         shrink(mask.target());
-        JButton apply = mask.button(VisibleText.button("Apply to Settings")).target();
+        JButton apply = mask.button(VisibleText.button("Save to settings")).target();
         JFormattedTextField field = GuiActionRunner.execute(() ->
                 ((JSpinner.DefaultEditor) mask.spinner(new GenericTypeMatcher<>(JSpinner.class, true) {
                     /** Selects the last trial input before the sidebar actions. */
@@ -61,14 +61,19 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
                         return "Base Star Jitter Radius".equals(spinner.getAccessibleContext().getAccessibleName());
                     }
                 }).target().getEditor()).getTextField());
+        // Save to settings is enabled only once a trial value differs from the saved one.
+        GuiActionRunner.execute(() -> {
+            JSpinner spinner = (JSpinner) SwingUtilities.getAncestorOfClass(JSpinner.class, field);
+            spinner.setValue(spinner.getNextValue());
+        });
         GuiActionRunner.execute(() -> { field.requestFocusInWindow(); });
         waitFor("the last trial field owns focus", () -> GuiActionRunner.execute(field::isFocusOwner));
         for (int i = 0; i < 12 && !GuiActionRunner.execute(apply::isFocusOwner); i++) {
             robot().pressAndReleaseKeys(KeyEvent.VK_TAB);
             robot().waitForIdle();
         }
-        assertTrue("Tab reaches Apply", GuiActionRunner.execute(apply::isFocusOwner));
-        assertTrue("Focused Apply is fully visible", GuiActionRunner.execute(() -> fullyVisible(apply)));
+        assertTrue("Tab reaches Save to settings", GuiActionRunner.execute(apply::isFocusOwner));
+        assertTrue("Focused Save to settings is fully visible", GuiActionRunner.execute(() -> fullyVisible(apply)));
         close(mask);
     }
 
@@ -131,15 +136,30 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         }).withTimeout(30_000).using(robot());
     }
 
-    /** Checks allocated control rectangles rather than preferred sizes alone. */
+    /**
+     * Checks allocated control rectangles rather than preferred sizes alone. Controls in a vertically scrolling panel,
+     * such as the viewers' side panel, are reached by scrolling, so there they only have to fit the panel's width.
+     */
     private static boolean controlsVisible(Container parent) {
         for (Component child : parent.getComponents()) {
             if (!child.isShowing() || child instanceof JScrollBar) continue;
             if ((child instanceof AbstractButton || child instanceof JSpinner || child instanceof JComboBox<?>)
-                    && !fullyVisible((JComponent) child)) return false;
+                    && !reachable((JComponent) child)) return false;
             if (child instanceof Container nested && !controlsVisible(nested)) return false;
         }
         return true;
+    }
+
+    /** Fully visible, or inside a vertically scrolling view and within its width. */
+    private static boolean reachable(JComponent control) {
+        JViewport viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, control);
+        if (viewport == null || !(viewport.getView() instanceof Scrollable scrollable)
+                || !scrollable.getScrollableTracksViewportWidth()) {
+            return fullyVisible(control);
+        }
+        Rectangle bounds = SwingUtilities.convertRectangle(control.getParent(), control.getBounds(), viewport.getView());
+        return control.getWidth() > 0 && control.getHeight() > 0 && bounds.x >= 0
+                && bounds.x + bounds.width <= viewport.getWidth() + 1;
     }
 
     /** Describes allocated rectangles on failure, so a layout regression identifies the clipped input or action. */
@@ -148,7 +168,7 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         for (Component child : parent.getComponents()) {
             if (!child.isShowing() || child instanceof JScrollBar) continue;
             if ((child instanceof AbstractButton || child instanceof JSpinner || child instanceof JComboBox<?>)
-                    && !fullyVisible((JComponent) child)) result.append(child.getClass().getSimpleName()).append(' ')
+                    && !reachable((JComponent) child)) result.append(child.getClass().getSimpleName()).append(' ')
                     .append(child instanceof AbstractButton button ? button.getText() : child.getAccessibleContext().getAccessibleName())
                     .append(" bounds=").append(child.getBounds()).append(" visible=").append(((JComponent) child).getVisibleRect()).append(';');
             if (child instanceof Container nested) result.append(clippedControls(nested));

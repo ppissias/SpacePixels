@@ -58,7 +58,7 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         trials = new TrialSettingsControls(detection.perFrameDetectionSettings(), detection.settingsInUse(),
                 this::refresh, this::focusFrame,
                 changes -> sessions.isCurrent(ownerSession) ? detection.applyTrialSettings(changes) : null);
-        addControlRow(trials.horizontal());
+        setRawDetections(trials);
         masterNote.setFont(UiStyle.bodyFont());
         addControlRow(masterNote);
         detector = new TransientInspectionDetector(reference, this.allTransients, detection.settingsInUse());

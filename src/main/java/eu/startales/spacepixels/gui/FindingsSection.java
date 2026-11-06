@@ -37,6 +37,12 @@ final class FindingsSection {
     private final JPanel children = new JPanel();
     private final SidePanelSection section;
     private boolean expanded;
+    /** The last run's tracks and faint movers, and their reference markers from an older report. */
+    private TrackOverlay tracks;
+    private boolean tracksAvailable;
+    private FaintMoverOverlay faintMovers;
+    private boolean faintMoversAvailable;
+    private final Map<ViewerLayer, Integer> references = new EnumMap<>(ViewerLayer.class);
 
     FindingsSection(ViewerLayerState state) {
         JPanel body = new JPanel();
@@ -92,11 +98,25 @@ final class FindingsSection {
     }
 
     void setTracks(TrackOverlay overlay, boolean available) {
-        int tracks = overlay == null ? 0 : overlay.getTracks().size();
-        rows.get(ViewerLayer.TRACKS).setAvailable(available, available ? String.valueOf(tracks) : reason(overlay != null, tracks),
-                available ? "Tracks of the last detection run, numbered as in the report: T for moving objects, ST for streak tracks. "
-                        + "Rings mark the positions in the frame shown."
-                        : overlay == null ? NO_RUN : "The last run has no tracks on these frames.");
+        tracks = overlay;
+        tracksAvailable = available;
+        updateTracks();
+    }
+
+    private void updateTracks() {
+        int count = tracks == null ? 0 : tracks.getTracks().size();
+        int referenced = references.getOrDefault(ViewerLayer.TRACKS, 0);
+        boolean available = tracksAvailable || referenced > 0;
+        String tip = "Tracks of the last detection run, numbered as in the report: T for moving objects, ST for streak tracks. "
+                + "Rings mark the positions in the frame shown.";
+        if (referenced > 0) {
+            tip = tracksAvailable ? tip + " Dashed squares marked ref are report reference positions."
+                    : "Tracks from an older report, which saved one reference position per track (dashed squares marked ref). "
+                    + "Run Detect Moving Targets again to see their positions frame by frame.";
+        }
+        rows.get(ViewerLayer.TRACKS).setAvailable(available,
+                available ? String.valueOf((tracksAvailable ? count : 0) + referenced) : reason(tracks != null, count),
+                available ? tip : tracks == null ? NO_RUN : "The last run has no tracks on these frames.");
     }
 
     void setVariableStars(VariableStarOverlay overlay, boolean available) {
@@ -109,10 +129,19 @@ final class FindingsSection {
     }
 
     void setFaintMovers(FaintMoverOverlay overlay, boolean available) {
-        int candidates = overlay == null ? 0 : overlay.candidates().size();
+        faintMovers = overlay;
+        faintMoversAvailable = available;
+        updateFaintMovers();
+    }
+
+    private void updateFaintMovers() {
+        int candidates = faintMovers == null ? 0 : faintMovers.candidates().size();
+        int referenced = references.getOrDefault(ViewerLayer.FAINT_MOVERS, 0);
+        boolean available = faintMoversAvailable || referenced > 0;
         rows.get(ViewerLayer.FAINT_MOVERS).setAvailable(available,
-                available ? String.valueOf(candidates) : reason(overlay != null, candidates),
+                available ? String.valueOf((faintMoversAvailable ? candidates : 0) + referenced) : reason(faintMovers != null, candidates),
                 available ? "Experimental FM candidates: dashed fitted paths and rings at each frame's exposure midpoint. These are unverified."
+                        + (referenced > 0 ? " Dashed squares marked ref are report reference positions without a fitted path." : "")
                         : "Run Detect Moving Targets with the faint-mover search enabled on this session to see its candidates here.");
     }
 
@@ -123,8 +152,15 @@ final class FindingsSection {
                 counts.merge(ViewerLayer.of(FindingCategory.fromId(marker.id())), 1, Integer::sum);
             }
         }
-        int total = counts.values().stream().mapToInt(Integer::intValue).sum();
-        rows.get(ViewerLayer.OTHER_FINDINGS).setAvailable(available, available ? String.valueOf(total) : reason(overlay != null, total),
+        references.clear();
+        for (ViewerLayer layer : List.of(ViewerLayer.TRACKS, ViewerLayer.FAINT_MOVERS)) {
+            if (available && counts.containsKey(layer)) references.put(layer, counts.get(layer));
+        }
+        updateTracks();
+        updateFaintMovers();
+        int total = OTHER_LAYERS.stream().mapToInt(layer -> counts.getOrDefault(layer, 0)).sum();
+        rows.get(ViewerLayer.OTHER_FINDINGS).setAvailable(available && total > 0,
+                available ? (total > 0 ? String.valueOf(total) : "none in report") : reason(overlay != null, total),
                 available ? "The report's other categories. Rings mark measured positions in the frame shown; dashed squares "
                         + "marked ref are report references, not per-frame detections." : NO_RUN);
         for (ViewerLayer layer : OTHER_LAYERS) {
@@ -133,7 +169,7 @@ final class FindingsSection {
             rows.get(layer).setAvailable(has, has ? String.valueOf(count) : available ? "none in report" : "",
                     describe(layer));
         }
-        expand.setEnabled(available);
+        expand.setEnabled(available && total > 0);
     }
 
     private static String reason(boolean run, int count) {

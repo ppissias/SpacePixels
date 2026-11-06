@@ -82,6 +82,13 @@ final class ViewerSidePanel {
         column.add(section);
     }
 
+    /** Puts a section above the others. */
+    void addFirst(JComponent section) {
+        section.setAlignmentX(Component.LEFT_ALIGNMENT);
+        column.add(section, 0);
+        column.revalidate();
+    }
+
     /** The panel, for the east side of the viewer. */
     JComponent component() {
         return panel;
@@ -118,8 +125,29 @@ final class ViewerSidePanel {
         }
     }
 
-    /** Fills the width of the scroll pane, so the sections wrap instead of scrolling sideways. */
+    /**
+     * Fills the width of the scroll pane, so the sections wrap instead of scrolling sideways, and scrolls a control
+     * that gets the keyboard focus, for example by Tab, into view.
+     */
     private static final class ColumnPanel extends JPanel implements Scrollable {
+        private final java.beans.PropertyChangeListener revealFocus = event -> {
+            if (event.getNewValue() instanceof JComponent focused && SwingUtilities.isDescendingFrom(focused, this)) {
+                focused.scrollRectToVisible(new Rectangle(focused.getSize()));
+            }
+        };
+
+        @Override
+        public void addNotify() {
+            super.addNotify();
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("focusOwner", revealFocus);
+        }
+
+        @Override
+        public void removeNotify() {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("focusOwner", revealFocus);
+            super.removeNotify();
+        }
+
         @Override
         public Dimension getPreferredScrollableViewportSize() {
             return getPreferredSize();

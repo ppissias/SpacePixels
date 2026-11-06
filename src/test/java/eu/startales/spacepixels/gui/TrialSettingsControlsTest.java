@@ -25,7 +25,7 @@ public class TrialSettingsControlsTest {
                 DetectionConfig live = config();
                 AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
                 TrialSettingsControls controls = controls(live, delta);
-                JComponent row = controls.horizontal();
+                JComponent row = controls.form();
                 try {
                     JSpinner grow = spinner(row, "Grow Sigma (Hysteresis)");
                     if (typed) {
@@ -39,7 +39,7 @@ public class TrialSettingsControlsTest {
                     }
                     spinner(row, "Detection Sigma").setValue(2.0);
                     live.growSigmaMultiplier = 1.0;
-                    button(row, "Apply to Settings").doClick();
+                    button(row, "Save to settings").doClick();
                     assertEquals(Set.of("detectionSigmaMultiplier"), delta.get().keySet());
                     assertEquals("the restored edit cannot overwrite a newer live value", 1.0, live.growSigmaMultiplier, 0);
                 } catch (java.text.ParseException invalidFixture) {
@@ -49,6 +49,40 @@ public class TrialSettingsControlsTest {
                 }
             }
         });
+    }
+
+    /** Save and Revert follow the difference from the saved settings, and a changed field names its saved value. */
+    @Test public void saveAndRevertFollowTheSavedSettings() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DetectionConfig live = config();
+            AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
+            TrialSettingsControls controls = controls(live, delta);
+            JComponent form = controls.form();
+            try {
+                assertFalse(button(form, "Save to settings").isEnabled());
+                assertFalse(button(form, "Revert").isEnabled());
+                JSpinner detection = spinner(form, "Detection Sigma");
+                detection.setValue(6.5);
+                assertTrue(controls.hasUnsavedChanges());
+                assertTrue(button(form, "Save to settings").isEnabled());
+                assertTrue(showsText(form, "saved: 5.0"));
+                button(form, "Revert").doClick();
+                assertEquals(5.0, ((Number) detection.getValue()).doubleValue(), 0);
+                assertFalse(controls.hasUnsavedChanges());
+                assertFalse(showsText(form, "saved: 5.0"));
+                assertNull("Revert does not change the settings", delta.get());
+            } finally {
+                controls.stop();
+            }
+        });
+    }
+
+    private static boolean showsText(java.awt.Container container, String text) {
+        for (java.awt.Component child : container.getComponents()) {
+            if (child instanceof JLabel label && text.equals(label.getText())) return true;
+            if (child instanceof java.awt.Container inner && showsText(inner, text)) return true;
+        }
+        return false;
     }
 
     /** Delayed refresh waits for the application job to unlock and cannot run after the viewer closes. */
@@ -62,7 +96,7 @@ public class TrialSettingsControlsTest {
             controls[0] = new TrialSettingsControls(List.of(new TrialSettingsControls.Input(
                     CoreDetectionSettings.DETECTION_SIGMA_MULTIPLIER, 5.0, 1.0, 20.0, 0.1)),
                     initial, () -> { refreshes.incrementAndGet(); refreshed.countDown(); }, () -> {}, changes -> initial.clone());
-            row[0] = controls[0].horizontal();
+            row[0] = controls[0].form();
             spinner(row[0], "Detection Sigma").setValue(4.0);
             controls[0].setEditable(false);
         });
@@ -87,20 +121,20 @@ public class TrialSettingsControlsTest {
             DetectionConfig live = config();
             AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
             TrialSettingsControls controls = controls(live, delta);
-            JComponent row = controls.horizontal();
+            JComponent row = controls.form();
             try {
                 spinner(row, "Detection Sigma").setValue(2.0);
                 assertEquals(5.0, live.detectionSigmaMultiplier, 0);
                 assertEquals(2.0, controls.snapshot(live).growSigmaMultiplier, 0);
                 live.growSigmaMultiplier = 1.0;
                 live.minDetectionPixels = 17;
-                button(row, "Apply to Settings").doClick();
+                button(row, "Save to settings").doClick();
                 assertEquals(Set.of("detectionSigmaMultiplier"), delta.get().keySet());
                 assertEquals(2.0, live.detectionSigmaMultiplier, 0);
                 assertEquals(1.0, live.growSigmaMultiplier, 0);
                 assertEquals(17, live.minDetectionPixels);
                 live.detectionSigmaMultiplier = 8.0;
-                button(row, "Apply to Settings").doClick();
+                button(row, "Save to settings").doClick();
                 assertEquals("repeated Apply has no stale delta", 8.0, live.detectionSigmaMultiplier, 0);
             } finally {
                 controls.stop();
@@ -114,18 +148,18 @@ public class TrialSettingsControlsTest {
             DetectionConfig live = config();
             AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
             TrialSettingsControls controls = controls(live, delta);
-            JComponent row = controls.horizontal();
+            JComponent row = controls.form();
             try {
                 field(spinner(row, "Detection Sigma")).setText("7.0");
                 field(spinner(row, "Grow Sigma (Hysteresis)")).setText("6.0");
-                button(row, "Apply to Settings").doClick();
+                button(row, "Save to settings").doClick();
                 assertEquals(7.0, live.detectionSigmaMultiplier, 0);
                 assertEquals(6.0, live.growSigmaMultiplier, 0);
                 assertEquals(Set.of("detectionSigmaMultiplier", "growSigmaMultiplier"), delta.get().keySet());
                 delta.set(null);
                 field(spinner(row, "Detection Sigma")).setText("99999");
-                assertFalse(button(row, "Apply to Settings").isEnabled());
-                button(row, "Apply to Settings").doClick();
+                assertFalse(button(row, "Save to settings").isEnabled());
+                button(row, "Save to settings").doClick();
                 assertNull(delta.get());
                 assertEquals(7.0, live.detectionSigmaMultiplier, 0);
             } finally {
@@ -140,20 +174,20 @@ public class TrialSettingsControlsTest {
             DetectionConfig live = config();
             AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
             TrialSettingsControls controls = controls(live, delta);
-            JComponent row = controls.horizontal();
+            JComponent row = controls.form();
             try {
                 spinner(row, "Detection Sigma").setValue(4.0);
                 controls.setEditable(false);
                 assertFalse(spinner(row, "Detection Sigma").isEnabled());
-                assertFalse(button(row, "Apply to Settings").isEnabled());
-                button(row, "Apply to Settings").doClick();
+                assertFalse(button(row, "Save to settings").isEnabled());
+                button(row, "Save to settings").doClick();
                 assertNull(delta.get());
                 controls.stop();
                 live.detectionSigmaMultiplier = 9.0;
                 controls.load(live);
                 controls.setEditable(true);
                 assertEquals(9.0, controls.value(CoreDetectionSettings.DETECTION_SIGMA_MULTIPLIER).doubleValue(), 0);
-                button(row, "Apply to Settings").doClick();
+                button(row, "Save to settings").doClick();
                 assertNull(delta.get());
             } finally {
                 controls.stop();

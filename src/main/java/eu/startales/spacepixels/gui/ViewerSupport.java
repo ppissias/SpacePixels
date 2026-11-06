@@ -33,21 +33,60 @@ final class ViewerSupport {
     private ViewerSupport() {
     }
 
-    /** "Zoom:", Fit, 100 %, 200 % and 400 %, for a row of controls. */
-    static List<JComponent> zoomControls(FrameView view) {
-        List<JComponent> controls = new ArrayList<>();
-        controls.add(new JLabel("Zoom:"));
-        JButton fitButton = new JButton("Fit");
-        fitButton.setToolTipText("Show the whole frame (F or double-click).");
-        fitButton.addActionListener(e -> view.fit());
-        controls.add(fitButton);
-        for (int percent : new int[]{100, 200, 400}) {
-            JButton zoomButton = new JButton(percent + " %");
-            zoomButton.setToolTipText(percent == 100 ? "One frame pixel per screen pixel (1)." : "Zoom to " + percent + " %.");
-            zoomButton.addActionListener(e -> view.zoomToScale(percent / 100.0));
-            controls.add(zoomButton);
+    /**
+     * "Zoom" and one group of Fit, 100 %, 200 % and 400 %, for a toolbar. The button of the zoom shown is selected;
+     * none is after scrolling to another zoom.
+     */
+    static JComponent zoomControl(FrameView view) {
+        JPanel control = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        control.setOpaque(false);
+        JLabel label = new JLabel("Zoom");
+        label.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, UiStyle.space(6)));
+        control.add(label);
+        ButtonGroup group = new ButtonGroup();
+        List<JToggleButton> buttons = new ArrayList<>();
+        double[] scales = {0, 1, 2, 4};
+        for (double scale : scales) {
+            JToggleButton button = new JToggleButton(scale == 0 ? "Fit" : Math.round(scale * 100) + " %");
+            button.putClientProperty("JButton.buttonType", "toolBarButton");
+            button.setToolTipText(scale == 0 ? "Show the whole frame (F or double-click)."
+                    : scale == 1 ? "One frame pixel per screen pixel (1)." : "Zoom to " + Math.round(scale * 100) + " %.");
+            button.addActionListener(e -> {
+                if (scale == 0) view.fit();
+                else view.zoomToScale(scale);
+            });
+            group.add(button);
+            buttons.add(button);
+            control.add(button);
         }
-        return controls;
+        Runnable update = () -> {
+            int selected = -1;
+            if (view.isFitted()) {
+                selected = 0;
+            } else {
+                for (int i = 1; i < scales.length; i++) {
+                    if (Math.abs(view.zoomPercent() - scales[i] * 100) < 0.5) selected = i;
+                }
+            }
+            if (selected < 0) group.clearSelection();
+            else buttons.get(selected).setSelected(true);
+        };
+        view.setZoomListener(update);
+        view.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override
+            public void componentResized(java.awt.event.ComponentEvent e) {
+                update.run();
+            }
+        });
+        update.run();
+        return control;
+    }
+
+    /** A thin vertical line between groups of toolbar controls. */
+    static JComponent toolbarSeparator() {
+        JSeparator separator = new JSeparator(SwingConstants.VERTICAL);
+        separator.setPreferredSize(new Dimension(UiStyle.space(12), UiStyle.space(22)));
+        return separator;
     }
 
     /** The frame description in the middle, the cursor on the right and the keys underneath. */

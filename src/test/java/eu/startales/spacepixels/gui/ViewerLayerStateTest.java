@@ -70,6 +70,33 @@ public class ViewerLayerStateTest {
         assertEquals(ViewerLayer.CATALOGUE, ViewerLayer.of(SkyMark.Kind.NAMED_STAR).parent);
     }
 
+    /** An older report saved one reference position per track: the Tracks row offers them, not Other findings. */
+    @Test public void olderReportTracksAppearUnderTracks() throws Exception {
+        java.nio.file.Path folder = java.nio.file.Files.createTempDirectory("older-report");
+        try {
+            java.nio.file.Files.writeString(folder.resolve("report-data.json"), "{\"schemaVersion\":1,\"frameCount\":2,\"findings\":["
+                    + "{\"id\":\"T1\",\"x\":10,\"y\":10,\"frames\":[1,2]},{\"id\":\"DS1\",\"x\":20,\"y\":20,\"frames\":[]}]}");
+            java.nio.file.Files.writeString(folder.resolve("detection_report.html"), "older report");
+            FitsFileInformation[] files = {
+                    new FitsFileInformation(folder.resolve("a.fit").toString(), "a.fit", true, 100, 80),
+                    new FitsFileInformation(folder.resolve("b.fit").toString(), "b.fit", true, 100, 80)};
+            var overlays = eu.startales.spacepixels.detection.SavedReportOverlays.read(
+                    folder.resolve("detection_report.html").toFile(), files).overlays();
+            SwingUtilities.invokeAndWait(() -> {
+                FindingsSection section = new FindingsSection(new ViewerLayerState(null));
+                section.setTracks(overlays.tracks(), overlays.tracks().coversAnyOf(java.util.Set.of("a.fit", "b.fit")));
+                section.setFindings(overlays.findings(), overlays.findings().coversAnyOf(files));
+                assertTrue("reference-only tracks can be shown", section.isAvailable(ViewerLayer.TRACKS));
+                assertTrue(section.isAvailable(ViewerLayer.SLOW_MOVERS));
+                assertTrue(section.isAvailable(ViewerLayer.OTHER_FINDINGS));
+            });
+        } finally {
+            try (var paths = java.nio.file.Files.walk(folder)) {
+                paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+            }
+        }
+    }
+
     /** The eye of a row changes the shared state; an unavailable row says why and cannot be switched. */
     @Test public void rowsSwitchTheStateAndExplainWhyTheyAreUnavailable() throws Exception {
         SwingUtilities.invokeAndWait(() -> {

@@ -41,6 +41,8 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     private final DetectionConfigurationPanel detection;
     private final TrialSettingsControls trials;
     private final ProcessingSession ownerSession;
+    private final JButton blinkButton = new JButton("Blink ↗");
+    private java.util.function.Consumer<FitsFileInformation> blinkAction = shown -> { };
 
     /** Captures the session identity; trial controls copy values while each preparation reads fresh other settings. */
     public DetectionSequenceFrame(JFrame owner, SessionAccess sessions, DetectionConfigurationPanel detection,
@@ -53,7 +55,13 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         trials = new TrialSettingsControls(detection.perFrameDetectionSettings(), detection.settingsInUse(),
                 this::refresh, this::focusFrame,
                 changes -> sessions.isCurrent(ownerSession) ? detection.applyTrialSettings(changes) : null);
-        addControlRow(trials.horizontal());
+        setRawDetections(trials);
+        blinkButton.setToolTipText("Blink the frames selected in the main window, or all frames when fewer than three "
+                + "are selected, starting on this frame.");
+        blinkButton.addActionListener(e -> {
+            if (files != null && currentIndex() < files.length) blinkAction.accept(files[currentIndex()]);
+        });
+        addToolbarButton(blinkButton);
         setLocationRelativeTo(owner);
     }
 
@@ -92,10 +100,16 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         setFindingOverlay(session == null ? null : session.getFindingOverlay(), files);
     }
 
-    /** Enables trial edits and Apply only while the application has no active job or blink. */
+    /** Enables trial edits, Save and Blink only while the application has no active job or blink. */
     @Override
     public void setSettingsEditable(boolean editable) {
         trials.setEditable(editable);
+        blinkButton.setEnabled(editable);
+    }
+
+    /** What the Blink button does with the frame shown. */
+    void setBlinkAction(java.util.function.Consumer<FitsFileInformation> blinkAction) {
+        this.blinkAction = blinkAction;
     }
 
     // ==========================================
