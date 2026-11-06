@@ -43,7 +43,12 @@ final class ReportPresentation {
             out.println("<option value='" + f.anchor() + "'>" + f.id() + " · " + f.category() + "</option>");
         }
         out.println("</select></label><button type='button' class='id-link' id='report-next'>Next finding</button>"
-                + "<a href='report-data.json' class='id-link' download>Report data JSON</a></div>");
+                + "<a href='report-data.json' class='id-link' download>Report data JSON</a>"
+                + "<label class='report-speed-control'>Theme <select id='report-theme' title='Colours of this page; pictures keep their own'>"
+                + "<option value='dark'>Dark</option><option value='light'>Light</option></select></label>"
+                + "<label class='report-speed-control'>Text <select id='report-text-size' title='Size of the text and controls; pictures keep their size'>"
+                + "<option value='small'>Small</option><option value='normal' selected>Normal</option>"
+                + "<option value='large'>Large</option><option value='x-large'>Extra large</option></select></label></div>");
         out.println("<script type='application/json' id='report-findings-data'>"
                 + new Gson().toJson(context.data.findings) + "</script>");
     }

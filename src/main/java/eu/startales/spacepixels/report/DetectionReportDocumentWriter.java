@@ -20,6 +20,15 @@ final class DetectionReportDocumentWriter {
     private static final String THEME = resource("report-theme.css");
     private static final String REPORT_STYLE = resource("report.css");
     private static final String INDEX_STYLE = resource("report-index.css");
+    /**
+     * Applies the theme and text size remembered by the browser before the page is drawn. Storage can be
+     * unavailable (some browsers, private windows, pages opened from disk); the report then opens in the defaults.
+     */
+    static final String REMEMBERED_APPEARANCE = "<script>(function(d){try{"
+            + "var t=localStorage.getItem('spacepixels.report.theme'),s=localStorage.getItem('spacepixels.report.textSize');"
+            + "if(t==='light')d.setAttribute('data-theme','light');"
+            + "if(s==='small'||s==='large'||s==='x-large')d.setAttribute('data-text-size',s);"
+            + "}catch(e){}})(document.documentElement);</script>";
 
     private DetectionReportDocumentWriter() {
     }
@@ -27,8 +36,9 @@ final class DetectionReportDocumentWriter {
     static void appendDetectionReportStart(PrintWriter report) {
         report.println("<!DOCTYPE html><html><head><meta charset='utf-8'><meta name='viewport' content='width=device-width, initial-scale=1'><title>SpacePixels Session Report</title><style>");
         report.print(THEME);
+        report.print(ReportThemeRoles.findingRoles());
         report.print(REPORT_STYLE);
-        report.println("</style></head><body>");
+        report.println("</style>" + REMEMBERED_APPEARANCE + "</head><body>");
         report.println("<h1>SpacePixels Session Report</h1>");
     }
 
@@ -36,8 +46,13 @@ final class DetectionReportDocumentWriter {
         report.println("<!DOCTYPE html><html><head><meta charset='utf-8'><title>Iterative Detection Summary</title><style>");
         report.print(THEME);
         report.print(INDEX_STYLE);
-        report.println("</style></head><body>");
+        report.println("</style>" + REMEMBERED_APPEARANCE + "</head><body>");
         report.println("<h1>SpacePixels Iterative Detection Summary</h1>");
+    }
+
+    /** The colour roles, for other report pages that use the themes. */
+    static String themeStyle() {
+        return THEME;
     }
 
     static void appendHtmlDocumentEnd(PrintWriter report) {

@@ -646,8 +646,8 @@ final class ResidualReviewSectionWriter {
         String candidateBadge = buildLocalRescueBadge(candidate.kind);
         String candidateNote = buildLocalRescueNote(candidate.kind);
         ResidualTransientAnalysis.LocalTransientMetrics metrics = candidate.metrics;
-        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_RESCUE, counter) + "' style='border-left-color: var(--sp-local-rescue);'>");
-        report.println("<div class='detection-title' style='color: var(--sp-local-rescue);'>Local Rescue Candidate " + FindingCategory.LOCAL_RESCUE.id(counter) + candidateBadge + "</div>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_RESCUE, counter) + "' style='border-left-color: var(--sp-finding-lr);'>");
+        report.println("<div class='detection-title' style='color: var(--sp-finding-lr);'>Local Rescue Candidate " + FindingCategory.LOCAL_RESCUE.id(counter) + candidateBadge + "</div>");
         RescueTrackAssociations.write(report, context, FindingCategory.LOCAL_RESCUE.id(counter));
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>" + candidateNote + "</div>");
         report.println("<div class='image-container'>");
@@ -771,8 +771,8 @@ final class ResidualReviewSectionWriter {
         }
 
         ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;
-        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_ACTIVITY, counter) + "' style='border-left-color: var(--sp-local-activity);'>");
-        report.println("<div class='detection-title' style='color: var(--sp-local-activity);'>Local Activity Cluster " + FindingCategory.LOCAL_ACTIVITY.id(counter)
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_ACTIVITY, counter) + "' style='border-left-color: var(--sp-finding-lc);'>");
+        report.println("<div class='detection-title' style='color: var(--sp-finding-lc);'>Local Activity Cluster " + FindingCategory.LOCAL_ACTIVITY.id(counter)
                 + " <span style='background: var(--sp-badge-amber); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
                 + String.format(Locale.US, "%.0f px Linkage", cluster.linkageRadiusPixels)
                 + "</span></div>");

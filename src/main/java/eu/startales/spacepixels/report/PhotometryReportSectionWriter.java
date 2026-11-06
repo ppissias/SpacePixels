@@ -499,10 +499,10 @@ public final class PhotometryReportSectionWriter {
     static String ensembleFitHtml(PipelineTelemetry.PhotometryTelemetry t) {
         String main = t.ensembleConverged
                 ? "Finished after " + t.ensembleIterations + " rounds"
-                : "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! Round limit (" + t.ensembleIterationLimit + ") reached</span>, last change "
+                : "<span style='color:var(--sp-status-warning);'>! Round limit (" + t.ensembleIterationLimit + ") reached</span>, last change "
                         + (Double.isFinite(t.ensembleLastChangeMag) ? String.format(Locale.US, "%.1e", t.ensembleLastChangeMag) : "n/a") + " mag";
         if (t.apertureSolvesAtIterationLimit > 0) {
-            main += "; <span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>" + t.apertureSolvesAtIterationLimit
+            main += "; <span style='color:var(--sp-status-warning);'>" + t.apertureSolvesAtIterationLimit
                     + " comparison-aperture fit" + (t.apertureSolvesAtIterationLimit == 1 ? "" : "s") + " reached the limit</span>";
         }
         return main;
@@ -527,7 +527,7 @@ public final class PhotometryReportSectionWriter {
                 + t.peakCheckConcentratedBrightenings + (t.peakCheckConcentratedBrightenings == 1 ? " brightening" : " brightenings")
                 + " concentrated in the brightest pixel";
         return t.peakRemovalFound
-                ? "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! Found</span>: " + counts + "; "
+                ? "<span style='color:var(--sp-status-warning);'>! Found</span>: " + counts + "; "
                         + t.measurementsPeakRemoved + " measurements left out"
                 : "Not found: " + counts;
     }
@@ -1783,28 +1783,28 @@ public final class PhotometryReportSectionWriter {
 
     private static String verdictColor(String verdict) {
         switch (verdict) {
-            case "READY": return PhotometrySvgChart.STATUS_GOOD;
-            case "LIMITED": return PhotometrySvgChart.STATUS_WARNING;
-            case "NOT_READY": return PhotometrySvgChart.STATUS_CRITICAL;
-            default: return "#777777";
+            case "READY": return "var(--sp-status-good)";
+            case "LIMITED": return "var(--sp-status-warning)";
+            case "NOT_READY": return "var(--sp-status-critical)";
+            default: return "var(--sp-text-faint)";
         }
     }
 
     private static String verdictBadge(String verdict) {
         switch (verdict) {
-            case "READY": return "<span style='color:" + PhotometrySvgChart.STATUS_GOOD + ";'>&#10003;</span> Ready";
-            case "LIMITED": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>!</span> Limited";
-            case "NOT_READY": return "<span style='color:" + PhotometrySvgChart.STATUS_CRITICAL + ";'>&#10005;</span> Not ready";
+            case "READY": return "<span style='color:var(--sp-status-good);'>&#10003;</span> Ready";
+            case "LIMITED": return "<span style='color:var(--sp-status-warning);'>!</span> Limited";
+            case "NOT_READY": return "<span style='color:var(--sp-status-critical);'>&#10005;</span> Not ready";
             default: return "Not run";
         }
     }
 
     private static String statusBadge(String status) {
         switch (status) {
-            case "PASS": return "<span style='color:" + PhotometrySvgChart.STATUS_GOOD + ";'>&#10003; PASS</span>";
-            case "LIMITED": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! LIMITED</span>";
-            case "INCONCLUSIVE": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>? INCONCLUSIVE</span>";
-            case "FAIL": return "<span style='color:" + PhotometrySvgChart.STATUS_CRITICAL + ";'>&#10005; FAIL</span>";
+            case "PASS": return "<span style='color:var(--sp-status-good);'>&#10003; PASS</span>";
+            case "LIMITED": return "<span style='color:var(--sp-status-warning);'>! LIMITED</span>";
+            case "INCONCLUSIVE": return "<span style='color:var(--sp-status-warning);'>? INCONCLUSIVE</span>";
+            case "FAIL": return "<span style='color:var(--sp-status-critical);'>&#10005; FAIL</span>";
             case "NOT_RUN": return "<span style='color:var(--sp-text-muted);'>&ndash; NOT RUN</span>";
             default: return status;
         }

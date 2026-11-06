@@ -209,10 +209,10 @@ final class DeepStackReportSectionWriter {
             GifSequenceWriter.saveAnimatedGif(gifFrames, context.file(gifFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
         }
 
-        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: var(--sp-slow-mover); padding: 15px; margin-bottom: 0;'>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: var(--sp-finding-ds); padding: 15px; margin-bottom: 0;'>");
         String trackBadge = matchedTracks.isEmpty() ? "" : ReportPresentation.trackBadge("Track overlap: " + matchedTracks.get(0).label
                 + (matchedTracks.size() > 1 ? " +" + (matchedTracks.size() - 1) : ""), matchedTracks.get(0).label);
-        report.println("<div class='detection-title' style='color: var(--sp-slow-mover); font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate " + FindingCategory.SLOW_MOVER.id(candidateNumber) + trackBadge + "</div>");
+        report.println("<div class='detection-title' style='color: var(--sp-finding-ds); font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate " + FindingCategory.SLOW_MOVER.id(candidateNumber) + trackBadge + "</div>");
         if (!matchedTracks.isEmpty()) {
             report.println("<div class='track-link-note'><strong>Nearby reported track"
                     + (matchedTracks.size() == 1 ? " " : "s ")

@@ -32,12 +32,12 @@ tr:hover { background-color: var(--sp-hover); }
 .scroll-box.compact-table-box thead th { position: sticky; top: 0; z-index: 3; background-color: var(--sp-sunken); box-shadow: 0 1px 0 var(--sp-border-subtle); }
 .detection-card { background: var(--sp-inset); padding: 20px; margin-bottom: 30px; border-radius: 8px; border-left: 5px solid var(--sp-accent); }
 .detection-title { font-size: 1.2em; font-weight: bold; color: var(--sp-text-strong); margin-bottom: 15px; }
-.streak-title { color: var(--sp-streak); border-left-color: var(--sp-streak);}
+.streak-title { color: var(--sp-finding-s); border-left-color: var(--sp-finding-s);}
 img, canvas.animation-sheet-canvas { border: 1px solid var(--sp-border-strong); border-radius: 4px; background-color: black; object-fit: contain; max-width: 100%; transition: border-color 0.2s ease-in-out; }
 a img:hover, a canvas.animation-sheet-canvas:hover { border-color: var(--sp-accent); cursor: pointer; }
 canvas.animation-sheet-canvas { display: block; margin: 0 auto; }
 .image-container { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 15px; }
-.anomaly-card { border-left-color: var(--sp-anomaly); }
+.anomaly-card { border-left-color: var(--sp-finding-a); }
 .anomaly-card .detection-title { margin-bottom: 3px; }
 .anomaly-subtitle { color: var(--sp-text-soft); font-size: 0.8125rem; margin-bottom: 14px; }
 .anomaly-summary { display: flex; flex-wrap: wrap; gap: 12px 26px; margin: 0 0 14px; font-size: 0.8125rem; }

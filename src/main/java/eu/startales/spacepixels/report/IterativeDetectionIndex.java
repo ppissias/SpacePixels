@@ -27,9 +27,13 @@ public final class IterativeDetectionIndex {
         String json = new GsonBuilder().setPrettyPrinting().serializeNulls().create().toJson(run);
         publish(new File(directory, "run-data.json"), json);
         StringBuilder html = new StringBuilder("<!doctype html><html lang='en'><meta charset='utf-8'>"
-                + "<title>Iterative detection results</title><style>body{font:16px system-ui;margin:2rem;max-width:100rem}"
-                + "table{border-collapse:collapse;width:100%}th,td{border:1px solid #aaa;padding:.6rem;text-align:left}"
-                + "td{vertical-align:top}small{display:block;margin-top:.4rem}</style><h1>Iterative detection results</h1>");
+                + "<title>Iterative detection results</title><style>" + DetectionReportDocumentWriter.themeStyle()
+                + "body{font-family:system-ui;font-size:1rem;margin:2rem;max-width:100rem;background:var(--sp-page);color:var(--sp-text)}"
+                + "h1{color:var(--sp-text-strong)}a{color:var(--sp-link)}a:visited{color:var(--sp-link-visited)}"
+                + "table{border-collapse:collapse;width:100%;background:var(--sp-inset)}"
+                + "th,td{border:1px solid var(--sp-border-strong);padding:.6rem;text-align:left}th{background:var(--sp-sunken);color:var(--sp-accent)}"
+                + "td{vertical-align:top}small{display:block;margin-top:.4rem;color:var(--sp-text-muted)}</style>"
+                + DetectionReportDocumentWriter.REMEMBERED_APPEARANCE + "<h1>Iterative detection results</h1>");
         html.append("<p>Source: ").append(escape(run.sourceDirectory())).append("</p><p>Outcome: ")
                 .append(escape(label(run.outcome()))).append("</p><p>Settings: ")
                 .append(run.autoTuneProfile() == null ? "current Detection Settings" : "Auto-Tune once: " + escape(label(run.autoTuneProfile())))

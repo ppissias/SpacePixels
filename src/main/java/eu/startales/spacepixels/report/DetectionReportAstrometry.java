@@ -283,7 +283,7 @@ public final class DetectionReportAstrometry {
                 .append("</span><br>");
         String motionClass = classifyTrackMotionByRaRate(skyRateSummary != null ? skyRateSummary.raRateArcsecPerHour : Double.NaN);
         if (motionClass != null) {
-            html.append("Motion Class: <span style='color:var(--sp-streak-track);'>")
+            html.append("Motion Class: <span style='color:var(--sp-finding-st);'>")
                     .append(escapeHtml(motionClass))
                     .append("</span><br>");
         }

@@ -211,7 +211,7 @@ test('local Stellarium sends the commands directly and marks opaque responses as
   assert.match(button.status.innerHTML, /Commands sent to local Stellarium for 2026-01-15 22:00:00 UTC/);
   assert.match(button.status.innerHTML, /Acceptance is unconfirmed/);
   assert.doesNotMatch(button.status.innerHTML, /Slewed|accepted the commands/);
-  assert.equal(button.status.style.color, '#d0a050');
+  assert.equal(button.status.style.color, 'var(--sp-warning)');
   assert.ok(c.requestOptions.every(options => options.signal === c.requestOptions[0].signal));
   assert.equal(c.requestOptions[0].signal.aborted, false);
   assert.equal(deadline.cleared, true);
@@ -240,7 +240,7 @@ test('local Stellarium confirms only readable successful command replies', async
   assert.equal(c.requests.length, 3);
   assert.match(button.status.innerHTML, /Stellarium accepted the commands/);
   assert.doesNotMatch(button.status.innerHTML, /Slewed/);
-  assert.equal(button.status.style.color, '#8fd19e');
+  assert.equal(button.status.style.color, 'var(--sp-success)');
 });
 
 test('one opaque command prevents confirmation even when the final reply is readable', async () => {

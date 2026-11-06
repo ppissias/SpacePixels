@@ -33,6 +33,7 @@ public class ReportThemeTest {
         int root = theme.indexOf(":root");
         assertTrue("the theme's :root rule must not be inside a comment", root >= 0);
         Set<String> defined = matches(DEFINITION, theme.substring(root));
+        defined.addAll(matches(DEFINITION, ReportThemeRoles.findingRoles()));
         Set<String> used = new TreeSet<>();
         for (String sheet : new String[]{"report.css", "report-index.css", "faint-mover-review.css"}) {
             used.addAll(matches(USE, withoutComments(resource(sheet))));
@@ -42,16 +43,32 @@ public class ReportThemeTest {
         assertTrue(defined.size() > 40);
     }
 
+    /** Each finding type has one role: its category colour on the dark page, a darker shade of it on the light page. */
+    @Test public void findingRolesFollowTheCategoryColours() {
+        String roles = ReportThemeRoles.findingRoles();
+        for (FindingCategory category : FindingCategory.values()) {
+            assertTrue(roles.contains(ReportThemeRoles.role(category) + ": " + ReportThemeRoles.hex(category.color()) + ";"));
+            java.awt.Color light = ReportThemeRoles.onLightPage(category.color());
+            float[] hsb = java.awt.Color.RGBtoHSB(light.getRed(), light.getGreen(), light.getBlue(), null);
+            assertTrue(category + " must keep WCAG AA contrast on a light page",
+                    ReportThemeRoles.contrastWithWhite(light) >= ReportThemeRoles.LIGHT_THEME_CONTRAST);
+            if (category.color().getRed() != category.color().getGreen()) {
+                float[] original = java.awt.Color.RGBtoHSB(category.color().getRed(), category.color().getGreen(), category.color().getBlue(), null);
+                assertEquals(category + " keeps its hue", original[0], hsb[0], 0.02);
+            }
+        }
+    }
+
     /** The report page carries the theme before its own styles, so the roles apply. */
     @Test public void reportPageCarriesTheThemeFirst() {
         StringWriter out = new StringWriter();
         DetectionReportDocumentWriter.appendDetectionReportStart(new PrintWriter(out, true));
         String html = out.toString();
         int theme = html.indexOf("--sp-page:");
-        int body = html.indexOf("background-color: var(--sp-page)");
+        int body = html.indexOf("body { font-family");
         assertTrue(theme > 0 && body > theme);
-        assertFalse("no hardcoded colour remains in the report's own styles",
-                withoutComments(html.substring(html.indexOf("}", theme))).matches("(?s).*#[0-9a-fA-F]{6}\\b.*"));
+        String ownStyles = withoutComments(html.substring(body, html.indexOf("</style>")));
+        assertFalse("no hardcoded colour remains in the report's own styles", ownStyles.matches("(?s).*#[0-9a-fA-F]{6}\\b.*"));
     }
 
     private static Set<String> matches(Pattern pattern, String text) {

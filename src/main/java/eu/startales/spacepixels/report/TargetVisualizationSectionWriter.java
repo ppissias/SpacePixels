@@ -78,7 +78,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeSingleStreaks(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
-        report.println("<h3 id='single-streaks' style='color: var(--sp-streak); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Single-Frame Streaks</h3>");
+        report.println("<h3 id='single-streaks' style='color: var(--sp-finding-s); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Single-Frame Streaks</h3>");
         int counter = 1;
         for (Track track : context.singleStreaks) {
             context.progress.next();
@@ -147,7 +147,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeStreakTracks(PrintWriter report,
                                           DetectionReportContext context) throws IOException {
-        report.println("<h3 id='streak-tracks' style='color: var(--sp-streak-track); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Streak Tracks</h3>");
+        report.println("<h3 id='streak-tracks' style='color: var(--sp-finding-st); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Streak Tracks</h3>");
         int counter = 1;
         for (Track track : context.streakTracks) {
             context.progress.next();
@@ -180,9 +180,9 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
 
-            report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: var(--sp-streak-track);'>");
+            report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: var(--sp-finding-st);'>");
             String timeBadge = track.isTimeBasedTrack ? " <span style='background: var(--sp-badge-blue); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-            report.println("<div class='detection-title' style='color: var(--sp-streak-track);'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + faintSearchBadge(track) + "</div>");
+            report.println("<div class='detection-title' style='color: var(--sp-finding-st);'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + faintSearchBadge(track) + "</div>");
             report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
             report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, context.fitsFiles));
 
@@ -494,7 +494,7 @@ final class TargetVisualizationSectionWriter {
             if (timestampMillis > 0L) {
                 html.append(" <span style='color:var(--sp-time);'>").append(ReportFormat.escapeHtml(formatUtcTimestamp(timestampMillis))).append("</span>");
             }
-            html.append(": fragments <span style='color:var(--sp-streak-track);'>");
+            html.append(": fragments <span style='color:var(--sp-finding-st);'>");
             for (int i = 0; i < fragmentIndices.size(); i++) {
                 if (i > 0) {
                     html.append(", ");
@@ -629,7 +629,7 @@ final class TargetVisualizationSectionWriter {
         }
         html.append("Streak Parts: <span style='color:var(--sp-text-strong);'>").append(partCount).append("</span>");
         if (partCount > 1) {
-            html.append(" <span style='color:var(--sp-streak);'>(grouped same-frame components)</span>");
+            html.append(" <span style='color:var(--sp-finding-s);'>(grouped same-frame components)</span>");
         }
         html.append("</div>");
         return html.toString();

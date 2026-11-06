@@ -6,7 +6,7 @@
 .fm-controls label { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8125rem; }
 .fm-controls select, .fm-controls button { background: var(--sp-raised); color: var(--sp-text-bright); border: 1px solid var(--sp-border-strong); border-radius: 4px; padding: 5px; }
 .fm-controls input[type=range] { width: 100px; }
-.fm-controls :focus-visible { outline: 2px solid var(--sp-faint-mover); outline-offset: 3px; }
+.fm-controls :focus-visible { outline: 2px solid var(--sp-finding-fm); outline-offset: 3px; }
 .fm-controls :disabled { opacity: .55; }
 .fm-review-grid { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 20px; margin: 12px 0; }
 .fm-review figure { margin: 0; min-width: 0; max-width: 100%; width: 320px; }
@@ -16,7 +16,7 @@
 .fm-fallback { width: 100%; }
 .fm-stack-content { width: var(--fm-stack-width, 318px); height: var(--fm-stack-height, 318px); position: relative; margin: 0 auto; }
 .fm-stack img { width: 100%; height: 100%; }
-.fm-reticle { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: var(--sp-faint-mover); font: 24px monospace; pointer-events: none; }
+.fm-reticle { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); color: #50e1d2; font: 24px monospace; pointer-events: none; }
 .fm-review.fm-no-annotations .fm-reticle { display: none; }
 .fm-review figcaption { color: var(--sp-text-soft); font-size: 0.75rem; line-height: 1.5; margin-top: 7px; text-align: center; }
 .fm-frame-label { font-family: monospace; color: var(--sp-text-bright); overflow-wrap: anywhere; }

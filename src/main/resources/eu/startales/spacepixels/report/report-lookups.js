@@ -125,15 +125,15 @@
     let html;
     let hasVsxMatch = false;
     if (entry.kind === 'loading') {
-      html = "<span style='color:#9aa4ad;'>checking...</span>";
+      html = "<span style='color:var(--sp-text-muted);'>checking...</span>";
     } else if (entry.kind === 'unavailable') {
-      html = "<span style='color:#d0a050;' title='Start SpacePixels to run catalogue lookups from the report.'>lookup unavailable</span>";
+      html = "<span style='color:var(--sp-warning);' title='Start SpacePixels to run catalogue lookups from the report.'>lookup unavailable</span>";
     } else if (!entry.response || entry.response.ok !== true) {
-      html = "<span style='color:#d0a050;'>lookup failed</span>";
+      html = "<span style='color:var(--sp-warning);'>lookup failed</span>";
     } else {
       const matches = safeArray((entry.response.normalized || {}).matches);
       if (!matches.length) {
-        html = "<span style='color:#c9a227;'>not in VSX</span>";
+        html = "<span style='color:var(--sp-warning);'>not in VSX</span>";
       } else {
         hasVsxMatch = true;
         const match = matches[0];
@@ -141,7 +141,7 @@
         const link = match.vsxUrl ? "<a class='live-link-inline' href='" + escapeHtml(match.vsxUrl) + "' target='_blank' rel='noopener noreferrer'>" + name + "</a>" : name;
         html = '<strong>' + link + '</strong> &middot; ' + escapeHtml(match.type || '?') + ' &middot; ' + escapeHtml(formatVsxPeriod(match.periodDays))
           + ' &middot; ' + escapeHtml(formatNumber(match.separationArcsec, 1)) + '&Prime;'
-          + (matches.length > 1 ? " <span style='color:#888;'>(+" + (matches.length - 1) + ' more)</span>' : '');
+          + (matches.length > 1 ? " <span style='color:var(--sp-text-faint);'>(+" + (matches.length - 1) + ' more)</span>' : '');
       }
     }
     cells.forEach(function (cell) {
@@ -671,7 +671,7 @@
     const status = container ? container.querySelector('.stellarium-local-status') : null;
     if (!status) return;
     status.style.display = 'block';
-    status.style.color = ok ? '#8fd19e' : '#d0a050';
+    status.style.color = ok ? 'var(--sp-success)' : 'var(--sp-warning)';
     status.innerHTML = htmlMessage;
   }
 

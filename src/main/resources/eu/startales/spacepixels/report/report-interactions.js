@@ -13,6 +13,20 @@
   if (toolbar && root.ResizeObserver) new root.ResizeObserver(sizeToolbar).observe(toolbar);
   root.addEventListener('resize', sizeToolbar);
   sizeToolbar();
+  // Theme and text size: applied to the page at once and remembered when the browser allows it.
+  function appearance(selectId, attribute, storageKey, defaultValue) {
+    const control = doc.getElementById(selectId);
+    if (!control) return;
+    control.value = doc.documentElement.getAttribute(attribute) || defaultValue;
+    control.addEventListener('change', function () {
+      if (control.value === defaultValue) doc.documentElement.removeAttribute(attribute);
+      else doc.documentElement.setAttribute(attribute, control.value);
+      try { root.localStorage.setItem(storageKey, control.value); } catch (e) { /* Not remembered; still applied. */ }
+      sizeToolbar();
+    });
+  }
+  appearance('report-theme', 'data-theme', 'spacepixels.report.theme', 'dark');
+  appearance('report-text-size', 'data-text-size', 'spacepixels.report.textSize', 'normal');
   const select = doc.getElementById('report-finding-select');
   function syncFinding() {
     if (!select) return;

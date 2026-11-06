@@ -1,6 +1,7 @@
 /* SpacePixels report colour roles: the dark theme, the default. A custom report-custom.css can
    override any of them, for example by setting --sp-accent to #ff9f1c in a rule for the root element. */
 :root {
+  color-scheme: dark;
   --sp-page: #2b2b2b;
   --sp-panel: #3c3f41;
   --sp-inset: #2b2b2b;
@@ -41,20 +42,97 @@
   --sp-track-link: #8ff0bd;
   --sp-track-badge: #2f8a5f;
   --sp-track-badge-hover: #3aa673;
-  --sp-streak: #ff9933;
-  --sp-faint-mover: #50e1d2;
-  --sp-anomaly: #b888c9;
   --sp-anomaly-text: #e0c7ed;
   --sp-anomaly-dim: #8d759a;
   --sp-compass: #ff6666;
-  --sp-local-rescue: #40e0d0;
-  --sp-local-activity: #ffb347;
-  --sp-slow-mover: #ff66ff;
-  --sp-streak-track: #ffcc33;
   --sp-time: #88c999;
   --sp-badge-blue: #2d5a88;
   --sp-badge-teal: #19595a;
   --sp-badge-purple: #4b3b7a;
   --sp-badge-amber: #7a4b14;
   --sp-tooltip: rgba(12,16,28,0.96);
+  --sp-status-good: #0ca30c;
+  --sp-status-warning: #fab219;
+  --sp-status-critical: #d03b3b;
 }
+
+/* The light theme. Roles not listed here keep their dark-theme value: the image well and marks over the
+   astronomical images, which stay dark in both themes, and the badges, which keep white text on colour. */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --sp-page: #f3f4f6;
+  --sp-panel: #ffffff;
+  --sp-inset: #f7f8fa;
+  --sp-sunken: #eceef1;
+  --sp-raised: #eef0f3;
+  --sp-row-alt: #f6f7f9;
+  --sp-hover: #e6ecf3;
+  --sp-toolbar: rgba(248,249,251,0.98);
+  --sp-shadow: rgba(0,0,0,0.08);
+  --sp-text-strong: #111418;
+  --sp-text-bright: #1f2328;
+  --sp-text: #2d333a;
+  --sp-text-soft: #4b535c;
+  --sp-text-muted: #5c6670;
+  --sp-text-faint: #69737d;
+  --sp-border-subtle: #e3e6ea;
+  --sp-border: #d0d5db;
+  --sp-border-strong: #b6bdc6;
+  --sp-accent: #0b66c3;
+  --sp-link: #0b5cad;
+  --sp-link-visited: #6a3fb5;
+  --sp-button-bg: #e3eefb;
+  --sp-button-hover: #cfe2f8;
+  --sp-button-border: #9cc3ec;
+  --sp-button-text: #0b4f94;
+  --sp-toggle-on: #cfe2f8;
+  --sp-alert: #c62828;
+  --sp-error-bg: #fdecec;
+  --sp-error-border: #e6a3a3;
+  --sp-warning: #8a5a00;
+  --sp-success: #1e7d32;
+  --sp-track-note-bg: #e8f6ee;
+  --sp-track-note-border: #a6d8bb;
+  --sp-track-note-accent: #2e9d68;
+  --sp-track-note-text: #1d4d33;
+  --sp-track-link: #17693f;
+  --sp-track-badge: #cdeedd;
+  --sp-track-badge-hover: #b6e4cc;
+  --sp-time: #2f6b3b;
+  --sp-anomaly-text: #6b3d80;
+  --sp-anomaly-dim: #a07db2;
+  --sp-status-good: #0a7d0a;
+  --sp-status-warning: #8a6200;
+  --sp-status-critical: #b42318;
+}
+
+/* Text sizes: the report's sizes are relative to the page's base size, so this scales text and controls,
+   not the astronomical images. */
+:root[data-text-size='small'] { font-size: 87.5%; }
+:root[data-text-size='large'] { font-size: 112.5%; }
+:root[data-text-size='x-large'] { font-size: 125%; }
+
+/* Charts on the page draw with the dark theme's colours; on a light page their background, grid, axes and text
+   follow the theme, and the light series colours are darkened to stay readable. Plots of the sky and marks over
+   the astronomical images keep their colours. */
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) :is([fill='#2b2b2b'], [fill='#262626']) { fill: var(--sp-sunken); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#2b2b2b'] { stroke: var(--sp-inset); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) :is([stroke='#444'], [stroke='#3a3a3a'], [stroke='#3a3a38']) { stroke: var(--sp-border); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) :is([stroke='#6a6a66'], [stroke='#777']) { stroke: var(--sp-border-strong); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#6f6f6a'] { stroke: #9aa0a6; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#6f6f6a'] { fill: #9aa0a6; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) :is([fill='#999'], [fill='#a8a8a2'], [fill='#bbb']) { fill: var(--sp-text-muted); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#e6e6e6'] { fill: var(--sp-text-bright); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#c3c2b7'] { fill: #5d5c55; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#c3c2b7'] { stroke: #5d5c55; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#4da6ff'] { fill: var(--sp-accent); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#4da6ff'] { stroke: var(--sp-accent); }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#8fc3ff'] { stroke: #3d7fc4; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#d9a35b'] { fill: #9a6417; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#d9a35b'] { stroke: #9a6417; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#ffb366'] { fill: #b85f00; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#ffb366'] { stroke: #b85f00; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#fab219'] { fill: #a87400; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [stroke='#fab219'] { stroke: #a87400; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#50e1d2'] { fill: #0f8a7e; }
+:root[data-theme='light'] :is(.ne-svg, .sp-chart, [data-fm-signal]) [fill='#ffdf6b'] { fill: #a67c00; }

@@ -253,9 +253,9 @@ final class PhotometrySvgChart {
             r.run();
         }
         StringBuilder svg = new StringBuilder();
-        svg.append("<svg xmlns='http://www.w3.org/2000/svg'").append(interactive ? " data-report-chart='true'" : "").append(" role='img' viewBox='0 0 ").append(width).append(' ').append(height)
+        svg.append("<svg class='sp-chart' xmlns='http://www.w3.org/2000/svg'").append(interactive ? " data-report-chart='true'" : "").append(" role='img' viewBox='0 0 ").append(width).append(' ').append(height)
                 .append("' width='").append(width).append("' height='").append(height)
-                .append("' style='max-width:100%; height:auto; background:").append(SURFACE).append("; border-radius:4px;'")
+                .append("' style='max-width:100%; height:auto; background:var(--sp-inset); border-radius:4px;'")
                 .append(" font-family=\"'Segoe UI', Tahoma, sans-serif\">");
         svg.append("<title>").append(ReportFormat.escapeHtml(ariaLabel)).append("</title>");
         svg.append(background);

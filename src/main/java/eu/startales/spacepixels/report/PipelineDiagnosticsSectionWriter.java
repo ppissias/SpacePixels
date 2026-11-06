@@ -535,8 +535,8 @@ final class PipelineDiagnosticsSectionWriter {
         min = Math.floor((min - 0.3) * 2) / 2;
         max = Math.ceil((max + 0.3) * 2) / 2;
         int count = frames.size();
-        StringBuilder svg = new StringBuilder("<svg viewBox='0 0 " + width + " " + height + "' style='max-width:" + width
-                + "px; width:100%; background:#2b2b2b; border:1px solid #555; border-radius:4px;' font-family='Segoe UI, sans-serif' font-size='11'>");
+        StringBuilder svg = new StringBuilder("<svg class='sp-chart' viewBox='0 0 " + width + " " + height + "' style='max-width:" + width
+                + "px; width:100%; background:var(--sp-inset); border:1px solid var(--sp-border-strong); border-radius:4px;' font-family='Segoe UI, sans-serif' font-size='11'>");
         for (double mag = min; mag <= max + 1e-9; mag += 0.5) {
             // Fainter (deeper) at the top.
             double y = top + (max - mag) / (max - min) * (height - top - bottom);
@@ -668,7 +668,7 @@ final class PipelineDiagnosticsSectionWriter {
                 Object value = field.get(reportContext.config);
                 Object defaultValue = field.get(defaults);
                 boolean differs = !java.util.Objects.equals(value, defaultValue);
-                String item = "<div class='config-item'" + (differs ? " style='border-left-color:var(--sp-streak);' title='Default: "
+                String item = "<div class='config-item'" + (differs ? " style='border-left-color:var(--sp-finding-s);' title='Default: "
                         + ReportFormat.escapeHtml(String.valueOf(defaultValue)) + "'" : "") + "><span>" + field.getName()
                         + "</span> <span class='val'" + (differs ? " style='color:var(--sp-warning);'" : "") + ">" + ReportFormat.escapeHtml(String.valueOf(value)) + "</span></div>";
                 (differs ? changed : unchanged).add(item);
@@ -824,7 +824,7 @@ final class PipelineDiagnosticsSectionWriter {
                 report.println("<tr><td>" + (starStat.frameIndex + 1) + "</td>");
                 report.println("<td>" + ReportFormat.escapeHtml(fileName) + "</td>");
                 report.println("<td>" + starStat.initialPointSources + "</td>");
-                report.println("<td style='color: var(--sp-streak);'>" + starStat.purgedStars + "</td>");
+                report.println("<td style='color: var(--sp-finding-s);'>" + starStat.purgedStars + "</td>");
                 report.println("<td style='color: var(--sp-success); font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");
             }
             report.println("</tbody></table>");
