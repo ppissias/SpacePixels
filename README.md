@@ -373,6 +373,17 @@ SpacePixels is built with the following open-source Java libraries and component
 
 [Gradle](https://gradle.org/) builds the application; [JUnit](https://junit.org/junit4/) and [AssertJ Swing (Hiroshi Miura's fork)](https://codeberg.org/miurahr/assertj-swing) support tests. JDK jpackage/jlink and [WiX Toolset](https://wixtoolset.org/) create the Windows installer.
 
+#### AI Coding Assistants
+
+Since 2026, the development of SpacePixels and its libraries has been supported by these AI coding assistants:
+
+- <img src="src/main/resources/eu/startales/spacepixels/gui/logos/claude.png" alt="Claude logo" width="20" height="20" /> **Claude** by Anthropic ([Claude](https://www.anthropic.com/claude))
+- <img src="src/main/resources/eu/startales/spacepixels/gui/logos/openai.png" alt="OpenAI logo" width="20" height="20" /> **Codex** by OpenAI ([Codex](https://openai.com/codex/))
+- <img src="src/main/resources/eu/startales/spacepixels/gui/logos/gemini.png" alt="Gemini logo" width="20" height="20" /> **Gemini** by Google ([Gemini](https://gemini.google.com/))
+- <img src="src/main/resources/eu/startales/spacepixels/gui/logos/grok.png" alt="Grok logo" width="72" height="20" /> **Grok** by xAI ([Grok](https://x.ai/grok))
+
+Logos are trademarks of their respective owners.
+
 ### Scientific References & Algorithms
 
 Each entry identifies its use in SpacePixels or its libraries. Project-specific extensions and selection thresholds are described separately in the [JTransient algorithm documentation](https://github.com/ppissias/JTransient/blob/main/ALGORITHM.md).

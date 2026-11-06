@@ -234,7 +234,19 @@ final class AcknowledgementsDialog extends JDialog {
                 + "<p><a href='https://gradle.org/'>Gradle</a> builds the application; "
                 + "<a href='https://junit.org/junit4/'>JUnit</a> and "
                 + "<a href='https://codeberg.org/miurahr/assertj-swing'>AssertJ Swing (Hiroshi Miura's fork)</a> support tests. "
-                + "JDK jpackage/jlink and <a href='https://wixtoolset.org/'>WiX Toolset</a> create the Windows installer.</p>";
+                + "JDK jpackage/jlink and <a href='https://wixtoolset.org/'>WiX Toolset</a> create the Windows installer.</p>"
+                + "<hr style='border: 0; border-top: 1px solid #666666; margin: 14px 0 10px 0;'>"
+                + "<h3>AI Coding Assistants</h3>"
+                + "<p>Since 2026, the development of SpacePixels and its libraries has been supported by these AI coding assistants:</p>"
+                + logoCard("claude.png", 40, 40,
+                        "<b>Claude</b> by Anthropic (<a href='https://www.anthropic.com/claude'>Claude</a>).")
+                + logoCard("openai.png", 40, 40,
+                        "<b>Codex</b> by OpenAI (<a href='https://openai.com/codex/'>Codex</a>).")
+                + logoCard("gemini.png", 40, 40,
+                        "<b>Gemini</b> by Google (<a href='https://gemini.google.com/'>Gemini</a>).")
+                + logoCard("grok.png", 72, 20,
+                        "<b>Grok</b> by xAI (<a href='https://x.ai/grok'>Grok</a>).")
+                + "<p class='muted'>Logos are trademarks of their respective owners.</p>";
     }
 
     /** Maps verified publications and data references to the features that actually use them. */

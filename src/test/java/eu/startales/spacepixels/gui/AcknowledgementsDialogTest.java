@@ -67,6 +67,10 @@ public class AcknowledgementsDialogTest {
                 assertTrue(tab3Text.contains("FlatLaf"));
                 assertTrue(tab3Text.contains("JTransient"));
                 assertTrue(tab3Text.contains("JPlateSolve"));
+                assertTrue(tab3Text.contains("Claude"));
+                assertTrue(tab3Text.contains("Codex"));
+                assertTrue(tab3Text.contains("Gemini"));
+                assertTrue(tab3Text.contains("Grok"));
 
                 // Verify Tab 4 (Scientific References & Algorithms)
                 String tab4Text = extractEditorText(tabs.getComponentAt(3));
