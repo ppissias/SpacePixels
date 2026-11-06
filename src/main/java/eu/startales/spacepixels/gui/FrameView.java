@@ -152,6 +152,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private eu.startales.spacepixels.detection.FindingOverlay findingOverlay;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
+    /** A short tag in the top-left corner, for example Blink's "17 / 33 · +37:17", or null. */
+    private String caption;
     /** Told when the zoom changes, for the zoom buttons. */
     private Runnable zoomListener = () -> { };
     /** A prepared picture, used by the stretch previews and the star-mask stack instead of a FITS frame. */
@@ -234,6 +236,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     void setCursorListener(CursorListener listener) {
         this.cursorListener = listener;
+    }
+
+    void setCaption(String caption) {
+        this.caption = caption;
+        repaint();
     }
 
     void setZoomListener(Runnable listener) {
@@ -660,11 +667,16 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         return levels;
     }
 
+    /** The caption, then the zoom when it is not the fitted view, in the top-left corner. */
     private void drawZoomLabel(Graphics2D g2) {
-        if (link.zoom <= 1.0) return;
-        String label = String.format(Locale.US, "%.0f %%", zoomPercent());
         g2.setFont(UiStyle.bodyFont());
-        drawNote(g2, label, UiStyle.space(6), Color.WHITE);
+        int y = UiStyle.space(6);
+        if (caption != null) {
+            drawNote(g2, caption, y, Color.WHITE);
+            y += noteHeight(g2) + UiStyle.space(4);
+        }
+        if (link.zoom <= 1.0) return;
+        drawNote(g2, String.format(Locale.US, "%.0f %%", zoomPercent()), y, Color.WHITE);
     }
 
     /** Height of one image-overlay note, including padding, at the selected interface font size. */

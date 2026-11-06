@@ -17,7 +17,11 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.*;
 
-/** Owns Blink's viewport selection and one cancellable, streamed GIF export. UI state belongs to the EDT. */
+/**
+ * Owns Blink's Export GIF mode and one cancellable, streamed GIF export. In the mode, the image is dimmed outside the
+ * dragged rectangle, and a bar over the image offers Cancel (Esc) and Export GIF; right-click inside the rectangle and
+ * Ctrl+E export too. UI state belongs to the EDT.
+ */
 final class BlinkGifExport {
     /** Immutable frame identity and projected catalogue marks, borrowing read-only Blink pixel buffers. */
     record FrameInput(BlinkSequence.Frame frame, List<SkyMark> marks) {
@@ -37,10 +41,12 @@ final class BlinkGifExport {
     private final Runnable pause;
     private final JLayer<FrameView> layer;
     private final SelectionGlass glass = new SelectionGlass();
-    private final JToggleButton select = new JToggleButton("Select GIF region");
+    private final JToggleButton select = new JToggleButton("Export GIF…");
     private final JButton cancel = new JButton("Cancel GIF export");
+    private final JButton leave = new JButton("Cancel (Esc)");
+    private final JButton export = new JButton("Export GIF");
     private final JLabel status = new JLabel(" ");
-    private final JPanel controls = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 0));
+    private final JPanel bar = new JPanel(new FlowLayout(FlowLayout.CENTER, UiStyle.space(8), UiStyle.space(4)));
     private Rectangle selection;
     private Point anchor;
     private boolean available;
@@ -54,7 +60,8 @@ final class BlinkGifExport {
         layer = new JLayer<>(view);
         layer.setGlassPane(glass); glass.setVisible(false);
         select.setName("selectGifRegion"); select.setEnabled(false);
-        select.setToolTipText("Select GIF region (G), drag a rectangle, then right-click inside it or press Ctrl+E to export.");
+        select.setToolTipText("<html>Export a region of the loop as an animated GIF (G): drag a rectangle on the image, then Export GIF.<br>"
+                + "The GIF includes the frames in the loop, the visible annotations, the zoom and stretch, at the current speed.</html>");
         select.addActionListener(event -> {
             if (select.isSelected()) pause.run();
             else { selection = null; anchor = null; }
@@ -64,10 +71,22 @@ final class BlinkGifExport {
         cancel.setName("cancelGifExport"); cancel.setVisible(false);
         cancel.setToolTipText("Stop this GIF export and keep any earlier complete file at the destination.");
         cancel.addActionListener(event -> cancelExport());
-        JLabel guidance = new JLabel("Drag a rectangle; right-click inside it to export.");
-        guidance.setToolTipText("The GIF includes the current loop, visible annotations, zoom and stretch, at the current playback speed.");
+        leave.setToolTipText("Leave Export GIF without exporting (Esc).");
+        leave.addActionListener(event -> { if (select.isSelected()) select.doClick(); });
+        export.setName("exportGifButton");
+        export.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
+        export.setToolTipText("Choose a file and export the selected region (Ctrl+E).");
+        export.addActionListener(event -> chooseFile());
+        JLabel guidance = new JLabel("Drag a rectangle on the image, then export");
+        guidance.setToolTipText("The GIF includes the frames in the loop, the visible annotations, the zoom and stretch, at the current speed.");
         status.setName("blinkGifStatus");
-        controls.add(select); controls.add(guidance); controls.add(cancel); controls.add(status);
+        bar.add(guidance); bar.add(status); bar.add(cancel); bar.add(leave); bar.add(export);
+        bar.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(0x363B44)),
+                BorderFactory.createEmptyBorder(UiStyle.space(2), UiStyle.space(6), UiStyle.space(2), UiStyle.space(6))));
+        // Clicks on the bar must not start a selection on the image under it.
+        bar.addMouseListener(new MouseAdapter() { });
+        for (Component control : bar.getComponents()) if (control instanceof AbstractButton button) button.setRequestFocusEnabled(false);
+        glass.add(bar);
         MouseAdapter mouse = new MouseAdapter() {
             @Override public void mousePressed(MouseEvent event) {
                 view.requestFocusInWindow();
@@ -92,8 +111,8 @@ final class BlinkGifExport {
 
     /** Component used in place of the plain image view in Blink's split pane. */
     JComponent image() { return layer; }
-    /** Selection, guidance, progress and cancellation controls for Blink's wrapping controls row. */
-    JComponent controls() { return controls; }
+    /** The toolbar toggle that enters and leaves the mode (G). */
+    JComponent toolbarButton() { return select; }
     /** Enables admission only for a loaded blink; an old worker must actually finish before another export starts. */
     void setAvailable(boolean available) { this.available = available; select.setEnabled(available && worker == null); }
     /** Keyboard G follows the same action as the selection control. */
@@ -191,11 +210,15 @@ final class BlinkGifExport {
                             JOptionPane.showMessageDialog(layer, cause.getMessage(), "GIF export failed", JOptionPane.ERROR_MESSAGE);
                     }
                 } finally {
-                    if (worker == this) { worker = null; cancellation = null; cancel.setVisible(false); setAvailable(available); }
+                    if (worker == this) {
+                        worker = null; cancellation = null; cancel.setVisible(false); setAvailable(available);
+                        export.setEnabled(selection != null && !selection.isEmpty()); leave.setVisible(true);
+                    }
                 }
             }
         };
         select.setEnabled(false); cancel.setEnabled(true); cancel.setVisible(true); status.setText("Exporting GIF…");
+        export.setEnabled(false); leave.setVisible(false);
         worker.execute();
         return completed;
     }
@@ -235,10 +258,12 @@ final class BlinkGifExport {
     }
     /** Shows actual exported pixel dimensions, including the monitor's HiDPI scale. */
     private void updateSelectionStatus() {
+        export.setEnabled(worker == null && selection != null && !selection.isEmpty());
+        leave.setVisible(worker == null);
         if (worker != null) return;
-        if (selection == null || selection.isEmpty()) { if (select.isSelected()) status.setText("Draw a GIF region."); return; }
+        if (selection == null || selection.isEmpty()) { status.setText(" "); return; }
         Rectangle pixels = FrameView.deviceBounds(selection, device());
-        status.setText(pixels.width + " × " + pixels.height + " px · right-click to export");
+        status.setText(pixels.width + " × " + pixels.height + " px");
     }
     /** GIF stores delays in 10-ms units; round once rather than truncating the current playback interval. */
     static int gifDelay(int milliseconds) { return Math.max(10, (int) Math.round(milliseconds / 10.0) * 10); }
@@ -267,16 +292,32 @@ final class BlinkGifExport {
         }
     }
 
-    /** Selection guides intercept mouse gestures only while enabled and are never painted into exported image data. */
+    /**
+     * Dims the image outside the selection and outlines it, with the mode's bar at the top. It intercepts mouse
+     * gestures only while the mode is on, and is never painted into exported image data.
+     */
     private final class SelectionGlass extends JPanel {
-        SelectionGlass() { setOpaque(false); setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR)); }
+        SelectionGlass() {
+            super(new FlowLayout(FlowLayout.CENTER, 0, UiStyle.space(10)));
+            setOpaque(false);
+            setCursor(Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        }
         @Override protected void paintComponent(Graphics graphics) {
-            if (selection == null || selection.isEmpty()) return;
-            Point origin = SwingUtilities.convertPoint(view, selection.getLocation(), this);
             Graphics2D guide = (Graphics2D) graphics.create();
             try {
-                guide.setColor(new Color(255, 220, 80)); guide.setStroke(new BasicStroke(2));
-                guide.drawRect(origin.x, origin.y, selection.width, selection.height);
+                java.awt.geom.Area dimmed = new java.awt.geom.Area(new Rectangle(getSize()));
+                Rectangle area = null;
+                if (selection != null && !selection.isEmpty()) {
+                    area = new Rectangle(SwingUtilities.convertPoint(view, selection.getLocation(), this), selection.getSize());
+                    dimmed.subtract(new java.awt.geom.Area(area));
+                }
+                guide.setColor(new Color(0, 0, 0, 110));
+                guide.fill(dimmed);
+                if (area != null) {
+                    guide.setColor(SidePanelIcons.accent());
+                    guide.setStroke(new BasicStroke(2, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{6, 4}, 0));
+                    guide.drawRect(area.x, area.y, area.width, area.height);
+                }
             } finally { guide.dispose(); }
         }
     }
