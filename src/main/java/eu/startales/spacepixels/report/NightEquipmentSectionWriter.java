@@ -321,7 +321,8 @@ final class NightEquipmentSectionWriter {
     // THE OPTICS
     // ==========================================
 
-    private static void writeOptics(PrintWriter report, NightEquipment ne) {
+    /** Writes local optical measurements and their field-wide summaries without changing the borrowed measurements. */
+    static void writeOptics(PrintWriter report, NightEquipment ne) {
         if (ne.relativeSize == null) {
             return;
         }
@@ -340,7 +341,7 @@ final class NightEquipmentSectionWriter {
         }));
         report.println("<p class='ne-reading'>" + sizeReading(ne) + "</p></div>");
 
-        report.println("<div><div class='ne-chart-title'>Star shapes (tracking removed)</div>");
+        report.println("<div><div class='ne-chart-title'>Star shapes (shared stretch removed)</div>");
         report.println(whiskerMap(ne));
         report.println("<p class='ne-reading'>" + shapeReading(ne) + "</p></div>");
 
@@ -397,37 +398,66 @@ final class NightEquipmentSectionWriter {
         return text.toString().trim();
     }
 
+    /** Distinguishes shared and radial stretch from the largest measured local stretch; stretches are axis-ratio excesses. */
     private static String shapeReading(NightEquipment ne) {
         StringBuilder text = new StringBuilder();
         double tracking = Math.hypot(ne.trackingE1, ne.trackingE2);
         double trackingRatio = axisRatio(tracking);
         if (trackingRatio >= 1.12) {
-            text.append(String.format(Locale.US, "All stars are stretched %.0f %% in the same direction (%s): tracking, guiding, wind or a shared optical effect may contribute. "
+            text.append(String.format(Locale.US, "The shared stretch across the field is %.0f %% (%s): tracking, guiding, wind or a shared optical effect may contribute. "
                     + "This shared stretch is taken out of the map. ", (trackingRatio - 1) * 100, lineDirection(ne.trackingE1, ne.trackingE2)));
         } else if (trackingRatio >= 1.05) {
-            text.append(String.format(Locale.US, "All stars share a slight stretch of %.0f %% (%s): tracking or guiding; it is taken out of the map. ",
+            text.append(String.format(Locale.US, "The shared stretch across the field is slight, %.0f %% (%s): tracking or guiding may contribute; it is taken out of the map. ",
                     (trackingRatio - 1) * 100, lineDirection(ne.trackingE1, ne.trackingE2)));
+        } else if (Double.isFinite(trackingRatio)) {
+            text.append("No shared stretch above 5 % is measured across the field. ");
         } else {
-            text.append("Round on average: the stars share no measured stretch beyond 5 %. ");
+            text.append("The shared stretch could not be measured. ");
         }
         double radial = ne.radialEllipticity;
-        if (Double.isNaN(radial)) {
-            return text.toString();
-        }
-        double ratio = axisRatio(Math.abs(radial));
-        if (ratio < 1.05) {
-            text.append("In the outer field the stars keep their shape (within 5 %).");
+        double ratio = axisRatio(radial);
+        if (!Double.isFinite(radial)) {
+            text.append("Too few outer-field measurements to summarize the radial or tangential pattern. ");
+        } else if (ratio < 1.05) {
+            text.append("The average radial or tangential stretch in the outer field is below 5 %; local stretches can cancel in this average. ");
         } else if (radial > 0) {
-            text.append(String.format(Locale.US, "In the outer field the stars are stretched %.0f %% along the line to the centre: typical of a reducer or flattener at the wrong distance from the camera, or of coma.", (ratio - 1) * 100));
+            text.append(String.format(Locale.US, "The average stretch along the line to the centre in the outer field is %.0f %% after removing the shared stretch. "
+                    + "This pattern can be consistent with reducer or flattener spacing, or coma. ", (ratio - 1) * 100));
         } else {
-            text.append(String.format(Locale.US, "In the outer field the stars are stretched %.0f %% across the line to the centre: typical of a reducer or flattener at the wrong distance (the opposite way to stretching along the line), of astigmatism, or of field rotation.", (ratio - 1) * 100));
+            text.append(String.format(Locale.US, "The average stretch across the line to the centre in the outer field is %.0f %% after removing the shared stretch. "
+                    + "This pattern can be consistent with reducer or flattener spacing, astigmatism, or field rotation. ", (ratio - 1) * 100));
         }
+        double largest = maximumLocalStretch(ne);
+        text.append(Double.isFinite(largest)
+                ? String.format(Locale.US, "Measured local stretch after removing the shared stretch reaches %.1f %% across the available map regions. Hover a line for that region's measurement.", largest * 100)
+                : "Local stretch measurements are unavailable.");
         return text.toString();
     }
 
+    /** Returns the largest measured local axis-ratio excess after shared-stretch removal, or NaN when unavailable. */
+    private static double maximumLocalStretch(NightEquipment ne) {
+        double largest = Double.NaN;
+        for (int r = 0; r < ne.rows; r++) {
+            for (int c = 0; c < ne.columns; c++) {
+                double e1 = ne.shapeE1[r][c];
+                double e2 = ne.shapeE2[r][c];
+                if (Double.isFinite(e1) && Double.isFinite(e2)) {
+                    double stretch = axisRatio(Math.hypot(e1, e2)) - 1;
+                    largest = Double.isNaN(largest) ? stretch : Math.max(largest, stretch);
+                }
+            }
+        }
+        return largest;
+    }
+
+    /** Describes the fitted radial component separately from measured local offsets, using the same reference star size. */
     private static String comaReading(NightEquipment ne) {
+        double largest = maximumLocalComaOffset(ne);
+        String local = Double.isFinite(largest)
+                ? String.format(Locale.US, "Measured local light-to-core offsets reach %.0f %% of the reference star size across the available map regions. Hover an arrow or dot for that region's measurement.", largest * 100)
+                : "Local light-to-core measurements are unavailable.";
         if (Double.isNaN(ne.comaSlope)) {
-            return "Too few bright stars across the field to measure coma.";
+            return "Too few bright stars across the field to fit a radial coma pattern. " + local;
         }
         double halfDiagonal = Math.hypot(ne.width, ne.height) / 2;
         double corner = Math.abs(ne.comaSlope) * halfDiagonal;
@@ -436,65 +466,53 @@ final class NightEquipmentSectionWriter {
         StringBuilder text = new StringBuilder();
         double lean = Math.hypot(ne.comaCentreX, ne.comaCentreY) / ne.centreSizePx;
         if (lean >= 0.04) {
-            text.append(String.format(Locale.US, "All stars lean the same way, with their light %.0f %% of their size towards the %s of the core: "
-                    + "the tracking or guiding moved during the exposures, or an optical part is slightly off-centre. ",
+            text.append(String.format(Locale.US, "The fitted light-to-core offset at the field centre is %.0f %% of the reference star size towards the %s of the core. "
+                    + "Tracking, guiding or an off-centre optical effect may contribute. ",
                     lean * 100, direction(ne.comaCentreX, ne.comaCentreY).replace(" side", "")));
         }
-        if (!significant || share < 0.05) {
-            double[] edge = largestComaCell(ne);
-            if (edge != null && edge[0] >= 0.08 && edge[0] >= 2.5 * edge[3]) {
-                text.append(String.format(Locale.US, "Only towards the %s are the stars lopsided, by up to %.0f %% of their size: this goes with an uneven focus across the field (see the star sizes), not with coma. ",
-                        direction(edge[1], edge[2]).replace(" side", ""), edge[0] * 100));
-            }
-            text.append(String.format(Locale.US, "No coma at the edges: towards the corners the light of a star moves by only %.0f %% of its size against its core.", Math.max(share, 0) * 100));
+        text.append(String.format(Locale.US, "The fitted radial change from the centre to the corners is %s (%.0f %% of the reference star size). "
+                        + "This excludes the fitted centre offset and local deviations shown by the arrows. ",
+                format(corner * (ne.hasPixelScale() ? ne.pixelScale : 1), ne.hasPixelScale() ? SECOND : " px"), share * 100));
+        if (!significant) {
+            text.append("A radial coma pattern is not statistically resolved by these measurements. ");
+        } else if (share < 0.05) {
+            text.append("The fitted radial component is small (below 5 % of the reference star size); local offsets can be larger. ");
         } else if (share < 0.10) {
-            text.append(String.format(Locale.US, "The corner stars are slightly lopsided, with a faint tail pointing %s the centre: their light lies %s (%.0f %% of their size) from the core. "
-                            + "Slight coma; with a camera lens it can also be lateral colour (the colours focused side by side).",
-                    ne.comaSlope > 0 ? "away from" : "towards", format(corner * (ne.hasPixelScale() ? ne.pixelScale : 1), ne.hasPixelScale() ? SECOND : " px"), share * 100));
+            text.append(String.format(Locale.US, "The small fitted radial component points %s the centre. "
+                            + "This pattern can be consistent with slight coma; with a camera lens it can also be lateral colour (the colours focused side by side). ",
+                    ne.comaSlope > 0 ? "away from" : "towards"));
         } else {
-            text.append(String.format(Locale.US, "The corner stars are lopsided, with a faint tail pointing %s the centre: their light lies %s (%.0f %% of their size) from the core. "
+            text.append(String.format(Locale.US, "The fitted radial component points %s the centre. "
                             + "This pattern is consistent with coma. On a reflector, check the corrector and its spacing; asymmetric focus and colour effects can also contribute. ",
-                    ne.comaSlope > 0 ? "away from" : "towards", format(corner * (ne.hasPixelScale() ? ne.pixelScale : 1), ne.hasPixelScale() ? SECOND : " px"), share * 100));
+                    ne.comaSlope > 0 ? "away from" : "towards"));
             if (!Double.isNaN(ne.comaZeroX)) {
                 double zx = ne.comaZeroX - (ne.width - 1) / 2.0;
                 double zy = ne.comaZeroY - (ne.height - 1) / 2.0;
                 double off = Math.hypot(zx, zy) / halfDiagonal;
                 boolean inside = ne.comaZeroX >= 0 && ne.comaZeroY >= 0 && ne.comaZeroX < ne.width && ne.comaZeroY < ne.height;
                 if (inside && off >= 0.2) {
-                    text.append(String.format(Locale.US, "The point without coma (the cross) lies %.0f %% of the way from the centre to the %s corner: on a reflector, the collimation is probably off.",
+                    text.append(String.format(Locale.US, "The fitted zero-offset point (the cross) lies %.0f %% of the way from the centre to the %s corner: on a reflector, this may suggest a collimation issue. ",
                             off * 100, direction(zx, zy)));
                 } else if (inside) {
-                    text.append("The point without coma is near the centre: the fitted asymmetry is centred within these measurements.");
+                    text.append("The fitted zero-offset point is near the centre. ");
                 }
             }
         }
-        return text.toString();
+        return text.append(local).toString();
     }
 
-    /**
-     * The cell with the most lopsided stars: {share of the star size, x and y of the cell from the centre, median share
-     * of all cells}; null when none.
-     */
-    private static double[] largestComaCell(NightEquipment ne) {
-        double[] best = null;
-        List<Double> shares = new ArrayList<>();
+    /** Returns the largest measured local offset as a fraction of the reference star size, or NaN when unavailable. */
+    private static double maximumLocalComaOffset(NightEquipment ne) {
+        double largest = Double.NaN;
         for (int r = 0; r < ne.rows; r++) {
             for (int c = 0; c < ne.columns; c++) {
-                if (Double.isNaN(ne.comaX[r][c])) {
-                    continue;
-                }
                 double share = Math.hypot(ne.comaX[r][c], ne.comaY[r][c]) / ne.centreSizePx;
-                shares.add(share);
-                if (best == null || share > best[0]) {
-                    double[] uv = ne.cellCentre(r, c);
-                    best = new double[]{share, uv[0], uv[1], 0};
+                if (Double.isFinite(share)) {
+                    largest = Double.isNaN(largest) ? share : Math.max(largest, share);
                 }
             }
         }
-        if (best != null) {
-            best[3] = Statistics.median(shares);
-        }
-        return best;
+        return largest;
     }
 
     // ==========================================
@@ -741,7 +759,7 @@ final class NightEquipmentSectionWriter {
                 (int) (grey[2] + a * (target[2] - grey[2])));
     }
 
-    /** Each cell's star stretch (tracking removed) as a line along the stretch, its length growing with the stretch. */
+    /** Draws each cell's residual stretch; its tooltip reports the local axis-ratio excess after shared-stretch removal. */
     private static String whiskerMap(NightEquipment ne) {
         int width = 400;
         int height = (int) Math.round(width * ne.height / (double) ne.width);
@@ -764,13 +782,13 @@ final class NightEquipmentSectionWriter {
                 double y = (r + 0.5) * ch;
                 svg.append(String.format(Locale.US, "<line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f' stroke='#8fc3ff' stroke-width='3' stroke-linecap='round'><title>%s</title></line>",
                         x - half * Math.cos(angle), y - half * Math.sin(angle), x + half * Math.cos(angle), y + half * Math.sin(angle),
-                        String.format(Locale.US, "Stretched %.1f %%", (ratio - 1) * 100)));
+                        String.format(Locale.US, "Measured stretch in this region: %.1f %% (shared stretch removed)", (ratio - 1) * 100)));
             }
         }
         return svg.append("</svg>").toString();
     }
 
-    /** Each cell's coma offset as an arrow from the core towards the light, much enlarged. */
+    /** Draws measured local light-to-core offsets, with percentages relative to the session's reference star size. */
     private static String comaMap(NightEquipment ne) {
         int width = 400;
         int height = (int) Math.round(width * ne.height / (double) ne.width);
@@ -801,7 +819,7 @@ final class NightEquipmentSectionWriter {
                 double length = share * scale;
                 double x = (c + 0.5) * cw;
                 double y = (r + 0.5) * ch;
-                String tip = String.format(Locale.US, "Light %.2f px from the core (%.0f %% of the star size)", Math.hypot(dx, dy), share * 100);
+                String tip = String.format(Locale.US, "Measured light-to-core offset in this region: %.2f px (%.0f %% of the reference star size)", Math.hypot(dx, dy), share * 100);
                 if (length < 2) {
                     svg.append(String.format(Locale.US, "<circle cx='%.1f' cy='%.1f' r='2' fill='#ffb366'><title>%s</title></circle>", x, y, tip));
                     continue;
@@ -818,7 +836,7 @@ final class NightEquipmentSectionWriter {
             double x = ne.comaZeroX / ne.width * width;
             double y = ne.comaZeroY / ne.height * height;
             svg.append(String.format(Locale.US, "<g stroke='#ffffff' stroke-width='1.5'><line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f'/><line x1='%.1f' y1='%.1f' x2='%.1f' y2='%.1f'/>"
-                    + "<title>Point without coma</title></g>", x - 7, y, x + 7, y, x, y - 7, x, y + 7));
+                    + "<title>Fitted zero-offset point</title></g>", x - 7, y, x + 7, y, x, y - 7, x, y + 7));
         }
         return svg.append("</svg>").toString();
     }
