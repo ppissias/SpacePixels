@@ -11,6 +11,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Planned for the next release; not implemented |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
+| [F29](#f29-preview-frame-and-blink-redesign) | Preview Frame and Blink redesign | Agreed 2026-11-06; implementation in progress |
 
 The other investigations from 2026-11-02 are owned by JTransient: [remaining deferred photometry work](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [readiness policy](../JTransient/FEATURE-REQUESTS.md#vs-9-selected-stars-and-the-linearity-check-minimum), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -201,3 +202,25 @@ The saved Gaia star model contains source identity when available, position, pro
 - Check offline reopening, older caches/reports, additive CSV/schema behavior, saved provenance and uncertainty labels. Detection outputs, scores, candidates and engine readiness must be unchanged.
 
 **Scientific references used in the review.** [Gaia DR3 photometric relationships](https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html) describe the validity ranges and limitations of passband transformations. [AAVSO's guide to using its data](https://archive.aavso.org/index.php/quickstart-guide-using-aavso-data) distinguishes filtered and unfiltered observations and calibration limitations.
+
+## F29. Preview Frame and Blink redesign
+
+**Request (2026-11-06).** The maintainer's redesign of the two overlay viewers: a side panel with the same sections in both windows (Raw detections, Report findings, Catalog annotations, Display stretch), legend rows with per-layer label and visibility switches, a single-row toolbar, a Blink frame list with gap rows, a transport bar with a timeline by capture time, an Export GIF mode, and a one-line status bar with a shortcuts window. The full design, with the mock-up screenshots, is in [docs/features/viewer-redesign.md](docs/features/viewer-redesign.md).
+
+**Decision (made, 2026-11-06):** "I agree with everything, let's start" — accepting the review's recommendations below — and "on the blink window, please use the arrow keys up and down to move frames manually when the blink animation is paused."
+
+What the decision settles, where the spec differed from the application:
+
+1. Faint movers keep their dashed fitted path beside the midpoint ring.
+2. Variable-star candidates keep solid (high confidence) and dashed (possible) rings.
+3. Catalog annotations keep the faintest-star and faintest-variable limits, in a settings menu on the section header.
+4. Catalog annotations gain a fourth row, Known asteroids & comets.
+5. Other findings use the real report types: S and A, DS, LR and LC, FC and CM. ST stays under Tracks.
+6. "Align markers to corrected plate solution" (key C) belongs to Catalog annotations: it moves the catalogue marks and the cursor RA/Dec, not the findings.
+7. Findings keep the report's finding-type colours; catalogue objects are drawn white.
+8. Side-panel sections are collapsible, so Display stretch stays reachable.
+9. Blink speed runs from 0.5 to 30 frames per second.
+10. Full Size and Manual Transient Inspection get the same side panel, since they share Preview Frame's viewer.
+11. Blink's transport bar is built as specified. While paused, ↑ and ↓ step frames; while playing, they change the speed.
+
+The application theme stays a setting; the spec's dark palette is not hard-coded. The finding detail card and the stretch histogram are optional and come last.
