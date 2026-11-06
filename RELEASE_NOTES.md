@@ -37,6 +37,8 @@
 
 ## Unreleased
 
+- **Faint-mover review and motion controls.** The report pixel allowance increases to 96 MiB alongside the 64 MiB engine pool. Catalogue comparisons check every searched fitted epoch and show fitted-frame counts/residuals, distinct from measured tracks. Both motion controls show arcsec/min with WCS, with explicit fallback units and a 2-FWHM/session floor; reports show the completed search's angular range.
+
 ### Added
 
 - **Known-object report comparisons (F22).** A saved-prediction table adds magnitude ranges, sampled path/mask coverage, ordinary-track position/rate evidence, existing FM comparisons and a cautious common-clock diagnostic. New Horizons fetches include fourteen-hour sampling padding; older caches may need a refetch for clock review. Missing uncertainties, ambiguity, passband differences and incomplete search/fetch coverage stay explicit; timestamps and detection outputs are unchanged. Original/trial comparison times, positions and residuals are retained in optional `knownSolarSystem` data within report schema version 1.

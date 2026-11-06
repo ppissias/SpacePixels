@@ -12,7 +12,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 
-/** Captured catalogue coverage and descriptive ordinary-track comparisons; never identifies, seeds or changes detections. */
+/** Captured catalogue coverage and measured-track/fitted-path comparisons; never identifies, seeds or changes detections. */
 final class KnownSolarSystemReport {
     /** An actual centroid with its unchanged midpoint and nominal/trial prediction time; coordinates and distances are pixels. */
     record Residual(int frameNumber, long midpointMillis, long predictionTimeMillis, double observedX, double observedY,
@@ -203,7 +203,7 @@ final class KnownSolarSystemReport {
     }
 
     /** Uses formal plane-of-sky RA/Dec 3-sigma RSS, scaled locally; this is not a covariance model or total astrometric error. */
-    private static Double uncertaintyPixels(SolarSystemObjects.Position sky, WcsCoordinateTransformer wcs, double[] pixel) {
+    static Double uncertaintyPixels(SolarSystemObjects.Position sky, WcsCoordinateTransformer wcs, double[] pixel) {
         if (sky.raSigmaArcsec() == null || sky.decSigmaArcsec() == null || !Double.isFinite(sky.raSigmaArcsec())
                 || !Double.isFinite(sky.decSigmaArcsec()) || sky.raSigmaArcsec() < 0 || sky.decSigmaArcsec() < 0) return null;
         var a = wcs.pixelToSky(pixel[0] + 1, pixel[1]); var b = wcs.pixelToSky(pixel[0], pixel[1] + 1);
@@ -215,7 +215,7 @@ final class KnownSolarSystemReport {
     }
 
     /** Rejects malformed sampled clocks/coordinates rather than letting interpolation invent finite comparison evidence. */
-    private static SolarSystemObjects.Position position(SolarSystemObjects.Body body, long time) {
+    static SolarSystemObjects.Position position(SolarSystemObjects.Body body, long time) {
         long previous = 0;
         boolean first = true;
         for (var s : body.samples) {
@@ -302,8 +302,15 @@ final class KnownSolarSystemReport {
                 writeComparisonDetails(out, m);
                 out.print("</div>");
             }
-            for (var id : body.faintMoverComparisons()) out.print("<div class='known-object-finding'><a class='known-finding-link' href='#"
-                    + anchor(c, id) + "'>" + escape(id) + "</a> <span>Possible fitted-path match</span></div>");
+            for (var id : body.faintMoverComparisons()) {
+                var match = c.faintMoverPresentation.stream().filter(entry -> entry.id().equals(id))
+                        .flatMap(entry -> entry.catalogueComparisons().stream())
+                        .filter(m -> java.util.Objects.equals(m.name(), body.name())).findFirst().orElseThrow();
+                out.print("<div class='known-object-finding'><a class='known-finding-link' href='#"
+                        + anchor(c, id) + "'>" + escape(id) + "</a> <span>Fitted position and motion agree</span>");
+                writeFaintComparisonDetails(out, match);
+                out.print("</div>");
+            }
             out.print("</td></tr>");
         }
         out.print("</tbody></table></div>");
@@ -378,6 +385,16 @@ final class KnownSolarSystemReport {
                         + "RMS %.2f px, maximum %.2f px. Original and trial times/positions are saved in report-data.json.</p>",
                 m.suggestedTimeOffsetSeconds(), m.timeToleranceSeconds(), m.shiftedFrames(), m.shiftedRmsPixels(), m.shiftedMaximumPixels());
         out.print("</details>");
+    }
+
+    /** Shows full-epoch agreement while distinguishing fitted positions from a track's independently measured frames. */
+    static void writeFaintComparisonDetails(PrintWriter out, FaintMoverPresentation.Match match) {
+        out.printf(Locale.US, "<details class='known-object-evidence'><summary>%d fitted frames · RMS %.2f px</summary>"
+                        + "<p>Maximum %.2f px; position screen %.2f px. Rate difference %.4f px/min (screen %.4f). "
+                        + "All searched exposure midpoints were compared. Positions come from one fitted path, "
+                        + "not separate per-frame centroid measurements. Agreement is not identity confirmation.</p></details>",
+                match.frames(), match.rmsPixels(), match.maximumPixels(), match.positionTolerancePixels(),
+                match.motionResidualPixelsPerMinute(), match.motionTolerancePixelsPerMinute());
     }
 
     /** Builds a JPL SBDB lookup from the saved designation; no network request or extra catalogue fetch is needed. */

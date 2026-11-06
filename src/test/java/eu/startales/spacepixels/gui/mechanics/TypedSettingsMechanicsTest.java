@@ -2,6 +2,7 @@ package eu.startales.spacepixels.gui.mechanics;
 
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
+import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.assertj.swing.core.GenericTypeMatcher;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.junit.Test;
@@ -39,7 +40,11 @@ public class TypedSettingsMechanicsTest extends MechanicsTestCase {
         waitFor("typed field save completed", () -> showingLabel("Saved settings").contains("Saved settings"));
         File profileFile = new File(System.getProperty("user.home"), SpacePixelsDetectionProfileIO.DEFAULT_FILENAME);
         try (FileReader reader = new FileReader(profileFile)) {
-            assertEquals(11.5, SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig().localActivityClusterRadiusPixels, 0);
+            var saved = SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
+            assertEquals(11.5, saved.localActivityClusterRadiusPixels, 0);
+            assertFalse("An inactive faint-mover search cannot block an unrelated save", saved.enableFaintMoverSearch);
+            assertEquals("Imported timing must not rewrite a saved speed", new DetectionConfig().faintMoverMaxSpeedPixelsPerMinute,
+                    saved.faintMoverMaxSpeedPixelsPerMinute, 0);
         }
         GuiActionRunner.execute(() -> radius.setValue(12.5));
         GuiActionRunner.execute(() -> window().button(VisibleText.button("Revert")).target().doClick());

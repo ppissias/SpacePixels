@@ -41,11 +41,18 @@ final class DecimalSpinnerModel extends SpinnerNumberModel {
         return step(-1);
     }
 
-    /** The value one step up or down, or null past the range, as {@link SpinnerNumberModel} answers. */
+    /** Steps in decimal; an arrow towards a newly changed range first returns its nearest bound. */
     private Object step(int direction) {
         Number value = getNumber();
         if (!(value instanceof Double || value instanceof Float)) {
             return direction > 0 ? super.getNextValue() : super.getPreviousValue();
+        }
+        // A metadata change may move a bound past the saved value without rewriting that value.
+        if (direction > 0 && getMinimum() instanceof Number minimum && value.doubleValue() < minimum.doubleValue()) {
+            return minimum;
+        }
+        if (direction < 0 && getMaximum() instanceof Number maximum && value.doubleValue() > maximum.doubleValue()) {
+            return maximum;
         }
         BigDecimal current = new BigDecimal(value.toString()).round(SIGNIFICANT);
         BigDecimal step = new BigDecimal(getStepSize().toString());

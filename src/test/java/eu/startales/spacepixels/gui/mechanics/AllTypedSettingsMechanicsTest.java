@@ -108,8 +108,10 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, Object> defaults = GuiActionRunner.execute(() -> values(inputs));
         DetectionConfig defaultConfig = new DetectionConfig();
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
-            if (setting.id().equals("faintMoverMaxSpeedPixelsPerMinute")) {
-                double expectedMotion = defaultConfig.faintMoverMaxSpeedPixelsPerMinute * faintMoverDisplayScale();
+            if (setting.id().equals("faintMoverMaxSpeedPixelsPerMinute") || setting.id().equals("faintMoverMinDisplacementFwhm")) {
+                double expectedMotion = setting.id().equals("faintMoverMaxSpeedPixelsPerMinute")
+                        ? defaultConfig.faintMoverMaxSpeedPixelsPerMinute * faintMoverDisplayScale()
+                        : defaultConfig.faintMoverMinDisplacementFwhm * faintMoverMinimumDisplayScale();
                 assertEquals(expectedMotion, ((Number) defaults.get(setting.id())).doubleValue(), expectedMotion * 0.000005);
             } else sameValue(setting.id(), setting.read(defaultConfig), canonicalValue(setting.id(), defaults.get(setting.id())));
         }
@@ -213,11 +215,21 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
     private Object canonicalValue(String id, Object value) {
         if (id.equals("faintMoverMaxSeconds")) return ((Number) value).doubleValue() * 60;
         if (id.equals("faintMoverMaxSpeedPixelsPerMinute")) return ((Number) value).doubleValue() / faintMoverDisplayScale();
+        if (id.equals("faintMoverMinDisplacementFwhm")) return ((Number) value).doubleValue() / faintMoverMinimumDisplayScale();
         return value;
     }
 
-    /** Computes the continuous fixture's timing span independently of the production display converter. */
+    /** Resolves the fixture's angular scale, or the explicit pixel-rate fallback. */
     private double faintMoverDisplayScale() {
+        return GuiActionRunner.execute(() -> {
+            double scale = eu.startales.spacepixels.detection.FaintMoverRuntimeEstimate.angularPixelScale(application().getSession().getFiles());
+            return Double.isFinite(scale) ? scale : 1;
+        });
+    }
+
+    /** Computes the minimum's timing conversion independently of the production display converter. */
+    private double faintMoverMinimumDisplayScale() {
+        double angularScale = faintMoverDisplayScale();
         return GuiActionRunner.execute(() -> {
             var files = application().getSession().getFiles();
             long first = Long.MAX_VALUE, last = Long.MIN_VALUE;
@@ -225,7 +237,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
                 long midpoint = file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2;
                 first = Math.min(first, midpoint); last = Math.max(last, midpoint);
             }
-            return (last - first) / 60_000.0 / 2.5;
+            return angularScale * 2.5 / ((last - first) / 60_000.0);
         });
     }
 

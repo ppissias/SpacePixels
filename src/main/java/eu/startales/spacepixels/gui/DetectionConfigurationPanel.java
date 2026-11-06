@@ -30,8 +30,6 @@ import eu.startales.spacepixels.config.MovingObjectsSettings;
 import eu.startales.spacepixels.config.StreakDetectionSettings;
 import eu.startales.spacepixels.config.FaintMoversSettings;
 import eu.startales.spacepixels.detection.FaintMoverRuntimeEstimate;
-import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
-import eu.startales.spacepixels.util.SkyMath;
 import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.jobs.JobCoordinator;
@@ -91,8 +89,10 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinFaintMoverMinMotion, spinFaintMoverMaxSpeed;
     private WrappingHelpLabel faintMoverMinInfo, faintMoverMaxInfo;
     private JLabel faintMoverEstimate;
-    /** Maps stored px/min to displayed FWHM/session; one is the explicitly labelled no-timing fallback. */
+    /** Maps stored px/min to displayed arcsec/min; one keeps pixel rates without a usable WCS. */
     private double faintMoverSpeedScale = 1;
+    /** Displayed rate per stored minimum displacement in FWHM; unavailable timing keeps displacement units. */
+    private double faintMoverMinimumScale = 1;
     private double faintMoverAngularScale = Double.NaN;
     private eu.startales.spacepixels.session.SkyCatalogueModel faintMoverSky;
     private final Runnable faintMoverSkyListener = () -> SwingUtilities.invokeLater(this::refreshFaintMoverContext);
@@ -1524,17 +1524,24 @@ public class DetectionConfigurationPanel extends JPanel {
                 + defaults.faintMoverMaxSpeedPixelsPerMinute + " px/min maximum speed; score "
                 + defaults.faintMoverMinScore + "; " + defaults.faintMoverMaxSeconds / 60 + " minute limit."));
         chkEnableFaintMovers = addTypedCheckbox(panel, FaintMoversSettings.ENABLE);
-        spinFaintMoverMinMotion = addTypedDouble(panel, FaintMoversSettings.MIN_DISPLACEMENT, Double.MIN_VALUE, Double.MAX_VALUE, 0.1);
+        spinFaintMoverMinMotion = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMinDisplacementFwhm), 2, Double.MAX_VALUE, 0.001));
+        registerTypedBinding(FaintMoversSettings.MIN_DISPLACEMENT, spinFaintMoverMinMotion, () -> {
+            double displayed = ((Number) spinFaintMoverMinMotion.getValue()).doubleValue();
+            double current = jTransientConfig.faintMoverMinDisplacementFwhm;
+            return displayed == faintMoverDisplayNumber(current * faintMoverMinimumScale) ? current : Math.max(2, displayed / faintMoverMinimumScale);
+        }, value -> spinFaintMoverMinMotion.setValue(faintMoverDisplayNumber(value * faintMoverMinimumScale)));
+        addSettingRow(panel, FaintMoversSettings.MIN_DISPLACEMENT.id(), FaintMoversSettings.MIN_DISPLACEMENT.title(),
+                FaintMoversSettings.MIN_DISPLACEMENT.help(), false, spinFaintMoverMinMotion);
         faintMoverMinInfo = addFaintMoverMotionInfo(spinFaintMoverMinMotion, "Slowest motion equivalents");
         spinFaintMoverMaxSpeed = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSpeedPixelsPerMinute), Double.MIN_VALUE, Double.MAX_VALUE, 0.001));
         registerTypedBinding(FaintMoversSettings.MAX_SPEED, spinFaintMoverMaxSpeed, () -> {
             double displayed = ((Number) spinFaintMoverMaxSpeed.getValue()).doubleValue();
             double current = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
             return displayed == faintMoverDisplayNumber(current * faintMoverSpeedScale) ? current : displayed / faintMoverSpeedScale;
-        }, value -> setSpinnerValueClamped(spinFaintMoverMaxSpeed, faintMoverDisplayNumber(value * faintMoverSpeedScale)));
+        }, value -> spinFaintMoverMaxSpeed.setValue(faintMoverDisplayNumber(value * faintMoverSpeedScale)));
         addSettingRow(panel, FaintMoversSettings.MAX_SPEED.id(), FaintMoversSettings.MAX_SPEED.title(), FaintMoversSettings.MAX_SPEED.help(), false, spinFaintMoverMaxSpeed);
         faintMoverMaxInfo = addFaintMoverMotionInfo(spinFaintMoverMaxSpeed, "Fastest motion equivalents");
-        addTypedDouble(panel, FaintMoversSettings.MIN_SCORE, Double.MIN_VALUE, Double.MAX_VALUE, 0.5);
+        JSpinner score = addTypedDouble(panel, FaintMoversSettings.MIN_SCORE, Double.MIN_VALUE, Double.MAX_VALUE, 0.5);
         JSpinner time = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSeconds / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
         registerTypedBinding(FaintMoversSettings.TIME_LIMIT, time, () -> {
             double displayed = ((Number) time.getValue()).doubleValue();
@@ -1542,6 +1549,7 @@ public class DetectionConfigurationPanel extends JPanel {
             return displayed == faintMoverDisplayNumber(current / 60) ? current : displayed * 60;
         }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
         addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), "Time limit (minutes)", FaintMoversSettings.TIME_LIMIT.help(), false, time);
+        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, time);
         faintMoverEstimate = new WrappingHelpLabel("", 560);
         faintMoverEstimate.setForeground(UiStyle.helpColor());
         faintMoverEstimate.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1572,37 +1580,40 @@ public class DetectionConfigurationPanel extends JPanel {
         var owner = sessions.current();
         var files = owner == null ? new FitsFileInformation[0] : owner.getFiles();
         var session = FaintMoverRuntimeEstimate.importedSession(files);
-        double scale = session.hasSpan() ? session.spanMinutes() / FaintMoverRuntimeEstimate.ASSUMED_FWHM_PIXELS : 1;
-        faintMoverAngularScale = Double.NaN;
-        for (var file : files) {
-            var wcs = WcsCoordinateTransformer.fromHeader(file.getFitsHeader());
-            if (wcs == null) continue;
-            var a = wcs.pixelToSky(file.getSizeWidth() / 2.0, file.getSizeHeight() / 2.0);
-            var b = wcs.pixelToSky(file.getSizeWidth() / 2.0 + 1, file.getSizeHeight() / 2.0);
-            if (a == null || b == null) continue;
-            double measured = SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
-            if (Double.isFinite(measured) && measured > 0) { faintMoverAngularScale = measured; break; }
-        }
-        if (Double.compare(scale, faintMoverSpeedScale) != 0) {
+        double displacementScale = session.hasSpan() ? session.spanMinutes() / FaintMoverRuntimeEstimate.ASSUMED_FWHM_PIXELS : 1;
+        faintMoverAngularScale = FaintMoverRuntimeEstimate.angularPixelScale(files);
+        double maximumScale = Double.isFinite(faintMoverAngularScale) ? faintMoverAngularScale : 1;
+        double minimumScale = session.hasSpan() ? maximumScale / displacementScale : 1;
+        double maximumFloor = session.hasSpan() ? faintMoverDisplayNumber(2 * maximumScale / displacementScale) : Double.MIN_VALUE;
+        if (Double.compare(maximumScale, faintMoverSpeedScale) != 0
+                || Double.compare(minimumScale, faintMoverMinimumScale) != 0
+                || Double.compare(((Number) ((SpinnerNumberModel) spinFaintMoverMaxSpeed.getModel()).getMinimum()).doubleValue(), maximumFloor) != 0) {
             boolean previous = suppressAutoApply;
             suppressAutoApply = true;
             try {
-                double canonical = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
-                faintMoverSpeedScale = scale;
-                setSpinnerValueClamped(spinFaintMoverMaxSpeed, faintMoverDisplayNumber(canonical * scale));
-                for (var row : settingRows) if (row.input == spinFaintMoverMaxSpeed && savedConfig != null) {
-                    row.setSavedValue(faintMoverDisplayNumber(savedConfig.faintMoverMaxSpeedPixelsPerMinute * scale));
+                faintMoverSpeedScale = maximumScale;
+                faintMoverMinimumScale = minimumScale;
+                ((SpinnerNumberModel) spinFaintMoverMinMotion.getModel()).setMinimum(faintMoverDisplayNumber(2 * minimumScale));
+                ((SpinnerNumberModel) spinFaintMoverMaxSpeed.getModel()).setMinimum(maximumFloor);
+                // Keep legacy out-of-range values visible for correction; a context change never rewrites the profile.
+                spinFaintMoverMinMotion.setValue(faintMoverDisplayNumber(jTransientConfig.faintMoverMinDisplacementFwhm * minimumScale));
+                spinFaintMoverMaxSpeed.setValue(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSpeedPixelsPerMinute * maximumScale));
+                for (var row : settingRows) if (savedConfig != null) {
+                    if (row.input == spinFaintMoverMaxSpeed) row.setSavedValue(faintMoverDisplayNumber(savedConfig.faintMoverMaxSpeedPixelsPerMinute * maximumScale));
+                    else if (row.input == spinFaintMoverMinMotion) row.setSavedValue(faintMoverDisplayNumber(savedConfig.faintMoverMinDisplacementFwhm * minimumScale));
+                    else continue;
                     row.refresh();
                 }
             } finally { suppressAutoApply = previous; }
         }
-        double minimumRate = session.hasSpan() ? jTransientConfig.faintMoverMinDisplacementFwhm / scale : Double.NaN;
+        double minimumRate = session.hasSpan() ? jTransientConfig.faintMoverMinDisplacementFwhm / displacementScale : Double.NaN;
         double maximumRate = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
-        faintMoverMinInfo.setText("<html>FWHM/session<br>" + faintMoverRate(minimumRate, "px/min", true)
-                + "<br>" + faintMoverRate(minimumRate * faintMoverAngularScale, "arcsec/min", true) + "</html>");
-        faintMoverMaxInfo.setText("<html>" + (session.hasSpan() ? "FWHM/session (est.)<br>" + faintMoverRate(maximumRate, "px/min", false)
-                : "px/min (stored)<br>FWHM/session unavailable") + "<br>"
-                + faintMoverRate(maximumRate * faintMoverAngularScale, "arcsec/min", true) + "</html>");
+        String rateUnit = Double.isFinite(faintMoverAngularScale) ? "arcsec/min" : "px/min";
+        faintMoverMinInfo.setText("<html>" + (session.hasSpan() ? rateUnit + " (est.)<br>"
+                + faintMoverRate(minimumRate, "px/min", true) : "FWHM/session<br>Session times unavailable")
+                + "<br>Minimum: 2 FWHM/session</html>");
+        faintMoverMaxInfo.setText("<html>" + rateUnit + (Double.isFinite(faintMoverAngularScale)
+                ? "<br>" + faintMoverRate(maximumRate, "px/min", false) : "<br>No usable WCS") + "</html>");
         spinFaintMoverMinMotion.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MIN_DISPLACEMENT.help()
                 + " " + faintMoverMinInfo.getText().replaceAll("<[^>]*>", " "));
         spinFaintMoverMaxSpeed.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MAX_SPEED.help()
@@ -1619,11 +1630,11 @@ public class DetectionConfigurationPanel extends JPanel {
     /** Explains metadata estimates and display-only WCS conversion, distinct from the final measured search domain. */
     private String faintMoverEstimateText(FitsFileInformation[] files) {
         String units = !Double.isFinite(faintMoverAngularScale) ? "No usable WCS: angular rates are unavailable."
-                : String.format(java.util.Locale.ROOT, "Angular rates use %.6f arcsec/pixel from the first usable WCS at its image centre.", faintMoverAngularScale);
+                : String.format(java.util.Locale.ROOT, "Rates use %.6f arcsec/pixel at the first usable WCS field centre.", faintMoverAngularScale);
         return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig) + "<br>" + units
-                + " FWHM/session conversions use imported times and the assumed seeing width; the maximum remains stored in px/min. "
-                + "Without a usable span the maximum control shows that stored rate. The report gives the final domain from kept frames "
-                + "and measured seeing (or its labelled fallback).</html>";
+                + " The slowest rate is estimated from imported times and an assumed seeing width; it cannot be set below 2 FWHM/session. "
+                + "The fastest rate must exceed the slowest. Without WCS the controls use pixel rates; without timing the minimum uses session displacement. "
+                + "The report gives the actual search range from kept frames and measured seeing (or its labelled fallback).</html>";
     }
 
     /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */

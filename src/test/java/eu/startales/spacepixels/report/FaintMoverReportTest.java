@@ -158,12 +158,19 @@ public class FaintMoverReportTest {
         assertNotNull(wcs);
         var c = candidate(files[0].getObservationTimestamp() + 60_000);
         var objects = predictions(c, wcs, files[0]);
-        assertEquals(2, FaintMoverPresentation.compare(c, wcs, objects, 2.5, objects.startMillis, objects.endMillis).size());
+        var positions = new ArrayList<FaintMoverPresentation.Position>();
+        for (long time : new long[]{objects.startMillis, objects.endMillis}) {
+            var p = c.positionAt(time);
+            positions.add(new FaintMoverPresentation.Position(positions.size() + 1, time, p[0], p[1], null, null));
+        }
+        assertEquals(2, FaintMoverPresentation.compare(c, wcs, objects, 2.5, positions,
+                Math.hypot(100, 100), objects.startMillis, objects.endMillis).size());
         var sky = FaintMoverPresentation.sky(c, wcs, c.referenceTimeMillis);
         assertEquals(0.4, sky.speedArcsecPerMinute(), 0.00001);
         assertEquals(270, sky.positionAngleDegrees(), 0.01);
         objects.startMillis = c.referenceTimeMillis + 1;
-        assertTrue(FaintMoverPresentation.compare(c, wcs, objects, 2.5, objects.startMillis, objects.endMillis).isEmpty());
+        assertTrue(FaintMoverPresentation.compare(c, wcs, objects, 2.5, positions,
+                Math.hypot(100, 100), objects.startMillis, objects.endMillis).isEmpty());
     }
 
     /** Admission detaches public mutable prediction lists, and rejects a saved prediction for another field. */
@@ -196,13 +203,21 @@ public class FaintMoverReportTest {
         var search = data.getAsJsonObject("faintMoverSearch");
         assertEquals("partial-fetch", search.get("catalogueComparisonStatus").getAsString());
         assertEquals(objects.source, search.get("catalogueSource").getAsString());
+        assertTrue(search.get("minSpeedArcsecPerMinute").getAsDouble() > 0);
+        assertEquals(10 * search.get("minSpeedArcsecPerMinute").getAsDouble(), search.get("maxSpeedArcsecPerMinute").getAsDouble(), 1e-10);
         var entry = data.getAsJsonArray("faintMovers").get(0).getAsJsonObject();
         assertTrue(entry.get("catalogueComparisonAvailable").getAsBoolean());
         assertEquals(2, entry.getAsJsonArray("catalogueComparisons").size());
+        var match = entry.getAsJsonArray("catalogueComparisons").get(0).getAsJsonObject();
+        assertEquals(2, match.get("frames").getAsInt());
+        assertEquals(2, match.getAsJsonArray("residuals").size());
+        assertTrue(match.get("maximumPixels").getAsDouble() < 0.001);
         String html = Files.readString(output.toPath().resolve("detection_report.html"));
         assertTrue(html.contains("Saved prediction fetch was incomplete"));
         assertTrue(html.contains("One &lt;request&gt; failed"));
         assertTrue(html.contains("Possible identifications (ambiguous):"));
+        assertTrue(html.contains("Fitted position and motion agree"));
+        assertTrue(html.contains("2 fitted frames"));
         assertTrue(html.contains("sstr=First%20comparison"));
         assertTrue(html.contains("sstr=Second%20comparison"));
         assertTrue(html.contains("Faint mover FM1 · Unverified"));
@@ -278,6 +293,7 @@ public class FaintMoverReportTest {
         var t = new FaintMoverSearchTelemetry();
         t.frames = 2; t.framesOutsideSession = 1; t.searchedFrameIndices = List.of(0, 2);
         t.fwhmPixels = 2.5; t.tiles = 2; t.tilesSearched = 1; t.candidates = 1;
+        t.minSpeedPixelsPerMinute = 0.1; t.maxSpeedPixelsPerMinute = 1;
         return t;
     }
 
@@ -305,11 +321,53 @@ public class FaintMoverReportTest {
         return output;
     }
 
+    /** Endpoint/rate agreement must not hide a discrepant prediction at another searched epoch. */
+    @Test public void catalogueMatchChecksEverySearchedFittedEpoch() throws Exception {
+        var files = files();
+        var wcs = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
+        var c = candidate(files[0].getObservationTimestamp() + 60_000);
+        var objects = predictions(c, wcs, files[0]);
+        var positions = new ArrayList<FaintMoverPresentation.Position>();
+        long[] times = {objects.startMillis, c.referenceTimeMillis - 30_000, c.referenceTimeMillis, objects.endMillis};
+        for (int i = 0; i < times.length; i++) {
+            var point = c.positionAt(times[i]);
+            positions.add(new FaintMoverPresentation.Position(i + 1, times[i], point[0], point[1], null, null));
+        }
+        assertEquals(2, FaintMoverPresentation.compare(c, wcs, objects, 2.5, positions,
+                Math.hypot(100, 100), times[0], times[times.length - 1]).size());
+        var body = objects.bodies.getFirst();
+        body.samples.clear();
+        for (int i = 0; i < times.length; i++) {
+            var point = c.positionAt(times[i]);
+            var sky = wcs.pixelToSky(point[0] + (i == 1 ? 10 : 0), point[1]);
+            var sample = new SolarSystemObjects.Sample();
+            sample.timeMillis = times[i]; sample.ra = sky.getRaDegrees(); sample.dec = sky.getDecDegrees();
+            body.samples.add(sample);
+        }
+        var names = FaintMoverPresentation.compare(c, wcs, objects, 2.5, positions,
+                Math.hypot(100, 100), times[0], times[times.length - 1]).stream().map(FaintMoverPresentation.Match::name).toList();
+        assertEquals(List.of("Second comparison"), names);
+    }
+
+    /** A catalogue covering only the reference epoch cannot claim a checked full fitted path. */
+    @Test public void partialPredictionTimesMakeFittedPathComparisonUnavailable() throws Exception {
+        var files = files();
+        var c = candidate(files[0].getObservationTimestamp() + 60_000);
+        var objects = predictions(c, WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader()), files[0]);
+        objects.endMillis = c.referenceTimeMillis + 60_000;
+        eu.startales.spacepixels.solarsystem.SolarSystemStore.save(folder.getRoot(), objects);
+        File output = export(files, c, telemetry(), ReportInclusion.all());
+        var data = JsonParser.parseString(Files.readString(output.toPath().resolve("report-data.json"))).getAsJsonObject();
+        var entry = data.getAsJsonArray("faintMovers").get(0).getAsJsonObject();
+        assertFalse(entry.get("catalogueComparisonAvailable").getAsBoolean());
+        assertTrue(entry.getAsJsonArray("catalogueComparisons").isEmpty());
+    }
+
     /** Builds ambiguous matching predictions and one deliberately incompatible motion using the same WCS. */
     private static SolarSystemObjects predictions(FaintMoverCandidate c, WcsCoordinateTransformer wcs, FitsFileInformation file) {
         var objects = new SolarSystemObjects();
         objects.field = SkyField.of(wcs, file.getSizeWidth(), file.getSizeHeight());
-        objects.startMillis = c.referenceTimeMillis - 60_000; objects.endMillis = c.referenceTimeMillis + 60_000;
+        objects.startMillis = c.referenceTimeMillis - 60_000; objects.endMillis = c.referenceTimeMillis + 240_000;
         objects.magnitudeLimit = 19;
         for (String name : List.of("First comparison", "Second comparison", "Wrong motion")) {
             var body = new SolarSystemObjects.Body(); body.name = name;

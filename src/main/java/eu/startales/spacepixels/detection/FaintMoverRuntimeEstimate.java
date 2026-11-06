@@ -1,6 +1,8 @@
 package eu.startales.spacepixels.detection;
 
 import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import java.util.Arrays;
 import java.util.Locale;
@@ -21,6 +23,28 @@ public final class FaintMoverRuntimeEstimate {
 
     /** Prevents construction of this metadata-only presentation helper. */
     private FaintMoverRuntimeEstimate() { }
+
+    /** Returns the first usable header's field-centre arcseconds/pixel, or NaN without a WCS; reads no image pixels. */
+    public static double angularPixelScale(FitsFileInformation[] files) {
+        if (files == null) return Double.NaN;
+        for (var file : files) {
+            if (file == null) continue;
+            double scale = angularPixelScale(WcsCoordinateTransformer.fromHeader(file.getFitsHeader()),
+                    file.getSizeWidth(), file.getSizeHeight());
+            if (Double.isFinite(scale)) return scale;
+        }
+        return Double.NaN;
+    }
+
+    /** Converts an X-axis pixel at the field centre through the supplied WCS; this is a local angular-rate equivalent. */
+    public static double angularPixelScale(WcsCoordinateTransformer wcs, int width, int height) {
+        if (wcs == null || width <= 0 || height <= 0) return Double.NaN;
+        var a = wcs.pixelToSky(width / 2.0, height / 2.0);
+        var b = wcs.pixelToSky(width / 2.0 + 1, height / 2.0);
+        if (a == null || b == null) return Double.NaN;
+        double scale = SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
+        return Double.isFinite(scale) && scale > 0 ? scale : Double.NaN;
+    }
 
     /** Reads only headers to choose the most populated session, with gaps over two hours separating sessions. */
     public static ImportedSession importedSession(FitsFileInformation[] files) {

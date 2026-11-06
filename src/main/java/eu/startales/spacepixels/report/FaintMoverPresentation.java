@@ -11,10 +11,17 @@ import java.util.Map;
 
 /** Report-owned fitted paths and catalogue comparisons; never changes or identifies an engine candidate. */
 final class FaintMoverPresentation {
+    /** Bounds original plus residual review pixels; their six bytes/sample accompany the engine's four-byte residuals. */
+    private static final long REVIEW_BUDGET_BYTES = 96L * 1024 * 1024;
     /** Sky coordinates and motion derived through the run's captured WCS; absent values remain unavailable. */
     record Sky(Double raDegrees, Double decDegrees, Double speedArcsecPerMinute, Double positionAngleDegrees) { }
-    /** A heuristic comparison with one fetched prediction, with residuals in registered-image coordinates. */
-    record Match(String name, Double predictedMagnitude, double positionResidualPixels, double motionResidualPixelsPerMinute) { }
+    /** A fitted path evaluated at one searched exposure midpoint, not an independently measured centroid. */
+    record Residual(int frameNumber, long midpointMillis, double fittedX, double fittedY,
+                    double predictedX, double predictedY, double distancePixels) { }
+    /** A heuristic full-path comparison; the original reference-offset field remains available in exports. */
+    record Match(String name, Double predictedMagnitude, double positionResidualPixels, double motionResidualPixelsPerMinute,
+                 int frames, double rmsPixels, double maximumPixels, double positionTolerancePixels,
+                 double motionTolerancePixelsPerMinute, List<Residual> residuals) { }
     /** An evaluated fitted position, not an independent per-frame detection. Frame numbers are one-based. */
     record Position(int frameNumber, long midpointMillis, double x, double y, Double raDegrees, Double decDegrees) { }
     /** Actual scoring-grid sample and mask test from the engine, not a fitted per-frame detection or photometry. */
@@ -37,7 +44,7 @@ final class FaintMoverPresentation {
     /** Derives all entries once, preserving engine ordering and explicit searched-frame identities. */
     static List<Entry> entries(DetectionReportContext context) {
         var output = new ArrayList<Entry>();
-        long[] reviewBudget = {48L * 1024 * 1024};
+        long[] reviewBudget = {REVIEW_BUDGET_BYTES};
         var wcs = context.astrometryContext == null ? null : context.astrometryContext.getTransformer();
         double fwhm = context.pipelineTelemetry != null && context.pipelineTelemetry.faintMoverSearchTelemetry != null
                 ? context.pipelineTelemetry.faintMoverSearchTelemetry.fwhmPixels : 2.5;
@@ -62,7 +69,8 @@ final class FaintMoverPresentation {
                     finite(c.firstHalfScore), finite(c.secondHalfScore), finite(c.stationaryScore), finite(c.cameraScore),
                     Double.isFinite(c.firstHalfScore), Double.isFinite(c.secondHalfScore), Double.isFinite(c.cameraScore),
                     sky(c, wcs, c.referenceTimeMillis), List.copyOf(positions),
-                    canCompare(c, wcs, objects, start, end), compare(c, wcs, objects, fwhm, start, end),
+                    canCompare(c, wcs, objects, start, end), compare(c, wcs, objects, fwhm, positions,
+                            Math.hypot(context.fitsFiles[0].getSizeWidth(), context.fitsFiles[0].getSizeHeight()), start, end),
                     "faint_movers/" + id.toLowerCase(java.util.Locale.ROOT) + "_stack.png",
                     review.data() == null ? null : "faint_movers/" + id.toLowerCase(java.util.Locale.ROOT) + "_blink.gif", review));
         }
@@ -96,7 +104,7 @@ final class FaintMoverPresentation {
             long bytes = (residual ? 6L : 2L) * w * h * positions.size();
             if (w <= 0 || h <= 0 || w > 256 || h > 256 || positions.size() > 128)
                 unavailable = "Review limited to 128 frames and 256 pixels per side";
-            else if (bytes > budget[0]) unavailable = "48 MiB report review pixel budget exhausted";
+            else if (bytes > budget[0]) unavailable = "96 MiB report review pixel budget exhausted";
             else budget[0] -= bytes;
         }
         String prefix = "faint_movers/" + id.toLowerCase(java.util.Locale.ROOT);
@@ -125,31 +133,52 @@ final class FaintMoverPresentation {
                 speed > 0 ? finite(SkyMath.normalizeDegrees(angle)) : null);
     }
 
-    /** Compares position and velocity using explicit heuristic tolerances; retains every compatible match. */
+    /** Checks every searched fitted epoch and the predicted rate with the existing heuristic screens; retains all alternatives. */
     static List<Match> compare(FaintMoverCandidate c, WcsCoordinateTransformer wcs, SolarSystemObjects objects,
-                               double fwhm, long sessionStart, long sessionEnd) {
-        if (!canCompare(c, wcs, objects, sessionStart, sessionEnd)) return List.of();
-        long before = Math.max(objects.startMillis, sessionStart);
-        long after = Math.min(objects.endMillis, sessionEnd);
-        if (after <= before) return List.of();
+                               double fwhm, List<Position> positions, double fieldDiagonalPixels,
+                               long sessionStart, long sessionEnd) {
+        if (!canCompare(c, wcs, objects, sessionStart, sessionEnd) || positions.size() < 2
+                || !Double.isFinite(fwhm) || fwhm <= 0) return List.of();
         var matches = new ArrayList<Match>();
         for (var body : objects.bodies) {
             if (body == null || body.samples == null || body.samples.isEmpty()) continue;
-            var p = SolarSystemObjects.positionAt(body, c.referenceTimeMillis);
-            var a = SolarSystemObjects.positionAt(body, before);
-            var b = SolarSystemObjects.positionAt(body, after);
-            if (p == null || a == null || b == null) continue;
+            var p = KnownSolarSystemReport.position(body, c.referenceTimeMillis);
+            if (p == null) continue;
             var pixel = wcs.skyToPixel(p.ra(), p.dec());
-            var pa = wcs.skyToPixel(a.ra(), a.dec());
-            var pb = wcs.skyToPixel(b.ra(), b.dec());
-            if (pixel == null || pa == null || pb == null) continue;
+            if (!finitePixel(pixel)) continue;
             double offset = Math.hypot(pixel[0] - c.x, pixel[1] - c.y);
-            double minutes = (after - before) / 60000.0;
-            double motion = Math.hypot((pb[0] - pa[0]) / minutes - c.vx, (pb[1] - pa[1]) / minutes - c.vy);
-            if (offset <= 2 * fwhm && motion <= 0.1) matches.add(new Match(body.name == null ? "Unnamed catalogue object" : body.name,
-                    p.magnitude() == null ? null : finite(p.magnitude()), offset, motion));
+            if (offset > 2 * fwhm) continue;
+            var predicted = new ArrayList<ReportTrackMotion.Point>();
+            var residuals = new ArrayList<Residual>();
+            double squares = 0, maximum = 0;
+            boolean compatible = true;
+            for (var position : positions) {
+                var sky = KnownSolarSystemReport.position(body, position.midpointMillis());
+                var q = sky == null ? null : wcs.skyToPixel(sky.ra(), sky.dec());
+                if (!finitePixel(q)) { compatible = false; break; }
+                Double uncertainty = KnownSolarSystemReport.uncertaintyPixels(sky, wcs, q);
+                if (uncertainty != null && uncertainty >= fieldDiagonalPixels) { compatible = false; break; }
+                double distance = Math.hypot(position.x() - q[0], position.y() - q[1]);
+                if (distance > 2 * fwhm) { compatible = false; break; }
+                squares += distance * distance;
+                maximum = Math.max(maximum, distance);
+                predicted.add(new ReportTrackMotion.Point(position.frameNumber() - 1, position.midpointMillis(), q[0], q[1]));
+                residuals.add(new Residual(position.frameNumber(), position.midpointMillis(), position.x(), position.y(), q[0], q[1], distance));
+            }
+            if (!compatible) continue;
+            var fit = ReportTrackMotion.fit(predicted);
+            if (fit == null) continue;
+            double motion = Math.hypot(fit.vx() - c.vx, fit.vy() - c.vy);
+            if (motion <= 0.1) matches.add(new Match(body.name == null ? "Unnamed catalogue object" : body.name,
+                    p.magnitude() == null ? null : finite(p.magnitude()), offset, motion,
+                    residuals.size(), Math.sqrt(squares / residuals.size()), maximum, 2 * fwhm, 0.1, List.copyOf(residuals)));
         }
         return List.copyOf(matches);
+    }
+
+    /** Rejects unavailable or nonfinite WCS projections before calculating evidence. */
+    private static boolean finitePixel(double[] pixel) {
+        return pixel != null && pixel.length >= 2 && Double.isFinite(pixel[0]) && Double.isFinite(pixel[1]);
     }
 
     /** Distinguishes an unavailable comparison from an available catalogue with no compatible predictions. */
@@ -157,7 +186,7 @@ final class FaintMoverPresentation {
                                       long sessionStart, long sessionEnd) {
         return wcs != null && objects != null && objects.bodies != null && c.referenceTimeMillis >= objects.startMillis
                 && c.referenceTimeMillis <= objects.endMillis
-                && Math.min(objects.endMillis, sessionEnd) > Math.max(objects.startMillis, sessionStart);
+                && sessionEnd > sessionStart && sessionStart >= objects.startMillis && sessionEnd <= objects.endMillis;
     }
 
     /** Produces finite, explicit search-domain/status data for the report JSON; null means the stage was off. */
@@ -173,6 +202,11 @@ final class FaintMoverPresentation {
         data.put("fwhmFromStars", t.fwhmFromStars);
         data.put("minSpeedPixelsPerMinute", finite(t.minSpeedPixelsPerMinute));
         data.put("maxSpeedPixelsPerMinute", finite(t.maxSpeedPixelsPerMinute));
+        Double angularScale = angularPixelScale(c);
+        data.put("pixelScaleArcsecPerPixel", angularScale);
+        data.put("minSpeedArcsecPerMinute", angularScale == null ? null : finite(t.minSpeedPixelsPerMinute * angularScale));
+        data.put("maxSpeedArcsecPerMinute", angularScale == null ? null : finite(t.maxSpeedPixelsPerMinute * angularScale));
+        data.put("angularSpeedReference", angularScale == null ? "unavailable without WCS" : "field-centre WCS equivalent of the actual pixel search domain");
         data.put("coarseStepPixelsPerMinute", finite(t.coarseStepPixelsPerMinute));
         data.put("fineStepPixelsPerMinute", finite(t.fineStepPixelsPerMinute));
         data.put("coarseMotions", t.coarseMotions); data.put("tiles", t.tiles); data.put("tilesSearched", t.tilesSearched);
@@ -195,6 +229,13 @@ final class FaintMoverPresentation {
         data.put("comparisonPositionTolerancePixels", finite(2 * t.fwhmPixels));
         data.put("comparisonMotionTolerancePixelsPerMinute", 0.1);
         return java.util.Collections.unmodifiableMap(data);
+    }
+
+    /** Converts the completed run's pixel rates through its captured, corrected field-centre WCS. */
+    static Double angularPixelScale(DetectionReportContext context) {
+        if (context.astrometryContext == null || context.fitsFiles.length == 0 || context.fitsFiles[0] == null) return null;
+        return finite(eu.startales.spacepixels.detection.FaintMoverRuntimeEstimate.angularPixelScale(
+                context.astrometryContext.getTransformer(), context.fitsFiles[0].getSizeWidth(), context.fitsFiles[0].getSizeHeight()));
     }
 
     /** Represents unavailable evidence without writing NaN or infinity to standard JSON. */

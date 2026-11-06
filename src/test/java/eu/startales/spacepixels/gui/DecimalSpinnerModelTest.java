@@ -31,6 +31,21 @@ public class DecimalSpinnerModelTest {
         assertEquals("19.2", model.getPreviousValue().toString());
     }
 
+    /** Imported metadata may change a bound; preserve the saved value and let an arrow recover into the range. */
+    @Test public void arrowsRecoverFromAChangedRange() {
+        DecimalSpinnerModel model = new DecimalSpinnerModel(1.0, 0.1, 100.0, 0.001);
+        model.setMinimum(12.5);
+        assertEquals(1.0, model.getNumber().doubleValue(), 0);
+        assertNull(model.getPreviousValue());
+        assertEquals(12.5, model.getNextValue());
+        model.setValue(model.getNextValue());
+        assertEquals(12.501, model.getNextValue());
+        model.setMaximum(10.0);
+        model.setMinimum(0.1);
+        assertNull(model.getNextValue());
+        assertEquals(10.0, model.getPreviousValue());
+    }
+
     /** Past the range there is no next or previous value, as with the standard model; whole numbers step as before. */
     @Test public void rangeAndWholeNumbersAsBefore() {
         DecimalSpinnerModel model = new DecimalSpinnerModel(100.0, 0.1, 100.0, 0.1);

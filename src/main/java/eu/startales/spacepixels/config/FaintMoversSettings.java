@@ -11,14 +11,16 @@ public final class FaintMoversSettings {
                     + "the search can add several minutes. Known-object predictions are used only for comparisons.",
             false, Boolean.class, c -> c.enableFaintMoverSearch, (c, v) -> c.enableFaintMoverSearch = v);
     public static final DetectionSetting<Double> MIN_DISPLACEMENT = new DetectionSetting<>(
-            "faintMoverMinDisplacementFwhm", "Slowest motion", "FWHM over the session",
-            "Smallest displacement searched, in star widths over the searched session. Slower sources can disappear into the static reference.",
+            "faintMoverMinDisplacementFwhm", "Slowest motion", "",
+            "Smallest rate searched, in arcsec/min when WCS and session times are available. The lower bound is 2 star widths over the session; "
+                    + "slower sources can disappear into the static reference. Before a run the seeing and retained time span are estimated. "
+                    + "Without WCS the rate uses px/min; without timing it uses FWHM/session. The report gives the measured search domain.",
             false, Double.class, c -> c.faintMoverMinDisplacementFwhm, (c, v) -> c.faintMoverMinDisplacementFwhm = v);
     public static final DetectionSetting<Double> MAX_SPEED = new DetectionSetting<>(
             "faintMoverMaxSpeedPixelsPerMinute", "Fastest motion", "",
-            "Largest motion searched, displayed as FWHM over the imported session using its timing span and an assumed seeing width. "
-                    + "This displacement is an estimate; the stored maximum remains pixels per minute. Pixel and angular rates are shown below. "
-                    + "Without usable session times the control shows its stored px/min value. Cost grows approximately with the square of that speed.",
+            "Largest rate searched, in arcsec/min when WCS is available, otherwise px/min. It must exceed the slowest rate. "
+                    + "The profile preserves the pixel rate; the default is 1 px/min converted through this field's WCS. "
+                    + "Cost grows approximately with the square of the maximum speed.",
             false, Double.class, c -> c.faintMoverMaxSpeedPixelsPerMinute, (c, v) -> c.faintMoverMaxSpeedPixelsPerMinute = v);
     public static final DetectionSetting<Double> MIN_SCORE = new DetectionSetting<>(
             "faintMoverMinScore", "Minimum score", "",

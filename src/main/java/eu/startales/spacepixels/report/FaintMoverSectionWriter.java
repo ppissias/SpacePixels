@@ -37,6 +37,11 @@ final class FaintMoverSectionWriter {
                 telemetry.searchedPixels, telemetry.frames, telemetry.sessionMinutes, telemetry.framesOutsideSession,
                 telemetry.minSpeedPixelsPerMinute, telemetry.maxSpeedPixelsPerMinute, telemetry.coarseMotions,
                 telemetry.fwhmPixels, telemetry.fwhmFromStars ? "measured" : "fallback", telemetry.elapsedMs / 1000.0);
+        Double angularScale = FaintMoverPresentation.angularPixelScale(c);
+        if (angularScale != null) out.printf(Locale.ROOT,
+                "<p>Searched angular motion range: %.5g–%.5g arcsec/min (field-centre WCS equivalent). "
+                        + "This uses the completed search's retained session and seeing above.</p>%n",
+                telemetry.minSpeedPixelsPerMinute * angularScale, telemetry.maxSpeedPixelsPerMinute * angularScale);
         out.printf(Locale.ROOT, "<details><summary>Search checks and diagnostic coverage</summary><p>Candidate checks: %d below score, %d split-half, %d stationary, %d camera-fixed, "
                         + "%d duplicates, %d matching tracks, %d near stronger paths; %d candidates retained.</p>%n",
                 telemetry.belowScore, telemetry.rejectedSplitHalf, telemetry.rejectedStationary, telemetry.followingCamera,
@@ -72,11 +77,16 @@ final class FaintMoverSectionWriter {
                         ? "unavailable for this field or reference time" : comparisons.isEmpty()
                         ? "none within the comparison tolerances" : escape(comparisons)) + ".</p>");
                 if (!entry.catalogueComparisons().isEmpty()) {
-                    out.println("<details><summary>Catalogue position and motion comparisons</summary><table><thead><tr><th>Possible match</th><th>Position residual (px)</th><th>Motion residual (px/min)</th><th>Predicted magnitude</th></tr></thead><tbody>");
+                    out.println("<details><summary>Catalogue position and motion comparisons</summary><table><thead><tr><th>Possible match</th><th>Path RMS (px)</th><th>Motion residual (px/min)</th><th>Predicted magnitude</th></tr></thead><tbody>");
                     for (var match : entry.catalogueComparisons()) out.printf(Locale.ROOT,
                             "<tr><td>%s</td><td>%.3f</td><td>%.4f</td><td>%s</td></tr>%n",
-                            escape(match.name()), match.positionResidualPixels(), match.motionResidualPixelsPerMinute(), number(match.predictedMagnitude()));
-                    out.println("</tbody></table></details>");
+                            escape(match.name()), match.rmsPixels(), match.motionResidualPixelsPerMinute(), number(match.predictedMagnitude()));
+                    out.println("</tbody></table>");
+                    for (var match : entry.catalogueComparisons()) {
+                        out.println("<p>" + escape(match.name()) + "</p>");
+                        KnownSolarSystemReport.writeFaintComparisonDetails(out, match);
+                    }
+                    out.println("</details>");
                 }
                 if (entry.blink() != null) writeBlink(c, entry);
                 FaintMoverReviewWriter.write(out, c, entry, candidate);

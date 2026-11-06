@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.detection;
 
 import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import java.time.Instant;
 import java.util.Map;
@@ -36,6 +37,19 @@ public class FaintMoverRuntimeEstimateTest {
                 frame(0, 0), frame(0, 0), frame(0, 0), frame(0, 0)};
         assertFalse(FaintMoverRuntimeEstimate.importedSession(equal).hasSpan());
         assertTrue(FaintMoverRuntimeEstimate.describe(equal, new DetectionConfig()).contains("Different capture times"));
+    }
+
+    /** Angular rates use a real WCS; missing metadata never invents a pixel scale. */
+    @Test public void derivesAngularRatesFromFieldCentreWcs() {
+        var header = Map.of("CRPIX1", "50", "CRPIX2", "50", "CRVAL1", "359.99", "CRVAL2", "30",
+                "CTYPE1", "RA---TAN", "CTYPE2", "DEC--TAN", "CD1_1", "-0.0005555555555555556", "CD1_2", "0",
+                "CD2_1", "0", "CD2_2", "0.0005555555555555556");
+        var wcs = WcsCoordinateTransformer.fromHeader(header);
+        assertEquals(2, FaintMoverRuntimeEstimate.angularPixelScale(wcs, 100, 100), 1e-6);
+        var file = new FitsFileInformation("wcs.fit", "wcs.fit", true, 100, 100, header);
+        assertEquals(2, FaintMoverRuntimeEstimate.angularPixelScale(new FitsFileInformation[]{null, file}), 1e-6);
+        assertTrue(Double.isNaN(FaintMoverRuntimeEstimate.angularPixelScale((FitsFileInformation[]) null)));
+        assertTrue(Double.isNaN(FaintMoverRuntimeEstimate.angularPixelScale(null, 100, 100)));
     }
 
     /** Creates metadata only; no image file or application settings are read or written. */
