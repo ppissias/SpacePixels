@@ -77,7 +77,10 @@ public class AcknowledgementsDialogTest {
                 assertTrue(tab4Text.contains("Honeycutt"));
                 assertTrue(tab4Text.contains("Stetson"));
                 assertTrue(tab4Text.contains("Howell"));
-                assertTrue(tab4Text.contains("Lang"));
+                // Service citations stay with their provider: Astrometry.net's paper is in the services tab.
+                // Swing's HTML writer wraps long lines, so compare with the whitespace collapsed.
+                assertFalse(tab4Text.replaceAll("\\s+", " ").contains("Lang et al."));
+                assertTrue(extractEditorText(tabs.getComponentAt(1)).replaceAll("\\s+", " ").contains("Lang et al. (2010)"));
                 assertTrue(tab4Text.contains("Shupe"));
                 assertTrue(tab4Text.contains("Calabretta"));
                 assertTrue(tab4Text.contains("Greisen"));
