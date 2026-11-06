@@ -32,7 +32,7 @@ public class FrameViewHoverTest {
             view.zoomToScale(4);
             paint(view);
             assertEquals("DK Per · EA/SD", view.getToolTipText(mouse(view, 202, 162)));
-            view.setSkyLayers(true, true, false, true);
+            view.setLayers(without(ViewerLayer.KNOWN_VARIABLES));
             assertNull(view.getToolTipText(mouse(view, 202, 162)));
             paint(view);
             assertNull(view.getToolTipText(mouse(view, 202, 162)));
@@ -58,10 +58,18 @@ public class FrameViewHoverTest {
             assertEquals("the asteroid comes before the star under it", "194 Prokne (A879 FA) · asteroid",
                     view.getToolTipText(mouse(view, 201, 161)));
             assertNull("an object elsewhere at this time has no position to point at", view.getToolTipText(mouse(view, 200, 21)));
-            view.setSkyLayers(true, true, true, false);
+            view.setLayers(without(ViewerLayer.SOLAR_SYSTEM));
             paint(view);
             assertEquals("Gaia G 9.0", view.getToolTipText(mouse(view, 201, 161)));
         });
+    }
+
+    /** The default layers with these ones switched off. */
+    private static ViewerLayerState.Snapshot without(ViewerLayer... hidden) {
+        ViewerLayerState.Snapshot defaults = ViewerLayerState.Snapshot.defaults();
+        java.util.Set<ViewerLayer> visible = java.util.EnumSet.copyOf(defaults.visible());
+        for (ViewerLayer layer : hidden) visible.remove(layer);
+        return new ViewerLayerState.Snapshot(visible, defaults.labelled());
     }
 
     private static MouseEvent mouse(FrameView view, int x, int y) {

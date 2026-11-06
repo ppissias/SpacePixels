@@ -20,7 +20,7 @@ public final class ViewerLifecycleProbe extends SequenceViewerFrame {
     private FitsFileInformation[] files;
 
     public ViewerLifecycleProbe(boolean disposeOnClose) {
-        super("Lifecycle test viewer", "waiting for test frame", disposeOnClose, false);
+        super("Lifecycle test viewer", "waiting for test frame", disposeOnClose, false, new ViewerLayerState(null));
     }
 
     public void open(FitsFileInformation[] files, StretchPanel stretch) {

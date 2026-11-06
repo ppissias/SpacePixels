@@ -49,8 +49,8 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
     public TransientInspectionFrame(List<ImageFrame> frames, List<FrameTransients> allTransients,
                                     FitsFileInformation[] filesInfo, StretchPanel stretchPanel,
                                     TransientReference reference, DetectionConfigurationPanel detection,
-                                    SessionAccess sessions) {
-        super("Manual Transient Inspection", "preparing…", true, true);
+                                    SessionAccess sessions, ViewerLayerState layers) {
+        super("Manual Transient Inspection", "preparing…", true, true, layers);
         this.reference = reference;
         this.detection = detection;
         this.allTransients = allTransients != null ? allTransients : Collections.emptyList();

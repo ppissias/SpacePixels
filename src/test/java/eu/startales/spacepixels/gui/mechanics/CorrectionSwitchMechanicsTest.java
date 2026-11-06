@@ -39,7 +39,7 @@ public class CorrectionSwitchMechanicsTest extends MechanicsTestCase {
                 return candidate.isShowing() && candidate.getTitle().startsWith("Preview Frame");
             }
         }).withTimeout(20_000).using(robot());
-        var correction = viewer.checkBox(VisibleText.checkBox("Correct plate solution"));
+        var correction = viewer.checkBox(VisibleText.checkBox("Align markers to corrected plate solution"));
         waitFor("viewer correction available", () -> correction.target().isEnabled());
         assertTrue(correction.target().isSelected());
         correction.uncheck();

@@ -733,7 +733,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = viewers.register(new TransientInspectionFrame(result.frames(), result.transients(), result.files(),
-                        stretch, result.reference(), detectionSettings, sessions));
+                        stretch, result.reference(), detectionSettings, sessions, viewers.layers()));
                 frame.setSkyCatalogueModel(skyCatalogue());
                 frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
                 if (frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
@@ -1715,7 +1715,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             return;
         }
         if (detectionSequenceFrame == null || !detectionSequenceFrame.isDisplayable()) {
-            detectionSequenceFrame = viewers.register(new DetectionSequenceFrame(windowFrame, sessions, detectionSettings));
+            detectionSequenceFrame = viewers.register(new DetectionSequenceFrame(windowFrame, sessions, detectionSettings, viewers.layers()));
             detectionSequenceFrame.setSettingsEditable(!uiLocked);
         }
 

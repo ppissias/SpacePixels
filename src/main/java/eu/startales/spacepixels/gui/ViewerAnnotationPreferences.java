@@ -3,9 +3,9 @@ package eu.startales.spacepixels.gui;
 import java.util.prefs.Preferences;
 
 /** Immutable viewer-only catalogue filters; magnitudes use each catalogue's band, and 99 means no limit. */
-record ViewerAnnotationPreferences(double faintestStar, double faintestVariable, boolean names) {
+record ViewerAnnotationPreferences(double faintestStar, double faintestVariable) {
     static final double NO_LIMIT = 99;
-    static final ViewerAnnotationPreferences DEFAULT = new ViewerAnnotationPreferences(NO_LIMIT, NO_LIMIT, true);
+    static final ViewerAnnotationPreferences DEFAULT = new ViewerAnnotationPreferences(NO_LIMIT, NO_LIMIT);
 
     /** Rejects invalid limits rather than allowing a corrupt preference to hide the catalogue. */
     ViewerAnnotationPreferences {
@@ -24,14 +24,13 @@ record ViewerAnnotationPreferences(double faintestStar, double faintestVariable,
         double stars = storage.getDouble("faintestStar", NO_LIMIT);
         double variables = storage.getDouble("faintestVariable", NO_LIMIT);
         return new ViewerAnnotationPreferences(valid(stars) ? stars : NO_LIMIT,
-                valid(variables) ? variables : NO_LIMIT, storage.getBoolean("names", true));
+                valid(variables) ? variables : NO_LIMIT);
     }
 
     /** Saves display choices for subsequently opened viewers without modifying detection or export settings. */
     void save(Preferences storage) {
         storage.putDouble("faintestStar", faintestStar);
         storage.putDouble("faintestVariable", faintestVariable);
-        storage.putBoolean("names", names);
     }
 
     /**

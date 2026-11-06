@@ -34,6 +34,13 @@ public final class ViewerRegistry {
     private final List<SessionViewer> viewers = new ArrayList<>();
     private boolean settingsEditable = true;
     private final Map<Window, WindowListener> windowListeners = new IdentityHashMap<>();
+    /** The overlay layers shown by all the application's viewers. */
+    private final ViewerLayerState layers = ViewerLayerState.fromPreferences();
+
+    /** The layer choices shared by the viewers of this application. */
+    ViewerLayerState layers() {
+        return layers;
+    }
 
     /**
      * Registers {@code viewer}. If {@code viewer} is a {@link Window}, a window listener is attached to unregister

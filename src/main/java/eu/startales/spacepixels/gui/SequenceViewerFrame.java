@@ -68,16 +68,18 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     private final JButton previousButton = new JButton("◀");
     private final JButton nextButton = new JButton("▶");
     private final JCheckBox detectionsBox = new JCheckBox("Show detections", true);
-    private final JCheckBox tracksBox = new JCheckBox("Show tracks", true);
-    private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
-    private final JCheckBox faintMoversBox = new JCheckBox("Show faint movers", true);
-    private final JCheckBox findingsBox = new JCheckBox("Show other findings", true);
-    private final JPanel stretchRow = new JPanel(new BorderLayout());
+    private final ViewerLayerState layerState;
+    /** Kept here: the shared state holds its listeners weakly. */
+    private final Runnable layerListener = this::layersChanged;
+    private final FindingsSection findings;
+    private final ViewerSidePanel sidePanel = new ViewerSidePanel();
+    /** Holds the Display stretch section, which is made when the viewer first opens with the Image Stretch tab. */
+    private final JPanel stretchHolder = new JPanel(new BorderLayout());
     private final JPanel controlRows = new JPanel();
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
     private final ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
-    private final SkyAnnotations sky = new SkyAnnotations(view);
+    private final SkyAnnotations sky;
     private final String windowName;
     private final String busyText;
     private final boolean disposeOnClose;
@@ -100,8 +102,13 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
      * @param busyText       shown while a frame is prepared, for example "detecting…"
      * @param disposeOnClose whether closing disposes the window (else it hides and is opened again later)
      * @param showsDetections whether the frames come with detections, which get a "Show detections" switch
+     * @param layers          the overlay layers shared by the application's viewers
      */
-    SequenceViewerFrame(String windowName, String busyText, boolean disposeOnClose, boolean showsDetections) {
+    SequenceViewerFrame(String windowName, String busyText, boolean disposeOnClose, boolean showsDetections,
+                        ViewerLayerState layers) {
+        this.layerState = layers;
+        this.sky = new SkyAnnotations(view, layers);
+        this.findings = new FindingsSection(layers);
         this.windowName = windowName;
         this.busyText = busyText;
         this.disposeOnClose = disposeOnClose;
@@ -119,8 +126,17 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         JComponent controls = buildControls();
         JComponent statusBar = ViewerSupport.statusBar(frameLabel, cursorLabel, "← → previous / next frame · "
                 + (showsDetections ? "D detections · T tracks · " : "") + "A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · Esc closes");
+        findings.section().setVisible(false);
+        stretchHolder.setOpaque(false);
+        sidePanel.add(findings.section());
+        sidePanel.add(sky.section());
+        sidePanel.add(stretchHolder);
+        ViewerSupport.prepareControls(sidePanel.component());
+        JPanel centre = new JPanel(new BorderLayout());
+        centre.add(view, BorderLayout.CENTER);
+        centre.add(sidePanel.component(), BorderLayout.EAST);
         contentPane.add(WindowSizing.viewerControls(controls), BorderLayout.NORTH);
-        contentPane.add(view, BorderLayout.CENTER);
+        contentPane.add(centre, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
         view.setMinimumSize(new Dimension(UiStyle.space(240), UiStyle.space(160)));
         WindowSizing.install(this, 600, 380);
@@ -145,28 +161,14 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         ViewerSupport.bind(getRootPane(), "LEFT", "previous", () -> step(-1));
         ViewerSupport.bind(getRootPane(), "RIGHT", "next", () -> step(1));
         if (showsDetections) {
-            ViewerSupport.bind(getRootPane(), "D", "detections", () -> {
-                detectionsBox.setSelected(!detectionsBox.isSelected());
-                view.setDetectionsVisible(detectionsBox.isSelected());
-            });
+            ViewerSupport.bind(getRootPane(), "D", "detections", () -> layerState.toggleVisible(ViewerLayer.RAW_DETECTIONS));
         }
-        ViewerSupport.bind(getRootPane(), "A", "annotate", () -> {
-            sky.toggle();
-            updateCursorLabel();
-        });
+        ViewerSupport.bind(getRootPane(), "A", "annotate", sky::toggle);
         ViewerSupport.bind(getRootPane(), "C", "correct", sky::toggleCorrection);
-        ViewerSupport.bind(getRootPane(), "T", "tracks", () -> {
-            if (tracksBox.isVisible() && tracksBox.isEnabled()) {
-                tracksBox.setSelected(!tracksBox.isSelected());
-                view.setOverlayVisible(tracksBox.isSelected());
-            }
-        });
-        ViewerSupport.bind(getRootPane(), "V", "variables", () -> {
-            if (variablesBox.isVisible() && variablesBox.isEnabled()) {
-                variablesBox.setSelected(!variablesBox.isSelected());
-                view.setVariableStarsVisible(variablesBox.isSelected());
-            }
-        });
+        ViewerSupport.bind(getRootPane(), "T", "tracks", () -> toggleFindingLayer(ViewerLayer.TRACKS));
+        ViewerSupport.bind(getRootPane(), "V", "variables", () -> toggleFindingLayer(ViewerLayer.VARIABLE_STARS));
+        layerState.addListener(layerListener);
+        view.setLayers(layerState.snapshot());
         sky.setOnSolutionChanged(() -> {
             cursorReadout.forgetSolutions();
             updateCursorLabel();
@@ -179,6 +181,22 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
                 close();
             }
         });
+    }
+
+    /** A key switches a layer of the last run only while the viewer has it to show. */
+    private void toggleFindingLayer(ViewerLayer layer) {
+        if (findings.section().isVisible() && findings.isAvailable(layer)) {
+            layerState.toggleVisible(layer);
+        }
+    }
+
+    /** Follows the shared layer state, which this or another viewer changed. */
+    private void layersChanged() {
+        view.setLayers(layerState.snapshot());
+        detectionsBox.setSelected(layerState.isVisible(ViewerLayer.RAW_DETECTIONS));
+        findings.refresh();
+        sky.layersChanged();
+        updateCursorLabel();
     }
 
     /** The number of frames to step through. */
@@ -240,48 +258,33 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
             }
         }
         boolean available = overlay != null && overlay.coversAnyOf(names);
-        tracksBox.setVisible(true);
-        if (available && !tracksBox.isEnabled()) tracksBox.setSelected(true);
-        tracksBox.setEnabled(available);
-        if (!available) {
-            tracksBox.setSelected(false);
-        }
-        tracksBox.setToolTipText(available
-                ? "Draw the tracks of the last detection run, numbered as in the report: T for moving objects, ST for streak tracks (T)."
-                : "Run Detect Moving Targets on this session to see its tracks here.");
+        findings.section().setVisible(true);
+        findings.setTracks(overlay, available);
         view.setOverlay(available ? overlay : null);
-        view.setOverlayVisible(tracksBox.isSelected());
     }
 
     /** Preview can show candidates from the last full run, independently of single-frame extraction. */
     protected void setVariableStarOverlay(VariableStarOverlay overlay, FitsFileInformation[] files) {
         boolean available = overlay != null && overlay.coversAnyOf(files);
-        variablesBox.setVisible(true);
-        variablesBox.setEnabled(available);
-        variablesBox.setToolTipText(available
-                ? "Variable-star candidates of the last detection run, numbered as in the report. Solid rings: high confidence; dashed rings: possible. Hover for details (V)."
-                : "Run Detect Moving Targets with variable-star photometry enabled on this session to see its candidates here.");
+        findings.section().setVisible(true);
+        findings.setVariableStars(overlay, available);
         view.setVariableStarOverlay(available ? overlay : null);
-        view.setVariableStarsVisible(variablesBox.isSelected());
     }
 
     /** Offers the run's experimental fitted paths independently of per-frame detections. */
     protected void setFaintMoverOverlay(eu.startales.spacepixels.detection.FaintMoverOverlay overlay, FitsFileInformation[] files) {
         boolean available = overlay != null && overlay.coversAnyOf(files);
-        faintMoversBox.setVisible(true);
-        faintMoversBox.setEnabled(available);
-        faintMoversBox.setToolTipText("Experimental FM candidates: dashed fitted paths and current exposure-midpoint positions. These are unverified.");
+        findings.section().setVisible(true);
+        findings.setFaintMovers(overlay, available);
         view.setFaintMoverOverlay(available ? overlay : null);
-        view.setFaintMoversVisible(faintMoversBox.isSelected());
     }
 
     /** Offers all additional report categories, with explicit stack/reference markers where measurements are unavailable. */
     protected void setFindingOverlay(eu.startales.spacepixels.detection.FindingOverlay overlay, FitsFileInformation[] files) {
         boolean available = overlay != null && overlay.coversAnyOf(files);
-        findingsBox.setVisible(true);findingsBox.setEnabled(available);
-        findingsBox.setToolTipText("Single-frame streaks/anomalies, slow-mover references, rescue/activity groups and artifacts. Dashed squares marked ref are report references, not per-frame detections.");
+        findings.section().setVisible(true);
+        findings.setFindings(overlay, available);
         view.setFindingOverlay(available ? overlay : null);
-        view.setFindingsVisible(findingsBox.isSelected());
     }
 
     // ==========================================
@@ -327,7 +330,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     }
 
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
-        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::redraw, stretchRow);
+        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::redraw, stretchHolder);
         cursorReadout.reset(files, sky::solutionFor);
         sky.attach(files);
         open = true;
@@ -335,7 +338,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         shown = null;
         shownIndex = -1;
         view.clear();
-        view.setDetectionsVisible(detectionsBox.isSelected());
+        view.setLayers(layerState.snapshot());
         FitsFileInformation first = infoOf(0);
         setTitle(windowName + " · " + ViewerSupport.sessionName(first) + " · " + frameCount() + " frames");
         if (!isVisible()) {
@@ -392,21 +395,14 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     // ==========================================
 
     private JComponent buildControls() {
-        tracksBox.setVisible(false);
-        tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
-        variablesBox.setVisible(false);
-        variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
-        faintMoversBox.setVisible(false);
-        faintMoversBox.addActionListener(e -> view.setFaintMoversVisible(faintMoversBox.isSelected()));
-        findingsBox.setVisible(false);
-        findingsBox.addActionListener(e -> view.setFindingsVisible(findingsBox.isSelected()));
         previousButton.setToolTipText("Previous frame (←).");
         previousButton.addActionListener(e -> step(-1));
         nextButton.setToolTipText("Next frame (→).");
         nextButton.addActionListener(e -> step(1));
         detectionsBox.setToolTipText("Green boxes: point sources. Red lines: streaks. From 100 % zoom the detected "
                 + "pixels are tinted too (D).");
-        detectionsBox.addActionListener(e -> view.setDetectionsVisible(detectionsBox.isSelected()));
+        detectionsBox.setSelected(layerState.isVisible(ViewerLayer.RAW_DETECTIONS));
+        detectionsBox.addActionListener(e -> layerState.setVisible(ViewerLayer.RAW_DETECTIONS, detectionsBox.isSelected()));
 
         JPanel row = new WrappingControlsPanel(6, 0);
         row.add(previousButton);
@@ -414,25 +410,17 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         row.add(Box.createHorizontalStrut(10));
         if (showsDetections) {
             row.add(detectionsBox);
-            row.add(tracksBox);
-            row.add(variablesBox);
-            row.add(faintMoversBox);
-            row.add(findingsBox);
             row.add(Box.createHorizontalStrut(10));
         }
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             row.add(zoomControl);
         }
         row.add(Box.createHorizontalStrut(10));
-        for (JComponent skyControl : sky.controls()) {
-            row.add(skyControl);
-        }
+        row.add(sidePanel.toggleButton());
 
         controlRows.setLayout(new BoxLayout(controlRows, BoxLayout.Y_AXIS));
         row.setAlignmentX(Component.LEFT_ALIGNMENT);
-        stretchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         controlRows.add(row);
-        controlRows.add(stretchRow);
         return controlRows;
     }
 

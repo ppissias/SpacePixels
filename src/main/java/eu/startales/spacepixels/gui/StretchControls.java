@@ -23,21 +23,27 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * The stretch row of the frame viewers. Its controls use the models of the Image Stretch tab, so every viewer and
- * the tab always show the same stretch, and a change here is remembered like a change there. Keeps the stretch
- * tables of the frames it has drawn until the stretch changes.
+ * The Display stretch section of the frame viewers' side panel. Its controls use the models of the Image Stretch
+ * tab, so every viewer and the tab always show the same stretch, and a change here is remembered like a change
+ * there. Each parameter has a slider and a number field on the same model. Keeps the stretch tables of the frames it
+ * has drawn until the stretch changes.
  */
 final class StretchControls {
 
     private final StretchPanel panel;
     private final JComboBox<StretchAlgorithm> algorithmCombo;
-    private final JCheckBox displayStretchCheckbox = new JCheckBox("Stretch display");
-    private final JButton resetButton = new JButton("Reset");
+    private final JCheckBox displayStretchCheckbox = SidePanelIcons.onOff("Stretch display");
+    private final JButton resetButton = new JButton("Reset display");
+    private final JLabel functionLabel = new JLabel("Function");
     private final JSlider primarySlider;
     private final JSlider secondarySlider;
+    private final JSpinner primarySpinner;
+    private final JSpinner secondarySpinner;
     private final JLabel primaryLabel = new JLabel();
     private final JLabel secondaryLabel = new JLabel();
-    private final JPanel row = new WrappingControlsPanel(6, 0);
+    private final SidePanelSection section;
+    /** Undoes the number fields' links to the shared slider models, when the controls are detached. */
+    private final java.util.List<Runnable> unlinks = new java.util.ArrayList<>();
     private final ChangeListener modelListener = e -> scheduleRefresh();
     private final ActionListener algorithmListener = e -> scheduleRefresh();
     private final ItemListener displayListener = e -> scheduleRefresh();
@@ -67,44 +73,110 @@ final class StretchControls {
         secondarySlider = new JSlider(panel.getStretchIterationsSlider().getModel());
         for (JSlider slider : new JSlider[]{primarySlider, secondarySlider}) {
             Dimension natural = slider.getPreferredSize();
-            slider.setPreferredSize(new Dimension(UiStyle.space(150), natural.height));
+            slider.setPreferredSize(new Dimension(UiStyle.space(120), natural.height));
             slider.getModel().addChangeListener(modelListener);
         }
+        primarySpinner = linkedSpinner(primarySlider.getModel());
+        secondarySpinner = linkedSpinner(secondarySlider.getModel());
         algorithmCombo.addActionListener(algorithmListener);
-        resetButton.setToolTipText("Return the sliders to the defaults of the selected algorithm.");
+        // The side panel decides the width; the combo box fills what the label leaves.
+        algorithmCombo.setPreferredSize(new Dimension(UiStyle.space(120), algorithmCombo.getPreferredSize().height));
+        resetButton.putClientProperty("JButton.buttonType", "borderless");
+        resetButton.setToolTipText("Return the stretch parameters to the defaults of the selected function. "
+                + "The detection settings are not affected.");
         resetButton.addActionListener(e -> panel.resetStretchToDefaults());
 
-        row.setBorder(new EmptyBorder(4, 0, 0, 0));
-        row.add(displayStretchCheckbox);
-        row.add(algorithmCombo);
-        row.add(Box.createHorizontalStrut(8));
-        row.add(primaryLabel);
-        row.add(primarySlider);
-        row.add(Box.createHorizontalStrut(8));
-        row.add(secondaryLabel);
-        row.add(secondarySlider);
-        row.add(resetButton);
-        ViewerSupport.prepareControls(row);
+        JPanel body = new JPanel(new GridBagLayout());
+        GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(0, 0, UiStyle.space(6), UiStyle.space(8));
+        c.gridy = 0;
+        c.gridx = 0;
+        body.add(functionLabel, c);
+        c.gridx = 1;
+        c.gridwidth = 2;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        c.insets = new Insets(0, 0, UiStyle.space(6), 0);
+        body.add(algorithmCombo, c);
+        addParameter(body, 1, primaryLabel, primarySlider, primarySpinner);
+        addParameter(body, 3, secondaryLabel, secondarySlider, secondarySpinner);
+        c = new GridBagConstraints();
+        c.gridy = 5;
+        c.gridx = 0;
+        c.gridwidth = 3;
+        c.anchor = GridBagConstraints.WEST;
+        body.add(resetButton, c);
+        section = new SidePanelSection("Display stretch", body).addHeaderControl(displayStretchCheckbox);
+        ViewerSupport.prepareControls(section);
+        functionLabel.setLabelFor(algorithmCombo);
         primaryLabel.setLabelFor(primarySlider);
         secondaryLabel.setLabelFor(secondarySlider);
         algorithmCombo.getAccessibleContext().setAccessibleName("Display stretch algorithm");
-        String widestPrimary = "";
-        String widestSecondary = "";
-        for (StretchAlgorithm algorithm : StretchAlgorithm.values()) {
-            widestPrimary = longer(widestPrimary, algorithm.getPrimaryParameterLabel() + ": " + algorithm.getPrimaryMaximum());
-            widestSecondary = longer(widestSecondary, algorithm.getSecondaryParameterLabel() + ": " + algorithm.getSecondaryMaximum());
-        }
-        ViewerSupport.fixWidth(primaryLabel, widestPrimary);
-        ViewerSupport.fixWidth(secondaryLabel, widestSecondary);
         updateLabels();
+    }
+
+    /** A parameter's name on one line, its slider and number field on the next. */
+    private static void addParameter(JPanel body, int row, JLabel label, JSlider slider, JSpinner spinner) {
+        GridBagConstraints c = new GridBagConstraints();
+        c.anchor = GridBagConstraints.WEST;
+        c.gridx = 0;
+        c.gridy = row;
+        c.gridwidth = 3;
+        c.insets = new Insets(UiStyle.space(4), 0, 0, 0);
+        body.add(label, c);
+        c.gridy = row + 1;
+        c.gridwidth = 2;
+        c.weightx = 1;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.insets = new Insets(0, 0, UiStyle.space(4), UiStyle.space(8));
+        body.add(slider, c);
+        c.gridx = 2;
+        c.gridwidth = 1;
+        c.weightx = 0;
+        c.fill = GridBagConstraints.NONE;
+        c.insets = new Insets(0, 0, UiStyle.space(4), 0);
+        UiStyle.inputWidth(spinner, 64);
+        body.add(spinner, c);
+    }
+
+    /** A number field that follows the slider model both ways, including its range when the function changes. */
+    private JSpinner linkedSpinner(BoundedRangeModel range) {
+        SpinnerNumberModel number = new SpinnerNumberModel(range.getValue(), range.getMinimum(), range.getMaximum(), 1);
+        JSpinner spinner = UiStyle.spinner(number);
+        boolean[] syncing = {false};
+        ChangeListener fromRange = e -> {
+            if (syncing[0]) return;
+            syncing[0] = true;
+            try {
+                number.setMinimum(range.getMinimum());
+                number.setMaximum(range.getMaximum());
+                number.setValue(range.getValue());
+            } finally {
+                syncing[0] = false;
+            }
+        };
+        number.addChangeListener(e -> {
+            if (syncing[0]) return;
+            syncing[0] = true;
+            try {
+                range.setValue(((Number) number.getValue()).intValue());
+            } finally {
+                syncing[0] = false;
+            }
+        });
+        range.addChangeListener(fromRange);
+        unlinks.add(() -> range.removeChangeListener(fromRange));
+        return spinner;
     }
 
     StretchPanel getPanel() {
         return panel;
     }
 
-    JPanel getRow() {
-        return row;
+    /** The section for the viewer's side panel. */
+    SidePanelSection getSection() {
+        return section;
     }
 
     /** The stretch table of each channel of this frame, for the current stretch. */
@@ -151,6 +223,8 @@ final class StretchControls {
         displayStretchCheckbox.getModel().removeItemListener(displayListener);
         displayStretchCheckbox.setModel(new JToggleButton.ToggleButtonModel());
         algorithmCombo.removeActionListener(algorithmListener);
+        unlinks.forEach(Runnable::run);
+        unlinks.clear();
         for (JSlider slider : new JSlider[]{primarySlider, secondarySlider}) {
             slider.getModel().removeChangeListener(modelListener);
             slider.setModel(new DefaultBoundedRangeModel());
@@ -178,6 +252,9 @@ final class StretchControls {
         algorithmCombo.setEnabled(enabled);
         primarySlider.setEnabled(enabled);
         secondarySlider.setEnabled(enabled);
+        primarySpinner.setEnabled(enabled);
+        secondarySpinner.setEnabled(enabled);
+        functionLabel.setEnabled(enabled);
         primaryLabel.setEnabled(enabled);
         secondaryLabel.setEnabled(enabled);
         resetButton.setEnabled(enabled);
@@ -185,11 +262,9 @@ final class StretchControls {
         if (algorithm == null) {
             return;
         }
-        primaryLabel.setText(algorithm.getPrimaryParameterLabel() + ": " + primarySlider.getValue());
-        secondaryLabel.setText(algorithm.getSecondaryParameterLabel() + ": " + secondarySlider.getValue());
-    }
-
-    private static String longer(String a, String b) {
-        return b.length() > a.length() ? b : a;
+        primaryLabel.setText(algorithm.getPrimaryParameterLabel());
+        secondaryLabel.setText(algorithm.getSecondaryParameterLabel());
+        primarySpinner.getAccessibleContext().setAccessibleName(algorithm.getPrimaryParameterLabel());
+        secondarySpinner.getAccessibleContext().setAccessibleName(algorithm.getSecondaryParameterLabel());
     }
 }

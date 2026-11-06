@@ -35,9 +35,10 @@ import java.util.prefs.Preferences;
 
 /**
  * Plays the selected frames in turn, the classic way of hunting moving objects by eye. The speed, the display
- * stretch (shared with the Image Stretch tab) and the zoom can change while it plays, and the tracks of the last
- * detection run can be drawn on top. The list on the left shows every frame; while paused, frames can be left out of
- * the loop. The window opens as soon as the frames start loading and shows the progress.
+ * stretch (shared with the Image Stretch tab) and the zoom can change while it plays, and the findings of the last
+ * detection run and the catalogue can be drawn on top, chosen in the side panel. The list on the left shows every
+ * frame; while paused, frames can be left out of the loop. The window opens as soon as the frames start loading and
+ * shows the progress.
  */
 public class BlinkFrame extends JFrame implements SessionViewer {
 
@@ -61,12 +62,13 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final JSlider speedSlider = new JSlider(0, SPEED_STEPS);
     private final JLabel speedLabel = new JLabel();
     private final JCheckBox skipBox = new JCheckBox("Skip this frame");
-    private final JCheckBox tracksBox = new JCheckBox("Show tracks", true);
-    private final JCheckBox variablesBox = new JCheckBox("Show variable stars", true);
-    private final JCheckBox faintMoversBox = new JCheckBox("Show faint movers", true);
-    private final JCheckBox findingsBox = new JCheckBox("Show other findings", true);
-    /** Holds the stretch row, which is made when the first blink brings the Image Stretch tab. */
-    private final JPanel stretchRow = new JPanel(new BorderLayout());
+    private final ViewerLayerState layerState;
+    /** Kept here: the shared state holds its listeners weakly. */
+    private final Runnable layerListener = this::layersChanged;
+    private final FindingsSection findings;
+    private final ViewerSidePanel sidePanel = new ViewerSidePanel();
+    /** Holds the Display stretch section, which is made when the first blink brings the Image Stretch tab. */
+    private final JPanel stretchHolder = new JPanel(new BorderLayout());
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
     private final FrameTableModel frameModel = new FrameTableModel();
@@ -86,7 +88,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     private StretchControls stretch;
     private final ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
-    private final SkyAnnotations sky = new SkyAnnotations(view);
+    private final SkyAnnotations sky;
 
     private BlinkSequence sequence;
     private FitsFileInformation[] files;
@@ -98,7 +100,11 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private FitsFileInformation[] loadingFiles;
     private Point cursorPixel;
 
-    public BlinkFrame() {
+    /** {@code layers} are the overlay layers shared by the application's viewers. */
+    public BlinkFrame(ViewerLayerState layers) {
+        layerState = layers;
+        sky = new SkyAnnotations(view, layers);
+        findings = new FindingsSection(layers);
         setTitle("Blink");
         AppIcon.apply(this);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
@@ -114,7 +120,15 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         setContentPane(contentPane);
         controls = buildControls();
         statusBar = buildStatusBar();
-        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildFrameList(), gifExport.image());
+        stretchHolder.setOpaque(false);
+        sidePanel.add(findings.section());
+        sidePanel.add(sky.section());
+        sidePanel.add(stretchHolder);
+        ViewerSupport.prepareControls(sidePanel.component());
+        JPanel imageAndPanel = new JPanel(new BorderLayout());
+        imageAndPanel.add(gifExport.image(), BorderLayout.CENTER);
+        imageAndPanel.add(sidePanel.component(), BorderLayout.EAST);
+        JSplitPane split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, buildFrameList(), imageAndPanel);
         split.setFocusable(false);
         split.setContinuousLayout(true);
         // The split pane would take the arrow keys to move its divider; they step frames here.
@@ -171,7 +185,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
               StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables) {
-        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::showCurrent, stretchRow);
+        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::showCurrent, stretchHolder);
         release();
         this.sequence = sequence;
         this.files = files == null ? null : files.clone();
@@ -188,22 +202,11 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         }
         boolean hasTracks = overlay != null && overlay.coversAnyOf(names);
         view.setOverlay(hasTracks ? overlay : null);
-        if (hasTracks && !tracksBox.isEnabled()) tracksBox.setSelected(true);
-        tracksBox.setEnabled(hasTracks);
-        if (!hasTracks) {
-            tracksBox.setSelected(false);
-        }
-        tracksBox.setToolTipText(hasTracks
-                ? "Draw the tracks of the last detection run, numbered as in the report: T for moving objects, ST for streak tracks (T)."
-                : "Run Detect Moving Targets on this session to see its tracks here.");
-        view.setOverlayVisible(tracksBox.isSelected());
+        findings.setTracks(overlay, hasTracks);
         boolean hasVariables = variables != null && variables.coversAnyOf(files);
-        variablesBox.setEnabled(hasVariables);
-        variablesBox.setToolTipText(hasVariables
-                ? "Variable-star candidates of the last detection run, numbered V1, V2, … as in its report. Solid rings: high confidence; dashed rings: possible. Hover for details (V)."
-                : "Run Detect Moving Targets with variable-star photometry enabled on this session to see its candidates here.");
+        findings.setVariableStars(variables, hasVariables);
         view.setVariableStarOverlay(hasVariables ? variables : null);
-        view.setVariableStarsVisible(variablesBox.isSelected());
+        view.setLayers(layerState.snapshot());
 
         setTitle("Blink · " + ViewerSupport.sessionName(sequence.getFrames().get(0).getInfo().getFilePath()) + " · "
                 + sequence.getFrames().size() + " frames");
@@ -326,19 +329,30 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     /** Installs the last completed run's fitted paths after a blink opens, using full frame identities. */
     void setFaintMoverOverlay(eu.startales.spacepixels.detection.FaintMoverOverlay overlay) {
         boolean available = overlay != null && overlay.coversAnyOf(files);
-        faintMoversBox.setEnabled(available);
-        faintMoversBox.setToolTipText("Experimental FM candidates: dashed fitted paths and current exposure-midpoint positions. These are unverified.");
+        findings.setFaintMovers(overlay, available);
         view.setFaintMoverOverlay(available ? overlay : null);
-        view.setFaintMoversVisible(faintMoversBox.isSelected());
     }
 
     /** Installs the saved or completed run's remaining categories after a blink opens. */
     void setFindingOverlay(eu.startales.spacepixels.detection.FindingOverlay overlay) {
         boolean available = overlay != null && overlay.coversAnyOf(files);
-        findingsBox.setEnabled(available);
-        findingsBox.setToolTipText("Other report categories; dashed squares marked ref are reference positions, not per-frame detections.");
+        findings.setFindings(overlay, available);
         view.setFindingOverlay(available ? overlay : null);
-        view.setFindingsVisible(findingsBox.isSelected());
+    }
+
+    /** Follows the shared layer state, which this or another viewer changed. */
+    private void layersChanged() {
+        view.setLayers(layerState.snapshot());
+        findings.refresh();
+        sky.layersChanged();
+        updateCursorLabel();
+    }
+
+    /** A key switches a layer of the last run only while the blink has it to show. */
+    private void toggleFindingLayer(ViewerLayer layer) {
+        if (findings.isAvailable(layer)) {
+            layerState.toggleVisible(layer);
+        }
     }
 
     // ==========================================
@@ -353,7 +367,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         nextButton.setToolTipText("Next frame (→). Stepping pauses the blink.");
         nextButton.addActionListener(e -> stepByHand(1));
 
-        speedSlider.setToolTipText("Time each frame is shown (↑ faster, ↓ slower).");
+        speedSlider.setToolTipText("Time each frame is shown (↑ faster, ↓ slower while playing).");
         Dimension speedSize = speedSlider.getPreferredSize();
         speedSlider.setPreferredSize(new Dimension(UiStyle.space(160), speedSize.height));
         speedSlider.addChangeListener(e -> speedChanged());
@@ -365,12 +379,6 @@ public class BlinkFrame extends JFrame implements SessionViewer {
                 skipBox.setSelected(skipped[current]);
             }
         });
-        tracksBox.addActionListener(e -> view.setOverlayVisible(tracksBox.isSelected()));
-        findingsBox.addActionListener(e -> view.setFindingsVisible(findingsBox.isSelected()));
-        variablesBox.setEnabled(false);
-        variablesBox.addActionListener(e -> view.setVariableStarsVisible(variablesBox.isSelected()));
-        faintMoversBox.setEnabled(false);
-        faintMoversBox.addActionListener(e -> view.setFaintMoversVisible(faintMoversBox.isSelected()));
 
         // Wraps onto a second line when the window is narrow, so no control is cut off.
         JPanel playbackRow = new JPanel(new WrapLayout(FlowLayout.LEFT, 6, 0));
@@ -383,25 +391,17 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         playbackRow.add(speedLabel);
         playbackRow.add(Box.createHorizontalStrut(10));
         playbackRow.add(skipBox);
-        playbackRow.add(tracksBox);
-        playbackRow.add(findingsBox);
-        playbackRow.add(variablesBox);
-        playbackRow.add(faintMoversBox);
         playbackRow.add(Box.createHorizontalStrut(10));
         for (JComponent zoomControl : ViewerSupport.zoomControls(view)) {
             playbackRow.add(zoomControl);
         }
         playbackRow.add(Box.createHorizontalStrut(10));
-        for (JComponent skyControl : sky.controls()) {
-            playbackRow.add(skyControl);
-        }
+        playbackRow.add(sidePanel.toggleButton());
 
         JPanel controls = new JPanel();
         controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
         playbackRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        stretchRow.setAlignmentX(Component.LEFT_ALIGNMENT);
         controls.add(playbackRow);
-        controls.add(stretchRow);
         JComponent gifControls = gifExport.controls();
         gifControls.setAlignmentX(Component.LEFT_ALIGNMENT);
         controls.add(gifControls);
@@ -502,7 +502,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     }
 
     private JComponent buildStatusBar() {
-        return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed · "
+        return ViewerSupport.statusBar(frameLabel, cursorLabel, "Space play/pause · ← → step · ↑ ↓ speed, or step while paused · "
                 + "S skip frame (paused) · T tracks · A annotate · C correct plate solution · F fit · 1 100 % · scroll to zoom, drag to pan · G GIF region · Esc cancel/close");
     }
 
@@ -510,29 +510,25 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         bind("SPACE", "playPause", this::togglePlay);
         bind("LEFT", "previous", () -> stepByHand(-1));
         bind("RIGHT", "next", () -> stepByHand(1));
-        bind("UP", "faster", () -> speedSlider.setValue(Math.min(SPEED_STEPS, speedSlider.getValue() + SPEED_STEPS / 20)));
-        bind("DOWN", "slower", () -> speedSlider.setValue(Math.max(0, speedSlider.getValue() - SPEED_STEPS / 20)));
+        // While playing, up and down change the speed; while paused, they step through the frames as the list does.
+        bind("UP", "fasterOrPrevious", () -> {
+            if (timer.isRunning()) speedSlider.setValue(Math.min(SPEED_STEPS, speedSlider.getValue() + SPEED_STEPS / 20));
+            else stepByHand(-1);
+        });
+        bind("DOWN", "slowerOrNext", () -> {
+            if (timer.isRunning()) speedSlider.setValue(Math.max(0, speedSlider.getValue() - SPEED_STEPS / 20));
+            else stepByHand(1);
+        });
         bind("S", "skip", () -> {
             if (open) {
                 setSkipped(current, !skipped[current]);
             }
         });
-        bind("T", "tracks", () -> {
-            if (tracksBox.isEnabled()) {
-                tracksBox.setSelected(!tracksBox.isSelected());
-                view.setOverlayVisible(tracksBox.isSelected());
-            }
-        });
-        bind("V", "variables", () -> {
-            if (variablesBox.isEnabled()) {
-                variablesBox.setSelected(!variablesBox.isSelected());
-                view.setVariableStarsVisible(variablesBox.isSelected());
-            }
-        });
-        bind("A", "annotate", () -> {
-            sky.toggle();
-            updateCursorLabel();
-        });
+        bind("T", "tracks", () -> toggleFindingLayer(ViewerLayer.TRACKS));
+        bind("V", "variables", () -> toggleFindingLayer(ViewerLayer.VARIABLE_STARS));
+        bind("A", "annotate", sky::toggle);
+        layerState.addListener(layerListener);
+        view.setLayers(layerState.snapshot());
         bind("C", "correct", sky::toggleCorrection);
         sky.setOnSolutionChanged(() -> {
             cursorReadout.forgetSolutions();

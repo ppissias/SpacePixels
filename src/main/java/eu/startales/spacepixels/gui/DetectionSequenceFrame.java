@@ -43,8 +43,9 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     private final ProcessingSession ownerSession;
 
     /** Captures the session identity; trial controls copy values while each preparation reads fresh other settings. */
-    public DetectionSequenceFrame(JFrame owner, SessionAccess sessions, DetectionConfigurationPanel detection) {
-        super("Preview Frame", "detecting…", false, true);
+    public DetectionSequenceFrame(JFrame owner, SessionAccess sessions, DetectionConfigurationPanel detection,
+                                  ViewerLayerState layers) {
+        super("Preview Frame", "detecting…", false, true, layers);
         this.sessions = sessions;
         this.detection = detection;
         setMarkerSettings(detection::visualizationSettings);

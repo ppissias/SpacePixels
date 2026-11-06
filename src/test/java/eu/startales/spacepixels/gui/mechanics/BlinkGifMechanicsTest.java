@@ -42,7 +42,7 @@ public class BlinkGifMechanicsTest extends MechanicsTestCase {
         waitFor("selection pauses playback", () -> blink.button(VisibleText.button("▶ Play")).target().isEnabled());
         blink.table().cell(TableCell.row(1).column(0)).click();
         assertEquals(Boolean.FALSE, GuiActionRunner.execute(() -> blink.table().target().getValueAt(1, 0)));
-        blink.checkBox(VisibleText.checkBox("Annotate")).check();
+        blink.checkBox(VisibleText.checkBox("Show catalog annotations")).check();
         JComponent image = robot().finder().find(blink.target(), new GenericTypeMatcher<>(JComponent.class) {
             @Override protected boolean isMatching(JComponent candidate) {
                 return candidate.isShowing() && candidate.getAccessibleContext() != null

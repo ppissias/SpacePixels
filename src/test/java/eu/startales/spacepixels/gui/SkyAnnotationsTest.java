@@ -21,8 +21,8 @@ public class SkyAnnotationsTest {
         javax.swing.SwingUtilities.invokeAndWait(() -> {
             var firstModel = new eu.startales.spacepixels.session.SkyCatalogueModel();
             var secondModel = new eu.startales.spacepixels.session.SkyCatalogueModel();
-            SkyAnnotations first = new SkyAnnotations(new FrameView());
-            SkyAnnotations second = new SkyAnnotations(new FrameView());
+            SkyAnnotations first = new SkyAnnotations(new FrameView(), new ViewerLayerState(null));
+            SkyAnnotations second = new SkyAnnotations(new FrameView(), new ViewerLayerState(null));
             var firstChanges = new java.util.concurrent.atomic.AtomicInteger();
             var secondChanges = new java.util.concurrent.atomic.AtomicInteger();
             first.setOnSolutionChanged(firstChanges::incrementAndGet);
@@ -60,7 +60,7 @@ public class SkyAnnotationsTest {
             var tableModel = new FitsFileTableModel(new eu.startales.spacepixels.fits.FitsFileInformation[]{unsolved, second});
             assertEquals("No", tableModel.getValueAt(0, FitsFileTableModel.COL_SOLVED));
 
-            SkyAnnotations sky = new SkyAnnotations(new FrameView());
+            SkyAnnotations sky = new SkyAnnotations(new FrameView(), new ViewerLayerState(null));
             ViewerSupport.CursorReadout cursorReadout = new ViewerSupport.CursorReadout();
             sky.setOnSolutionChanged(cursorReadout::forgetSolutions);
             var files = new eu.startales.spacepixels.fits.FitsFileInformation[]{unsolved, second};

@@ -138,16 +138,16 @@ final class ViewerSupport {
     }
 
     /**
-     * Installs the stretch row for {@code panel}, replacing a row already bound to another panel. The same method
-     * serves Blink and the sequence viewers; {@code redraw} is the viewer's own refresh.
+     * Installs the Display stretch section for {@code panel} in {@code holder}, replacing a section bound to another
+     * panel. The same method serves Blink and the sequence viewers; {@code redraw} is the viewer's own refresh.
      */
-    static StretchControls bindStretch(StretchControls current, StretchPanel panel, Runnable redraw, JComponent row) {
+    static StretchControls bindStretch(StretchControls current, StretchPanel panel, Runnable redraw, JComponent holder) {
         if (current != null && current.getPanel() == panel) return current;
         if (current != null) current.detach();
         StretchControls next = new StretchControls(panel, redraw);
-        row.removeAll();
-        row.add(next.getRow(), BorderLayout.CENTER);
-        row.revalidate();
+        holder.removeAll();
+        holder.add(next.getSection(), BorderLayout.CENTER);
+        holder.revalidate();
         return next;
     }
 

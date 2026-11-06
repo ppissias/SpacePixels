@@ -58,6 +58,8 @@
 
 ### Changed
 
+- **Viewer side panel (F29, first part).** Blink, Preview Frame, Manual Transient Inspection and Show full size move their layer switches, catalogue annotations and display stretch into a side panel on the right. Each layer has a row with a swatch matching its marks, its count, a label switch (**Aa**) and an eye; a layer without anything to show says why. Other findings unfold into the report's categories. Catalogue objects are drawn in off-white and findings in their report colours. The choices are shared by all viewers and remembered; the panel can be resized and hidden. In Blink, ↑ and ↓ step through the frames while paused and still change the speed while playing.
+
 - **Consistent faint-mover motion units.** Both controls display FWHM over the session, with pixel and angular rates underneath. Timing/seeing conversions are labelled estimates, missing metadata remains explicit, and the maximum retains a stored-px/min fallback without usable timing. Profile values and detection semantics are unchanged; Save/Revert and session changes preserve the exact stored maximum.
 
 - **Faint-mover review (F26).** Compact evidence cards add native-intensity Normal/Strong/Adjustable stretches, synchronized source/residual blinks, frame stepping, zoom, annotation visibility, a motion-centred view, shared-scale half stacks and actual scoring-path support. Offline assets are bounded and missing evidence stays explicit; CSV/JSON gain finite sample metadata without changing existing score or fitted-position definitions. JTransient supplies the residual/support cutouts. Search thresholds and candidate-selection rules are unchanged.

@@ -21,12 +21,12 @@ public class ViewerAnnotationPreferencesTest {
         Preferences storage = Preferences.userRoot().node("spacepixels-test/" + UUID.randomUUID());
         try {
             assertEquals(ViewerAnnotationPreferences.DEFAULT, ViewerAnnotationPreferences.load(storage));
-            ViewerAnnotationPreferences chosen = new ViewerAnnotationPreferences(14.5, 12, false);
+            ViewerAnnotationPreferences chosen = new ViewerAnnotationPreferences(14.5, 12);
             chosen.save(storage);
             assertEquals(chosen, ViewerAnnotationPreferences.load(storage));
             storage.putDouble("faintestStar", Double.NaN);
             storage.putDouble("faintestVariable", 100);
-            assertEquals(new ViewerAnnotationPreferences(99, 99, false), ViewerAnnotationPreferences.load(storage));
+            assertEquals(new ViewerAnnotationPreferences(99, 99), ViewerAnnotationPreferences.load(storage));
         } finally {
             storage.removeNode();
         }
@@ -34,7 +34,7 @@ public class ViewerAnnotationPreferencesTest {
 
     /** Limits affect the intended layers, include boundary/unknown values and keep deep-sky objects visible. */
     @Test public void magnitudeLimitsRespectCategoriesAndUnknownValues() {
-        ViewerAnnotationPreferences filters = new ViewerAnnotationPreferences(14, 12, false);
+        ViewerAnnotationPreferences filters = new ViewerAnnotationPreferences(14, 12);
         assertTrue(filters.includes(mark(SkyMark.Kind.STAR, 14, 10)));
         assertFalse(filters.includes(mark(SkyMark.Kind.NAMED_STAR, 14.1, 10)));
         assertFalse(filters.includes(mark(SkyMark.Kind.VARIABLE, 13, 10)));
@@ -43,7 +43,7 @@ public class ViewerAnnotationPreferencesTest {
         assertTrue(ViewerAnnotationPreferences.DEFAULT.includes(mark(SkyMark.Kind.VARIABLE, 100, 10)));
     }
 
-    /** Hiding names retains hover identification; filtering a mark removes its stale hover target. */
+    /** A mark within the limits can be hovered; filtering it out removes its stale hover target. */
     @Test public void filteredMarkersAndHoverAgreeWithoutNames() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             FrameView view = new FrameView();
@@ -51,10 +51,10 @@ public class ViewerAnnotationPreferencesTest {
             FitsFileInformation info = new FitsFileInformation("test.fit", "test.fit", true, 200, 160);
             view.showFrame(BlinkSequence.fromMono(info, new short[160][200]), new byte[1][65536], false);
             view.setSkyMarks(List.of(mark(SkyMark.Kind.STAR, 15, 100)), 18);
-            view.setSkyPreferences(new ViewerAnnotationPreferences(16, 99, false));
+            view.setSkyPreferences(new ViewerAnnotationPreferences(16, 99));
             paint(view);
             assertNotNull(view.skyMarkAt(new Point(100, 80)));
-            view.setSkyPreferences(new ViewerAnnotationPreferences(14, 99, false));
+            view.setSkyPreferences(new ViewerAnnotationPreferences(14, 99));
             assertNull(view.skyMarkAt(new Point(100, 80)));
             paint(view);
             assertNull(view.skyMarkAt(new Point(100, 80)));

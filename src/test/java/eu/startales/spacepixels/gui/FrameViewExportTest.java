@@ -40,9 +40,9 @@ public class FrameViewExportTest {
             var variables = eu.startales.spacepixels.detection.VariableStarOverlay.from(result, new FitsFileInformation[]{info}, null, null);
             Rectangle region = new Rectangle(31, 27, 281, 223);
             for (double zoom : new double[]{0.5, 1, 2}) for (double dpi : new double[]{1, 1.5, 2}) {
-                view.fit(); view.zoomToScale(zoom); view.setDetectionsVisible(true);
-                view.setOverlay(tracks); view.setOverlayVisible(true);
-                view.setVariableStarOverlay(variables); view.setVariableStarsVisible(true);
+                view.fit(); view.zoomToScale(zoom); view.setLayers(ViewerLayerState.Snapshot.defaults());
+                view.setOverlay(tracks);
+                view.setVariableStarOverlay(variables);
                 view.setSkyMarks(List.of(new SkyMark(SkyMark.Kind.DEEP_SKY, 350, 350, 9, 15, 10, 0, "Test galaxy", "Synthetic galaxy")), 15);
                 assertEquals(zoom * 100, view.zoomPercent(), 1e-8);
                 view.setMarkerSettings(VisualizationSettings::defaults);
@@ -50,7 +50,7 @@ public class FrameViewExportTest {
                 BufferedImage full = new BufferedImage((int) Math.ceil(400 * dpi), (int) Math.ceil(320 * dpi), BufferedImage.TYPE_INT_RGB);
                 var graphics = full.createGraphics(); graphics.scale(dpi, dpi); view.paint(graphics); graphics.dispose();
                 FrameView frozen = view.copyForExport();
-                view.fit(); view.setDetectionsVisible(false);
+                view.fit(); view.setLayers(without(ViewerLayer.RAW_DETECTIONS, ViewerLayer.TRACKS, ViewerLayer.VARIABLE_STARS));
                 view.setOverlay(null); view.setVariableStarOverlay(null); view.setSkyMarks(null, 15);
                 view.setMarkerSettings(() -> VisualizationSettings.defaults().withPointSourceMinBoxRadius(30));
                 BufferedImage crop = frozen.renderRegion(region, device);
@@ -61,5 +61,13 @@ public class FrameViewExportTest {
                 frozen.clear();
             }
         });
+    }
+
+    /** The default layers with these ones switched off. */
+    private static ViewerLayerState.Snapshot without(ViewerLayer... hidden) {
+        ViewerLayerState.Snapshot defaults = ViewerLayerState.Snapshot.defaults();
+        java.util.Set<ViewerLayer> visible = java.util.EnumSet.copyOf(defaults.visible());
+        for (ViewerLayer layer : hidden) visible.remove(layer);
+        return new ViewerLayerState.Snapshot(visible, defaults.labelled());
     }
 }

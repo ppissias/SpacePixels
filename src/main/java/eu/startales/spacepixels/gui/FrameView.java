@@ -76,10 +76,10 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                     : frame.getWidth() + " by " + frame.getHeight() + " pixels; "
                     + Math.round(scale() * 100) + " percent zoom. "
                     + (skyMarks == null ? "Catalogue annotations off. " : "Catalogue annotations on. ")
-                    + (overlayVisible && overlay != null ? "Tracks on. " : "")
-                    + (faintMoversVisible && faintMoverOverlay != null ? "Faint movers on. " : "")
-                    + (findingsVisible && findingOverlay != null ? "Other findings on. " : "")
-                    + (variableStarsVisible && variableStarOverlay != null ? "Variable candidates on." : ""));
+                    + (layers.shows(ViewerLayer.TRACKS) && overlay != null ? "Tracks on. " : "")
+                    + (layers.shows(ViewerLayer.FAINT_MOVERS) && faintMoverOverlay != null ? "Faint movers on. " : "")
+                    + (layers.shows(ViewerLayer.OTHER_FINDINGS) && findingOverlay != null ? "Other findings on. " : "")
+                    + (layers.shows(ViewerLayer.VARIABLE_STARS) && variableStarOverlay != null ? "Variable candidates on." : ""));
         }
     }
 
@@ -89,19 +89,14 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     }
 
     private static final Color BACKGROUND = new Color(0x14121f);
-    private static final Color MOVING_COLOR = new Color(80, 220, 255);
-    private static final Color STREAK_COLOR = new Color(255, 170, 60);
-    private static final Color DETECTION_POINT_COLOR = new Color(50, 255, 50);
-    private static final Color DETECTION_STREAK_COLOR = new Color(255, 50, 50);
+    private static final Color DETECTION_POINT_COLOR = OverlayStyle.DETECTION_POINT;
+    private static final Color DETECTION_STREAK_COLOR = OverlayStyle.DETECTION_STREAK;
     /** The smallest marker on screen, so detections stay visible when zoomed out. */
     private static final double MIN_MARKER_RADIUS = 5;
     /** Below this many screen pixels per detection on screen, the markers are not drawn. */
     private static final double MIN_SCREEN_AREA_PER_MARKER = 400;
-    private static final Color SKY_STAR_COLOR = new Color(170, 160, 255);
-    private static final Color SKY_DEEP_SKY_COLOR = new Color(255, 215, 70);
-    private static final Color SKY_VARIABLE_COLOR = new Color(255, 90, 210);
-    private static final Color SKY_NAMED_STAR_COLOR = new Color(235, 235, 255);
-    private static final Color SKY_SOLAR_SYSTEM_COLOR = new Color(190, 255, 90);
+    private static final Color CATALOGUE_COLOR = OverlayStyle.CATALOGUE;
+    private static final Color VARIABLE_CANDIDATE_COLOR = eu.startales.spacepixels.report.FindingCategory.VARIABLE_STAR.color();
     /** Screen pixels per catalogue mark: when more would be on screen, only the brightest (or largest) are drawn. */
     private static final double SCREEN_AREA_PER_STAR = 2500;
     private static final double SCREEN_AREA_PER_VARIABLE = 2500;
@@ -142,26 +137,19 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private byte[][] tables;
     private boolean extremeColour;
     private TrackOverlay overlay;
-    private boolean overlayVisible;
+    /** Which layers are drawn and labelled; set by the viewer from the shared layer state. */
+    private ViewerLayerState.Snapshot layers = ViewerLayerState.Snapshot.defaults();
     private List<DetectedObject> detections;
-    private boolean detectionsVisible = true;
     /** The marker sizes of detections, read at each paint so they follow the settings page. */
     private Supplier<VisualizationSettings> markerSettings = VisualizationSettings::defaults;
     private List<SkyMark> skyMarks;
     private double skyStarLimit;
-    private boolean skyStars = true;
-    private boolean skyDeepSky = true;
-    private boolean skyVariables = true;
-    private boolean skySolarSystem = true;
     private ViewerAnnotationPreferences skyPreferences = ViewerAnnotationPreferences.DEFAULT;
     /** The catalogue marks drawn last, for {@link #skyMarkAt}. */
     private List<SkyMark> drawnSkyMarks = new java.util.ArrayList<>();
     private VariableStarOverlay variableStarOverlay;
     private eu.startales.spacepixels.detection.FaintMoverOverlay faintMoverOverlay;
     private eu.startales.spacepixels.detection.FindingOverlay findingOverlay;
-    private boolean findingsVisible = true;
-    private boolean faintMoversVisible;
-    private boolean variableStarsVisible = true;
     private String placeholder = "Loading…";
     private CursorListener cursorListener;
     /** A prepared picture, used by the stretch previews and the star-mask stack instead of a FITS frame. */
@@ -255,14 +243,13 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         copy.link.zoom = link.zoom; copy.link.centerX = link.centerX; copy.link.centerY = link.centerY;
         copy.frame = frame; copy.extremeColour = extremeColour;
         copy.tables = tables == null ? null : java.util.Arrays.stream(tables).map(byte[]::clone).toArray(byte[][]::new);
-        copy.overlay = overlay; copy.overlayVisible = overlayVisible;
-        copy.detections = detections == null ? null : List.copyOf(detections); copy.detectionsVisible = detectionsVisible;
+        copy.overlay = overlay; copy.layers = layers;
+        copy.detections = detections == null ? null : List.copyOf(detections);
         VisualizationSettings markers = markerSettings.get(); copy.markerSettings = () -> markers;
-        copy.variableStarOverlay = variableStarOverlay; copy.variableStarsVisible = variableStarsVisible;
-        copy.faintMoverOverlay = faintMoverOverlay; copy.faintMoversVisible = faintMoversVisible;
+        copy.variableStarOverlay = variableStarOverlay;
+        copy.faintMoverOverlay = faintMoverOverlay; copy.findingOverlay = findingOverlay;
         copy.skyMarks = skyMarks == null ? null : List.copyOf(skyMarks); copy.skyStarLimit = skyStarLimit;
-        copy.skyStars = skyStars; copy.skyDeepSky = skyDeepSky; copy.skyVariables = skyVariables;
-        copy.skySolarSystem = skySolarSystem; copy.skyPreferences = skyPreferences;
+        copy.skyPreferences = skyPreferences;
         return copy;
     }
 
@@ -373,14 +360,15 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         repaint();
     }
 
-    /** Which kinds of catalogue objects are drawn; {@code solarSystem} is the predicted asteroids and comets. */
-    void setSkyLayers(boolean stars, boolean deepSky, boolean variables, boolean solarSystem) {
-        this.skyStars = stars;
-        this.skyDeepSky = deepSky;
-        this.skyVariables = variables;
-        this.skySolarSystem = solarSystem;
+    /** Which layers are drawn and labelled; clears the hover targets until the marks are drawn again. */
+    void setLayers(ViewerLayerState.Snapshot layers) {
+        this.layers = java.util.Objects.requireNonNull(layers);
         drawnSkyMarks = new java.util.ArrayList<>();
         repaint();
+    }
+
+    ViewerLayerState.Snapshot layers() {
+        return layers;
     }
 
     /** Changes catalogue presentation only, clearing hover targets until the filtered marks are repainted. */
@@ -401,19 +389,9 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         repaint();
     }
 
-    /** Changes only the experimental fitted-path display layer. */
-    void setFaintMoversVisible(boolean visible) { faintMoversVisible = visible; repaint(); }
-
     /** Installs detached report markers; actual frame identities govern measured points, and references stay labelled. */
     void setFindingOverlay(eu.startales.spacepixels.detection.FindingOverlay overlay) { findingOverlay = overlay; repaint(); }
 
-    /** Changes only the additional saved/run finding display layer. */
-    void setFindingsVisible(boolean visible) { findingsVisible = visible; repaint(); }
-
-    void setVariableStarsVisible(boolean visible) {
-        variableStarsVisible = visible;
-        repaint();
-    }
 
     /** Catalogue names remain available beside the pointer even when density limits hide their labels. */
     @Override
@@ -442,7 +420,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     }
 
     private boolean hasVariableStars() {
-        return variableStarsVisible && frame != null && variableStarOverlay != null
+        return layers.shows(ViewerLayer.VARIABLE_STARS) && frame != null && variableStarOverlay != null
                 && variableStarOverlay.covers(frame.getInfo());
     }
 
@@ -507,18 +485,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         repaint();
     }
 
-    void setDetectionsVisible(boolean visible) {
-        this.detectionsVisible = visible;
-        repaint();
-    }
-
     void setOverlay(TrackOverlay overlay) {
         this.overlay = overlay;
-        repaint();
-    }
-
-    void setOverlayVisible(boolean visible) {
-        this.overlayVisible = visible;
         repaint();
     }
 
@@ -722,15 +690,15 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             if (skyMarks != null) {
                 drawSkyMarks(g2);
             }
-            if (detectionsVisible && detections != null) {
+            if (layers.shows(ViewerLayer.RAW_DETECTIONS) && detections != null) {
                 drawDetections(g2);
             }
-            if (overlayVisible && overlay != null) {
+            if (layers.shows(ViewerLayer.TRACKS) && overlay != null) {
                 drawOverlay(g2);
             }
             if (hasVariableStars()) drawVariableStars(g2);
-            if (faintMoversVisible && faintMoverOverlay != null) drawFaintMovers(g2);
-            if (findingsVisible && findingOverlay != null) drawFindings(g2);
+            if (layers.shows(ViewerLayer.FAINT_MOVERS) && faintMoverOverlay != null) drawFaintMovers(g2);
+            if (layers.shows(ViewerLayer.OTHER_FINDINGS) && findingOverlay != null) drawFindings(g2);
             drawZoomLabel(g2);
         } finally {
             g2.dispose();
@@ -820,15 +788,17 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         g2.clip(new java.awt.geom.Rectangle2D.Double(left, top, frame.getWidth() * scale, frame.getHeight() * scale));
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
+        boolean labels = layers.labels(ViewerLayer.VARIABLE_STARS);
         for (VariableStarOverlay.Candidate candidate : visible) {
             double x = left + (candidate.x + 0.5) * scale;
             double y = top + (candidate.y + 0.5) * scale;
-            g2.setColor(SKY_VARIABLE_COLOR);
-            g2.setStroke(candidate.highConfidence ? new BasicStroke(1.5f)
-                    : new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{3, 3}, 0));
-            g2.draw(new Ellipse2D.Double(x - 9, y - 9, 18, 18));
-            String text = candidate.label + (candidate.name != null && visible.size() <= 40 ? " · " + candidate.name : "");
-            drawLabel(g2, text, x + 12, y - 8, SKY_VARIABLE_COLOR);
+            g2.setColor(VARIABLE_CANDIDATE_COLOR);
+            g2.setStroke(OverlayStyle.variableStroke(candidate.highConfidence));
+            g2.draw(OverlayStyle.ring(x, y, 9));
+            if (labels) {
+                String text = candidate.label + (candidate.name != null && visible.size() <= 40 ? " · " + candidate.name : "");
+                drawLabel(g2, text, x + 12, y - 8, VARIABLE_CANDIDATE_COLOR);
+            }
         }
         g2.setClip(clip);
     }
@@ -845,10 +815,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         List<SkyMark> namedStars = new java.util.ArrayList<>();
         List<SkyMark> solarSystem = new java.util.ArrayList<>();
         for (SkyMark mark : skyMarks) {
-            boolean shown = mark.kind == SkyMark.Kind.STAR || mark.kind == SkyMark.Kind.NAMED_STAR ? skyStars
-                    : mark.kind == SkyMark.Kind.VARIABLE ? skyVariables
-                    : mark.kind == SkyMark.Kind.SOLAR_SYSTEM ? skySolarSystem : skyDeepSky;
-            if (!shown || !skyPreferences.includes(mark)) {
+            // The Catalog annotations switch decides whether there are marks at all; each kind has its own switch.
+            if (!layers.visible().contains(ViewerLayer.of(mark.kind)) || !skyPreferences.includes(mark)) {
                 continue;
             }
             if (mark.kind == SkyMark.Kind.NAMED_STAR) {
@@ -885,46 +853,41 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         java.awt.Shape screenClip = g2.getClip();
         g2.clip(new java.awt.geom.Rectangle2D.Double(left, top, frame.getWidth() * scale, frame.getHeight() * scale));
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        // Circles grow with the zoom, more slowly than the stars, so they stay around them.
+        // Crosshairs grow with the zoom, more slowly than the stars, so they stay around them.
         double circleZoom = Math.max(1, Math.pow(scale, 0.75));
         g2.setFont(UiStyle.bodyFont());
         g2.setStroke(new BasicStroke(1.2f));
-        boolean labelStars = skyPreferences.names() && stars.size() <= MAX_LABELLED_STARS;
+        boolean labelStars = layers.labels(ViewerLayer.KNOWN_STARS) && stars.size() <= MAX_LABELLED_STARS;
         for (SkyMark mark : stars) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
-            double radius = Math.max(3, Math.min(14, 3 + (skyStarLimit - mark.magnitude) * 1.1)) * circleZoom;
-            g2.setColor(withAlpha(SKY_STAR_COLOR, 190));
-            g2.draw(new Ellipse2D.Double(x - radius, y - radius, 2 * radius, 2 * radius));
+            double arm = Math.max(4, Math.min(14, 4 + (skyStarLimit - mark.magnitude) * 1.1)) * circleZoom;
+            g2.setColor(withAlpha(CATALOGUE_COLOR, 190));
+            OverlayStyle.drawCrosshair(g2, x, y, arm);
             if (labelStars) {
-                drawLabel(g2, mark.label, x + radius + 2, y + radius + 9, SKY_STAR_COLOR);
+                drawLabel(g2, mark.label, x + arm + 2, y + arm + 9, CATALOGUE_COLOR);
             }
             drawn.add(mark);
         }
-        boolean labelVariables = skyPreferences.names() && variables.size() <= MAX_LABELLED_VARIABLES;
+        boolean labelVariables = layers.labels(ViewerLayer.KNOWN_VARIABLES) && variables.size() <= MAX_LABELLED_VARIABLES;
         boolean labelSurveyNames = variables.size() <= MAX_LABELLED_SURVEY_VARIABLES;
         for (SkyMark mark : variables) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
             double size = 7;
-            Path2D.Double diamond = new Path2D.Double();
-            diamond.moveTo(x, y - size);
-            diamond.lineTo(x + size, y);
-            diamond.lineTo(x, y + size);
-            diamond.lineTo(x - size, y);
-            diamond.closePath();
-            g2.setColor(SKY_VARIABLE_COLOR);
-            g2.draw(diamond);
+            g2.setColor(CATALOGUE_COLOR);
+            g2.draw(OverlayStyle.diamond(x, y, size));
             if (labelVariables && (labelSurveyNames || mark.label.length() <= SHORT_NAME_LENGTH)) {
-                drawLabel(g2, mark.label, x + size + 3, y - 3, SKY_VARIABLE_COLOR);
+                drawLabel(g2, mark.label, x + size + 3, y - 3, CATALOGUE_COLOR);
             }
             drawn.add(mark);
         }
-        boolean labelDeepSky = skyPreferences.names() && deepSky.size() <= MAX_LABELLED_DEEP_SKY;
+        boolean labelDeepSky = layers.labels(ViewerLayer.DEEP_SKY) && deepSky.size() <= MAX_LABELLED_DEEP_SKY;
+        g2.setStroke(OverlayStyle.deepSkyStroke());
         for (SkyMark mark : deepSky) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
-            g2.setColor(SKY_DEEP_SKY_COLOR);
+            g2.setColor(CATALOGUE_COLOR);
             double labelX;
             double labelY;
             if (mark.semiMajor * scale >= 4) {
@@ -937,28 +900,26 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 labelX = x + Math.min(a, 200) * 0.7 + 4;
                 labelY = y - Math.min(a, 200) * 0.7 - 2;
             } else {
-                double arm = 6;
-                g2.draw(new java.awt.geom.Line2D.Double(x - arm, y, x - 2, y));
-                g2.draw(new java.awt.geom.Line2D.Double(x + 2, y, x + arm, y));
-                g2.draw(new java.awt.geom.Line2D.Double(x, y - arm, x, y - 2));
-                g2.draw(new java.awt.geom.Line2D.Double(x, y + 2, x, y + arm));
-                labelX = x + arm + 3;
-                labelY = y - arm;
+                double radius = 6;
+                g2.draw(new Ellipse2D.Double(x - radius, y - radius * 0.6, 2 * radius, 2 * radius * 0.6));
+                labelX = x + radius + 3;
+                labelY = y - radius;
             }
             if (labelDeepSky) {
-                drawLabel(g2, mark.label, labelX, labelY, SKY_DEEP_SKY_COLOR);
+                drawLabel(g2, mark.label, labelX, labelY, CATALOGUE_COLOR);
             }
             drawn.add(mark);
         }
+        g2.setStroke(new BasicStroke(1.2f));
         for (SkyMark mark : namedStars) {
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
-            double radius = 16 * circleZoom;
-            g2.setColor(SKY_NAMED_STAR_COLOR);
-            g2.draw(new Ellipse2D.Double(x - radius, y - radius, 2 * radius, 2 * radius));
+            double arm = 16 * circleZoom;
+            g2.setColor(CATALOGUE_COLOR);
+            OverlayStyle.drawCrosshair(g2, x, y, arm);
             g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
-            if (skyPreferences.names()) {
-                drawLabel(g2, mark.label, x + radius + 4, y - radius / 2, SKY_NAMED_STAR_COLOR);
+            if (layers.labels(ViewerLayer.KNOWN_STARS)) {
+                drawLabel(g2, mark.label, x + arm + 4, y - arm / 2, CATALOGUE_COLOR);
             }
             g2.setFont(UiStyle.bodyFont());
             drawn.add(mark);
@@ -983,7 +944,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         if (!clipped.isEmpty()) {
             String note = "Showing " + String.join(", ", clipped) + " on screen · zoom in for more";
             g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
-            drawNote(g2, note, getHeight() - noteHeight(g2) - UiStyle.space(6), SKY_STAR_COLOR);
+            drawNote(g2, note, getHeight() - noteHeight(g2) - UiStyle.space(6), CATALOGUE_COLOR);
         }
     }
 
@@ -994,8 +955,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
      * show their path only.
      */
     private void drawSolarSystem(Graphics2D g2, List<SkyMark> marks, double left, double top, double scale, List<SkyMark> drawn) {
-        boolean label = skyPreferences.names() && marks.size() <= MAX_LABELLED_SOLAR_SYSTEM;
-        Stroke dashed = new BasicStroke(1.4f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{6, 4}, 0);
+        boolean label = layers.labels(ViewerLayer.SOLAR_SYSTEM) && marks.size() <= MAX_LABELLED_SOLAR_SYSTEM;
+        Stroke dashed = OverlayStyle.pathStroke();
         Stroke dotted = new BasicStroke(1f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{2, 3}, 0);
         for (SkyMark mark : marks) {
             if (mark.path != null && mark.path.length >= 4) {
@@ -1004,7 +965,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 for (int i = 2; i + 1 < mark.path.length; i += 2) {
                     path.lineTo(left + (mark.path[i] + 0.5) * scale, top + (mark.path[i + 1] + 0.5) * scale);
                 }
-                g2.setColor(withAlpha(SKY_SOLAR_SYSTEM_COLOR, 170));
+                g2.setColor(withAlpha(CATALOGUE_COLOR, 170));
                 g2.setStroke(dashed);
                 g2.draw(path);
             }
@@ -1013,7 +974,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             }
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
-            g2.setColor(SKY_SOLAR_SYSTEM_COLOR);
+            g2.setColor(CATALOGUE_COLOR);
             if (mark.trail != null) {
                 double x0 = left + (mark.trail[0] + 0.5) * scale;
                 double y0 = top + (mark.trail[1] + 0.5) * scale;
@@ -1036,7 +997,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             g2.setStroke(new BasicStroke(1.5f));
             g2.draw(new Ellipse2D.Double(x - SOLAR_SYSTEM_RING, y - SOLAR_SYSTEM_RING, 2 * SOLAR_SYSTEM_RING, 2 * SOLAR_SYSTEM_RING));
             if (label) {
-                drawLabel(g2, mark.label, x + SOLAR_SYSTEM_RING + 3, y + SOLAR_SYSTEM_RING + 3, SKY_SOLAR_SYSTEM_COLOR);
+                drawLabel(g2, mark.label, x + SOLAR_SYSTEM_RING + 3, y + SOLAR_SYSTEM_RING + 3, CATALOGUE_COLOR);
             }
             drawn.add(mark);
         }
@@ -1077,8 +1038,9 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         double ring = Math.max(9, 4 * scale);
+        boolean labels = layers.labels(ViewerLayer.TRACKS);
         for (TrackOverlay.Track track : overlay.getTracks()) {
-            Color color = track.streak ? STREAK_COLOR : MOVING_COLOR;
+            Color color = OverlayStyle.trackColour(track.streak);
             List<TrackOverlay.Point> here = track.pointsIn(fileName);
             Path2D.Double path = new Path2D.Double();
             boolean first = true;
@@ -1098,7 +1060,9 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             if (here.isEmpty()) {
                 TrackOverlay.Point start = track.points.get(0);
                 g2.setColor(withAlpha(color, 110));
-                g2.drawString(track.label, (float) (left + (start.x + 0.5) * scale + 6), (float) (top + (start.y + 0.5) * scale - 6));
+                if (labels) {
+                    g2.drawString(track.label, (float) (left + (start.x + 0.5) * scale + 6), (float) (top + (start.y + 0.5) * scale - 6));
+                }
                 continue;
             }
             g2.setStroke(new BasicStroke(1.6f));
@@ -1108,9 +1072,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 double y = top + (point.y + 0.5) * scale;
                 g2.draw(new Ellipse2D.Double(x - ring, y - ring, 2 * ring, 2 * ring));
             }
-            TrackOverlay.Point labelled = here.get(0);
-            g2.drawString(track.label, (float) (left + (labelled.x + 0.5) * scale + ring + 3),
-                    (float) (top + (labelled.y + 0.5) * scale - ring));
+            if (labels) {
+                TrackOverlay.Point labelled = here.get(0);
+                g2.drawString(track.label, (float) (left + (labelled.x + 0.5) * scale + ring + 3),
+                        (float) (top + (labelled.y + 0.5) * scale - ring));
+            }
         }
     }
 
@@ -1123,26 +1089,28 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         g2.setFont(UiStyle.bodyFont().deriveFont(Math.max(9f, UiStyle.bodyFont().getSize2D() - 1)));
         for (var marker : findingOverlay.markers()) {
             var category = eu.startales.spacepixels.report.FindingCategory.fromId(marker.id());
+            ViewerLayer layer = ViewerLayer.of(category);
+            if (!layers.shows(layer)) continue;
             boolean reference = marker.positions().isEmpty();
             var positions = reference ? java.util.List.of(new eu.startales.spacepixels.detection.FindingOverlay.Position(number,marker.x(),marker.y())) : marker.positions();
             g2.setColor(withAlpha(category.color(), 190));
-            g2.setStroke(reference ? new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10,new float[]{3,3},0) : new BasicStroke(1.2f));
+            g2.setStroke(reference ? OverlayStyle.referenceStroke() : new BasicStroke(1.2f));
             for (var point : positions) if (point.frameNumber() == number) {
                 double x = left + (point.x() + .5) * scale, y = top + (point.y() + .5) * scale;
-                if (reference) g2.draw(new java.awt.geom.Rectangle2D.Double(x-radius,y-radius,2*radius,2*radius));
-                else g2.draw(new Ellipse2D.Double(x-radius,y-radius,2*radius,2*radius));
-                g2.drawString(marker.id() + (reference ? " ref" : ""),(float)(x+radius+3),(float)(y-radius));
+                g2.draw(reference ? OverlayStyle.square(x, y, radius) : OverlayStyle.ring(x, y, radius));
+                if (layers.labels(layer)) g2.drawString(marker.id() + (reference ? " ref" : ""),(float)(x+radius+3),(float)(y-radius));
             }
         }
     }
 
     /** Returns a nearby additional finding's evidence kind without claiming a reference is a current-frame detection. */
     private String findingAt(Point pixel) {
-        if (!findingsVisible || findingOverlay == null || frame == null || pixel == null) return null;
+        if (!layers.shows(ViewerLayer.OTHER_FINDINGS) || findingOverlay == null || frame == null || pixel == null) return null;
         Integer number = findingOverlay.frameNumber(frame.getInfo());
         if (number == null) return null;
         double distance = 8 / scale();String found = null;
         for (var marker : findingOverlay.markers()) {
+            if (!layers.shows(ViewerLayer.of(eu.startales.spacepixels.report.FindingCategory.fromId(marker.id())))) continue;
             var positions = marker.positions().isEmpty()
                     ? java.util.List.of(new eu.startales.spacepixels.detection.FindingOverlay.Position(number,marker.x(),marker.y())) : marker.positions();
             for (var point : positions) if (point.frameNumber() == number) {
@@ -1162,15 +1130,16 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         double scale = scale(), left = left(scale), top = top(scale), radius = Math.max(9, scale * 4);
         g2.setColor(eu.startales.spacepixels.report.FindingCategory.FAINT_MOVER.color());
         g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
-        g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10, new float[]{5, 4}, 0));
+        g2.setStroke(OverlayStyle.faintMoverStroke());
+        boolean labels = layers.labels(ViewerLayer.FAINT_MOVERS);
         for (var candidate : faintMoverOverlay.candidates()) {
             double[] start = candidate.positionAt(times.getFirst()), end = candidate.positionAt(times.getLast());
             double[] here = candidate.positionAt(midpoint);
             double x = left + (here[0] + .5) * scale, y = top + (here[1] + .5) * scale;
             g2.draw(new java.awt.geom.Line2D.Double(left + (start[0] + .5) * scale, top + (start[1] + .5) * scale,
                     left + (end[0] + .5) * scale, top + (end[1] + .5) * scale));
-            g2.draw(new Ellipse2D.Double(x - radius, y - radius, radius * 2, radius * 2));
-            g2.drawString(candidate.id(), (float) (x + radius + 3), (float) (y - radius));
+            g2.draw(OverlayStyle.ring(x, y, radius));
+            if (labels) g2.drawString(candidate.id(), (float) (x + radius + 3), (float) (y - radius));
         }
     }
 

@@ -49,18 +49,18 @@ public class ViewerMechanicsTest extends MechanicsTestCase {
         window().table().selectRows(0, 1, 2);
         window().button(VisibleText.button("Blink Selected")).click();
         FrameFixture blink = viewer("Blink");
-        waitFor("the blink is playing", () -> blink.checkBox(VisibleText.checkBox("Annotate")).isEnabled());
+        waitFor("the blink is playing", () -> blink.checkBox(VisibleText.checkBox("Show catalog annotations")).isEnabled());
 
         JCheckBoxFixture tracks = blink.checkBox(VisibleText.checkBox("Show tracks"));
         assertFalse("Show tracks needs a detection", tracks.target().isEnabled());
 
-        JCheckBoxFixture annotate = blink.checkBox(VisibleText.checkBox("Annotate"));
+        JCheckBoxFixture annotate = blink.checkBox(VisibleText.checkBox("Show catalog annotations"));
         annotate.check();
         assertTrue(annotate.target().isSelected());
         annotate.uncheck();
         assertFalse(annotate.target().isSelected());
 
-        JCheckBoxFixture correct = blink.checkBox(VisibleText.checkBox("Correct plate solution"));
+        JCheckBoxFixture correct = blink.checkBox(VisibleText.checkBox("Align markers to corrected plate solution"));
         assertTrue(correct.target().isEnabled());
         correct.check();
         assertTrue(correct.target().isSelected());

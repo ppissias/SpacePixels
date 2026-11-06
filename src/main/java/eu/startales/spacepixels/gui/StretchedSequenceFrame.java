@@ -25,7 +25,7 @@ public class StretchedSequenceFrame extends SequenceViewerFrame {
     private FitsFileInformation[] files;
 
     public StretchedSequenceFrame(ApplicationWindow mainAppWindow, StretchPanel stretchPanel) {
-        super("Full Size", "reading…", false, false);
+        super("Full Size", "reading…", false, false, mainAppWindow.getViewers().layers());
         this.stretchPanel = stretchPanel;
         if (mainAppWindow.getSession() != null) setSkyCatalogueModel(mainAppWindow.getSession().getSkyCatalogue());
         setLocationRelativeTo(mainAppWindow.getFrame());

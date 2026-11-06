@@ -20,6 +20,7 @@ import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import javax.swing.*;
 import java.awt.*;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -27,14 +28,14 @@ import java.util.Map;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 
 /**
- * The Annotate switch of a frame viewer (key A), with its Layers menu: labels from the session's sky catalogue
- * (stars, deep-sky objects and variable stars) and its predicted asteroids and comets drawn on the frame, and the
- * object under the cursor named in the readout. Asteroids and comets are placed where JPL predicts them at the middle
- * of each frame's exposure, so they move from frame to frame. The viewers only show the catalogue and the
- * predictions; both are fetched in the main window. When either arrives while the viewer is open, the switch becomes
- * available and a note says so, but nothing changes on the frame until it is turned on.
- * Next to it, Correct plate solution (key C) switches the session's correction to the Gaia stars on or off, for all
- * viewers at once and for what else uses the plate solution.
+ * The Catalog annotations section of a frame viewer (key A): the session's sky catalogue (stars, variable stars and
+ * deep-sky objects) and its predicted asteroids and comets drawn on the frame, one row per kind, and the object under
+ * the cursor named in the readout. Asteroids and comets are placed where JPL predicts them at the middle of each
+ * frame's exposure, so they move from frame to frame. The viewers only show the catalogue and the predictions; both
+ * are fetched in the main window. When either arrives while the viewer is open, the switch becomes available and a
+ * note says so, but nothing changes on the frame until it is turned on. Below the rows, "Align markers to corrected
+ * plate solution" (key C) switches the session's correction to the Gaia stars on or off, for all viewers at once and
+ * for what else uses the plate solution.
  */
 final class SkyAnnotations {
 
@@ -42,18 +43,20 @@ final class SkyAnnotations {
     /** Marks are kept for this many plate solutions; aligned frames usually share one. */
     private static final int CACHED_SOLUTIONS = 3;
     private static final Color NOTICE_COLOR = new Color(255, 200, 80);
+    private static final List<ViewerLayer> ROWS = List.of(ViewerLayer.KNOWN_STARS, ViewerLayer.KNOWN_VARIABLES,
+            ViewerLayer.DEEP_SKY, ViewerLayer.SOLAR_SYSTEM);
 
     private final FrameView view;
-    private final JCheckBox annotateBox = new JCheckBox("Annotate");
-    private final JButton layersButton = new JButton("Layers ▾");
-    private final JCheckBoxMenuItem starsItem = new JCheckBoxMenuItem("Stars (Gaia)", true);
-    private final JCheckBoxMenuItem deepSkyItem = new JCheckBoxMenuItem("Galaxies, nebulae and clusters (SIMBAD)", true);
-    private final JCheckBoxMenuItem variablesItem = new JCheckBoxMenuItem("Variable stars (AAVSO VSX)", true);
-    private final JCheckBoxMenuItem solarSystemItem = new JCheckBoxMenuItem("Asteroids and comets (JPL)", true);
-    private final JCheckBoxMenuItem namesItem = new JCheckBoxMenuItem("Names and magnitude labels", true);
+    private final ViewerLayerState state;
+    private final JCheckBox annotateSwitch = SidePanelIcons.onOff("Show catalog annotations");
+    private final JButton settingsButton = new JButton("⋯");
+    private final JLabel hint = new JLabel();
+    private final Map<ViewerLayer, LayerRow> rows = new EnumMap<>(ViewerLayer.class);
     private ViewerAnnotationPreferences preferences = ViewerAnnotationPreferences.DEFAULT;
-    private final JCheckBox correctBox = new JCheckBox("Correct plate solution");
+    private final JCheckBox correctBox = new JCheckBox("Align markers to corrected plate solution");
+    private final JLabel correctHint = new JLabel("Uses the plate solution corrected to the Gaia stars.");
     private final JLabel notice = new JLabel(" ");
+    private final SidePanelSection section;
     private final Runnable catalogueListener = this::catalogueChanged;
     private final Runnable correctionListener = this::correctionChanged;
     /** Told when the plate solution in use changes, so the viewer can update its cursor readout. */
@@ -75,33 +78,52 @@ final class SkyAnnotations {
     private SkyCatalogueModel model = new SkyCatalogueModel();
 
     /** Creates viewer-owned controls, restoring display preferences without changing the session catalogue. */
-    SkyAnnotations(FrameView view) {
+    SkyAnnotations(FrameView view, ViewerLayerState state) {
         this.view = view;
+        this.state = state;
         try {
             preferences = ViewerAnnotationPreferences.load(ViewerAnnotationPreferences.storage());
         } catch (RuntimeException unavailable) {
             notice.setText("Cannot load annotation preferences; defaults are in use.");
         }
-        namesItem.setSelected(preferences.names());
         view.setSkyPreferences(preferences);
-        annotateBox.addActionListener(e -> apply());
-        JPopupMenu layers = new JPopupMenu();
-        for (JCheckBoxMenuItem item : new JCheckBoxMenuItem[]{starsItem, deepSkyItem, variablesItem, solarSystemItem}) {
-            item.addActionListener(e -> apply());
-            layers.add(item);
-        }
-        layers.addSeparator();
-        namesItem.addActionListener(e -> updatePreferences(new ViewerAnnotationPreferences(
-                preferences.faintestStar(), preferences.faintestVariable(), namesItem.isSelected())));
-        layers.add(namesItem);
+        annotateSwitch.addActionListener(e -> state.setVisible(ViewerLayer.CATALOGUE, annotateSwitch.isSelected()));
+        JPopupMenu settings = new JPopupMenu();
         JMenuItem limitsItem = new JMenuItem("Faintest magnitude…");
         limitsItem.addActionListener(e -> editMagnitudeLimits());
-        layers.add(limitsItem);
-        layersButton.setToolTipText("Choose what Annotate shows.");
-        layersButton.addActionListener(e -> layers.show(layersButton, 0, layersButton.getHeight()));
+        settings.add(limitsItem);
+        settingsButton.putClientProperty("JButton.buttonType", "borderless");
+        settingsButton.setToolTipText("Catalogue display settings: the faintest stars and variables shown.");
+        settingsButton.getAccessibleContext().setAccessibleName("Catalog annotation settings");
+        settingsButton.addActionListener(e -> settings.show(settingsButton, 0, settingsButton.getHeight()));
         correctBox.addActionListener(e -> setCorrection(correctBox.isSelected()));
         notice.setForeground(NOTICE_COLOR);
+        hint.setForeground(UiStyle.helpColor());
+        correctHint.setForeground(UiStyle.helpColor());
+        correctHint.setBorder(BorderFactory.createEmptyBorder(0, correctBox.getIconTextGap() + UiStyle.space(20), 0, 0));
+
+        JPanel body = new JPanel();
+        body.setLayout(new BoxLayout(body, BoxLayout.Y_AXIS));
+        addLeft(body, hint);
+        for (ViewerLayer layer : ROWS) {
+            LayerRow row = new LayerRow(layer, state, null, 0);
+            rows.put(layer, row);
+            addLeft(body, row);
+        }
+        body.add(Box.createVerticalStrut(UiStyle.space(6)));
+        addLeft(body, correctBox);
+        addLeft(body, correctHint);
+        addLeft(body, notice);
+        section = new SidePanelSection("Catalog annotations", body)
+                .addHeaderControl(settingsButton)
+                .addHeaderControl(annotateSwitch);
         updateEnabled();
+        updateRows(null);
+    }
+
+    private static void addLeft(JPanel panel, JComponent component) {
+        component.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(component);
     }
 
     /** Runs when the plate solution in use changes (the correction is switched on or off, or a new one arrives). */
@@ -109,14 +131,9 @@ final class SkyAnnotations {
         this.onSolutionChanged = onSolutionChanged;
     }
 
-    /** The switch, the Layers button and the note, for the viewer's row of controls. */
-    List<JComponent> controls() {
-        List<JComponent> controls = new ArrayList<>();
-        controls.add(annotateBox);
-        controls.add(layersButton);
-        controls.add(correctBox);
-        controls.add(notice);
-        return controls;
+    /** The section for the viewer's side panel. */
+    SidePanelSection section() {
+        return section;
     }
 
     /** Starts following the session's catalogue; {@code files} are the frames, which can share a plate solution. */
@@ -139,7 +156,6 @@ final class SkyAnnotations {
         marksBySolution.clear();
         notice.setText(" ");
         updateEnabled();
-        setLayers();
     }
 
     /** Stops following the catalogue and lets go of the marks, when the viewer closes. */
@@ -153,14 +169,13 @@ final class SkyAnnotations {
         solarSystem = null;
         marksBySolution.clear();
         view.setSkyMarks(null, 0);
+        updateRows(null);
     }
 
     /** The viewer now shows this frame. */
     void showFrame(FitsFileInformation info) {
         shownInfo = info;
-        if (annotateBox.isSelected() && hasContent()) {
-            view.setSkyMarks(marksFor(info), starLimit());
-        }
+        apply();
     }
 
     /** Replaces a session frame's metadata after a WCS write and refreshes sky marks and solution listeners. */
@@ -188,9 +203,8 @@ final class SkyAnnotations {
 
     /** Key A. */
     void toggle() {
-        if (annotateBox.isEnabled()) {
-            annotateBox.setSelected(!annotateBox.isSelected());
-            apply();
+        if (annotateSwitch.isEnabled()) {
+            state.toggleVisible(ViewerLayer.CATALOGUE);
         }
     }
 
@@ -199,6 +213,16 @@ final class SkyAnnotations {
         if (correctBox.isEnabled()) {
             setCorrection(!model.isCorrectionEnabled());
         }
+    }
+
+    /** The shared layer state changed, possibly in another viewer: show it and draw the marks again. */
+    void layersChanged() {
+        annotateSwitch.setSelected(isShowing());
+        rows.values().forEach(LayerRow::refresh);
+        if (isShowing()) {
+            notice.setText(" ");
+        }
+        apply();
     }
 
     private void setCorrection(boolean enabled) {
@@ -210,9 +234,9 @@ final class SkyAnnotations {
         correctBox.setSelected(model.isCorrectionEnabled());
     }
 
-    /** "  · NGC 2264 · open cluster" for the object under the cursor while Annotate is on, else "". */
+    /** "  · NGC 2264 · open cluster" for the object under the cursor while annotations are on, else "". */
     String describe(Point pixel) {
-        if (!annotateBox.isSelected() || pixel == null) {
+        if (!isShowing() || pixel == null) {
             return "";
         }
         SkyMark mark = view.skyMarkAt(pixel);
@@ -220,24 +244,47 @@ final class SkyAnnotations {
     }
 
     boolean isShowing() {
-        return annotateBox.isSelected();
+        return state.isVisible(ViewerLayer.CATALOGUE);
     }
 
     /** Freezes this frame's currently enabled projected catalogue marks on the EDT, without changing the viewer. */
     List<SkyMark> exportMarks(FitsFileInformation info) {
-        if (!annotateBox.isSelected() || !hasContent()) return List.of();
+        if (!isShowing() || !hasContent()) return List.of();
         List<SkyMark> marks = marksFor(info);
         return marks == null ? List.of() : List.copyOf(marks);
     }
 
     private void apply() {
-        notice.setText(" ");
-        setLayers();
-        if (annotateBox.isSelected() && hasContent() && shownInfo != null) {
-            view.setSkyMarks(marksFor(shownInfo), starLimit());
-        } else {
-            view.setSkyMarks(null, 0);
+        List<SkyMark> marks = hasContent() && shownInfo != null ? marksFor(shownInfo) : null;
+        view.setSkyMarks(isShowing() ? marks : null, starLimit());
+        updateRows(marks);
+    }
+
+    /** The count of each kind on the frame shown, within the magnitude limits, or why a kind is not available. */
+    private void updateRows(List<SkyMark> marks) {
+        Map<ViewerLayer, Integer> counts = new EnumMap<>(ViewerLayer.class);
+        if (marks != null) {
+            for (SkyMark mark : marks) {
+                if (preferences.includes(mark)) counts.merge(ViewerLayer.of(mark.kind), 1, Integer::sum);
+            }
         }
+        for (ViewerLayer layer : ROWS) {
+            boolean fetched = layer == ViewerLayer.SOLAR_SYSTEM ? solarSystem != null : catalogue != null;
+            String count = !fetched ? "not fetched" : marks == null ? " " : String.valueOf(counts.getOrDefault(layer, 0));
+            rows.get(layer).setAvailable(fetched, count, fetched ? describeRow(layer)
+                    : layer == ViewerLayer.SOLAR_SYSTEM ? "Fetch Asteroids and Comets in the main window (2 Astrometry) first."
+                    : "Fetch Sky Catalogue in the main window (2 Astrometry) first.");
+        }
+    }
+
+    private static String describeRow(ViewerLayer layer) {
+        return switch (layer) {
+            case KNOWN_STARS -> "Gaia stars and named stars (SIMBAD); the cross grows with the brightness.";
+            case KNOWN_VARIABLES -> "Known variable stars from the AAVSO VSX.";
+            case DEEP_SKY -> "Galaxies, nebulae and clusters from SIMBAD, drawn at their catalogued size.";
+            case SOLAR_SYSTEM -> "Where JPL predicts the known asteroids and comets at the middle of each exposure, with their paths.";
+            default -> layer.title;
+        };
     }
 
     /** Edits independent catalogue limits in a dialog so numeric keys belong to its editors, not navigation. */
@@ -261,7 +308,7 @@ final class SkyAnnotations {
                 stars.commitEdit();
                 variables.commitEdit();
                 updatePreferences(new ViewerAnnotationPreferences(((Number) stars.getValue()).doubleValue(),
-                        ((Number) variables.getValue()).doubleValue(), namesItem.isSelected()));
+                        ((Number) variables.getValue()).doubleValue()));
                 return;
             } catch (java.text.ParseException | IllegalArgumentException invalid) {
                 JOptionPane.showMessageDialog(view, "Enter a magnitude between -10 and 99.",
@@ -288,13 +335,10 @@ final class SkyAnnotations {
         catalogue = model.get();
         solarSystem = model.getSolarSystem();
         marksBySolution.clear();
-        if (!hasContent()) {
-            annotateBox.setSelected(false);
-        }
         updateEnabled();
         // Labels already on are replaced in place; otherwise the frame stays as it is and the note offers them.
         apply();
-        if (!annotateBox.isSelected()) {
+        if (!isShowing()) {
             if (solarSystem != null && solarSystem != previousSolarSystem) {
                 notice.setText("Asteroids and comets ready · A shows them");
             } else if (catalogue != null && catalogue != previousCatalogue) {
@@ -308,13 +352,9 @@ final class SkyAnnotations {
         return catalogue != null || solarSystem != null;
     }
 
-    /** The star depth of the catalogue, which sizes the star circles; 0 without a catalogue. */
+    /** The star depth of the catalogue, which sizes the star marks; 0 without a catalogue. */
     private double starLimit() {
         return catalogue == null ? 0 : catalogue.starMagnitudeLimit;
-    }
-
-    private void setLayers() {
-        view.setSkyLayers(starsItem.isSelected(), deepSkyItem.isSelected(), variablesItem.isSelected(), solarSystemItem.isSelected());
     }
 
     private void correctionChanged() {
@@ -341,6 +381,7 @@ final class SkyAnnotations {
         eu.startales.spacepixels.platesolve.PlateSolutionCorrection correction = model.getCorrection();
         correctBox.setEnabled(!model.isClosed() && correction != null && correction.isNeeded());
         correctBox.setSelected(correction != null && correction.enabled);
+        correctHint.setEnabled(correctBox.isEnabled());
         if (correction == null) {
             correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C).<br><i>Not available: "
                     + "it is worked out after Fetch Sky Catalogue, in the background.</i></html>");
@@ -355,13 +396,15 @@ final class SkyAnnotations {
                     + "the FITS files are not changed.</html>");
         }
         boolean available = hasContent();
-        annotateBox.setEnabled(available);
-        layersButton.setEnabled(available);
+        annotateSwitch.setEnabled(available);
+        annotateSwitch.setSelected(isShowing());
+        settingsButton.setEnabled(available);
+        hint.setText(available ? "Known objects in this field." : "Nothing fetched for this session yet.");
         if (!available) {
-            annotateBox.setToolTipText("<html>Labels from the sky catalogue and the predicted asteroids and comets (A).<br><i>Not available: "
+            annotateSwitch.setToolTipText("<html>Show the known objects of the field (A).<br><i>Not available: "
                     + NOT_FETCHED_TIP + "</i></html>");
         } else {
-            StringBuilder tip = new StringBuilder("<html>Labels on the frame (A):");
+            StringBuilder tip = new StringBuilder("<html>Show the known objects of the field (A):");
             if (catalogue != null) {
                 tip.append("<br>sky catalogue: ").append(catalogue.summary())
                         .append(catalogue.starSource == null ? "" : ", stars from " + catalogue.starSource);
@@ -369,11 +412,10 @@ final class SkyAnnotations {
             if (solarSystem != null) {
                 tip.append("<br>predicted by JPL: ").append(solarSystem.summary());
             }
-            annotateBox.setToolTipText(tip.append(".</html>").toString());
+            annotateSwitch.setToolTipText(tip.append(".</html>").toString());
         }
-        solarSystemItem.setToolTipText(solarSystem == null
-                ? "Fetch Asteroids and Comets in the main window (2 Astrometry) first."
-                : "Where JPL predicts the known asteroids and comets at the middle of each exposure, with their paths.");
+        hint.setToolTipText(annotateSwitch.getToolTipText());
+        section.title().setToolTipText(annotateSwitch.getToolTipText());
     }
 
     /**
