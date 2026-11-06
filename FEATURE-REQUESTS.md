@@ -8,7 +8,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 |---|---|---|
 | [F04](#f04-mcp-agent-services) | MCP agent services over HTTP | Agreed: HTTP. The services table awaits agreement. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
-| [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Planned for the next release; not implemented |
+| [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Decided 2026-11-06; implementation started |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
 | [F29](#f29-preview-frame-and-blink-redesign) | Preview Frame and Blink redesign | Agreed 2026-11-06; implementation in progress |
@@ -87,7 +87,18 @@ Offer a light report theme alongside the current dark appearance, and make repor
 - Apply the same themes to ordinary reports and iterative summary/index pages. Review controls, tables, status messages, legends and inline SVG charts for contrast and consistent category meanings in both themes.
 - Preserve astronomical image/GIF pixels and their dark viewing areas. Review colours already drawn into diagnostic images separately; changing page CSS does not update those image assets.
 
-A graphical colour editor is outside this proposal. Still to decide: whether custom CSS can also be selected once for future exports, and whether/how the browser remembers a theme selection.
+A graphical colour editor is outside this proposal.
+
+**Decision (made, 2026-11-06):** "Agreed with everything. A+B and dark as a default", after the review below, with "We can remember the choice on a best effort basis. If the memory isn't available it's OK" and agreement to four text-size steps.
+
+What the decision settles:
+
+1. **Steps.** First a restructuring with no visible change: the embedded CSS moves into a shared `report.css` in the report folder, every hardcoded colour becomes a named CSS variable (backgrounds, text, borders, accents and the finding-category colours), and pixel font sizes become relative to one base size. It is checked on the 18 reference datasets: data, CSVs and images identical, and before/after screenshots of the reports matching. Then the themes and text size, then custom CSS.
+2. **Theme.** Dark (default for every new report) and Light, chosen in the report toolbar and applied at once. Light gets a contrast review, with darker variants of finding colours where needed that keep their category meaning. Charts follow the theme; colours drawn into images do not change.
+3. **Text size.** Four steps in the toolbar (Small, Normal, Large, Extra large), scaling text and controls but not the astronomical images.
+4. **Remembering.** The browser remembers the theme and text size where it can (best effort); reports work normally where it cannot.
+5. **Custom CSS (A + B).** A report applies a `report-custom.css` in its own folder after the built-in styles (A). A setting on the Report Visualization page selects a CSS file once, and each new report gets a copy of it as its `report-custom.css` (B), so reports stay self-contained and offline. Reports never link to a shared file elsewhere. A commented example lists every variable.
+6. The same styles apply to ordinary reports, iterative summary and index pages, and the faint-mover review pages.
 
 **Acceptance.** Check both themes on representative complete reports and iterative indexes, including charts, warnings, filters and lookup results. Verify custom overrides and offline use after copying the report folder. Theme changes must not change measurements, detection results or exported scientific data.
 
