@@ -155,7 +155,7 @@ public class DetectionReportGenerator {
                 report.println("<td>" + summary.frameCount + " Frames</td>");
                 String trackStr = summary.trackCount > 0 ? "<span class='highlight'>" + summary.trackCount + "</span>" : "0";
                 report.println("<td>" + trackStr + "</td>");
-                String anomalyStr = summary.anomalyCount > 0 ? "<span style='color:#ff9933;'>" + summary.anomalyCount + "</span>" : "0";
+                String anomalyStr = summary.anomalyCount > 0 ? "<span style='color:var(--sp-streak);'>" + summary.anomalyCount + "</span>" : "0";
                 report.println("<td>" + anomalyStr + "</td>");
                 if (summary.reportFailure != null) {
                     report.println("<td class='alert'>Report not written: " + ReportFormat.escapeHtml(summary.reportFailure) + "</td>");

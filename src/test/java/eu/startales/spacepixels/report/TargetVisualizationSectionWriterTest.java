@@ -198,7 +198,7 @@ public class TargetVisualizationSectionWriterTest {
 
         // 1. Verify download controls are in HTML with both links
         assertTrue("Must contain download-controls container", html.contains("<div class='download-controls'"));
-        assertTrue("Must contain 'Download animation:' label", html.contains("<strong style='color: #ccc;'>Download animation:</strong>"));
+        assertTrue("Must contain 'Download animation:' label", html.contains("<strong style='color: var(--sp-text);'>Download animation:</strong>"));
         assertTrue("Must contain Narrow download link",
                 html.contains("<a class='id-link' href='moving_targets/moving_track_1_clean_narrow.gif' download='moving_track_1_clean_narrow.gif' target='_blank'>Narrow</a>"));
         assertTrue("Must contain Wide download link",

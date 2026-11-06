@@ -236,7 +236,7 @@ final class PipelineDiagnosticsSectionWriter {
             empty.add("variable stars");
         } else {
             String value = photometry.highConfidence + (photometry.possible > 0
-                    ? " <span style='color:#888; font-size: 16px;'>+ " + photometry.possible + " possible</span>" : "");
+                    ? " <span style='color:var(--sp-text-faint); font-size: 1rem;'>+ " + photometry.possible + " possible</span>" : "");
             cards.add(textCard(value, "Variable stars", "variable-candidates", false));
         }
         report.println("<div class='flex-container'>");
@@ -255,7 +255,7 @@ final class PipelineDiagnosticsSectionWriter {
         SessionPictureSectionWriter.write(report, reportContext, localRescueTracks);
 
         report.println("<div class='flex-container' style='margin-bottom: 4px;'>");
-        report.println(compactCard(pipelineTelemetry.totalFramesKept + " <span style='color:#888;'>of " + pipelineTelemetry.totalFramesLoaded + "</span>", "Frames kept"));
+        report.println(compactCard(pipelineTelemetry.totalFramesKept + " <span style='color:var(--sp-text-faint);'>of " + pipelineTelemetry.totalFramesLoaded + "</span>", "Frames kept"));
         report.println(compactCard(String.format(Locale.US, "%.1f s", pipelineTelemetry.processingTimeMs / 1000.0), "Detection time"));
         report.println(compactCard(String.valueOf(pipelineTelemetry.totalRawObjectsExtracted), "Objects extracted"));
         report.println(compactCard(String.valueOf(summary.masterStarCount), "Stars in the master map"));
@@ -654,7 +654,7 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel'>");
         report.println("<h2>Pipeline Configuration</h2>");
-        report.println("<p style='font-size: 13px; color: #888; margin-top: -10px;'>Every detection parameter used in this session, as stored in the profile file. <a href='detection_config.json' target='_blank' style='color: #4da6ff; text-decoration: none;'>[View / Download JSON Profile]</a></p>");
+        report.println("<p style='font-size: 0.8125rem; color: var(--sp-text-faint); margin-top: -10px;'>Every detection parameter used in this session, as stored in the profile file. <a href='detection_config.json' target='_blank' style='color: var(--sp-accent); text-decoration: none;'>[View / Download JSON Profile]</a></p>");
         // Values that differ from the built-in defaults come first and are highlighted.
         DetectionConfig defaults = new DetectionConfig();
         List<String> changed = new ArrayList<>();
@@ -668,9 +668,9 @@ final class PipelineDiagnosticsSectionWriter {
                 Object value = field.get(reportContext.config);
                 Object defaultValue = field.get(defaults);
                 boolean differs = !java.util.Objects.equals(value, defaultValue);
-                String item = "<div class='config-item'" + (differs ? " style='border-left-color:#ff9933;' title='Default: "
+                String item = "<div class='config-item'" + (differs ? " style='border-left-color:var(--sp-streak);' title='Default: "
                         + ReportFormat.escapeHtml(String.valueOf(defaultValue)) + "'" : "") + "><span>" + field.getName()
-                        + "</span> <span class='val'" + (differs ? " style='color:#ffb366;'" : "") + ">" + ReportFormat.escapeHtml(String.valueOf(value)) + "</span></div>";
+                        + "</span> <span class='val'" + (differs ? " style='color:var(--sp-warning);'" : "") + ">" + ReportFormat.escapeHtml(String.valueOf(value)) + "</span></div>";
                 (differs ? changed : unchanged).add(item);
             } catch (IllegalAccessException e) {
                 // Silently ignore fields that cannot be accessed
@@ -695,7 +695,7 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel'>");
         report.println("<h2>Star Mask</h2>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
+        report.println("<p style='color: var(--sp-text-muted); font-size: 0.875rem; margin-top: -10px; margin-bottom: 15px;'>");
         report.println("The median stack (left) and the star mask built from it, in red (right): every object of the median stack, grown by the allowed star jitter of <strong>" + reportContext.config.maxStarJitter + "</strong> pixels. " +
                 "A detection that overlaps this mask too much is treated as a star and removed before tracking. " +
                 "The maximum allowed overlap fraction is currently set to <strong>" + reportContext.config.maxMaskOverlapFraction + "</strong> (" + (int) (reportContext.config.maxMaskOverlapFraction * 100) + "%).</p>");
@@ -757,7 +757,7 @@ final class PipelineDiagnosticsSectionWriter {
 
         report.println("<div class='panel'>");
         report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");
-        report.println("<p style='color: #999999; font-size: 14px; margin-top: -10px; margin-bottom: 15px;'>");
+        report.println("<p style='color: var(--sp-text-muted); font-size: 0.875rem; margin-top: -10px; margin-bottom: 15px;'>");
         report.println("Shows how the image frame drifted across the session. Sensor dust or hot pixels move exactly along this trajectory, potentially creating false moving targets.</p>");
         if (!reportContext.dataAreaText.isEmpty()) {
             report.println("<div class='astro-note'>" + ReportFormat.escapeHtml(reportContext.dataAreaText)
@@ -774,11 +774,11 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("<div class='image-container'>");
         report.println("<div><a href='" + DRIFT_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + DRIFT_MAP + "' style='max-width: 300px;' alt='Drift Trajectory' /></a><br/><center><small>Drift Trajectory Map (Blue = Start, Red = End)</small></center></div>");
         report.println("<div><a href='" + CORNERS + "' target='_blank'><img loading='lazy' decoding='async' src='" + CORNERS + "' style='max-width: 300px;' alt='Corners Sampled Time-Lapse' /></a><br/><center><small>4-Corners Sampled Time-Lapse</small></center></div>");
-        report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: #333; padding: 10px;'>");
+        report.println("<div style='min-width: 200px; flex-grow: 1;'><div class='scroll-box' style='max-height: 325px; border-color: var(--sp-border-subtle); padding: 10px;'>");
         report.println("<div class='config-grid' style='grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));'>");
         for (int i = 0; i < driftPoints.size(); i++) {
             Pixel point = driftPoints.get(i);
-            report.println("<div class='config-item'><span style='color: #aaa;'>Frame " + (point.value + 1) + "</span> <span class='val'>" + ReportFormat.escapeHtml(ReportFormat.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
+            report.println("<div class='config-item'><span style='color: var(--sp-text-soft);'>Frame " + (point.value + 1) + "</span> <span class='val'>" + ReportFormat.escapeHtml(ReportFormat.formatPixelCoordinateOnly(point.x, point.y)) + "</span></div>");
         }
         report.println("</div></div></div>");
         report.println("</div>");
@@ -824,8 +824,8 @@ final class PipelineDiagnosticsSectionWriter {
                 report.println("<tr><td>" + (starStat.frameIndex + 1) + "</td>");
                 report.println("<td>" + ReportFormat.escapeHtml(fileName) + "</td>");
                 report.println("<td>" + starStat.initialPointSources + "</td>");
-                report.println("<td style='color: #ff9933;'>" + starStat.purgedStars + "</td>");
-                report.println("<td style='color: #44ff44; font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");
+                report.println("<td style='color: var(--sp-streak);'>" + starStat.purgedStars + "</td>");
+                report.println("<td style='color: var(--sp-success); font-weight: bold;'>" + starStat.survivingTransients + "</td></tr>");
             }
             report.println("</tbody></table>");
             report.println("</div>");

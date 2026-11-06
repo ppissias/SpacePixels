@@ -171,14 +171,14 @@ final class GlobalMapsSectionWriter {
         report.println("Every detection that was not a star, before the tracker sorted it, coloured by time (blue = start, red = end). Useful for spotting noise patterns, hot columns, streaks and movers that were not linked into a track.</p>");
         report.println("<div class='image-container' style='flex-wrap: wrap;'>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
-        report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Exact Footprint Map</h4>");
-        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>The exact pixels of every detection, objects and streaks, at full resolution.</p>");
-        report.println("<a href='" + TRANSIENT_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + TRANSIENT_MAP + "' class='native-size-image' style='border: 1px solid #555; border-radius: 4px;' alt='Global Transient Map' /></a>");
-        report.println("<div style='display:flex; align-items:center; gap:10px; margin-top:8px; font-size:12px; color:#aaa;'><span>Start</span><span style='flex:0 0 220px; height:12px; border-radius:3px; background:linear-gradient(90deg, hsl(240,100%,50%), hsl(180,100%,50%), hsl(120,100%,50%), hsl(60,100%,50%), hsl(0,100%,50%));'></span><span>End</span></div></div>");
+        report.println("<h4 style='color: var(--sp-text); margin-bottom: 5px;'>Exact Footprint Map</h4>");
+        report.println("<p style='font-size: 0.75rem; color: var(--sp-text-faint); margin-top: 0;'>The exact pixels of every detection, objects and streaks, at full resolution.</p>");
+        report.println("<a href='" + TRANSIENT_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + TRANSIENT_MAP + "' class='native-size-image' style='border: 1px solid var(--sp-border-strong); border-radius: 4px;' alt='Global Transient Map' /></a>");
+        report.println("<div style='display:flex; align-items:center; gap:10px; margin-top:8px; font-size:0.75rem; color:var(--sp-text-soft);'><span>Start</span><span style='flex:0 0 220px; height:12px; border-radius:3px; background:linear-gradient(90deg, hsl(240,100%,50%), hsl(180,100%,50%), hsl(120,100%,50%), hsl(60,100%,50%), hsl(0,100%,50%));'></span><span>End</span></div></div>");
         report.println("<div style='flex: 1; min-width: 400px;'>");
-        report.println("<h4 style='color: #ccc; margin-bottom: 5px;'>Transient Cluster Map</h4>");
-        report.println("<p style='font-size: 12px; color: #888; margin-top: 0;'>Every non-star detection, including streak pieces, as a dot at its centre. Dots of one colour are the same frame, so a line of one colour is often a streak. A rainbow chain changed frame as it moved. Cropped around the activity, downscaled and dilated so close neighbours merge. Linking a piece onto a streak does not remove it from this map.</p>");
-        report.println("<div style='overflow-x: auto;'><a href='" + CLUSTER_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + CLUSTER_MAP + "' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid #555; border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
+        report.println("<h4 style='color: var(--sp-text); margin-bottom: 5px;'>Transient Cluster Map</h4>");
+        report.println("<p style='font-size: 0.75rem; color: var(--sp-text-faint); margin-top: 0;'>Every non-star detection, including streak pieces, as a dot at its centre. Dots of one colour are the same frame, so a line of one colour is often a streak. A rainbow chain changed frame as it moved. Cropped around the activity, downscaled and dilated so close neighbours merge. Linking a piece onto a streak does not remove it from this map.</p>");
+        report.println("<div style='overflow-x: auto;'><a href='" + CLUSTER_MAP + "' target='_blank'><img loading='lazy' decoding='async' src='" + CLUSTER_MAP + "' style='display: block; width: auto; max-width: none; height: auto; border: 1px solid var(--sp-border-strong); border-radius: 4px;' alt='Rainbow Cluster Map' /></a></div></div>");
         report.println("</div>");
         report.println("</div>");
     }

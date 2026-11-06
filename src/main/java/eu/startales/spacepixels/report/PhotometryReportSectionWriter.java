@@ -177,7 +177,7 @@ public final class PhotometryReportSectionWriter {
                 + limitedAmplitude + " mag are reported. Not ready: stars are not scored.")
                 + " style='border-left-color:" + verdictColor(t.verdict) + ";'><span class='metric-value'>"
                 + verdictBadge(t.verdict) + "</span><span class='metric-label'>Readiness</span></div>");
-        report.println(metricBox(t.framesUsed + " <span style='color:#777; font-size:16px;'>/ " + t.framesAnalyzed + "</span>", "Frames used / analysed",
+        report.println(metricBox(t.framesUsed + " <span style='color:var(--sp-text-faint); font-size:1rem;'>/ " + t.framesAnalyzed + "</span>", "Frames used / analysed",
                 "Frames retained for photometry, out of the frames analysed after the initial quality filter."));
         if (t.framesExcludedSpatial > 0) {
             report.println(metricBox(String.valueOf(t.framesExcludedSpatial), "Frames excluded: spatial residuals",
@@ -209,7 +209,7 @@ public final class PhotometryReportSectionWriter {
 
     /** The reason for the verdict in plain words, and for a Not ready session what could help. */
     private static String verdictExplanationHtml(DetectionReportContext context, PipelineTelemetry.PhotometryTelemetry t) {
-        StringBuilder html = new StringBuilder("<div style='background:#2b2b2b; border-radius:6px; padding:12px 16px; margin: 4px 0 12px 0; font-size:14px; line-height:1.55; border-left:4px solid "
+        StringBuilder html = new StringBuilder("<div style='background:var(--sp-inset); border-radius:6px; padding:12px 16px; margin: 4px 0 12px 0; font-size:0.875rem; line-height:1.55; border-left:4px solid "
                 + verdictColor(t.verdict) + ";'>");
         if ("READY".equals(t.verdict)) {
             html.append("<strong>Ready:</strong> every readiness check passed, so all scored stars could be reported.");
@@ -277,7 +277,7 @@ public final class PhotometryReportSectionWriter {
         report.println("<h2>Variable Stars: Readiness Checks</h2>");
         report.println("<p class='compact-note'>Accurate photometry requires a linear response: twice the incoming light should produce twice the measured signal. "
                 + "These checks look for departures from that relationship.</p>");
-        report.println("<div style='display:grid; grid-template-columns: max-content max-content 1fr; gap: 8px 14px; align-items: baseline; font-size: 13px; margin-bottom: 14px;'>");
+        report.println("<div style='display:grid; grid-template-columns: max-content max-content 1fr; gap: 8px 14px; align-items: baseline; font-size: 0.8125rem; margin-bottom: 14px;'>");
         report.println(checkRow(t.quantisationCheck, "A &middot; Data depth",
                 "Checks for insufficient pixel-value precision, including 8-bit or heavily quantised data, and for sky-background values clipped at zero. These effects can bias photometry, especially for faint stars.",
                 t.distinctPixelLevels + " distinct pixel levels; " + formatPercent(t.medianFloorClippedFraction) + " of sky pixels at zero."));
@@ -292,7 +292,7 @@ public final class PhotometryReportSectionWriter {
         report.println("</div>");
         // A Not ready verdict already lists these messages as its reasons.
         if (!t.readinessMessages.isEmpty() && !"NOT_READY".equals(t.verdict)) {
-            report.println("<ul style='margin: 0 0 12px 18px; padding: 0; font-size: 13px; line-height: 1.5;'>");
+            report.println("<ul style='margin: 0 0 12px 18px; padding: 0; font-size: 0.8125rem; line-height: 1.5;'>");
             for (String message : t.readinessMessages) {
                 report.println("<li>" + ReportFormat.escapeHtml(message) + "</li>");
             }
@@ -407,8 +407,8 @@ public final class PhotometryReportSectionWriter {
     }
 
     private static String checkRow(String status, String name, String tests, String result) {
-        return "<div>" + statusBadge(status) + "</div><div style='color:#ffffff; font-weight:600; white-space:nowrap;'>" + name + "</div>"
-                + "<div><span style='color:#aab4bd;'>" + ReportFormat.escapeHtml(tests) + "</span><br>"
+        return "<div>" + statusBadge(status) + "</div><div style='color:var(--sp-text-strong); font-weight:600; white-space:nowrap;'>" + name + "</div>"
+                + "<div><span style='color:var(--sp-text-soft);'>" + ReportFormat.escapeHtml(tests) + "</span><br>"
                 + ReportFormat.escapeHtml(result) + "</div>";
     }
 
@@ -436,7 +436,7 @@ public final class PhotometryReportSectionWriter {
             appendReason(scoring, t.starsExcludedMostlyNonlinear, "mostly non-linear");
             appendReason(scoring, otherUnscored, "too few usable measurements");
         }
-        return "<div style='font-size:12px; margin: 4px 0 12px 0;'><div style='color:#e6e6e6; font-weight:600; margin-bottom:6px;'>From the master map to scored stars</div>"
+        return "<div style='font-size:0.75rem; margin: 4px 0 12px 0;'><div style='color:var(--sp-text-bright); font-weight:600; margin-bottom:6px;'>From the master map to scored stars</div>"
                 + funnelBar(master, master, "#5b6670", master + " stars in the master map", "")
                 + funnelBar(t.starsSelected, master, "#4f8fd0", t.starsSelected + " isolated enough to measure", selection.toString())
                 + funnelBar(t.starsScored, master, PhotometrySvgChart.SERIES_BLUE, t.starsScored + " scored", scoring.toString())
@@ -453,7 +453,7 @@ public final class PhotometryReportSectionWriter {
         appendReason(reasons, t.framesExcludedResponse, "response (D)");
         appendReason(reasons, t.framesExcludedRegistration, "registration");
         appendReason(reasons, t.framesExcludedTooFewStars, "too few stars");
-        return "<div style='font-size:12px; margin: 4px 0 12px 0;'><div style='color:#e6e6e6; font-weight:600; margin-bottom:6px;'>Frames</div>"
+        return "<div style='font-size:0.75rem; margin: 4px 0 12px 0;'><div style='color:var(--sp-text-bright); font-weight:600; margin-bottom:6px;'>Frames</div>"
                 + funnelBar(t.framesAnalyzed, t.framesAnalyzed, "#5b6670", t.framesAnalyzed + " analysed", "")
                 + funnelBar(t.framesUsed, t.framesAnalyzed, PhotometrySvgChart.SERIES_BLUE, t.framesUsed + " used", reasons.toString())
                 + "</div>";
@@ -549,10 +549,10 @@ public final class PhotometryReportSectionWriter {
     private static String funnelBar(int value, int total, String color, String label, String note) {
         double percent = total > 0 ? Math.max(0.6, 100.0 * value / total) : 0;
         return "<div style='display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:3px 0;'>"
-                + "<div style='flex: 0 1 360px; max-width:100%; background:#262626; border-radius:3px; height:14px;'><div style='width:"
+                + "<div style='flex: 0 1 360px; max-width:100%; background:var(--sp-sunken); border-radius:3px; height:14px;'><div style='width:"
                 + String.format(Locale.US, "%.1f", percent) + "%; height:100%; background:" + color + "; border-radius:3px;'></div></div>"
-                + "<div><span style='color:#ffffff;'>" + ReportFormat.escapeHtml(label) + "</span>"
-                + (note.isEmpty() ? "" : " <span style='color:#99a3ad;'>(" + ReportFormat.escapeHtml(note) + ")</span>") + "</div></div>";
+                + "<div><span style='color:var(--sp-text-strong);'>" + ReportFormat.escapeHtml(label) + "</span>"
+                + (note.isEmpty() ? "" : " <span style='color:var(--sp-text-muted);'>(" + ReportFormat.escapeHtml(note) + ")</span>") + "</div></div>";
     }
 
     // =================================================================
@@ -567,7 +567,7 @@ public final class PhotometryReportSectionWriter {
 
         // --- Noise model ---
         if (!t.noiseModel.isEmpty()) {
-            report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:4px 0 6px 0;'>Noise model: scatter against brightness</h3>");
+            report.println("<h3 style='color:var(--sp-text-bright); font-size:0.9375rem; margin:4px 0 6px 0;'>Noise model: scatter against brightness</h3>");
             int scored = t.noiseModel.size();
             String sampleNote = scored > MAX_CONSTANT_CHART_POINTS
                     ? " Every candidate is drawn; constant stars are thinned to an evenly spaced sample of about " + MAX_CONSTANT_CHART_POINTS
@@ -586,7 +586,7 @@ public final class PhotometryReportSectionWriter {
         }
 
         // --- Per-frame small multiples ---
-        report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Per-frame diagnostics</h3>");
+        report.println("<h3 style='color:var(--sp-text-bright); font-size:0.9375rem; margin:18px 0 6px 0;'>Per-frame diagnostics</h3>");
         report.println("<p class='compact-note'>The horizontal axis is the frame number. A blue point is a frame that was used. A red cross is an excluded frame; hover it for the file name and the reason. "
                 + "The sentence under each title says what the vertical position means.</p>");
         report.println(legend(
@@ -617,7 +617,7 @@ public final class PhotometryReportSectionWriter {
         report.println("</div>");
 
         // --- Check B profiles ---
-        report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Check B · Stellar concentration versus brightness</h3>");
+        report.println("<h3 style='color:var(--sp-text-bright); font-size:0.9375rem; margin:18px 0 6px 0;'>Check B · Stellar concentration versus brightness</h3>");
         report.println("<p class='compact-note'>Each line represents one frame. The plot shows the concentration index in brightness bins, relative to that frame's faint-star reference. "
                 + "Brighter stars are on the left and fainter stars on the right. Values within the shaded tolerance band are consistent with the reference profile. "
                 + "Departures at the bright end can indicate saturation or nonlinearity.</p>");
@@ -742,8 +742,8 @@ public final class PhotometryReportSectionWriter {
         chart.line(x, usedY, PhotometrySvgChart.SERIES_BLUE, 2, false, null);
         chart.points(x, usedY, PhotometrySvgChart.SERIES_BLUE, 4, PhotometrySvgChart.Marker.CIRCLE, usedTips);
         chart.points(x, excludedY, PhotometrySvgChart.STATUS_CRITICAL, 4.5, PhotometrySvgChart.Marker.CROSS, excludedTips);
-        return "<div><div style='font-size:12px; color:#cccccc;'>" + ReportFormat.escapeHtml(title) + "</div>"
-                + "<div style='font-size:11px; color:#9aa3ab; max-width:360px; margin:0 0 4px 0; line-height:1.35;'>"
+        return "<div><div style='font-size:0.75rem; color:var(--sp-text);'>" + ReportFormat.escapeHtml(title) + "</div>"
+                + "<div style='font-size:0.6875rem; color:var(--sp-text-muted); max-width:360px; margin:0 0 4px 0; line-height:1.35;'>"
                 + ReportFormat.escapeHtml(explanation) + "</div>" + chart.render() + "</div>";
     }
 
@@ -828,7 +828,7 @@ public final class PhotometryReportSectionWriter {
         }
 
         if (!rejected.isEmpty()) {
-            report.println("<h3 style='color:#e6e6e6; font-size:15px; margin:18px 0 6px 0;'>Rejected candidates (" + rejected.size() + ")</h3>");
+            report.println("<h3 style='color:var(--sp-text-bright); font-size:0.9375rem; margin:18px 0 6px 0;'>Rejected candidates (" + rejected.size() + ")</h3>");
             report.println("<p class='compact-note'>Stars whose scores stood out but that failed two or more gates. Listed so you can see why a suspected variable was not reported.</p>");
             report.println("<div class='scroll-box compact-table-box'>");
             report.println("<table><thead><tr>"
@@ -863,7 +863,7 @@ public final class PhotometryReportSectionWriter {
         report.println("<div class='astro-note' style='margin-top:-8px; margin-bottom:8px;'>"
                 + ReportFormat.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, star.x, star.y))
                 + "</div>");
-        report.println("<p style='font-size:14px; color:#e6e6e6; margin: 0 0 10px 0; line-height:1.5;'>" + ReportFormat.escapeHtml(plainSummary(analysis, star)) + "</p>");
+        report.println("<p style='font-size:0.875rem; color:var(--sp-text-bright); margin: 0 0 10px 0; line-height:1.5;'>" + ReportFormat.escapeHtml(plainSummary(analysis, star)) + "</p>");
         report.println(catalogueEntryHtml(context, star, sessionCatalogue));
         SkyTarget comparisonTarget = skyTarget(context, star.x, star.y);
         boolean comparisonMatched = comparisonTarget != null && !sessionCatalogue.variablesNear(
@@ -896,14 +896,14 @@ public final class PhotometryReportSectionWriter {
         report.println(compactMetric(formatMag(star.aperturePatternDifference, 2) + " &plusmn; " + formatMag(star.aperturePatternDifferenceError, 2), "Aperture pattern difference",
                 "Share of the light curve's pattern by which the small (1.0 x FWHM) and large (2.0 x FWHM) apertures differ through time, with its uncertainty: 0 when they agree, -2 when they move in opposite directions, -0.5 when the large aperture shows half the variation. The APERTURE check fails when it is beyond the allowed share and twice its uncertainty."));
         report.println(compactMetric(formatMag(star.maxSystematicsCorrelation, 2)
-                + (star.maxSystematicsSource != null ? " <span style='font-size:10px; color:#999;'>" + ReportFormat.escapeHtml(star.maxSystematicsSource) + "</span>" : ""),
+                + (star.maxSystematicsSource != null ? " <span style='font-size:0.625rem; color:var(--sp-text-muted);'>" + ReportFormat.escapeHtml(star.maxSystematicsSource) + "</span>" : ""),
                 "Maximum systematics correlation (r)",
                 "Largest absolute correlation between the light curve and the monitored frame properties: ensemble zero point, stellar-image width, sky background, and registration offsets."));
         report.println(compactMetric(formatMag(star.systematicsLimitMag, 3), "Systematics limit (mag)",
                 "Response expected from the most correlated monitored frame property for ordinary stars of this brightness, multiplied by the response factor. The systematics check fails a correlated candidate when its amplitude does not exceed this limit."));
         report.println(compactMetric(formatMag(star.maxFrameToFrameSystematicsCorrelation, 2), "Frame-to-frame systematics correlation (r)",
                 "Largest correlation between successive changes in the light curve and successive changes in a monitored frame property. A high value means the star and that property change together from frame to frame."));
-        report.println(compactMetric(formatMag(star.localCorrelation, 2) + " <span style='font-size:10px; color:#999;'>n=" + star.localComparisonStars + "</span>", "Local correlation (r)",
+        report.println(compactMetric(formatMag(star.localCorrelation, 2) + " <span style='font-size:0.625rem; color:var(--sp-text-muted);'>n=" + star.localComparisonStars + "</span>", "Local correlation (r)",
                 "Median absolute correlation with the usable nearby comparison stars. n is the number of neighbours used."));
         report.println(compactMetric(formatMag(star.localSharedFraction, 2), "Local shared fraction",
                 "Median absolute regression slope of the nearby comparison stars on this star: the fraction of this star's change that appears in those neighbours, not an amplitude in magnitudes. About 0.3 or more, together with a high local correlation, fails the LOCAL check."));
@@ -1019,7 +1019,7 @@ public final class PhotometryReportSectionWriter {
                         .replace("<button ", "<button style='display:none' data-identify-all='1' ");
                 report.print("<td><span data-known-as-sidecar='" + sidecar + "' data-catalogue-star='"
                         + ReportFormat.escapeHtml(fallback) + "'>" + (fallback.isEmpty() ? "" : fallback + "<br>")
-                        + "<span style='color:#777;'>VSX: not checked</span>" + hidden
+                        + "<span style='color:var(--sp-text-faint);'>VSX: not checked</span>" + hidden
                         + "</span>" + CatalogueComparisonWriter.slot(number, true, false) + "</td>");
             } else if (sky) {
                 report.print("<td>&ndash;</td>");
@@ -1038,7 +1038,7 @@ public final class PhotometryReportSectionWriter {
         return "<strong>" + link + "</strong> &middot; " + ReportFormat.escapeHtml(star.type != null ? star.type : "?")
                 + " &middot; " + (star.periodDays != null ? SessionCatalogue.formatPeriod(star.periodDays) : "no period")
                 + " &middot; " + String.format(Locale.US, "%.1f", matches.get(0).separationArcsec) + "&Prime;"
-                + (matches.size() > 1 ? " <span style='color:#888;'>(+" + (matches.size() - 1) + " more)</span>" : "");
+                + (matches.size() > 1 ? " <span style='color:var(--sp-text-faint);'>(+" + (matches.size() - 1) + " more)</span>" : "");
     }
 
     /** Ordinary catalogue identity, distinct from a VSX match or variability classification. */
@@ -1047,7 +1047,7 @@ public final class PhotometryReportSectionWriter {
                 : catalogue.starIdentityNear(target.raDegrees, target.decDegrees, Math.min(target.radiusArcsec, 5.0));
         if (identity == null) return "";
         return "Catalogue star: <strong>" + ReportFormat.escapeHtml(identity.name()) + "</strong>"
-                + " <span style='color:#888;'>(" + ReportFormat.escapeHtml(identity.source()) + ", "
+                + " <span style='color:var(--sp-text-faint);'>(" + ReportFormat.escapeHtml(identity.source()) + ", "
                 + String.format(Locale.US, "%.1f", identity.separationArcsec()) + "&Prime; away)</span>";
     }
 
@@ -1092,7 +1092,7 @@ public final class PhotometryReportSectionWriter {
                 html.append('.');
             }
             if (matches.size() > 1) {
-                html.append(" <span style='color:#888;'>").append(matches.size() - 1).append(" more VSX ")
+                html.append(" <span style='color:var(--sp-text-faint);'>").append(matches.size() - 1).append(" more VSX ")
                         .append(matches.size() == 2 ? "star" : "stars").append(" within ")
                         .append(String.format(Locale.US, "%.0f", target.radiusArcsec)).append("&Prime;.</span>");
             }
@@ -1103,7 +1103,7 @@ public final class PhotometryReportSectionWriter {
             if (gaia.bpRp != null) {
                 html.append(", BP&minus;RP ").append(String.format(Locale.US, "%.2f", gaia.bpRp));
             }
-            html.append(" <span style='color:#888;'>(catalogue values, not measured in this session)</span>");
+            html.append(" <span style='color:var(--sp-text-faint);'>(catalogue values, not measured in this session)</span>");
         }
         return html.append("</div>").toString();
     }
@@ -1805,7 +1805,7 @@ public final class PhotometryReportSectionWriter {
             case "LIMITED": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>! LIMITED</span>";
             case "INCONCLUSIVE": return "<span style='color:" + PhotometrySvgChart.STATUS_WARNING + ";'>? INCONCLUSIVE</span>";
             case "FAIL": return "<span style='color:" + PhotometrySvgChart.STATUS_CRITICAL + ";'>&#10005; FAIL</span>";
-            case "NOT_RUN": return "<span style='color:#8b949c;'>&ndash; NOT RUN</span>";
+            case "NOT_RUN": return "<span style='color:var(--sp-text-muted);'>&ndash; NOT RUN</span>";
             default: return status;
         }
     }

@@ -78,7 +78,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeSingleStreaks(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
-        report.println("<h3 id='single-streaks' style='color: #ff9933; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Single-Frame Streaks</h3>");
+        report.println("<h3 id='single-streaks' style='color: var(--sp-streak); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Single-Frame Streaks</h3>");
         int counter = 1;
         for (Track track : context.singleStreaks) {
             context.progress.next();
@@ -87,7 +87,7 @@ final class TargetVisualizationSectionWriter {
             int frameIndex = point.sourceFrameIndex;
             int partCount = track.points.size();
             String partBadge = partCount > 1
-                    ? " <span style='background: #6b4a20; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
+                    ? " <span style='background: var(--sp-badge-amber); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>" + partCount + " Parts</span>"
                     : "";
 
             report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.SINGLE_STREAK, counter) + "'>");
@@ -147,7 +147,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeStreakTracks(PrintWriter report,
                                           DetectionReportContext context) throws IOException {
-        report.println("<h3 id='streak-tracks' style='color: #ffcc33; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Streak Tracks</h3>");
+        report.println("<h3 id='streak-tracks' style='color: var(--sp-streak-track); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Streak Tracks</h3>");
         int counter = 1;
         for (Track track : context.streakTracks) {
             context.progress.next();
@@ -180,9 +180,9 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxWidth,
                     cropBounds.trackBoxHeight);
 
-            report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: #ffcc33;'>");
-            String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
-            report.println("<div class='detection-title' style='color: #ffcc33;'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + faintSearchBadge(track) + "</div>");
+            report.println("<div class='detection-card streak-title' id='" + context.findingAnchor(FindingCategory.STREAK_TRACK, counter) + "' style='border-left-color: var(--sp-streak-track);'>");
+            String timeBadge = track.isTimeBasedTrack ? " <span style='background: var(--sp-badge-blue); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
+            report.println("<div class='detection-title' style='color: var(--sp-streak-track);'>Confirmed Streak Track " + FindingCategory.STREAK_TRACK.id(counter) + timeBadge + faintSearchBadge(track) + "</div>");
             report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
             report.print(buildConfirmedStreakFrameFragmentSummaryHtml(track, context.fitsFiles));
 
@@ -219,7 +219,7 @@ final class TargetVisualizationSectionWriter {
 
     private static void writeMovingTargets(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
-        report.println("<h3 id='moving-targets' style='color: #4da6ff; margin-top: 30px; border-bottom: 1px solid #444; padding-bottom: 5px;'>Moving-Object Tracks</h3>");
+        report.println("<h3 id='moving-targets' style='color: var(--sp-accent); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Moving-Object Tracks</h3>");
         int counter = 1;
         for (Track track : context.movingTargets) {
             context.progress.next();
@@ -292,7 +292,7 @@ final class TargetVisualizationSectionWriter {
                     cropBounds.trackBoxHeight);
 
             report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.MOVING_TARGET, counter) + "'>");
-            String timeBadge = track.isTimeBasedTrack ? " <span style='background: #005c99; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
+            String timeBadge = track.isTimeBasedTrack ? " <span style='background: var(--sp-badge-blue); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>⏱ Time-Based Kinematics</span>" : "";
             report.println("<div class='detection-title'>Moving Target Track " + FindingCategory.MOVING_TARGET.id(counter) + timeBadge + "</div>");
             KnownSolarSystemReport.writeTrackIdentification(report, context, FindingCategory.MOVING_TARGET.id(counter));
             RescueTrackAssociations.write(report, context, FindingCategory.MOVING_TARGET.id(counter));
@@ -320,18 +320,18 @@ final class TargetVisualizationSectionWriter {
             report.println("</div>");
 
             report.println("<div class='download-controls' style='margin-top: 8px; margin-bottom: 16px;'>");
-            report.println("<strong style='color: #ccc;'>Download animation:</strong> <a class='id-link' href='"
+            report.println("<strong style='color: var(--sp-text);'>Download animation:</strong> <a class='id-link' href='"
                     + cleanNarrowFileName + "' download='" + ReportFiles.name(cleanNarrowFileName) + "' target='_blank'>Narrow</a> <a class='id-link' href='"
                     + cleanWideFileName + "' download='" + ReportFiles.name(cleanWideFileName) + "' target='_blank'>Wide</a>");
             report.println("</div>");
 
             report.println("<div style='margin-bottom: 20px;'>");
-            report.println("<strong style='color: #ccc;'>Pixel Evolution (Tight Crops):</strong>");
+            report.println("<strong style='color: var(--sp-text);'>Pixel Evolution (Tight Crops):</strong>");
             report.println("<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-end;'>");
 
             StringBuilder shapeEvolutionHtml = new StringBuilder();
             shapeEvolutionHtml.append("<div style='margin-bottom: 20px;'>\n");
-            shapeEvolutionHtml.append("<strong style='color: #ccc;'>Shape Evolution (Detected Pixels):</strong>\n");
+            shapeEvolutionHtml.append("<strong style='color: var(--sp-text);'>Shape Evolution (Detected Pixels):</strong>\n");
             shapeEvolutionHtml.append("<div style='display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; align-items: flex-end;'>\n");
 
             for (int i = 0; i < track.points.size(); i++) {
@@ -419,7 +419,7 @@ final class TargetVisualizationSectionWriter {
         String text = faint == track.points.size() ? "Found by the faint-streak search"
                 : "Includes " + faint + (faint == 1 ? " detection" : " detections") + " from the faint-streak search";
         return " <span title='Found on frames smoothed to the size of the stars; the measurements of these detections are made on the smoothed frame' "
-                + "style='background: #4b3b7a; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
+                + "style='background: var(--sp-badge-purple); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
                 + text + "</span>";
     }
 
@@ -476,7 +476,7 @@ final class TargetVisualizationSectionWriter {
         }
 
         StringBuilder html = new StringBuilder();
-        html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
+        html.append("<div style='font-family: monospace; font-size: 0.75rem; color: var(--sp-text-soft); margin-bottom: 15px;'>");
         html.append("Frames &amp; Fragments:<br>");
 
         for (Map.Entry<Integer, List<Integer>> entry : frameToFragmentIndices.entrySet()) {
@@ -485,16 +485,16 @@ final class TargetVisualizationSectionWriter {
             String filename = frameToFilename.get(frameIndex);
             long timestampMillis = frameToTimestamp.getOrDefault(frameIndex, -1L);
 
-            html.append("<span style='color:#fff;'>Frame ");
+            html.append("<span style='color:var(--sp-text-strong);'>Frame ");
             html.append(frameIndex >= 0 ? frameIndex + 1 : "?");
             html.append("</span>");
             if (filename != null && !filename.isBlank()) {
-                html.append(" <span style='color:#7fbfff;'>(").append(ReportFormat.escapeHtml(filename)).append(")</span>");
+                html.append(" <span style='color:var(--sp-link);'>(").append(ReportFormat.escapeHtml(filename)).append(")</span>");
             }
             if (timestampMillis > 0L) {
-                html.append(" <span style='color:#88c999;'>").append(ReportFormat.escapeHtml(formatUtcTimestamp(timestampMillis))).append("</span>");
+                html.append(" <span style='color:var(--sp-time);'>").append(ReportFormat.escapeHtml(formatUtcTimestamp(timestampMillis))).append("</span>");
             }
-            html.append(": fragments <span style='color:#ffcc66;'>");
+            html.append(": fragments <span style='color:var(--sp-streak-track);'>");
             for (int i = 0; i < fragmentIndices.size(); i++) {
                 if (i > 0) {
                     html.append(", ");
@@ -615,21 +615,21 @@ final class TargetVisualizationSectionWriter {
         }
 
         StringBuilder html = new StringBuilder();
-        html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
+        html.append("<div style='font-family: monospace; font-size: 0.75rem; color: var(--sp-text-soft); margin-bottom: 15px;'>");
         if (frameIndex >= 0) {
-            html.append("Frame: <span style='color:#fff;'>").append(frameIndex + 1).append("</span><br>");
+            html.append("Frame: <span style='color:var(--sp-text-strong);'>").append(frameIndex + 1).append("</span><br>");
         }
-        html.append("Frame UTC: <span style='color:#fff;'>")
+        html.append("Frame UTC: <span style='color:var(--sp-text-strong);'>")
                 .append(ReportFormat.escapeHtml(formatUtcTimestamp(frameTimestamp)))
                 .append("</span><br>");
         if (exposureMillis > 0L) {
-            html.append("Exposure: <span style='color:#fff;'>")
+            html.append("Exposure: <span style='color:var(--sp-text-strong);'>")
                     .append(ReportFormat.escapeHtml(formatDuration(exposureMillis)))
                     .append("</span><br>");
         }
-        html.append("Streak Parts: <span style='color:#fff;'>").append(partCount).append("</span>");
+        html.append("Streak Parts: <span style='color:var(--sp-text-strong);'>").append(partCount).append("</span>");
         if (partCount > 1) {
-            html.append(" <span style='color:#ff9933;'>(grouped same-frame components)</span>");
+            html.append(" <span style='color:var(--sp-streak);'>(grouped same-frame components)</span>");
         }
         html.append("</div>");
         return html.toString();

@@ -68,7 +68,7 @@ final class FaintMoverSectionWriter {
                 var entry = c.faintMoverPresentation.get(i);
                 var candidate = c.faintMoverCandidates.get(i);
                 String anchor = c.findingAnchor(FindingCategory.FAINT_MOVER, i + 1);
-                out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:#50e1d2'>");
+                out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:var(--sp-faint-mover)'>");
                 out.println("<div class='detection-title'>Faint mover " + entry.id() + " · Unverified</div>");
                 KnownSolarSystemReport.writeFaintMoverIdentification(out, c, entry);
                 writeSummary(out, c, entry);

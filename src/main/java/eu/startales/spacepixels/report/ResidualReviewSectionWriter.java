@@ -646,8 +646,8 @@ final class ResidualReviewSectionWriter {
         String candidateBadge = buildLocalRescueBadge(candidate.kind);
         String candidateNote = buildLocalRescueNote(candidate.kind);
         ResidualTransientAnalysis.LocalTransientMetrics metrics = candidate.metrics;
-        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_RESCUE, counter) + "' style='border-left-color: #40e0d0;'>");
-        report.println("<div class='detection-title' style='color: #40e0d0;'>Local Rescue Candidate " + FindingCategory.LOCAL_RESCUE.id(counter) + candidateBadge + "</div>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_RESCUE, counter) + "' style='border-left-color: var(--sp-local-rescue);'>");
+        report.println("<div class='detection-title' style='color: var(--sp-local-rescue);'>Local Rescue Candidate " + FindingCategory.LOCAL_RESCUE.id(counter) + candidateBadge + "</div>");
         RescueTrackAssociations.write(report, context, FindingCategory.LOCAL_RESCUE.id(counter));
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>" + candidateNote + "</div>");
         report.println("<div class='image-container'>");
@@ -661,17 +661,17 @@ final class ResidualReviewSectionWriter {
         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' alt='Shape Footprint Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
         report.println("</div>");
 
-        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
-                + "Type: <span style='color:#fff;'>" + ReportFormat.escapeHtml(formatLocalRescueKind(candidate.kind)) + "</span>"
+        report.println("<div style='font-family: monospace; font-size: 0.75rem; color: var(--sp-text-soft); margin-bottom: 10px;'>"
+                + "Type: <span style='color:var(--sp-text-strong);'>" + ReportFormat.escapeHtml(formatLocalRescueKind(candidate.kind)) + "</span>"
                 + " | "
-                + "Support: <span style='color:#fff;'>" + metrics.pointCount + " detections</span>"
-                + " across <span style='color:#fff;'>" + metrics.frameSpan + "</span> frame(s)"
-                + " | Gap Frames: <span style='color:#fff;'>" + metrics.totalGapFrames + "</span>"
-                + " | Total Motion: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.totalDisplacementPixels) + "</span>"
-                + " | Mean Step: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.averageStepPixels) + "</span>"
-                + " | Cluster Radius: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.clusterRadiusPixels) + "</span>"
-                + " | Fit RMSE: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
-                + " | Score: <span style='color:#fff;'>" + String.format(Locale.US, "%.1f", candidate.score) + "</span>"
+                + "Support: <span style='color:var(--sp-text-strong);'>" + metrics.pointCount + " detections</span>"
+                + " across <span style='color:var(--sp-text-strong);'>" + metrics.frameSpan + "</span> frame(s)"
+                + " | Gap Frames: <span style='color:var(--sp-text-strong);'>" + metrics.totalGapFrames + "</span>"
+                + " | Total Motion: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.totalDisplacementPixels) + "</span>"
+                + " | Mean Step: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.averageStepPixels) + "</span>"
+                + " | Cluster Radius: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.clusterRadiusPixels) + "</span>"
+                + " | Fit RMSE: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
+                + " | Score: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.1f", candidate.score) + "</span>"
                 + "</div>");
         report.print(ReportFormat.buildTrackTimingSummaryHtml(track, context.astrometryContext));
 
@@ -771,9 +771,9 @@ final class ResidualReviewSectionWriter {
         }
 
         ResidualTransientAnalysis.LocalTransientMetrics metrics = cluster.metrics;
-        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_ACTIVITY, counter) + "' style='border-left-color: #ffb347;'>");
-        report.println("<div class='detection-title' style='color: #ffb347;'>Local Activity Cluster " + FindingCategory.LOCAL_ACTIVITY.id(counter)
-                + " <span style='background: #7a4b14; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.LOCAL_ACTIVITY, counter) + "' style='border-left-color: var(--sp-local-activity);'>");
+        report.println("<div class='detection-title' style='color: var(--sp-local-activity);'>Local Activity Cluster " + FindingCategory.LOCAL_ACTIVITY.id(counter)
+                + " <span style='background: var(--sp-badge-amber); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>"
                 + String.format(Locale.US, "%.0f px Linkage", cluster.linkageRadiusPixels)
                 + "</span></div>");
         report.println("<div class='astro-note' style='margin-top: -5px; margin-bottom: 12px;'>Leftover detections that keep appearing in the same area. Not a confirmed object; a place worth checking by eye.</div>");
@@ -788,16 +788,16 @@ final class ResidualReviewSectionWriter {
         report.println("<div><a href='" + shapeFileName + "' target='_blank'><img loading='lazy' decoding='async' src='" + shapeFileName + "' alt='Cluster Shape Evolution' /></a><br/><center><small>Shape Evolution</small></center></div>");
         report.println("</div>");
 
-        report.println("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 10px;'>"
-                + "Support: <span style='color:#fff;'>" + metrics.pointCount + " detections</span>"
-                + " across <span style='color:#fff;'>" + metrics.uniqueFrameCount + "</span> unique frame(s)"
-                + " | Frame Span: <span style='color:#fff;'>" + metrics.frameSpan + "</span>"
-                + " | Gap Frames: <span style='color:#fff;'>" + metrics.totalGapFrames + "</span>"
-                + " | Total Motion: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.totalDisplacementPixels) + "</span>"
-                + " | Mean Step: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.averageStepPixels) + "</span>"
-                + " | Cluster Radius: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.clusterRadiusPixels) + "</span>"
-                + " | Fit RMSE: <span style='color:#fff;'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
-                + " | Linkage Radius: <span style='color:#fff;'>" + String.format(Locale.US, "%.1f px", cluster.linkageRadiusPixels) + "</span>"
+        report.println("<div style='font-family: monospace; font-size: 0.75rem; color: var(--sp-text-soft); margin-bottom: 10px;'>"
+                + "Support: <span style='color:var(--sp-text-strong);'>" + metrics.pointCount + " detections</span>"
+                + " across <span style='color:var(--sp-text-strong);'>" + metrics.uniqueFrameCount + "</span> unique frame(s)"
+                + " | Frame Span: <span style='color:var(--sp-text-strong);'>" + metrics.frameSpan + "</span>"
+                + " | Gap Frames: <span style='color:var(--sp-text-strong);'>" + metrics.totalGapFrames + "</span>"
+                + " | Total Motion: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.totalDisplacementPixels) + "</span>"
+                + " | Mean Step: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.averageStepPixels) + "</span>"
+                + " | Cluster Radius: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.clusterRadiusPixels) + "</span>"
+                + " | Fit RMSE: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.2f px", metrics.linearityRmsePixels) + "</span>"
+                + " | Linkage Radius: <span style='color:var(--sp-text-strong);'>" + String.format(Locale.US, "%.1f px", cluster.linkageRadiusPixels) + "</span>"
                 + "</div>");
 
         report.println("<strong>Cluster Coordinates & Frames:</strong><ul class='source-list'>");
@@ -864,10 +864,10 @@ final class ResidualReviewSectionWriter {
 
     private static String buildLocalRescueBadge(ResidualTransientAnalysis.LocalRescueKind kind) {
         if (kind == ResidualTransientAnalysis.LocalRescueKind.LOCAL_REPEAT) {
-            return " <span style='background: #19595a; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>2+ Same-Location Rescue</span>";
+            return " <span style='background: var(--sp-badge-teal); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>2+ Same-Location Rescue</span>";
         }
         if (kind == ResidualTransientAnalysis.LocalRescueKind.SPARSE_LOCAL_DRIFT) {
-            return " <span style='background: #2d5a88; color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>Sparse Local-Drift Rescue</span>";
+            return " <span style='background: var(--sp-badge-blue); color: white; font-size: 0.7em; padding: 3px 8px; border-radius: 5px; margin-left: 10px; vertical-align: middle;'>Sparse Local-Drift Rescue</span>";
         }
         return "";
     }

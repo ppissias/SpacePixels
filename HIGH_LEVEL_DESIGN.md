@@ -493,6 +493,7 @@ Responsibilities:
 - export versioned `report-data.json` without input paths or observing-site coordinates
 - publish HTML, JSON and CSV text artifacts through `AtomicReportFile` (built on `StagedFile`), checking write errors before replacing final files
 - emit testable `report-lookups.js` and `report-interactions.js` resources; GIF exports include PNG posters for pause/reduced-motion controls
+- write the page styles from resources: `report-theme.css` defines the named colour roles (`--sp-page`, `--sp-text`, `--sp-accent`, the finding types and so on; the dark theme), and `report.css`, `report-index.css` and `faint-mover-review.css` use them, with text sizes in `rem`. Section writers' inline styles use the same roles. Like the scripts, the styles are written into each page, so a report is one self-contained HTML file plus its pictures
 
 `ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` uses the catalogue and WCS captured once by `ReportRunContext` at run admission, including their valid absence. The run's `VisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
 

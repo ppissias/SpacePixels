@@ -1,0 +1,15 @@
+/* SpacePixels report styles. Colours come from the named roles in report-theme.css (var(--sp-...)),
+   and text sizes are relative to the page's base size (rem), so themes and text sizes change them. */
+body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: var(--sp-page); color: var(--sp-text); margin: 0; padding: 30px; }
+h1 { color: var(--sp-text-strong); border-bottom: 2px solid var(--sp-accent); padding-bottom: 10px; margin-bottom: 30px; }
+.panel { background-color: var(--sp-panel); padding: 25px; margin-bottom: 30px; border-radius: 8px; box-shadow: 0 4px 8px var(--sp-shadow); }
+table { border-collapse: collapse; width: 100%; margin-top: 15px; font-size: 0.875rem; background-color: var(--sp-inset); border-radius: 5px; overflow: hidden; }
+th, td { padding: 12px 15px; text-align: left; }
+th { background-color: var(--sp-sunken); color: var(--sp-accent); font-weight: bold; border-bottom: 2px solid var(--sp-border-subtle); }
+tr { border-bottom: 1px solid var(--sp-border-subtle); }
+tr:nth-child(even) { background-color: var(--sp-row-alt); }
+tr:hover { background-color: var(--sp-hover); }
+a { color: var(--sp-accent); text-decoration: none; font-weight: bold; }
+a:hover { text-decoration: underline; }
+.highlight { color: var(--sp-success); font-weight: bold; }
+.alert { color: var(--sp-alert); font-weight: bold; }

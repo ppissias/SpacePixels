@@ -159,13 +159,13 @@ final class ReportFormat {
         }
 
         StringBuilder html = new StringBuilder();
-        html.append("<div style='font-family: monospace; font-size: 12px; color: #aaa; margin-bottom: 15px;'>");
-        html.append("First UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(firstStartTimestamp))).append("</span><br>");
-        html.append("Last UTC: <span style='color:#fff;'>").append(escapeHtml(formatUtcTimestamp(lastEndTimestamp))).append("</span><br>");
-        html.append("Track Duration: <span style='color:#fff;'>").append(escapeHtml(formatDuration(durationMillis))).append("</span><br>");
-        html.append("Mean Speed: <span style='color:#fff;'>").append(escapeHtml(formatTrackSpeed(displacementPixels, motionMillis))).append("</span> (exposure midpoints)<br>");
+        html.append("<div style='font-family: monospace; font-size: 0.75rem; color: var(--sp-text-soft); margin-bottom: 15px;'>");
+        html.append("First UTC: <span style='color:var(--sp-text-strong);'>").append(escapeHtml(formatUtcTimestamp(firstStartTimestamp))).append("</span><br>");
+        html.append("Last UTC: <span style='color:var(--sp-text-strong);'>").append(escapeHtml(formatUtcTimestamp(lastEndTimestamp))).append("</span><br>");
+        html.append("Track Duration: <span style='color:var(--sp-text-strong);'>").append(escapeHtml(formatDuration(durationMillis))).append("</span><br>");
+        html.append("Mean Speed: <span style='color:var(--sp-text-strong);'>").append(escapeHtml(formatTrackSpeed(displacementPixels, motionMillis))).append("</span> (exposure midpoints)<br>");
         html.append(DetectionReportAstrometry.buildTrackSkyRateSummaryHtml(astrometryContext, track));
-        html.append("Start-End Motion: <span style='color:#fff;'>")
+        html.append("Start-End Motion: <span style='color:var(--sp-text-strong);'>")
                 .append(escapeHtml(formatDecimal(displacementPixels, 1)))
                 .append(" px @ ")
                 .append(escapeHtml(formatDirectionDegrees(dx, dy)))

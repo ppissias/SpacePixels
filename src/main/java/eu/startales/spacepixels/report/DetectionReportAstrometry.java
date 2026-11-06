@@ -272,18 +272,18 @@ public final class DetectionReportAstrometry {
 
         TrackSkyRateSummary skyRateSummary = resolveTrackSkyRateSummary(track, astrometryContext);
         StringBuilder html = new StringBuilder();
-        html.append("Avg RA Rate: <span style='color:#fff;'>")
+        html.append("Avg RA Rate: <span style='color:var(--sp-text-strong);'>")
                 .append(escapeHtml(formatSkyRateArcsecPerHour(skyRateSummary != null ? skyRateSummary.raRateArcsecPerHour : Double.NaN)))
                 .append("</span><br>");
-        html.append("Avg Dec Rate: <span style='color:#fff;'>")
+        html.append("Avg Dec Rate: <span style='color:var(--sp-text-strong);'>")
                 .append(escapeHtml(formatSkyRateArcsecPerHour(skyRateSummary != null ? skyRateSummary.decRateArcsecPerHour : Double.NaN)))
                 .append("</span><br>");
-        html.append("Apparent Sky Speed: <span style='color:#fff;'>")
+        html.append("Apparent Sky Speed: <span style='color:var(--sp-text-strong);'>")
                 .append(escapeHtml(formatApparentSkySpeed(skyRateSummary != null ? skyRateSummary.skySpeedArcsecPerHour : Double.NaN)))
                 .append("</span><br>");
         String motionClass = classifyTrackMotionByRaRate(skyRateSummary != null ? skyRateSummary.raRateArcsecPerHour : Double.NaN);
         if (motionClass != null) {
-            html.append("Motion Class: <span style='color:#ffcc33;'>")
+            html.append("Motion Class: <span style='color:var(--sp-streak-track);'>")
                     .append(escapeHtml(motionClass))
                     .append("</span><br>");
         }

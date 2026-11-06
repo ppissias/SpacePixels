@@ -8,7 +8,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 |---|---|---|
 | [F04](#f04-mcp-agent-services) | MCP agent services over HTTP | Agreed: HTTP. The services table awaits agreement. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
-| [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Decided 2026-11-06; implementation started |
+| [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Decided 2026-11-06; step 1 (colour roles) done, themes next |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
 | [F29](#f29-preview-frame-and-blink-redesign) | Preview Frame and Blink redesign | Agreed 2026-11-06; implementation in progress |
@@ -99,6 +99,8 @@ What the decision settles:
 4. **Remembering.** The browser remembers the theme and text size where it can (best effort); reports work normally where it cannot.
 5. **Custom CSS (A + B).** A report applies a `report-custom.css` in its own folder after the built-in styles (A). A setting on the Report Visualization page selects a CSS file once, and each new report gets a copy of it as its `report-custom.css` (B), so reports stay self-contained and offline. Reports never link to a shared file elsewhere. A commented example lists every variable.
 6. The same styles apply to ordinary reports, iterative summary and index pages, and the faint-mover review pages.
+
+**Progress (2026-11-06).** Step 1 is done with one refinement and one agreed change. Like the report scripts, the stylesheets are resources written into each page, so a report stays one self-contained HTML file (only `report-custom.css` is a separate file). The maintainer chose to consolidate the about 200 near-identical colours into 56 named roles in `report-theme.css`; text sizes are in `rem`. Five reference reports (klangwolke-2, Eagle-noisy, Apophis, helix, M81 Kumar) kept their data, CSVs and pictures, differ in their HTML only in styles, and look the same in before/after screenshots at equal page heights. Still to move to the roles with the themes: the inline SVG charts and their status colours, colours set by the report scripts, the finding-type colours drawn from the application's category colours, and the iterative index page, which has no dark styling yet. Finding cards and the legend use different colours for some types (for example slow-mover cards are magenta while DS is green elsewhere); unifying them is a decision for the theme step.
 
 **Acceptance.** Check both themes on representative complete reports and iterative indexes, including charts, warnings, filters and lookup results. Verify custom overrides and offline use after copying the report folder. Theme changes must not change measurements, detection results or exported scientific data.
 

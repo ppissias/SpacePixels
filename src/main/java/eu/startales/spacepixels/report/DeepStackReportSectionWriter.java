@@ -53,7 +53,7 @@ final class DeepStackReportSectionWriter {
 
         if (hasTelemetry) {
             report.println("<div class='panel'>");
-            report.println("<h3 style='color: #ffffff; margin-top: 0;'>How the Candidates Were Selected</h3>");
+            report.println("<h3 style='color: var(--sp-text-strong); margin-top: 0;'>How the Candidates Were Selected</h3>");
             report.println("<div class='flex-container' style='margin-bottom: 25px;'>");
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rawCandidatesExtracted), "Raw Candidates"));
             report.println(compactMetricBox(String.valueOf(context.slowMoverTelemetry.rejectedBelowMinPixels), "Below Min Pixels"));
@@ -209,10 +209,10 @@ final class DeepStackReportSectionWriter {
             GifSequenceWriter.saveAnimatedGif(gifFrames, context.file(gifFileName), context.settings.getGifBlinkSpeedMs(), context.animations);
         }
 
-        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: #ff66ff; padding: 15px; margin-bottom: 0;'>");
+        report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.SLOW_MOVER, candidateNumber) + "' style='border-left-color: var(--sp-slow-mover); padding: 15px; margin-bottom: 0;'>");
         String trackBadge = matchedTracks.isEmpty() ? "" : ReportPresentation.trackBadge("Track overlap: " + matchedTracks.get(0).label
                 + (matchedTracks.size() > 1 ? " +" + (matchedTracks.size() - 1) : ""), matchedTracks.get(0).label);
-        report.println("<div class='detection-title' style='color: #ff66ff; font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate " + FindingCategory.SLOW_MOVER.id(candidateNumber) + trackBadge + "</div>");
+        report.println("<div class='detection-title' style='color: var(--sp-slow-mover); font-size: 1.1em; margin-bottom: 10px;'>Slow-Mover Candidate " + FindingCategory.SLOW_MOVER.id(candidateNumber) + trackBadge + "</div>");
         if (!matchedTracks.isEmpty()) {
             report.println("<div class='track-link-note'><strong>Nearby reported track"
                     + (matchedTracks.size() == 1 ? " " : "s ")
@@ -242,33 +242,33 @@ final class DeepStackReportSectionWriter {
         report.println("</div>");
 
         StringBuilder deepStackStats = new StringBuilder();
-        deepStackStats.append("<div style='font-family: monospace; font-size: 12px; color: #aaa;'>")
+        deepStackStats.append("<div style='font-family: monospace; font-size: 0.75rem; color: var(--sp-text-soft);'>")
                 .append(ReportFormat.escapeHtml(DetectionReportAstrometry.formatPixelCoordinateWithSky(context.astrometryContext, detection.x, detection.y)))
-                .append("<br>Moment Elongation: <span style='color:#fff;'>")
+                .append("<br>Moment Elongation: <span style='color:var(--sp-text-strong);'>")
                 .append(String.format(Locale.US, "%.2f", detection.elongation))
-                .append("</span><br>Pixels: <span style='color:#fff;'>")
+                .append("</span><br>Pixels: <span style='color:var(--sp-text-strong);'>")
                 .append((int) detection.pixelArea)
                 .append("</span>");
         if (resolvedAuxiliaryMaskOverlap != null) {
-            deepStackStats.append("<br>Mask Overlap: <span style='color:#fff;'>")
+            deepStackStats.append("<br>Mask Overlap: <span style='color:var(--sp-text-strong);'>")
                     .append(ReportFormat.formatPercent(resolvedAuxiliaryMaskOverlap))
                     .append("</span>");
         }
         if (candidateDiagnostics != null) {
-            deepStackStats.append("<br>Axis Ratio: <span style='color:#fff;'>")
+            deepStackStats.append("<br>Axis Ratio: <span style='color:var(--sp-text-strong);'>")
                     .append(String.format(Locale.US, "%.2f", candidateDiagnostics.axisRatio))
-                    .append("</span><br>Fill Factor: <span style='color:#fff;'>")
+                    .append("</span><br>Fill Factor: <span style='color:var(--sp-text-strong);'>")
                     .append(ReportFormat.formatPercent(candidateDiagnostics.fillFactor))
-                    .append("</span><br>Outside Median Mask: <span style='color:#fff;'>")
+                    .append("</span><br>Outside Median Mask: <span style='color:var(--sp-text-strong);'>")
                     .append(ReportFormat.formatPercent(candidateDiagnostics.outsideMedianMaskFraction))
-                    .append("</span><br>Shape-Estimated Motion: <span style='color:#fff;'>")
+                    .append("</span><br>Shape-Estimated Motion: <span style='color:var(--sp-text-strong);'>")
                     .append(String.format(Locale.US, "%.1f px (%.2f diameters)", candidateDiagnostics.estimatedMotionPixels, candidateDiagnostics.estimatedMotionDiameters))
                     .append("</span>");
-            deepStackStats.append("<br>Footprint Pixels: <span style='color:#fff;'>")
+            deepStackStats.append("<br>Footprint Pixels: <span style='color:var(--sp-text-strong);'>")
                     .append(candidateDiagnostics.pixelCount)
                     .append("</span>");
         }
-        deepStackStats.append("<br>Frame Support: <span style='color:#fff;'>");
+        deepStackStats.append("<br>Frame Support: <span style='color:var(--sp-text-strong);'>");
         if (candidateDiagnostics != null && candidateDiagnostics.frameSupportAvailable) {
             deepStackStats.append(formatPercentage(candidateDiagnostics.frameSupportPercentage))
                     .append(" (")
@@ -279,7 +279,7 @@ final class DeepStackReportSectionWriter {
         } else {
             deepStackStats.append("Unavailable");
         }
-        deepStackStats.append("</span><br>Stationary Likelihood (heuristic): <span style='color:#fff;'>")
+        deepStackStats.append("</span><br>Stationary Likelihood (heuristic): <span style='color:var(--sp-text-strong);'>")
                 .append(candidateDiagnostics != null && candidateDiagnostics.stationaryLikelihoodAvailable
                         ? formatPercentage(candidateDiagnostics.stationaryLikelihoodPercentage)
                         : "Unavailable")
