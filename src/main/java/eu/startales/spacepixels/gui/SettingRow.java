@@ -71,6 +71,8 @@ final class SettingRow {
             ((AbstractButton) input).addItemListener(e -> refresh());
         } else if (input instanceof JComboBox) {
             ((JComboBox<?>) input).addActionListener(e -> refresh());
+        } else if (input instanceof FileSettingField file) {
+            file.addChangeListener(this::refresh);
         }
     }
 
@@ -89,6 +91,9 @@ final class SettingRow {
         if (input instanceof JComboBox) {
             // A preset only sets other rows; an ordinary choice has its own saved value.
             return Boolean.TRUE.equals(input.getClientProperty(PRESET_CHOOSER)) ? null : ((JComboBox<?>) input).getSelectedItem();
+        }
+        if (input instanceof FileSettingField file) {
+            return file.path();
         }
         return ((AbstractButton) input).isSelected();
     }
@@ -132,6 +137,8 @@ final class SettingRow {
             ((JSpinner) input).setValue(savedValue);
         } else if (input instanceof JComboBox) {
             ((JComboBox<?>) input).setSelectedItem(savedValue);
+        } else if (input instanceof FileSettingField file) {
+            file.setPath((String) savedValue);
         } else {
             ((AbstractButton) input).setSelected((Boolean) savedValue);
         }
@@ -153,6 +160,9 @@ final class SettingRow {
     private static String format(Object value) {
         if (value instanceof Boolean) {
             return (Boolean) value ? "on" : "off";
+        }
+        if ("".equals(value)) {
+            return "none";
         }
         if (value instanceof Double || value instanceof Float) {
             double d = ((Number) value).doubleValue();

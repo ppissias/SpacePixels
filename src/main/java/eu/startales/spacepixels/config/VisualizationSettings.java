@@ -36,6 +36,8 @@ public final class VisualizationSettings {
     private final int maxAnimatedMarkers;
     private final boolean enhancedStack;
     private final VariableStarReportOptions variableStarReportOptions;
+    /** A path on this computer; kept out of the JSON written into report folders. */
+    private final transient String reportStyleFile;
 
     private VisualizationSettings(Values values) {
         autoStretchBlackSigma = values.autoStretchBlackSigma;
@@ -52,6 +54,7 @@ public final class VisualizationSettings {
         maxAnimatedMarkers = values.maxAnimatedMarkers;
         enhancedStack = values.enhancedStack;
         variableStarReportOptions = Objects.requireNonNull(values.variableStarReportOptions, "variableStarReportOptions");
+        reportStyleFile = Objects.requireNonNull(values.reportStyleFile, "reportStyleFile");
     }
 
     /** The built-in values. */
@@ -136,6 +139,14 @@ public final class VisualizationSettings {
         return variableStarReportOptions;
     }
 
+    /**
+     * The CSS file copied into each new report folder as its {@code report-custom.css}, which the report pages apply
+     * after their built-in styles; empty for none.
+     */
+    public String getReportStyleFile() {
+        return reportStyleFile;
+    }
+
     /** A copy with the black point {@code sigma} robust sky noises below the sky median. */
     public VisualizationSettings withAutoStretchBlackSigma(double sigma) {
         return with(values -> values.autoStretchBlackSigma = sigma);
@@ -211,6 +222,11 @@ public final class VisualizationSettings {
         return with(values -> values.variableStarReportOptions = options);
     }
 
+    /** A copy whose reports get a copy of {@code path} as their custom style; null or blank for none. */
+    public VisualizationSettings withReportStyleFile(String path) {
+        return with(values -> values.reportStyleFile = path == null ? "" : path.strip());
+    }
+
     /** A new value with this one's values, after {@code change} has replaced some of them. */
     private VisualizationSettings with(Consumer<Values> change) {
         Values values = new Values(this);
@@ -239,7 +255,8 @@ public final class VisualizationSettings {
                 && dynamicBoxPadding == that.dynamicBoxPadding
                 && maxAnimatedMarkers == that.maxAnimatedMarkers
                 && enhancedStack == that.enhancedStack
-                && variableStarReportOptions.equals(that.variableStarReportOptions);
+                && variableStarReportOptions.equals(that.variableStarReportOptions)
+                && reportStyleFile.equals(that.reportStyleFile);
     }
 
     @Override
@@ -247,7 +264,7 @@ public final class VisualizationSettings {
         return Objects.hash(autoStretchBlackSigma, autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding,
                 trackObjectCentricCropSize, targetCircleRadius, targetCircleStrokeWidth, streakLineScaleFactor,
                 streakCentroidBoxRadius, pointSourceMinBoxRadius, dynamicBoxPadding, maxAnimatedMarkers, enhancedStack,
-                variableStarReportOptions);
+                variableStarReportOptions, reportStyleFile);
     }
 
     @Override
@@ -265,7 +282,8 @@ public final class VisualizationSettings {
                 + ", dynamicBoxPadding=" + dynamicBoxPadding
                 + ", maxAnimatedMarkers=" + maxAnimatedMarkers
                 + ", enhancedStack=" + enhancedStack
-                + ", variableStarReportOptions=" + variableStarReportOptions + "]";
+                + ", variableStarReportOptions=" + variableStarReportOptions
+                + ", reportStyleFile=" + reportStyleFile + "]";
     }
 
     /** The values while a copy is made; it starts with the built-in values. */
@@ -284,6 +302,7 @@ public final class VisualizationSettings {
         int maxAnimatedMarkers = 500;
         boolean enhancedStack = true;
         VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
+        String reportStyleFile = "";
 
         /** The built-in values. */
         Values() {
@@ -305,6 +324,7 @@ public final class VisualizationSettings {
             maxAnimatedMarkers = settings.maxAnimatedMarkers;
             enhancedStack = settings.enhancedStack;
             variableStarReportOptions = settings.variableStarReportOptions;
+            reportStyleFile = settings.reportStyleFile;
         }
     }
 }

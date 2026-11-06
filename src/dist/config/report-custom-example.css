@@ -1,0 +1,146 @@
+/* SpacePixels report style: an example for report-custom.css.
+
+   A report reads the file report-custom.css in its own folder after its built-in styles, so the rules in it
+   take precedence. Edit that file and refresh the browser to see the change. To give every new report the
+   same style, choose a file under Detection Settings > Report Visualization > Report Style File; each new
+   report folder gets a copy of it as report-custom.css.
+
+   Every colour on the report page is one of the roles below, shown with its built-in value. To change one,
+   copy this file, remove the comment marks around the line and edit the value. The first rule sets the
+   dark theme, the default; the second sets the light theme, so change a role in both if you use both.
+   Pictures of the sky, and the marks drawn into them, keep their colours.
+
+   Other CSS works as well, for example:
+     body { font-family: Georgia, serif; }
+     .panel { border-radius: 0; }
+*/
+
+/* The dark theme. */
+:root {
+  /* --sp-page: #2b2b2b; */
+  /* --sp-panel: #3c3f41; */
+  /* --sp-inset: #2b2b2b; */
+  /* --sp-sunken: #222222; */
+  /* --sp-raised: #333333; */
+  /* --sp-row-alt: #303030; */
+  /* --sp-hover: #3a3a3a; */
+  /* --sp-toolbar: rgba(32,34,36,0.98); */
+  /* --sp-shadow: rgba(0,0,0,0.3); */
+  /* --sp-image-well: #111111; */
+  /* --sp-text-strong: #ffffff; */
+  /* --sp-text-bright: #e6e6e6; */
+  /* --sp-text: #cccccc; */
+  /* --sp-text-soft: #aaaaaa; */
+  /* --sp-text-muted: #999999; */
+  /* --sp-text-faint: #888888; */
+  /* --sp-text-on-colour: #101010; */
+  /* --sp-border-subtle: #333333; */
+  /* --sp-border: #444444; */
+  /* --sp-border-strong: #555555; */
+  /* --sp-accent: #4da6ff; */
+  /* --sp-link: #7fc2ff; */
+  /* --sp-link-visited: #a9c9ff; */
+  /* --sp-button-bg: #254a69; */
+  /* --sp-button-hover: #2f6288; */
+  /* --sp-button-border: #356c97; */
+  /* --sp-button-text: #d9ecff; */
+  /* --sp-toggle-on: #3a78b0; */
+  /* --sp-alert: #ff6b6b; */
+  /* --sp-error-bg: #342525; */
+  /* --sp-error-border: #7a3b3b; */
+  /* --sp-warning: #e4b66a; */
+  /* --sp-success: #44ff44; */
+  /* --sp-track-note-bg: #20362b; */
+  /* --sp-track-note-border: #3e7a5a; */
+  /* --sp-track-note-accent: #66d9a3; */
+  /* --sp-track-note-text: #d5efe1; */
+  /* --sp-track-link: #8ff0bd; */
+  /* --sp-track-badge: #2f8a5f; */
+  /* --sp-track-badge-hover: #3aa673; */
+  /* --sp-anomaly-text: #e0c7ed; */
+  /* --sp-anomaly-dim: #8d759a; */
+  /* --sp-compass: #ff6666; */
+  /* --sp-time: #88c999; */
+  /* --sp-badge-blue: #2d5a88; */
+  /* --sp-badge-teal: #19595a; */
+  /* --sp-badge-purple: #4b3b7a; */
+  /* --sp-badge-amber: #7a4b14; */
+  /* --sp-tooltip: rgba(12,16,28,0.96); */
+  /* --sp-status-good: #0ca30c; */
+  /* --sp-status-warning: #fab219; */
+  /* --sp-status-critical: #d03b3b; */
+
+  /* The finding types: their colour in the cards, legends, maps and labels. */
+  /* --sp-finding-t: #4da6ff; */
+  /* --sp-finding-st: #ffcc33; */
+  /* --sp-finding-s: #ff9933; */
+  /* --sp-finding-a: #ff33ff; */
+  /* --sp-finding-ds: #aaff6e; */
+  /* --sp-finding-fm: #50e1d2; */
+  /* --sp-finding-lr: #40e0d0; */
+  /* --sp-finding-lc: #9678ff; */
+  /* --sp-finding-v: #ff5ad2; */
+  /* --sp-finding-fc: #808080; */
+  /* --sp-finding-cm: #808080; */
+}
+
+/* The light theme. Roles not listed keep their dark-theme value. */
+:root[data-theme='light'] {
+  /* --sp-page: #f3f4f6; */
+  /* --sp-panel: #ffffff; */
+  /* --sp-inset: #f7f8fa; */
+  /* --sp-sunken: #eceef1; */
+  /* --sp-raised: #eef0f3; */
+  /* --sp-row-alt: #f6f7f9; */
+  /* --sp-hover: #e6ecf3; */
+  /* --sp-toolbar: rgba(248,249,251,0.98); */
+  /* --sp-shadow: rgba(0,0,0,0.08); */
+  /* --sp-text-strong: #111418; */
+  /* --sp-text-bright: #1f2328; */
+  /* --sp-text: #2d333a; */
+  /* --sp-text-soft: #4b535c; */
+  /* --sp-text-muted: #5c6670; */
+  /* --sp-text-faint: #69737d; */
+  /* --sp-border-subtle: #e3e6ea; */
+  /* --sp-border: #d0d5db; */
+  /* --sp-border-strong: #b6bdc6; */
+  /* --sp-accent: #0b66c3; */
+  /* --sp-link: #0b5cad; */
+  /* --sp-link-visited: #6a3fb5; */
+  /* --sp-button-bg: #e3eefb; */
+  /* --sp-button-hover: #cfe2f8; */
+  /* --sp-button-border: #9cc3ec; */
+  /* --sp-button-text: #0b4f94; */
+  /* --sp-toggle-on: #cfe2f8; */
+  /* --sp-alert: #c62828; */
+  /* --sp-error-bg: #fdecec; */
+  /* --sp-error-border: #e6a3a3; */
+  /* --sp-warning: #8a5a00; */
+  /* --sp-success: #1e7d32; */
+  /* --sp-track-note-bg: #e8f6ee; */
+  /* --sp-track-note-border: #a6d8bb; */
+  /* --sp-track-note-accent: #2e9d68; */
+  /* --sp-track-note-text: #1d4d33; */
+  /* --sp-track-link: #17693f; */
+  /* --sp-track-badge: #cdeedd; */
+  /* --sp-track-badge-hover: #b6e4cc; */
+  /* --sp-time: #2f6b3b; */
+  /* --sp-anomaly-text: #6b3d80; */
+  /* --sp-anomaly-dim: #a07db2; */
+  /* --sp-status-good: #0a7d0a; */
+  /* --sp-status-warning: #8a6200; */
+  /* --sp-status-critical: #b42318; */
+
+  /* The finding types: darker shades that stay readable on a light page. */
+  /* --sp-finding-t: #0073e6; */
+  /* --sp-finding-st: #946f00; */
+  /* --sp-finding-s: #b85c00; */
+  /* --sp-finding-a: #d100d1; */
+  /* --sp-finding-ds: #368200; */
+  /* --sp-finding-fm: #168277; */
+  /* --sp-finding-lr: #158176; */
+  /* --sp-finding-lc: #7a54ff; */
+  /* --sp-finding-v: #df00a2; */
+  /* --sp-finding-fc: #767676; */
+  /* --sp-finding-cm: #767676; */
+}

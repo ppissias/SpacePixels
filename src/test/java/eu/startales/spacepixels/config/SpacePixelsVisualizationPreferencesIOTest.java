@@ -76,7 +76,8 @@ public class SpacePixelsVisualizationPreferencesIOTest {
         SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.of(VisualizationSettings.defaults()));
 
         assertEquals(List.of("streakLineScaleFactor", "streakCentroidBoxRadius", "pointSourceMinBoxRadius", "dynamicBoxPadding",
-                        "autoStretchBlackSigma", "autoStretchWhiteSigma", "gifBlinkSpeedMs", "trackCropPadding", "enhancedStack"),
+                        "autoStretchBlackSigma", "autoStretchWhiteSigma", "gifBlinkSpeedMs", "trackCropPadding", "enhancedStack",
+                        "reportStyleFile"),
                 List.copyOf(JsonParser.parseString(writer.toString()).getAsJsonObject().keySet()));
     }
 
@@ -100,7 +101,25 @@ public class SpacePixelsVisualizationPreferencesIOTest {
                 loaded.applyTo(VisualizationSettings.defaults()));
     }
 
+    /** The report style file is saved with the preferences, but a path on this computer stays out of report JSON. */
+    @Test
+    public void reportStyleFileIsSavedButNotWrittenIntoReports() throws Exception {
+        VisualizationSettings styled = VisualizationSettings.defaults().withReportStyleFile("  C:/styles/night.css ");
+        assertEquals("C:/styles/night.css", styled.getReportStyleFile());
+        assertEquals("", VisualizationSettings.defaults().withReportStyleFile(null).getReportStyleFile());
+        StringWriter writer = new StringWriter();
+        SpacePixelsVisualizationPreferencesIO.write(writer, SpacePixelsVisualizationPreferences.of(styled));
+
+        SpacePixelsVisualizationPreferences loaded = SpacePixelsVisualizationPreferencesIO.load(new StringReader(writer.toString()));
+
+        assertEquals(styled, loaded.applyTo(VisualizationSettings.defaults()));
+        assertFalse(new com.google.gson.Gson().toJson(styled).contains("night.css"));
+        SpacePixelsVisualizationPreferences cleared = SpacePixelsVisualizationPreferencesIO.load(new StringReader("{\"reportStyleFile\": null}"));
+        assertEquals("", cleared.applyTo(VisualizationSettings.defaults()).getReportStyleFile());
+    }
+
     /** A value missing from an older or edited file keeps its built-in default. */
+
     @Test
     public void missingValuesKeepTheBuiltInDefaults() throws Exception {
         SpacePixelsVisualizationPreferences loaded = SpacePixelsVisualizationPreferencesIO.load(new StringReader("{\"gifBlinkSpeedMs\": 180}"));

@@ -51,6 +51,7 @@ public final class ReportExporter {
         File exportDir = reportContext.exportDir;
         ReportProgress progress = reportContext.progress;
         reportContext.data.writeJson(exportDir);
+        DetectionReportDocumentWriter.writeCustomStyle(reportContext.settings.getReportStyleFile(), exportDir);
         if (reportContext.enhancedStack != null) {
             progress.step(2, 3, "saving the enhanced stack");
             try {

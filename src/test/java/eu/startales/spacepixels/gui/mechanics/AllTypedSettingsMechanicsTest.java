@@ -8,6 +8,7 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsVisualizationPreferencesIO;
 import eu.startales.spacepixels.config.VariableStarReportOptions;
+import eu.startales.spacepixels.gui.FileSettingField;
 import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.assertj.swing.edt.GuiActionRunner;
@@ -58,7 +59,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("74 engine fields, 12 application fields and the rejection preset", 87, inputs.size());
+        assertEquals("74 engine fields, 13 application fields and the rejection preset", 88, inputs.size());
         for (String hidden : Set.of("linearityMaxConcentrationDrift", "linearityMinRangeMag", "linearityMaxFrameSlope",
                 "linearityMaxFailingFrameFraction", "variableLimitedMinAmplitudeMag", "variableAmplitudeNoiseFactor",
                 "variableMinSplitHalfCorrelation", "variableMaxApertureAmplitudeDifference",
@@ -82,7 +83,8 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
                 Map.entry("streakCentroidBoxRadius", true),
                 Map.entry("pointSourceMinBoxRadius", true),
                 Map.entry("dynamicBoxPadding", true),
-                Map.entry("trackCropPadding", true));
+                Map.entry("trackCropPadding", true),
+                Map.entry("reportStyleFile", true));
         expectedApplicationExpert.forEach((id, expert) -> {
             assertNotNull(id, controls.get(id));
             assertEquals(id, expert, controls.get(id).expert());
@@ -231,6 +233,8 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             toggle.setSelected(!toggle.isSelected());
         } else if (input instanceof JComboBox<?> choice) {
             choice.setSelectedIndex((choice.getSelectedIndex() + 1) % choice.getItemCount());
+        } else if (input instanceof FileSettingField file) {
+            file.setPath(file.path().isEmpty() ? "style-" + System.nanoTime() + ".css" : "");
         } else {
             fail("Unsupported settings input " + input.getClass());
         }
@@ -243,6 +247,8 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             if (input instanceof JSpinner spinner) result.put(id, spinner.getValue());
             else if (input instanceof AbstractButton toggle) result.put(id, toggle.isSelected());
             else if (input instanceof JComboBox<?> choice) result.put(id, choice.getSelectedItem());
+            else if (input instanceof FileSettingField file) result.put(id, file.path());
+
         });
         return result;
     }

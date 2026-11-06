@@ -44,6 +44,7 @@ import io.github.ppissias.jtransient.engine.JTransientEngine;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.*;
 import java.io.File;
 import java.io.FileReader;
@@ -532,6 +533,8 @@ public class DetectionConfigurationPanel extends JPanel {
                 ((JCheckBox) c).addItemListener(e -> onSettingEdited());
             } else if (c instanceof JComboBox && c != cmbFrameRejection) {
                 ((JComboBox<?>) c).addActionListener(e -> onSettingEdited());
+            } else if (c instanceof FileSettingField file) {
+                file.addChangeListener(this::onSettingEdited);
             } else if (c instanceof Container) {
                 installAutoApply((Container) c);
             }
@@ -1230,6 +1233,14 @@ public class DetectionConfigurationPanel extends JPanel {
                 true, () -> visualization.getTrackCropPadding(), value -> visualization = visualization.withTrackCropPadding(value),
                 0, 2000, 10);
 
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createExpertSectionHeader("Report Style"));
+        addApplicationFile(panel, visualizationBindings,
+                "reportStyleFile", "Report Style File",
+                "A CSS file with your own report colours or fonts. Each new report gets a copy of it as report-custom.css in its folder, which the report applies after its built-in styles; editing that copy and refreshing the browser changes that report only. Clear gives new reports the built-in styles. An example listing every colour role is included in config/report-custom-example.css.",
+                true, new FileSettingField("Choose a report style file", new FileNameExtensionFilter("CSS style sheets (*.css)", "css")),
+                () -> visualization.getReportStyleFile(), value -> visualization = visualization.withReportStyleFile(value));
+
         return panel;
     }
 
@@ -1479,6 +1490,17 @@ public class DetectionConfigurationPanel extends JPanel {
         addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
                 id, title, unit, description, expert, type, getter, setter,
                 () -> type.cast(input.getSelectedItem()), input::setSelectedItem), input);
+        return input;
+    }
+
+    /** Binds a file path, empty for none, to a button that opens a file chooser and a Clear button. */
+    private FileSettingField addApplicationFile(JPanel parent, List<ApplicationSettingBinding<?>> bindings,
+            String id, String title, String description, boolean expert, FileSettingField input,
+            java.util.function.Supplier<String> getter, java.util.function.Consumer<String> setter) {
+        input.setPath(getter.get());
+        addApplicationBinding(parent, bindings, new ApplicationSettingBinding<>(
+                id, title, "", description, expert, String.class, getter, setter,
+                input::path, input::setPath), input);
         return input;
     }
 

@@ -15,8 +15,13 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
+
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,6 +74,68 @@ public class ReportThemeTest {
         assertTrue(theme > 0 && body > theme);
         String ownStyles = withoutComments(html.substring(body, html.indexOf("</style>")));
         assertFalse("no hardcoded colour remains in the report's own styles", ownStyles.matches("(?s).*#[0-9a-fA-F]{6}\\b.*"));
+    }
+
+    /** The page links the folder's custom style after its own styles, so the custom rules take precedence. */
+    @Test public void reportPagesApplyTheCustomStyleLast() {
+        StringWriter out = new StringWriter();
+        DetectionReportDocumentWriter.appendDetectionReportStart(new PrintWriter(out, true));
+        String html = out.toString();
+        assertTrue(html.indexOf(DetectionReportDocumentWriter.CUSTOM_STYLE) > html.lastIndexOf("</style>"));
+        assertTrue(html.indexOf(DetectionReportDocumentWriter.CUSTOM_STYLE) < html.indexOf("</head>"));
+        out = new StringWriter();
+        DetectionReportDocumentWriter.appendIterativeIndexReportStart(new PrintWriter(out, true));
+        assertTrue(out.toString().contains("</style>" + DetectionReportDocumentWriter.CUSTOM_STYLE));
+    }
+
+    /**
+     * The chosen style file is copied into the report folder. Without one, or when it is missing, the folder gets a
+     * file holding only a comment, and a file already there is kept.
+     */
+    @Test public void customStyleIsCopiedIntoTheReportFolder() throws Exception {
+        Path folder = Files.createTempDirectory("report-style");
+        try {
+            Path style = Files.writeString(folder.resolve("mine.css"), ":root { --sp-accent: #ff9f1c; }");
+            Path report = Files.createDirectory(folder.resolve("report"));
+            DetectionReportDocumentWriter.writeCustomStyle(style.toString(), report.toFile());
+            assertEquals(Files.readString(style), Files.readString(report.resolve("report-custom.css")));
+
+            Path other = Files.createDirectory(folder.resolve("other"));
+            DetectionReportDocumentWriter.writeCustomStyle(folder.resolve("missing.css").toString(), other.toFile());
+            String note = Files.readString(other.resolve("report-custom.css"));
+            assertTrue(note.contains("report-custom-example.css"));
+            assertEquals("only a comment", "", withoutComments(note).strip());
+
+            Files.writeString(other.resolve("report-custom.css"), "body { font-family: serif; }");
+            DetectionReportDocumentWriter.writeCustomStyle("", other.toFile());
+            assertEquals("body { font-family: serif; }", Files.readString(other.resolve("report-custom.css")));
+        } finally {
+            try (var paths = Files.walk(folder)) {
+                paths.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+            }
+        }
+    }
+
+    /** The shipped example lists every role of both themes with its built-in value, ready to uncomment. */
+    @Test public void exampleStyleListsEveryRoleWithItsBuiltInValue() throws Exception {
+        String example = Files.readString(Path.of("src/dist/config/report-custom-example.css"), StandardCharsets.UTF_8);
+        String uncommented = withoutComments(example.replaceAll("/\\* (--sp-[a-z-]+: [^;]+;) \\*/", "$1"));
+        String theme = withoutComments(resource("report-theme.css")) + ReportThemeRoles.findingRoles();
+        for (String rule : new String[]{":root {", ":root[data-theme='light'] {"}) {
+            Map<String, String> builtIn = declarations(theme, rule);
+            assertTrue(builtIn.size() > 40);
+            assertEquals(rule, builtIn, declarations(uncommented, rule));
+        }
+    }
+
+    /** The role values set by every rule with this selector. */
+    private static Map<String, String> declarations(String css, String selector) {
+        Map<String, String> found = new TreeMap<>();
+        for (int from = css.indexOf(selector); from >= 0; from = css.indexOf(selector, from + 1)) {
+            Matcher m = Pattern.compile("(--sp-[a-z-]+):\\s*([^;]+);").matcher(css.substring(from, css.indexOf('}', from)));
+            while (m.find()) found.put(m.group(1), m.group(2).trim());
+        }
+        return found;
     }
 
     private static Set<String> matches(Pattern pattern, String text) {
