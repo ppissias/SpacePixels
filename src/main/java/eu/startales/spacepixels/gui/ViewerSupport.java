@@ -82,6 +82,15 @@ final class ViewerSupport {
         return control;
     }
 
+    /** Brings a viewer that stays open back in front of the other windows, also from the task bar. */
+    static void bringToFront(JFrame viewer) {
+        int state = viewer.getExtendedState();
+        if ((state & Frame.ICONIFIED) != 0) {
+            viewer.setExtendedState(state & ~Frame.ICONIFIED);
+        }
+        viewer.toFront();
+    }
+
     /** A thin vertical line between groups of toolbar controls. */
     static JComponent toolbarSeparator() {
         JSeparator separator = new JSeparator(SwingConstants.VERTICAL);

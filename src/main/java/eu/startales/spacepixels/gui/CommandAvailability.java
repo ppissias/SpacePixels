@@ -59,7 +59,8 @@ final class CommandAvailability {
             return Availability.AVAILABLE;
         }
         if (facts.busy()) {
-            return Availability.unavailable("wait until the current task has finished.");
+            return Availability.unavailable(facts.blinking() ? "close the Blink window first."
+                    : "wait until the current task has finished.");
         }
         if (command == Command.PREPARE_FRAMES || command == Command.IMPORT || command == Command.DETECT_ITERATIVELY
                 || (command == Command.SKY_CATALOGUE && facts.skyFetching())

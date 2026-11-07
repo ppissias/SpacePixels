@@ -102,6 +102,7 @@ public class CommandAvailabilityTest {
         assertTrue(enabled(Command.BLINK, blinking));
         assertFalse(enabled(Command.DETECT, blinking));
         assertFalse(enabled(Command.IMPORT, blinking));
+        assertEquals("close the Blink window first.", CommandAvailability.of(Command.DETECT, blinking).reason());
     }
 
     @Test

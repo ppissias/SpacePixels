@@ -102,6 +102,8 @@ final class ViewerSidePanel {
     private void setWidth(int requested) {
         width = Math.max(UiStyle.space(MIN_WIDTH), Math.min(UiStyle.space(MAX_WIDTH), requested));
         panel.setPreferredSize(new Dimension(width, 10));
+        // Beside the image the panel always gets this width, so the layouts around it must count it in full.
+        panel.setMinimumSize(new Dimension(width, 10));
         panel.revalidate();
     }
 

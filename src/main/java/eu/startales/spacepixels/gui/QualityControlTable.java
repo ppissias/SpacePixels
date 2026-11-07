@@ -8,6 +8,11 @@ import javax.swing.table.TableCellRenderer;
 
 /** Light quality tints across complete rows, respecting the active theme, selection and view/model order. */
 final class QualityControlTable extends JTable {
+    /** The colour of a Would keep verdict, used as a tint. */
+    static final Color KEEP_COLOUR = new Color(60, 165, 100);
+    /** The colour of a Would reject verdict, used as a tint. */
+    static final Color REJECT_COLOUR = new Color(220, 80, 75);
+
     /** Resets reused renderers on every cell so stale/unmeasured rows never inherit a previous row's tint. */
     @Override public Component prepareRenderer(TableCellRenderer renderer, int row, int column) {
         Component component = super.prepareRenderer(renderer, row, column);
@@ -15,7 +20,7 @@ final class QualityControlTable extends JTable {
             Color base = getBackground();
             if (getModel() instanceof FitsFileTableModel model && model.isQualityCurrent()) {
                 var quality = model.qualityAt(convertRowIndexToModel(row));
-                if (quality != null) base = blend(base, quality.rejected() ? new Color(220, 80, 75) : new Color(60, 165, 100));
+                if (quality != null) base = blend(base, quality.rejected() ? REJECT_COLOUR : KEEP_COLOUR, 12);
             }
             component.setBackground(base);
         }
@@ -24,15 +29,16 @@ final class QualityControlTable extends JTable {
             var quality = model.qualityAt(convertRowIndexToModel(row));
             cell.setToolTipText(quality == null ? "Run quality control to measure every imported frame."
                     : (model.isQualityCurrent() ? "" : "Stale result: rerun quality control. ") + quality.reason()
-                    + " — Select a frame and open Quality details for measurements and session limits.");
+                    + " — Right-click the frame for Quality details: its measurements and the session limits.");
         }
         return component;
     }
 
-    /** Adds twelve percent of the verdict colour to the theme's normal background. */
-    private static Color blend(Color base, Color tint) {
-        return new Color((base.getRed() * 88 + tint.getRed() * 12) / 100,
-                (base.getGreen() * 88 + tint.getGreen() * 12) / 100,
-                (base.getBlue() * 88 + tint.getBlue() * 12) / 100);
+    /** Adds this percentage of the tint to the theme's normal background. */
+    static Color blend(Color base, Color tint, int percent) {
+        int rest = 100 - percent;
+        return new Color((base.getRed() * rest + tint.getRed() * percent) / 100,
+                (base.getGreen() * rest + tint.getGreen() * percent) / 100,
+                (base.getBlue() * rest + tint.getBlue() * percent) / 100);
     }
 }

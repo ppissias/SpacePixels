@@ -84,7 +84,6 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final JProgressBar loadBar = new JProgressBar();
     private final JLabel loadLabel = new JLabel(" ");
     private final JLabel loadFileLabel = new JLabel(" ");
-    private final JComponent controls;
     private final JComponent statusBar;
     private final Timer timer;
     private final BlinkGifExport gifExport;
@@ -100,6 +99,8 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private boolean[] gapBefore;
     private int current;
     private boolean open;
+    /** Open in Preview paused a playing blink, and nothing has paused or played it since. */
+    private boolean resumeOnReturn;
     /** Frames are being read for the next blink; the window shows the progress. */
     private boolean loading;
     private FitsFileInformation[] loadingFiles;
@@ -123,16 +124,20 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         JPanel contentPane = new JPanel(new BorderLayout(0, 6));
         contentPane.setBorder(new EmptyBorder(6, 6, 6, 6));
         setContentPane(contentPane);
-        controls = buildControls();
+        JComponent controls = buildControls();
         statusBar = buildStatusBar();
         stretchHolder.setOpaque(false);
         sidePanel.add(findings.section());
         sidePanel.add(sky.section());
         sidePanel.add(stretchHolder);
         ViewerSupport.prepareControls(sidePanel.component());
+        // Every control above the image: the toolbar, then the transport bar right over the frames.
+        JPanel controlRows = new JPanel(new BorderLayout());
+        controlRows.add(controls, BorderLayout.NORTH);
+        controlRows.add(buildTransport(), BorderLayout.SOUTH);
         JPanel imageColumn = new JPanel(new BorderLayout());
+        imageColumn.add(WindowSizing.viewerControls(controlRows), BorderLayout.NORTH);
         imageColumn.add(gifExport.image(), BorderLayout.CENTER);
-        imageColumn.add(buildTransport(), BorderLayout.SOUTH);
         JPanel imageAndPanel = new JPanel(new BorderLayout());
         imageAndPanel.add(imageColumn, BorderLayout.CENTER);
         imageAndPanel.add(sidePanel.component(), BorderLayout.EAST);
@@ -143,7 +148,6 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         SwingUtilities.replaceUIInputMap(split, JComponent.WHEN_ANCESTOR_OF_FOCUSED_COMPONENT, null);
         center.add(split, BLINK_CARD);
         center.add(buildLoadingPanel(), LOADING_CARD);
-        contentPane.add(WindowSizing.viewerControls(controls), BorderLayout.NORTH);
         contentPane.add(center, BorderLayout.CENTER);
         contentPane.add(statusBar, BorderLayout.SOUTH);
         view.setMinimumSize(new Dimension(UiStyle.space(240), UiStyle.space(160)));
@@ -232,7 +236,6 @@ public class BlinkFrame extends JFrame implements SessionViewer {
             if (gapBefore[row]) frameTable.setRowHeight(row, frameTable.getRowHeight() + gapBand());
         }
         updateLoopCount();
-        controls.setVisible(true);
         statusBar.setVisible(true);
         centerCards.show(center, BLINK_CARD);
         view.fit();
@@ -271,7 +274,6 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         loadBar.setMaximum(files.length);
         showLoadProgress(0, files.length);
         setTitle("Blink · " + ViewerSupport.sessionName(files[0].getFilePath()) + " · reading " + files.length + " frames");
-        controls.setVisible(false);
         statusBar.setVisible(false);
         centerCards.show(center, LOADING_CARD);
         if (!isVisible()) {
@@ -325,6 +327,39 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         this.openInPreview = openInPreview;
     }
 
+    /** Open in Preview: pauses on the frame shown and hands it over; the blink stays open with its frames. */
+    private void openShownInPreview() {
+        if (!open) {
+            return;
+        }
+        boolean wasPlaying = timer.isRunning();
+        pause();
+        resumeOnReturn = wasPlaying;
+        openInPreview.accept(sequence.getFrames().get(current).getInfo());
+    }
+
+    /**
+     * Preview Frame's way back to this open blink: comes to the front on the frame Preview shows, when that frame is
+     * blinked, and plays again if Open in Preview paused it. Reads nothing.
+     */
+    void returnFromPreview(FitsFileInformation shown) {
+        if (!open) {
+            return;
+        }
+        for (int i = 0; shown != null && shown.getFilePath() != null && i < sequence.getFrames().size(); i++) {
+            if (shown.getFilePath().equals(sequence.getFrames().get(i).getInfo().getFilePath())) {
+                current = i;
+                showCurrent();
+                break;
+            }
+        }
+        ViewerSupport.bringToFront(this);
+        view.requestFocusInWindow();
+        if (resumeOnReturn) {
+            play();
+        }
+    }
+
     /** Sets what to do when the window ends a blink or its loading. */
     void setOnClose(Runnable onClose) {
         this.onClose = onClose;
@@ -336,6 +371,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         view.setFindingOverlay(null);
         gifExport.release();
         open = false;
+        resumeOnReturn = false;
         loading = false;
         loadingFiles = null;
         timer.stop();
@@ -386,26 +422,30 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     // CONTROLS
     // ==========================================
 
-    /** The toolbar: the zoom on the left; Export GIF, Open in Preview and the side panel's button on the right. */
+    /**
+     * The toolbar directly above the image: the zoom on the left; Export GIF, Open in Preview and the side panel's
+     * button on the right. On a narrow image column the right group goes to a second row.
+     */
     private JComponent buildControls() {
-        previewButton.setToolTipText("End the blink and open Preview Frame on this frame.");
-        previewButton.addActionListener(e -> {
-            if (open) openInPreview.accept(sequence.getFrames().get(current).getInfo());
-        });
-        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        previewButton.setToolTipText("Pause the blink and show this frame in Preview Frame. Both windows stay open; "
+                + "Preview's Blink button comes back here without reading the frames again.");
+        previewButton.addActionListener(e -> openShownInPreview());
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
         left.add(ViewerSupport.zoomControl(view));
         JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, UiStyle.space(6), 0));
         right.add(gifExport.toolbarButton());
         right.add(previewButton);
         right.add(sidePanel.toggleButton());
-        JPanel toolbar = new JPanel(new BorderLayout());
-        toolbar.add(left, BorderLayout.WEST);
-        toolbar.add(right, BorderLayout.EAST);
+        JPanel toolbar = new WidthFollowingPanel();
+        toolbar.setLayout(new ToolbarRowLayout(left, right));
+        toolbar.setBorder(new EmptyBorder(0, 0, UiStyle.space(4), 0));
+        toolbar.add(left);
+        toolbar.add(right);
         return toolbar;
     }
 
     /**
-     * The transport bar under the image: step back, play or pause, step forward, the timeline, the frame's place in
+     * The transport bar over the image: step back, play or pause, step forward, the timeline, the frame's place in
      * the sequence, and the speed.
      */
     private JComponent buildTransport() {
@@ -434,9 +474,9 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         speed.add(new JLabel("Speed"));
         speed.add(speedSlider);
         speed.add(speedLabel);
-        JPanel transport = new JPanel();
+        JPanel transport = new WidthFollowingPanel();
         transport.setLayout(new TransportLayout(buttons, timeline, positionLabel, speed));
-        transport.setBorder(new EmptyBorder(UiStyle.space(4), 0, 0, 0));
+        transport.setBorder(new EmptyBorder(0, 0, UiStyle.space(4), 0));
         transport.add(buttons);
         transport.add(timeline);
         transport.add(positionLabel);
@@ -619,11 +659,13 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         if (!open) {
             return;
         }
+        resumeOnReturn = false;
         timer.start();
         updatePlayState();
     }
 
     private void pause() {
+        resumeOnReturn = false;
         timer.stop();
         updatePlayState();
     }

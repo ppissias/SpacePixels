@@ -411,7 +411,7 @@ final class TrialSettingsControls {
         }
         note.setForeground(UiStyle.helpColor());
         note.setText("<html>" + (!editable ? "Trial settings are paused while a job runs."
-                : message != null ? message : "Previews on this frame only.<br>Typed values apply on Enter.") + "</html>");
+                : message != null ? message : "Previews in this window only.<br>Typed values apply on Enter.") + "</html>");
         apply.setEnabled(active && editable && unsaved);
     }
 

@@ -29,6 +29,7 @@ import eu.startales.spacepixels.fits.WcsSolutionResolver;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jtransient.config.DetectionConfig;
+import io.github.ppissias.jtransient.engine.FrameQualityResult;
 import eu.startales.spacepixels.jobs.*;
 import eu.startales.spacepixels.tasks.*;
 
@@ -328,7 +329,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         solarSystemButton.setAction(solarSystemAction);
         manualTransientInspectionButton.setAction(inspectionAction);
         qualityControlButton.setAction(qualityControlAction);
-        qualityDetailsButton.addActionListener(event -> showQualityDetails());
+        qualityDetailsButton.addActionListener(event -> showQualityDetails(table.getSelectedRow()));
         qualityDetailsButton.setToolTipText("Measurements, rejection reason and session limits for one selected frame.");
         detectIterativelyButton.setAction(iterativeAction);
         solveButton.setAction(solveAction);
@@ -361,7 +362,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
         JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
-                buttonRow(qualityControlButton, qualityDetailsButton),
                 buttonRow(manualTransientInspectionButton));
         detectStatus.setForeground(UiStyle.helpColor());
         detectStatus.setBorder(BorderFactory.createEmptyBorder(6, 2, 0, 0));
@@ -459,8 +459,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         // ==========================================
         // MAIN TABLE AREA
         // ==========================================
+        // The checks of the frames in the list sit over the list, at its left.
+        JPanel frameListActions = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), UiStyle.space(4)));
+        frameListActions.add(qualityControlButton);
+        frameListActions.add(qualityDetailsButton);
         JScrollPane scrollPane = new JScrollPane();
-        add(scrollPane, BorderLayout.CENTER);
+        JPanel frameList = new JPanel(new BorderLayout());
+        frameList.add(frameListActions, BorderLayout.NORTH);
+        frameList.add(scrollPane, BorderLayout.CENTER);
+        add(frameList, BorderLayout.CENTER);
 
         JPanel statusBar = new JPanel(new BorderLayout(10, 0));
         statusBar.setBorder(BorderFactory.createCompoundBorder(
@@ -567,7 +574,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 owner.setQualityControl(completed.result());
                 if (table.getModel() instanceof FitsFileTableModel model) {
                     model.showQuality(completed.result(), activeQualitySettingsKey);
-                    prioritizeQualityColumns();
                     resizeTableColumns(table);
                 }
                 refreshWorkflowStatus();
@@ -578,19 +584,19 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         });
     }
 
-    /** Shows one original frame's quality and limits even when the captured settings are now stale. */
-    private void showQualityDetails() {
-        if (uiLocked || table.getSelectedRowCount() != 1 || !(table.getModel() instanceof FitsFileTableModel model)) return;
-        var frame = model.qualityAt(table.convertRowIndexToModel(table.getSelectedRow()));
-        if (frame != null) QualityControlDetails.show(this, model.quality(), frame, model.isQualityCurrent());
+    /** Shows the quality and limits of the frame in this table row, even when the captured settings are now stale. */
+    private void showQualityDetails(int row) {
+        var frame = qualityOfRow(row);
+        if (frame != null && !uiLocked) {
+            FitsFileTableModel model = (FitsFileTableModel) table.getModel();
+            QualityControlDetails.show(this, model.quality(), frame, model.isQualityCurrent());
+        }
     }
 
-    /** Brings the measured quality alongside the filename without changing model indices or selected rows. */
-    private void prioritizeQualityColumns() {
-        int[] columns = {FitsFileTableModel.COL_QUALITY, FitsFileTableModel.COL_FWHM, FitsFileTableModel.COL_STARS,
-                FitsFileTableModel.COL_ELONGATION, FitsFileTableModel.COL_QUALITY_REASON};
-        for (int index = 0; index < columns.length; index++)
-            table.moveColumn(table.convertColumnIndexToView(columns[index]), index + 1);
+    /** The quality-control result of the frame in this table row, or null when it has none. */
+    private FrameQualityResult.Frame qualityOfRow(int row) {
+        return row >= 0 && table.getModel() instanceof FitsFileTableModel model
+                ? model.qualityAt(table.convertRowIndexToModel(row)) : null;
     }
 
     /** Compact session verdict; fewer than three retained frames is an engine stop, not a successful detection. */
@@ -684,10 +690,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
     /**
      * Preview Frame's Blink button: blinks the frames selected in the table when at least three are, otherwise all
-     * frames of the session, starting on the frame Preview shows.
+     * frames of the session, starting on the frame Preview shows. A blink already open has those frames, since the
+     * table is locked while it is open, so it comes back on that frame without reading them again.
      */
     void blinkFromPreview(FitsFileInformation shown) {
-        if (uiLocked || blinkPlaying) {
+        if (blinkPlaying) {
+            blink.returnFromPreview(shown);
+            return;
+        }
+        if (uiLocked) {
             statusLabel.setText("Wait until the current task has finished.");
             return;
         }
@@ -695,9 +706,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         startBlink(selected != null && selected.length >= 3 ? selected : getImportedFiles(), shown);
     }
 
-    /** Blink's Open in Preview button: ends the blink and opens Preview Frame on the frame it showed. */
+    /**
+     * Blink's Open in Preview button: shows the frame in Preview Frame while the blink stays open. A Preview Frame
+     * already open keeps its zoom and trial values.
+     */
     private void previewFromBlink(FitsFileInformation shown) {
-        blink.close();
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
         int row = 0;
         for (int i = 0; model != null && i < model.getRowCount(); i++) {
@@ -705,7 +718,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 row = i;
             }
         }
-        previewFrame(row);
+        if (detectionSequenceFrame != null && detectionSequenceFrame.isVisible()) {
+            detectionSequenceFrame.showFrame(row);
+        } else {
+            previewFrame(row);
+        }
     }
 
     /** Reads {@code selectedFitsFilesInfo} and blinks them, from {@code startAt} when it is among them. */
@@ -878,7 +895,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
         ProcessingSession owner = sessions.current();
         model.showQuality(owner == null ? null : owner.getQualityControl(), activeQualitySettingsKey);
-        if (model.quality() != null) prioritizeQualityColumns();
         if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
         subscribedSkyCatalogue = skyCatalogue();
         subscribedSkyCatalogue.addCorrectionListener(correctionChanged);
@@ -1178,6 +1194,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         menu.add(new JMenuItem(blinkAction));
         menu.add(new JMenuItem(previewAction));
         menu.add(new JMenuItem(solveAction));
+        // For the frame clicked, also among several selected; offered once that frame has a quality result.
+        JMenuItem qualityDetails = new JMenuItem("Quality details…");
+        int[] clickedRow = {-1};
+        qualityDetails.addActionListener(event -> showQualityDetails(clickedRow[0]));
+        menu.add(qualityDetails);
         table.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
@@ -1197,6 +1218,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 if (row >= 0 && !table.isRowSelected(row)) {
                     table.setRowSelectionInterval(row, row);
                 }
+                clickedRow[0] = row;
+                qualityDetails.setVisible(qualityOfRow(row) != null);
                 menu.show(table, e.getX(), e.getY());
             }
         });
@@ -1262,6 +1285,10 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 int viewRow = table.rowAtPoint(e.getPoint());
                 int viewColumn = table.columnAtPoint(e.getPoint());
                 if (!hasEarthLinkAt(viewRow, viewColumn)) {
+                    // A double click shows the frame in Preview Frame, whenever its command could run.
+                    if (e.getClickCount() == 2 && viewRow >= 0 && previewAction.isEnabled()) {
+                        previewFrame(table.convertRowIndexToModel(viewRow));
+                    }
                     return;
                 }
 
@@ -1631,13 +1658,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         sessionTabs.accept(sessions.current() != null);
     }
 
-    /** While a job runs (or a blink plays), the window's controls and the session tabs are locked. */
+    /** While a job runs or a blink is open, the window's controls and the session tabs are locked. */
     private void lockUI() {
         uiLocked = true;
         setControlsEnabled(this, false);
         refreshCommands();
-        // Trial values and Apply follow the same job lock as the Detection Settings tab.
-        viewers.setSettingsEditable(false);
         sessionTabs.accept(false);
     }
 
@@ -1719,9 +1744,20 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
     }
 
-    private void disableControlsProcessing() { lockUI(); }
+    /** A job locks the window and, like the Detection Settings tab, the trial values of the open viewers. */
+    private void disableControlsProcessing() {
+        lockUI();
+        viewers.setSettingsEditable(false);
+    }
+
     private void enableControlsProcessingFinished() { unlockUI(); }
+
+    /**
+     * An open blink locks the window, because a run would have to fit in memory beside its frames. It is not a job, so
+     * the open viewers stay usable, including their trial values.
+     */
     private void disableControlsBlinking() { lockUI(); }
+
     private void enableControlsProcessingBlinkingFinished() { unlockUI(); }
 
     /**
@@ -1752,7 +1788,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         if (detectionSequenceFrame == null || !detectionSequenceFrame.isDisplayable()) {
             detectionSequenceFrame = viewers.register(new DetectionSequenceFrame(windowFrame, sessions, detectionSettings, viewers.layers()));
-            detectionSequenceFrame.setSettingsEditable(!uiLocked);
             detectionSequenceFrame.setBlinkAction(this::blinkFromPreview);
         }
 
@@ -1864,7 +1899,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     }
 
     /**
-     * The end of loading a blink: plays the frames, or says why it did not. While the blink plays, its window holds
+     * The end of loading a blink: plays the frames, or says why it did not. While the blink is open, its window holds
      * the main window's lock, as the loading job did; closing it ends the blink.
      */
     private void blinkLoaded(FitsFileInformation[] files, JobOutcome<BlinkSequence> outcome) {

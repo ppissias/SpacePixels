@@ -35,13 +35,14 @@ public final class FileSettingField extends JPanel {
         this.dialogTitle = dialogTitle;
         this.filter = filter;
         setOpaque(false);
+        // Measured with its text: an empty button is only as tall as its margins.
+        showPath();
         Dimension natural = choose.getPreferredSize();
         choose.setPreferredSize(new Dimension(UiStyle.space(UiStyle.NUMBER_INPUT_WIDTH), natural.height));
         choose.addActionListener(event -> chooseFile());
         clear.addActionListener(event -> setPath(""));
         add(choose);
         add(clear);
-        showPath();
     }
 
     /** The chosen file's path, or an empty string for none. */

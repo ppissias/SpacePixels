@@ -57,7 +57,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
                 changes -> sessions.isCurrent(ownerSession) ? detection.applyTrialSettings(changes) : null);
         setRawDetections(trials);
         blinkButton.setToolTipText("Blink the frames selected in the main window, or all frames when fewer than three "
-                + "are selected, starting on this frame.");
+                + "are selected, starting on this frame. An open blink comes to the front on this frame.");
         blinkButton.addActionListener(e -> {
             if (files != null && currentIndex() < files.length) blinkAction.accept(files[currentIndex()]);
         });
@@ -100,7 +100,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         setFindingOverlay(session == null ? null : session.getFindingOverlay(), files);
     }
 
-    /** Enables trial edits, Save and Blink only while the application has no active job or blink. */
+    /** Enables trial edits, Save and Blink only while the application has no active job; an open blink is not one. */
     @Override
     public void setSettingsEditable(boolean editable) {
         trials.setEditable(editable);

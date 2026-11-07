@@ -6,7 +6,6 @@ import java.nio.file.Files;
 import java.util.Arrays;
 import javax.swing.JDialog;
 import javax.swing.JSpinner;
-import javax.swing.JTextArea;
 import nom.tam.fits.Fits;
 import org.assertj.swing.core.GenericTypeMatcher;
 import org.assertj.swing.edt.GuiActionRunner;
@@ -50,16 +49,20 @@ public class QualityControlMechanicsTest extends MechanicsTestCase {
             /** Finds the measured frame's user-facing detail window. */
             @Override protected boolean isMatching(JDialog dialog) { return dialog.isShowing() && dialog.getTitle().startsWith("Quality details"); }
         }).withTimeout(10_000).using(robot());
-        var readout = details.textBox(new GenericTypeMatcher<>(JTextArea.class) {
-            /** Selectable evidence text is accessible by its purpose. */
-            @Override protected boolean isMatching(JTextArea text) {
-                return "Frame quality measurements and session limits".equals(text.getAccessibleContext().getAccessibleName());
-            }
-        });
-        assertTrue(readout.text().contains("All 5 imported frames assessed"));
-        assertTrue(readout.text().contains("Background noise"));
-        assertTrue(readout.text().contains("not residual stellar alignment"));
-        details.button(VisibleText.button("OK")).click();
+        details.label(VisibleText.labelContaining("Frames assessed")).requireVisible();
+        details.label(VisibleText.labelContaining("Background noise")).requireVisible();
+        details.label(VisibleText.labelContaining("not residual stellar alignment")).requireVisible();
+        details.button(VisibleText.button("Copy details")).click();
+        var copied = GuiActionRunner.execute(() -> (String) java.awt.Toolkit.getDefaultToolkit().getSystemClipboard()
+                .getData(java.awt.datatransfer.DataFlavor.stringFlavor));
+        assertTrue(copied.contains("All 5 imported frames assessed"));
+        details.button(VisibleText.button("Close")).click();
+        window().table().showPopupMenuAt(org.assertj.swing.data.TableCell.row(1).column(0)).menuItemWithPath("Quality details…").click();
+        var fromMenu = WindowFinder.findDialog(new GenericTypeMatcher<>(JDialog.class) {
+            /** The right-clicked frame's details, not the frame selected before. */
+            @Override protected boolean isMatching(JDialog dialog) { return dialog.isShowing() && dialog.getTitle().contains("frame_02"); }
+        }).withTimeout(10_000).using(robot());
+        fromMenu.button(VisibleText.button("Close")).click();
         window().tabbedPane().selectTab("Detection Settings");
         JSpinner sigma = window().spinner(new GenericTypeMatcher<>(JSpinner.class, true) {
             /** Finds the core setting on the default Overview page. */

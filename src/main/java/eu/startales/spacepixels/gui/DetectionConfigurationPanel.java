@@ -1516,16 +1516,8 @@ public class DetectionConfigurationPanel extends JPanel {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBorder(new EmptyBorder(10, 20, 20, 20));
-        DetectionConfig defaults = new DetectionConfig();
         panel.add(createTabIntro("Digital tracking adds weak signals along trial motions across the kept frames. "
-                + "It searches independently of known-object predictions and reports unverified FM candidates. "
-                + "Only the session with the most kept frames is searched when gaps exceed two hours. "
-                + "Controls start from your saved profile, with engine defaults for absent values. They are policy choices, "
-                + "not measurements from the imported frames. Auto-Tune preserves these settings. "
-                + "Stored defaults: " + (defaults.enableFaintMoverSearch ? "on" : "off") + "; "
-                + defaults.faintMoverMinDisplacementFwhm + " FWHM minimum displacement; "
-                + defaults.faintMoverMaxSpeedPixelsPerMinute + " px/min maximum speed; score "
-                + defaults.faintMoverMinScore + "; " + defaults.faintMoverMaxSeconds / 60 + " minute limit."));
+                + "It searches independently of known-object predictions and reports unverified FM candidates."));
         chkEnableFaintMovers = addTypedCheckbox(panel, FaintMoversSettings.ENABLE);
         spinFaintMoverMinMotion = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMinDisplacementFwhm), 2, Double.MAX_VALUE, 0.001));
         registerTypedBinding(FaintMoversSettings.MIN_DISPLACEMENT, spinFaintMoverMinMotion, () -> {

@@ -49,6 +49,14 @@ public class QualityControlReadoutTest {
             assertTrue(detail.contains("FWHM: Unavailable"));
             assertTrue(detail.contains("Statistical session thresholds unavailable"));
             assertTrue(detail.contains("not residual stellar alignment"));
+            String shown = labels(QualityControlDetails.content(snapshot, metrics.getFirst(), false));
+            assertTrue(shown.contains("Stale result"));
+            assertTrue(shown.contains("fewer than 3"));
+            assertTrue("FWHM without reference stars has no number", shown.contains("FWHM") && shown.contains("Unavailable"));
+            assertFalse("The engine's fallback width is not shown as measured", shown.contains("999"));
+            assertTrue(shown.contains("Statistical session thresholds unavailable"));
+            assertTrue(shown.contains("Unavailable (registration failed)"));
+            assertTrue(shown.contains("not residual stellar alignment"));
             model.activeSettingsChanged(key);
             assertTrue(model.isQualityCurrent());
             model.replaceFile(files[0], files[0].withFitsHeader(Map.of("CRVAL1", "123")));
@@ -57,6 +65,43 @@ public class QualityControlReadoutTest {
             assertFalse("Changed exposure invalidates the cohort", model.isQualityCurrent());
             assertEquals(2, model.getRowCount());
         });
+    }
+
+    /** The readout shows every session limit beside its measurement, in the engine's values and fixed units. */
+    @Test public void detailsShowLimitsBesideMeasurements() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var files = new FitsFileInformation[]{file("a.fit"), file("b.fit"), file("c.fit")};
+            var fit = new FrameQualityResult.Registration(1.25, -0.5, 0, 0.125, true);
+            var frame = new FrameQualityResult.Frame(1, "b.fit", true, "Too few stars <60%", 1102.5, 56.5, 3.125, 1.25, 1.125, 812, 300, 12, 120, fit);
+            var metrics = List.of(frame(0, false), frame, new FrameQualityResult.Frame(2, "c.fit", false, "OK", 1100, 55, 3, 1.2, 1.1, 900, 310, 13, 125, fit));
+            var limits = new FrameQualityResult.Thresholds(true, 300.5, 4.5, 1.6, 1.55, 1100, 50, 1050, 1150);
+            var result = new FrameQualityResult(metrics, limits, 0.983, 0.978);
+            var snapshot = new QualityControlSnapshot(QualityControlSnapshot.inputs(files), QualityControlSnapshot.settingsKey(new DetectionConfig()), result);
+            String shown = labels(QualityControlDetails.content(snapshot, frame, true));
+            assertTrue(shown.contains("Would reject"));
+            assertTrue("The reason stays literal in the HTML label", shown.contains("Too few stars &lt;60%"));
+            assertTrue(shown.contains("Frame 2 of 3"));
+            assertTrue(shown.contains("at least 300.5"));
+            assertTrue(shown.contains("3.13 px"));
+            assertTrue(shown.contains("at most 4.50 px"));
+            assertTrue(shown.contains("1,102.5 ADU"));
+            assertTrue(shown.contains("1,050.0 to 1,150.0 ADU"));
+            assertTrue(shown.contains("Baseline 1,100.0 ± 50.0"));
+            assertTrue(shown.contains("98.3 %"));
+            assertTrue(shown.contains("1.25 / -0.50 px"));
+            assertTrue(shown.contains("Usable"));
+            assertFalse(shown.contains("Stale result"));
+        });
+    }
+
+    /** Every label's text in a readout, one per line. */
+    private static String labels(java.awt.Component component) {
+        StringBuilder text = new StringBuilder();
+        if (component instanceof javax.swing.JLabel label) text.append(label.getText()).append('\n');
+        if (component instanceof java.awt.Container container) {
+            for (var child : container.getComponents()) text.append(labels(child));
+        }
+        return text.toString();
     }
 
     /** Minimal immutable imported descriptor with absent clocks. */

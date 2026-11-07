@@ -95,7 +95,11 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> window().button(VisibleText.button("Blink Selected")).target().doClick());
         FrameFixture blink = viewer("Blink");
         shrink(blink.target());
-        waitFor("Blink controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(blink.target())));
+        try {
+            waitFor("Blink controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(blink.target())));
+        } catch (AssertionError clipped) {
+            throw new AssertionError(clipped.getMessage() + ": " + GuiActionRunner.execute(() -> clippedControls(blink.target())), clipped);
+        }
         close(blink);
     }
 

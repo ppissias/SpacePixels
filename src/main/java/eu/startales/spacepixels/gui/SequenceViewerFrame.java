@@ -378,6 +378,15 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         goTo(Math.max(0, Math.min(index, frameCount() - 1)));
     }
 
+    /** Brings the open window to the front on this frame, keeping its zoom and everything else it shows. */
+    void showFrame(int index) {
+        ViewerSupport.bringToFront(this);
+        view.requestFocusInWindow();
+        if (open) {
+            goTo(Math.max(0, Math.min(index, frameCount() - 1)));
+        }
+    }
+
     @Override
     public void dispose() {
         cleanup();
