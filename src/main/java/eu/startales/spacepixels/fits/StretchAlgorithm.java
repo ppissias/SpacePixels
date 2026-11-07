@@ -14,7 +14,7 @@ package eu.startales.spacepixels.fits;
  * valid ranges, and default values.
  */
 public enum StretchAlgorithm {
-    ASINH("Asinh", "Black Point (%)", 0, 50, 10, "Stretch Strength", 1, 50, 10),
+    ASINH("Asinh", "Black Point (%)", 0, 95, 10, "Stretch Strength", 1, 100, 10),
     ENHANCE_LOW("Enhance Low", "Intensity Threshold", 0, 100, 50, "Application Iterations", 1, 20, 1),
     ENHANCE_HIGH("Enhance High", "Intensity Threshold", 0, 100, 50, "Application Iterations", 1, 20, 1),
     EXTREME("Extreme", "Noise Threshold", 0, 100, 50, "Intensity Factor", 1, 20, 15);

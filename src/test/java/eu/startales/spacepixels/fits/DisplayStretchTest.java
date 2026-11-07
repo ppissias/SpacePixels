@@ -10,6 +10,7 @@ import java.util.Random;
 import java.util.zip.CRC32;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public class DisplayStretchTest {
 
@@ -106,10 +107,58 @@ public class DisplayStretchTest {
         }
     }
 
+    /** Strengths up to 50 keep their curve; above it the factor grows by one ratio per step to the largest factor. */
+    @Test
+    public void asinhStrengthFollowsTheSettingAndThenGrowsByARatio() {
+        for (int strength = 1; strength <= 50; strength++) {
+            assertEquals(strength, DisplayStretch.asinhFactor(strength), 0);
+        }
+        assertEquals(1, DisplayStretch.asinhFactor(0), 0);
+        assertEquals(5000, DisplayStretch.asinhFactor(StretchAlgorithm.ASINH.getSecondaryMaximum()), 1e-9);
+        assertEquals("A larger setting stays at the largest factor", 5000, DisplayStretch.asinhFactor(500), 1e-9);
+        double ratio = DisplayStretch.asinhFactor(52) / DisplayStretch.asinhFactor(51);
+        for (int strength = 51; strength < 100; strength++) {
+            assertEquals(ratio, DisplayStretch.asinhFactor(strength + 1) / DisplayStretch.asinhFactor(strength), 1e-9);
+        }
+        assertEquals("Each step is about ten percent", 1.1, ratio, 0.01);
+    }
+
+    /** A stronger stretch never darkens a value, and at the top of the range the sky is clearly lifted. */
+    @Test
+    public void asinhStrongerStretchLiftsFaintValues() {
+        int[] histogram = DisplayStretch.histogram(flatten(syntheticFrame(7, 1200)));
+        int sky = 1200 + 3 * WIDTH / 2;
+        int previous = -1;
+        for (int strength = 1; strength <= StretchAlgorithm.ASINH.getSecondaryMaximum(); strength++) {
+            byte[] table = DisplayStretch.lookupTable(histogram, StretchAlgorithm.ASINH, 10, strength);
+            int level = table[sky] & 0xFF;
+            assertTrue("strength " + strength, level >= previous);
+            previous = level;
+        }
+        int atFifty = DisplayStretch.lookupTable(histogram, StretchAlgorithm.ASINH, 10, 50)[sky] & 0xFF;
+        assertTrue(previous > atFifty);
+    }
+
+    /** The largest black point shows at least that share of the pixels as black. */
+    @Test
+    public void asinhLargestBlackPointClipsItsShare() {
+        int[] histogram = DisplayStretch.histogram(flatten(syntheticFrame(8, 1200)));
+        int largest = StretchAlgorithm.ASINH.getPrimaryMaximum();
+        byte[] table = DisplayStretch.lookupTable(histogram, StretchAlgorithm.ASINH, largest, 10);
+        long black = 0;
+        long total = 0;
+        for (int value = 0; value < histogram.length; value++) {
+            total += histogram[value];
+            if ((table[value] & 0xFF) == 0) black += histogram[value];
+        }
+        assertTrue(black >= total * largest / 100);
+    }
+
     /**
      * Batch Stretch writes the same pixels as before the stretch tables: checksums of its output for every algorithm
      * at its smallest, default and largest settings on three mono frames, plus a colour frame at the defaults,
-     * recorded from the earlier per-pixel code.
+     * recorded from the earlier per-pixel code. The asinh ranges grew afterwards, so its largest settings here are
+     * the 50 and 50 the checksums were recorded with; {@link #everyAlgorithmMatchesTheRenderer} covers the new range.
      */
     @Test
     public void batchStretchKeepsItsOutput() throws Exception {
@@ -122,8 +171,9 @@ public class DisplayStretchTest {
         FitsVisualizationRenderer renderer = new FitsVisualizationRenderer();
         for (StretchAlgorithm algorithm : StretchAlgorithm.values()) {
             CRC32 crc = new CRC32();
-            int[] primaries = {algorithm.getPrimaryMinimum(), algorithm.getPrimaryDefault(), algorithm.getPrimaryMaximum()};
-            int[] secondaries = {algorithm.getSecondaryMinimum(), algorithm.getSecondaryDefault(), algorithm.getSecondaryMaximum()};
+            boolean asinh = algorithm == StretchAlgorithm.ASINH;
+            int[] primaries = {algorithm.getPrimaryMinimum(), algorithm.getPrimaryDefault(), asinh ? 50 : algorithm.getPrimaryMaximum()};
+            int[] secondaries = {algorithm.getSecondaryMinimum(), algorithm.getSecondaryDefault(), asinh ? 50 : algorithm.getSecondaryMaximum()};
             for (int[] sky : skies) {
                 for (int primary : primaries) {
                     for (int secondary : secondaries) {

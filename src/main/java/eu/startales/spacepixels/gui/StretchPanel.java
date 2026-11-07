@@ -318,7 +318,9 @@ public class StretchPanel extends JPanel {
         switch (algorithm) {
             case ASINH:
                 return "<html><b>Asinh</b> (recommended): sets the black point at a percentile of the histogram and lifts faint "
-                        + "signal with an arcsinh curve,<br>keeping star cores from saturating. Strength controls how much faint parts are lifted.</html>";
+                        + "signal with an arcsinh curve,<br>keeping star cores from saturating. Strength controls how much faint parts are lifted; "
+                        + "above 50 each step lifts them about 10 % more.<br>A black point of 50 % is about the sky level; higher values "
+                        + "darken the sky and, near the top, hide faint stars.</html>";
             case ENHANCE_LOW:
                 return "<html><b>Enhance Low</b>: brightens pixels below the threshold, more strongly the fainter they are; "
                         + "each iteration repeats it.</html>";

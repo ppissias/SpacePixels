@@ -23,7 +23,26 @@ public final class DisplayStretch {
     /** Number of 16-bit values; tables and histograms are indexed by {@code value - Short.MIN_VALUE}. */
     public static final int VALUES = 65536;
 
+    /** Up to this Stretch Strength the asinh curve's factor is the setting itself. */
+    private static final int ASINH_LINEAR_STRENGTH = 50;
+    /** The asinh curve's factor at the largest Stretch Strength; beyond it real frames only lose contrast. */
+    private static final double ASINH_LARGEST_FACTOR = 5000;
+
     private DisplayStretch() {
+    }
+
+    /**
+     * The factor of the asinh curve for a Stretch Strength setting: the setting itself up to 50, then the same ratio
+     * per step (about 10 %) up to 5000 at the largest setting. The useful factors span several decades, which even
+     * steps could not cover on one slider; settings up to 50 keep the curve they have always had.
+     */
+    static double asinhFactor(int strength) {
+        if (strength <= ASINH_LINEAR_STRENGTH) {
+            return Math.max(1.0, strength);
+        }
+        int largest = StretchAlgorithm.ASINH.getSecondaryMaximum();
+        double share = (Math.min(strength, largest) - ASINH_LINEAR_STRENGTH) / (double) (largest - ASINH_LINEAR_STRENGTH);
+        return ASINH_LINEAR_STRENGTH * Math.pow(ASINH_LARGEST_FACTOR / ASINH_LINEAR_STRENGTH, share);
     }
 
     /** Full-range linear display, matching the Image Stretch tab's original preview; no histogram rescaling. */
@@ -172,7 +191,7 @@ public final class DisplayStretch {
             whitePointValue = blackPointValue + 1;
         }
         double usableRange = whitePointValue - blackPointValue;
-        double stretchScale = Math.max(1.0, stretchStrength);
+        double stretchScale = asinhFactor(stretchStrength);
         double normalization = asinh(stretchScale);
         short[] values = new short[VALUES];
         for (int index = 0; index < VALUES; index++) {
