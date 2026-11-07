@@ -1150,7 +1150,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** The note under Auto-Tune: which settings are in use, and when a saved auto-tune was run. */
     private void setDetectStatus(String body) {
         int width = Math.max(120, autoTuneButton.getPreferredSize().width - 4);
-        detectStatus.setText("<html><div style='width:" + width + "px'>" + body + "</div></html>");
+        detectStatus.setText(UiStyle.htmlWrappedTo(width, body));
     }
 
     /** Height of the Auto-Tune note when wrapped to the button width. */

@@ -41,6 +41,14 @@ final class UiStyle {
         return color == null ? helpColor() : color;
     }
 
+    /**
+     * HTML text that wraps to a column of this width. Swing's HTML renderer reads a CSS px as 1.3 pixels, so a style
+     * width written in real pixels wraps too wide and the ends of its lines are cut off at the edge of the label.
+     */
+    static String htmlWrappedTo(int columnWidth, String body) {
+        return "<html><div style='width:" + (int) (columnWidth / 1.3f) + "px'>" + body + "</div></html>";
+    }
+
     /** Image canvases stay dark in every theme, so their placeholder text must not inherit a light theme's black text. */
     static Color imageTextColor() {
         Color color = UIManager.getColor("SpacePixels.imageForeground");
