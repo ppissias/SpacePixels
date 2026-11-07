@@ -322,22 +322,46 @@
   // All scientific distances are calculated on the sphere by the proxy. This tangent-plane plot is for inspection.
   function exposureColour(index) { return ['#6ec6ff', '#ffb74d', '#81c784', '#ce93d8', '#ef9a9a', '#80cbc4'][index % 6]; }
 
-  function satelliteOverlay(exposures) {
+  /** Whether the report captured how the sky lies on its frames; older reports did not. */
+  function usableImageAxes(axes) {
+    return !!axes && [axes.eastX, axes.eastY, axes.northX, axes.northY].every(v => typeof v === 'number' && Number.isFinite(v));
+  }
+
+  /** A small north and east compass, in the plot's orientation, centred here. */
+  function overlayCompass(cx, cy, axes) {
+    const length = 26;
+    function arrow(dx, dy, label) {
+      const size = Math.max(1e-9, Math.hypot(dx, dy)), ux = dx / size, uy = dy / size;
+      return "<line x1='" + cx + "' y1='" + cy + "' x2='" + (cx + ux * length).toFixed(1) + "' y2='" + (cy + uy * length).toFixed(1) + "' stroke='#fff' stroke-width='1.2'/>"
+        + "<text x='" + (cx + ux * (length + 9)).toFixed(1) + "' y='" + (cy + uy * (length + 9) + 4).toFixed(1) + "' fill='#fff' font-size='12' text-anchor='middle'>" + label + "</text>";
+    }
+    return arrow(axes.northX, axes.northY, 'N') + arrow(axes.eastX, axes.eastY, 'E');
+  }
+
+  /** With {@code axes}, the plot lies as the frames do, also when they are rotated or mirrored; otherwise north is up. */
+  function satelliteOverlay(exposures, axes) {
     const observed = exposures.flatMap(e => safeArray(e.observed));
     if (!observed.length) return '';
+    const oriented = usableImageAxes(axes);
     const ra0 = observed[0][0] * Math.PI / 180, dec0 = observed[0][1] * Math.PI / 180;
+    // On screen: x to the right, y down, in image pixels when the axes are known.
     function project(p) {
       const ra = p[0] * Math.PI / 180, dec = p[1] * Math.PI / 180;
       const d = Math.sin(dec0) * Math.sin(dec) + Math.cos(dec0) * Math.cos(dec) * Math.cos(ra - ra0);
       if (d <= 0.01) return null;
-      return [Math.cos(dec) * Math.sin(ra - ra0) / d, (Math.cos(dec0) * Math.sin(dec) - Math.sin(dec0) * Math.cos(dec) * Math.cos(ra - ra0)) / d];
+      const east = Math.cos(dec) * Math.sin(ra - ra0) / d, north = (Math.cos(dec0) * Math.sin(dec) - Math.sin(dec0) * Math.cos(dec) * Math.cos(ra - ra0)) / d;
+      if (!oriented) return [east, -north];
+      const arcsec = 180 * 3600 / Math.PI;
+      return [(axes.eastX * east + axes.northX * north) * arcsec, (axes.eastY * east + axes.northY * north) * arcsec];
     }
     const points = exposures.flatMap(e => safeArray(e.observed).concat(safeArray(e.predicted))).map(project).filter(Boolean);
     let xmin = Infinity, xmax = -Infinity, ymin = Infinity, ymax = -Infinity;
     points.forEach(p => { xmin = Math.min(xmin, p[0]); xmax = Math.max(xmax, p[0]); ymin = Math.min(ymin, p[1]); ymax = Math.max(ymax, p[1]); });
-    const scale = Math.min(650 / Math.max(1e-6, xmax - xmin), 190 / Math.max(1e-6, ymax - ymin));
-    function xy(p) { const v = project(p); return v ? [(380 + (v[0] - (xmin + xmax) / 2) * scale).toFixed(2), (125 - (v[1] - (ymin + ymax) / 2) * scale).toFixed(2)] : null; }
-    let svg = "<svg role='img' aria-label='Observed fragment centroids and predicted paths during their exposures' viewBox='0 0 760 260' style='display:block;box-sizing:border-box;width:100%;min-width:640px;max-height:360px;background:#101820;border:1px solid #506070'>";
+    // Equal scale on both axes, so directions match the frames; a steep track gets a taller plot.
+    const scale = Math.min(650 / Math.max(1e-6, xmax - xmin), 430 / Math.max(1e-6, ymax - ymin));
+    const height = Math.round(Math.max(260, (ymax - ymin) * scale + 70));
+    function xy(p) { const v = project(p); return v ? [(380 + (v[0] - (xmin + xmax) / 2) * scale).toFixed(2), (height / 2 - 5 + (v[1] - (ymin + ymax) / 2) * scale).toFixed(2)] : null; }
+    let svg = "<svg role='img' aria-label='Observed fragment centroids and predicted paths during their exposures' viewBox='0 0 760 " + height + "' style='display:block;box-sizing:border-box;width:100%;min-width:640px;max-height:" + (height + 100) + "px;background:#101820;border:1px solid #506070'>";
     exposures.forEach((e, i) => {
       const colour = exposureColour(i);
       // Do not join separately projected path sections across the back of the tangent plane.
@@ -346,7 +370,12 @@
       safeArray(e.predicted).forEach(p => { const v = xy(p); if (v) section.push(v.join(',')); else flush(); }); flush();
       safeArray(e.observed).forEach(p => { const v = xy(p); if (v) svg += "<circle cx='" + v[0] + "' cy='" + v[1] + "' r='3' fill='" + colour + "' stroke='#fff' stroke-width='.7'><title>Frame " + escapeHtml(e.frame) + " centroid</title></circle>"; });
     });
-    return "<div class='live-table-box' style='max-height:none;overflow-y:hidden'>" + svg + "<text x='12' y='20' fill='#fff' font-size='12'>North ↑ · East →</text><text x='12' y='247' fill='#ddd' font-size='12'>Lines: predicted exposure paths · Points: observed centroids · Colours identify exposures</text></svg></div>";
+    const heading = oriented ? 'Same orientation as the frames' : 'North ↑ · East →';
+    const compass = oriented ? overlayCompass(715, 42, axes) : '';
+    const mirrored = oriented && axes.eastX * axes.northY - axes.northX * axes.eastY < 0;
+    return "<div class='live-table-box' style='max-height:none;overflow-y:hidden'>" + svg + "<text x='12' y='20' fill='#fff' font-size='12'>" + heading + "</text>" + compass
+      + "<text x='12' y='" + (height - 13) + "' fill='#ddd' font-size='12'>Lines: predicted exposure paths · Points: observed centroids · Colours identify exposures</text></svg></div>"
+      + (mirrored ? "<p class='live-caption'>These frames are mirrored compared with how the sky looks by eye, for example by the telescope's optics: turned so that north is up, east is on the right. The plot follows the frames.</p>" : '');
   }
 
   function orbitalProvenanceText(p) {
@@ -382,7 +411,7 @@
           + escapeHtml(formatNumber(m.centroidSpeedLowerArcsecSecond, 2)) + ' to ' + (m.centroidSpeedUpperArcsecSecond === undefined ? 'an unbounded upper rate' : escapeHtml(formatNumber(m.centroidSpeedUpperArcsecSecond, 2)) + ' ″/s')
           + '. Partial trails need not fill the predicted exposure path. Fragment-axis difference (180° ambiguity): ' + escapeHtml(formatNumber(m.axisDifferenceDegrees, 2)) + '°.'
           + ' The UTC/UT1 input approximation corresponds to up to about ' + escapeHtml(formatNumber(m.ut1TimingSensitivityArcsec, 1)) + '″ of along-path timing sensitivity.</p>';
-        html += satelliteOverlay(safeArray(m.exposures));
+        html += satelliteOverlay(safeArray(m.exposures), n.imageAxes);
         html += "<div class='live-table-box'><table><thead><tr><th>Frame</th><th>Exposure start UTC / seconds</th><th>Fragments</th><th>Median / p90 distance (″)</th><th>Perpendicular (″)</th><th>Beyond exposure path (″)</th></tr></thead><tbody>";
         safeArray(m.exposures).forEach((e, index) => {
           html += "<tr><td style='color:" + exposureColour(index) + "'>" + escapeHtml(e.frame) + '</td><td>' + escapeHtml(e.startUtc || 'unavailable') + ' / ' + escapeHtml(formatNumber(e.exposureSeconds, 1)) + '</td><td>' + escapeHtml(e.fragmentCount || 0) + '</td>';

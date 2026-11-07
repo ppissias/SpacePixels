@@ -77,6 +77,55 @@ public class StreakTrackObservationTest {
     }
 
     /**
+     * The captured axes are the image pixels per arcsecond, with y down as the frames are shown. A solution with east
+     * to the left and north at larger rows, drawn with its first row at the top, is mirrored; one with the opposite x
+     * direction is not.
+     */
+    @Test
+    public void imageAxesFollowTheFramesIncludingMirroredOnes() {
+        double pixelsPerArcsec = 1 / (.0004 * 3600);
+        var axes = axes(files());
+        assertEquals(-pixelsPerArcsec, axes.get("eastX"), 1e-4);
+        assertEquals(0, axes.get("eastY"), 1e-4);
+        assertEquals(0, axes.get("northX"), 1e-4);
+        assertEquals(pixelsPerArcsec, axes.get("northY"), 1e-4);
+        assertTrue("mirrored", axes.get("eastX") * axes.get("northY") - axes.get("northX") * axes.get("eastY") < 0);
+
+        var other = files();
+        for (int i = 0; i < other.length; i++) {
+            var header = new HashMap<>(other[i].getFitsHeader());
+            header.put("CD1_1", ".0004");
+            other[i] = other[i].withFitsHeader(header);
+        }
+        axes = axes(other);
+        assertEquals(pixelsPerArcsec, axes.get("eastX"), 1e-4);
+        assertTrue("not mirrored", axes.get("eastX") * axes.get("northY") - axes.get("northX") * axes.get("eastY") > 0);
+    }
+
+    /** Without a plate solution nothing tells how the sky lies on the frames. */
+    @Test
+    public void noSolutionCapturesNoImageAxes() {
+        var observation = StreakTrackObservation.capture("ST1", null, new Track());
+        assertNull(observation.astrometry().get("imageAxes"));
+    }
+
+    /** The axes captured for a track across two frames, as numbers. */
+    private static Map<String, Double> axes(FitsFileInformation[] files) {
+        var track = new Track();
+        for (int i = 0; i < 2; i++) {
+            var p = new DetectedObject(20 + i * 40, 30, 100, 20);
+            p.sourceFrameIndex = i;
+            track.addPoint(p);
+        }
+        var context = new DetectionReportAstrometry.Context(files, WcsSolutionResolver.resolve(null, files, null),
+                new DetectionReportAstrometry.ObserverSite(0, 280, Double.NaN, "synthetic"), null, null, 0);
+        var captured = (Map<?, ?>) StreakTrackObservation.capture("ST1", context, track).astrometry().get("imageAxes");
+        var numbers = new HashMap<String, Double>();
+        captured.forEach((key, value) -> numbers.put(key.toString(), ((Number) value).doubleValue()));
+        return numbers;
+    }
+
+    /**
      * Synthetic aligned TAN frames with millisecond timing and no observing-session files.
      */
     private static FitsFileInformation[] files() {

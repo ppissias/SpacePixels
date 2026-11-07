@@ -317,3 +317,42 @@ test('the Stellarium deadline also bounds reading a stalled response body', asyn
   assert.equal(button.disabled, false);
   assert.equal(deadline.cleared, true);
 });
+
+// One fragment east of another, 100 arcseconds apart, near the celestial equator.
+function overlayHtml(imageAxes) {
+  const c = client([{}]);
+  const exposures = [{frame: 1, observed: [[10, 0], [10 + 100 / 3600, 0]], predicted: [[10, 0], [10 + 100 / 3600, 0]]}];
+  return c.api.buildSatelliteComparisonHtml({ok: true, normalized: {trackComparison: true, imageAxes,
+    candidates: [{displayName: 'S', noradId: 1, comparison: {exposures}}], warnings: []}, payload: {}}, 'T');
+}
+const centroidXs = html => [...html.matchAll(/<circle cx='([-\d.]+)'/g)].map(match => Number(match[1]));
+
+test('the satellite overlay follows the frames, including mirrored ones', () => {
+  // Frames with east to the left, as the sky looks: the eastern fragment is drawn to the left.
+  let html = overlayHtml({eastX: -1, eastY: 0, northX: 0, northY: -1});
+  let [west, east] = centroidXs(html);
+  assert.ok(east < west);
+  assert.match(html, /Same orientation as the frames/);
+  assert.doesNotMatch(html, /mirrored/);
+  // Mirrored frames, with east to the right: the same fragment moves to the right, and the page says why.
+  html = overlayHtml({eastX: 1, eastY: 0, northX: 0, northY: -1});
+  [west, east] = centroidXs(html);
+  assert.ok(east > west);
+  assert.match(html, /mirrored compared with how the sky looks by eye/);
+});
+
+test('a track running along the frame rows or columns keeps that direction on screen', () => {
+  // East along the frame's y axis, downwards.
+  const html = overlayHtml({eastX: 0, eastY: 1, northX: -1, northY: 0});
+  const [first, second] = [...html.matchAll(/<circle cx='([-\d.]+)' cy='([-\d.]+)'/g)].map(match => [Number(match[1]), Number(match[2])]);
+  assert.equal(first[0], second[0]);
+  assert.ok(second[1] > first[1]);
+});
+
+test('a comparison from a report without captured axes stays north up', () => {
+  const html = overlayHtml(undefined);
+  const [west, east] = centroidXs(html);
+  assert.ok(east > west);
+  assert.match(html, /North ↑ · East →/);
+  assert.doesNotMatch(html, /Same orientation/);
+});

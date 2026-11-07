@@ -247,6 +247,9 @@ public final class SatCheckerTrackLookup {
                 && c.getAsJsonObject().getAsJsonObject("comparison").get("samplingAdequate").getAsBoolean()));
         normalized.add("candidates", comparisons);
         normalized.add("warnings", new Gson().toJsonTree(warnings));
+        // Older reports captured no axes; their plot stays north up.
+        if (observation.astrometry().get("imageAxes") != null)
+            normalized.add("imageAxes", new Gson().toJsonTree(observation.astrometry().get("imageAxes")));
         var response = new JsonObject();
         response.addProperty("ok", true);
         response.addProperty("provider", "satchecker");

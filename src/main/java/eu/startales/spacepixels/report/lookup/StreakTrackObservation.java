@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.report.lookup;
 
 import com.google.gson.Gson;
+import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.report.DetectionReportAstrometry;
 import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.Track;
@@ -118,7 +119,47 @@ public record StreakTrackObservation(int version, String findingId, Observer obs
         }
         exposures.sort(Comparator.comparingDouble(Exposure::startJd));
         provenance.put("unavailableExposureCount", grouped.size() - exposures.size());
+        var axes = wcs == null ? null : imageAxes(wcs, exposures);
+        if (axes != null) provenance.put("imageAxes", axes);
         return new StreakTrackObservation(1, id, observer, provenance, exposures, warnings);
+    }
+
+    /**
+     * How the sky lies on the frames where the track is: the image pixels (x right, y down, as the frames are shown)
+     * moved by one arcsecond east and north. A comparison plot drawn with it shows the track as the frames do, also on
+     * rotated or mirrored frames. Null when the solution gives no usable local scale there.
+     */
+    private static Map<String, Object> imageAxes(WcsCoordinateTransformer wcs, List<Exposure> exposures) {
+        double x = exposures.stream().flatMap(e -> e.fragments().stream()).mapToDouble(Fragment::x).average().orElse(Double.NaN);
+        double y = exposures.stream().flatMap(e -> e.fragments().stream()).mapToDouble(Fragment::y).average().orElse(Double.NaN);
+        if (!Double.isFinite(x) || !Double.isFinite(y)) return null;
+        final double step = 5;
+        var center = wcs.pixelToSky(x, y);
+        double[] right = tangentArcsec(center, wcs.pixelToSky(x + step, y));
+        double[] left = tangentArcsec(center, wcs.pixelToSky(x - step, y));
+        double[] down = tangentArcsec(center, wcs.pixelToSky(x, y + step));
+        double[] up = tangentArcsec(center, wcs.pixelToSky(x, y - step));
+        // Arcseconds east and north per image pixel, whose inverse gives the pixels per arcsecond.
+        double eastPerX = (right[0] - left[0]) / (2 * step), northPerX = (right[1] - left[1]) / (2 * step);
+        double eastPerY = (down[0] - up[0]) / (2 * step), northPerY = (down[1] - up[1]) / (2 * step);
+        double determinant = eastPerX * northPerY - eastPerY * northPerX;
+        if (!Double.isFinite(determinant) || Math.abs(determinant) < 1e-12) return null;
+        var axes = new LinkedHashMap<String, Object>();
+        axes.put("eastX", northPerY / determinant);
+        axes.put("eastY", -northPerX / determinant);
+        axes.put("northX", -eastPerY / determinant);
+        axes.put("northY", eastPerX / determinant);
+        return axes;
+    }
+
+    /** Arcseconds east and north of {@code center}, on the plane touching the sky there. */
+    private static double[] tangentArcsec(WcsCoordinateTransformer.SkyCoordinate center, WcsCoordinateTransformer.SkyCoordinate sky) {
+        double dec0 = Math.toRadians(center.getDecDegrees()), dec = Math.toRadians(sky.getDecDegrees());
+        double delta = Math.toRadians(sky.getRaDegrees() - center.getRaDegrees());
+        double scale = Math.sin(dec0) * Math.sin(dec) + Math.cos(dec0) * Math.cos(dec) * Math.cos(delta);
+        double arcsec = 180 * 3600 / Math.PI;
+        return new double[]{arcsec * Math.cos(dec) * Math.sin(delta) / scale,
+                arcsec * (Math.cos(dec0) * Math.sin(dec) - Math.sin(dec0) * Math.cos(dec) * Math.cos(delta)) / scale};
     }
 
     /**
