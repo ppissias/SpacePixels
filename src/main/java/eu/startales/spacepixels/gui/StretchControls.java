@@ -11,6 +11,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.fits.DisplayStretch;
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.StretchAlgorithm;
 
 import javax.swing.*;
@@ -21,11 +22,12 @@ import java.awt.event.ActionListener;
 import java.awt.event.ItemListener;
 import java.util.Map;
 import java.util.WeakHashMap;
+import java.util.function.Supplier;
 
 /**
- * The Display stretch section of the frame viewers' side panel. Its controls use the models of the Image Stretch
- * tab, so every viewer and the tab always show the same stretch, and a change here is remembered like a change
- * there. Each parameter has a slider and a number field on the same model. Keeps the stretch tables of the frames it
+ * The Display stretch section of the frame viewers' side panel. Its controls share the Image Stretch editor's
+ * models, so changes are live in both directions and remembered between sessions. Each parameter has a slider
+ * and a number field on the same model. Keeps the stretch tables of the frames it
  * has drawn until the stretch changes.
  */
 final class StretchControls {
@@ -53,12 +55,13 @@ final class StretchControls {
     private final Map<BlinkSequence.Frame, byte[][]> tables = new WeakHashMap<>();
     private boolean refreshPending;
 
-    /** {@code onChange} redraws the viewer after the stretch changed. */
-    StretchControls(StretchPanel panel, Runnable onChange) {
+    /** Redraws on shared-model changes; the editor link asks for the caller's currently displayed frame on the EDT. */
+    StretchControls(StretchPanel panel, Runnable onChange,
+                    Supplier<FitsFileInformation> currentFrame) {
         this.panel = panel;
         this.onChange = onChange;
         displayStretchCheckbox.setModel(panel.getDisplayStretchModel());
-        displayStretchCheckbox.setToolTipText("Apply the display stretch in all viewers and the Image Stretch tab. Untick for a linear view; your stretch settings are kept.");
+        displayStretchCheckbox.setToolTipText("Apply the display stretch in all viewers and the Image Stretch editor. Untick for a linear view; your stretch settings are kept.");
         displayStretchCheckbox.getModel().addItemListener(displayListener);
         algorithmCombo = new JComboBox<>(panel.getStretchAlgorithmModel());
         algorithmCombo.setRenderer(new DefaultListCellRenderer() {
@@ -69,7 +72,7 @@ final class StretchControls {
                 return c;
             }
         });
-        algorithmCombo.setToolTipText("The display stretch, shared with the Image Stretch tab. It only changes how frames look.");
+        algorithmCombo.setToolTipText("The display stretch, shared with the Image Stretch editor. It only changes how frames look.");
         primarySlider = new JSlider(panel.getStretchSlider().getModel());
         secondarySlider = new JSlider(panel.getStretchIterationsSlider().getModel());
         for (JSlider slider : new JSlider[]{primarySlider, secondarySlider}) {
@@ -116,6 +119,10 @@ final class StretchControls {
         c.gridwidth = 3;
         c.anchor = GridBagConstraints.WEST;
         body.add(resetButton, c);
+        JButton editor = AccessibleControls.link("Open stretch editor…", "Adjust this frame in the full Image Stretch window",
+                () -> panel.openEditor(currentFrame.get()));
+        c.gridy = 7;
+        body.add(editor, c);
         section = new SidePanelSection("Display stretch", body).addHeaderControl(displayStretchCheckbox);
         ViewerSupport.prepareControls(section);
         functionLabel.setLabelFor(algorithmCombo);
@@ -230,7 +237,7 @@ final class StretchControls {
     }
 
     /**
-     * Lets go of the shared models, so a closed viewer is not kept alive by the Image Stretch tab. The controls must
+     * Lets go of the shared models, so a closed viewer is not kept alive by the Image Stretch editor. The controls must
      * not be used afterwards.
      */
     void detach() {

@@ -156,10 +156,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final CommandAction convertMonoAction = new CommandAction("Convert to Mono",
             "Extract luminance and convert all loaded FITS files to linear 16-bit monochrome copies in _mono.",
             CommandAvailability.Command.CONVERT_TO_MONO, this::commandFacts, this::convertToMono);
-    private final CommandAction stretchAction = new CommandAction("Batch Stretch",
+    private final CommandAction stretchAction = new CommandAction("Export stretched copies…",
             "Batch stretch the entire dataset with the selected algorithm and sliders, independently of Stretch display. "
                     + "Save new copies in _stretched; the source files remain unchanged.",
             CommandAvailability.Command.BATCH_STRETCH, this::commandFacts, this::batchStretch);
+    private final CommandAction imageStretchAction = new CommandAction("Image Stretch…",
+            "Open the linked linear/stretched comparison and adjust the display shared by every frame viewer.",
+            CommandAvailability.Command.IMAGE_STRETCH, this::commandFacts, () -> stretch.openEditor(getSelectedFileInformation()));
     private final CommandAction skyCatalogueAction = new CommandAction(FETCH_SKY_CATALOGUE,
             "<html>Download the stars (Gaia), galaxies, nebulae and clusters (SIMBAD) and variable stars "
                     + "(AAVSO VSX)<br>in the field of the plate-solved frames, for the Annotate switch (A) of the viewers. "
@@ -187,7 +190,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final CommandAction prepareRawAction = new CommandAction("Prepare Raw Frames…",
             "For exposures that still need calibration or alignment: prepare the session with Siril in a separate window.",
             CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.run());
-    private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, solveAction,
+    private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, imageStretchAction, solveAction,
             skyCatalogueAction, solarSystemAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction,
             iterativeAction, qualityControlAction, chooseFolderAction, prepareRawAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
@@ -394,7 +397,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
         JPanel inspectGroup = new WorkflowStep(workflowSteps, 3, "Inspect", true, inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
-                buttonRow(manualTransientInspectionButton));
+                buttonRow(manualTransientInspectionButton),
+                buttonRow(new JButton(imageStretchAction)));
         prepareStatus.setForeground(UiStyle.helpColor());
         inspectStatus.setForeground(UiStyle.helpColor());
         detectStatus.setForeground(UiStyle.helpColor());
@@ -448,7 +452,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         workflowStrip.add(detectGroup);
         colourNotice.setBorder(BorderFactory.createEmptyBorder(2, 12, 8, 12));
         colourNotice.setVisible(false);
-        colourNotice.setToolTipText("<html>Colour frames support Blink Selected, Image Stretch and Batch Stretch, and Convert to Mono."
+        colourNotice.setToolTipText("<html>Colour frames support Blink Selected, the Image Stretch editor, stretched-copy export, and Convert to Mono."
                 + "<br>Astrometry remains available. Preview Frame, Manual Transient Inspection, Auto-Tune and all detection"
                 + "<br>(including variable-star photometry) need monochrome frames. Import the converted mono folder to use them.</html>");
         JPanel topArea = new WidthTrackingPanel();
@@ -529,7 +533,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         // Plate Solve and Blink follow the selection through refreshWorkflowStatus.
         table.getSelectionModel().addListSelectionListener(event -> {
             if (sessions.current() != null) sessions.current().setSelection(getSelectedFilesInformation());
-            stretch.onFrameSelectionChanged();
             refreshWorkflowStatus();
         });
 
@@ -548,7 +551,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         this.showDetectionSettings = showDetectionSettings;
     }
 
-    /** The Image Stretch tab uses the same guarded command and job lock as the other workflow actions. EDT only. */
+    /** The stretch editor uses the same guarded command and job lock as the other workflow actions. EDT only. */
     Action batchStretchAction() { return stretchAction; }
 
     /** The facts the shared commands are enabled from, as they are now. */
@@ -846,7 +849,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 this::showConversionOutcome);
     }
 
-    /** Writes stretched copies of every frame, with the Image Stretch tab's stretch. */
+    /** Writes stretched copies of every frame, with the stretch editor's captured settings. */
     private void batchStretch() {
         int stretchFactor = stretch.getStretchSlider().getValue();
         int iterations = stretch.getStretchIterationsSlider().getValue();
@@ -854,6 +857,30 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
+        FitsFileInformation[] files = owner.getFiles();
+        if (files.length == 0) return;
+        File destination = new File(new File(files[0].getFilePath()).getParentFile(), "_stretched");
+        JPanel summary = new JPanel(new GridLayout(0, 1, 0, UiStyle.space(6)));
+        summary.add(new WrappingHelpLabel("Export stretched copies of all " + files.length + " imported frames.", 460));
+        summary.add(new JLabel("Function: " + algo));
+        summary.add(new JLabel(algo.getPrimaryParameterLabel() + ": " + stretchFactor + " · "
+                + algo.getSecondaryParameterLabel() + ": " + iterations));
+        javax.swing.JTextField output = new javax.swing.JTextField(destination.getAbsolutePath(), 36);
+        output.setEditable(false);
+        output.setCaretPosition(0);
+        output.getAccessibleContext().setAccessibleName("Stretched copies destination");
+        summary.add(new JLabel("Destination:"));
+        summary.add(output);
+        summary.add(new WrappingHelpLabel("Source files stay unchanged. Export applies the stretch even when display stretch is off.", 460));
+        JOptionPane prompt = new JOptionPane(summary, JOptionPane.PLAIN_MESSAGE, JOptionPane.OK_CANCEL_OPTION,
+                null, new Object[]{"Export", "Cancel"}, "Cancel");
+        JDialog dialog = prompt.createDialog(SwingUtilities.getWindowAncestor(stretch), "Export stretched copies");
+        WindowSizing.install(dialog, 500, 280);
+        dialog.setVisible(true);
+        Object choice = prompt.getValue();
+        dialog.dispose();
+        if (!"Export".equals(choice) || !sessions.isCurrent(owner)
+                || !CommandAvailability.of(CommandAvailability.Command.BATCH_STRETCH, commandFacts()).enabled()) return;
         startJob(JobKind.BATCH_STRETCH, owner, new BatchStretchTask(owner.getBatchService(), stretchFactor, iterations, algo),
                 this::showStretchOutcome);
     }
@@ -1664,22 +1691,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         return model.getFitsFileAt(table.convertRowIndexToModel(row));
     }
 
-    /** Moves the frame selection by {@code delta} rows (one frame selected), staying within the table. */
-    public void selectFrameOffset(int delta) {
-        int rows = table.getRowCount();
-        if (rows == 0) {
-            return;
-        }
-        int row = Math.max(0, Math.min(rows - 1, Math.max(0, table.getSelectedRow()) + delta));
-        table.setRowSelectionInterval(row, row);
-        table.scrollRectToVisible(table.getCellRect(row, 0, true));
-    }
-
-    /** The selected row (or -1) and the number of rows. */
-    public int[] frameSelection() {
-        return new int[]{table == null ? -1 : table.getSelectedRow(), table == null ? 0 : table.getRowCount()};
-    }
-
     /** Accepts a folder (or a file in it) dropped on the frame table or the empty area, and imports it. */
     void installFolderDrop(TransferHandler handler) {
         table.setTransferHandler(handler);
@@ -1698,12 +1709,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     @Override
     public void setAutoTuneCommand(Runnable openOverviewAndRunAutoTune) {
         this.openOverviewAndRunAutoTune = openOverviewAndRunAutoTune;
-    }
-
-    public void selectFirstFileIfNoneSelected() {
-        if (table.getRowCount() > 0 && table.getSelectedRow() == -1) {
-            table.setRowSelectionInterval(0, 0);
-        }
     }
 
     public void setProgressBarWorking() {

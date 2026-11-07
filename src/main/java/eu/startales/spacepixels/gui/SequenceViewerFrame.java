@@ -77,7 +77,7 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     private final Runnable layerListener = this::layersChanged;
     private final FindingsSection findings;
     private final ViewerSidePanel sidePanel = new ViewerSidePanel();
-    /** Holds the Display stretch section, which is made when the viewer first opens with the Image Stretch tab. */
+    /** Holds the Display stretch section, which is made when the viewer first opens with the Image Stretch editor. */
     private final JPanel stretchHolder = new JPanel(new BorderLayout());
     private final JPanel controlRows = new JPanel();
     private final JLabel frameLabel = new JLabel(" ");
@@ -359,7 +359,8 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
     }
 
     protected void openAt(int index, StretchPanel stretchPanel, FitsFileInformation[] files) {
-        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::redraw, stretchHolder);
+        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::redraw, stretchHolder,
+                () -> shown == null || shown.frame == null ? null : shown.frame.getInfo());
         cursorReadout.reset(files, sky::solutionFor);
         sky.attach(files);
         open = true;

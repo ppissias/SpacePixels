@@ -82,6 +82,7 @@ public class ApplicationWindow {
     private volatile MainApplicationPanel mainApplicationPanel;
     private volatile ConfigurationPanel configurationApplicationPanel;
     private volatile StretchPanel stretchPanel;
+    private StretchEditorWindow stretchEditorWindow;
     private volatile DetectionConfigurationPanel detectionConfigurationPanel;
     /** The preparation workflow outlives session changes and closes only with its window or the application. */
     private PreparationWindow preparationWindow;
@@ -234,8 +235,8 @@ public class ApplicationWindow {
                 }, this::setSessionTabsEnabled, viewers);
         configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
                 storage, () -> closing);
-        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel, mainApplicationPanel.batchStretchAction(),
-                stretch -> viewers.register(new StretchedSequenceFrame(this, stretch)));
+        stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel.batchStretchAction(),
+                stretch -> viewers.register(new StretchedSequenceFrame(this, stretch)), this::showStretchEditor);
         detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
                 () -> closing, () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel),
                 mainApplicationPanel, mainApplicationPanel, viewers);
@@ -253,14 +254,12 @@ public class ApplicationWindow {
 
         tabbedPane.addTab("Main", mainApplicationPanel);
         tabbedPane.addTab("Astrometry Config", configurationApplicationPanel);
-        tabbedPane.addTab("Image Stretch", stretchPanel);
         tabbedPane.addTab("Detection Settings", detectionConfigurationPanel);
         tabbedPane.addTab("Appearance", new AppearancePanel(startupAppearance, appearanceWarning,
                 AppearanceSettings.defaultFile(), storage, () -> closing, this::requestRestart));
 
         configurationApplicationPanel.refreshComponents();
         setTabEnabled(configurationApplicationPanel, true);
-        setTabEnabled(stretchPanel, false);
         setTabEnabled(detectionConfigurationPanel, false);
         installHelpMenu();
 
@@ -594,12 +593,11 @@ public class ApplicationWindow {
     // --- HELPER METHODS ---
 
     /**
-     * The tabs that need a session: Astrometry Config, Image Stretch and Detection Settings. They are found by their
+     * The settings tabs that follow the session job lock: Astrometry Config and Detection Settings. They are found by their
      * panel, not by their position.
      */
     void setSessionTabsEnabled(boolean state) {
         setTabEnabled(configurationApplicationPanel, state || sessions.current() == null && jobCoordinator.current() == null);
-        setTabEnabled(stretchPanel, state);
         setTabEnabled(detectionConfigurationPanel, state);
     }
 
@@ -651,6 +649,17 @@ public class ApplicationWindow {
 
     public ConfigurationPanel getConfigurationApplicationPanel() {
         return configurationApplicationPanel;
+    }
+
+    /** Opens the shared stretch workspace on a caller's frame, or Main's selected frame. EDT only. */
+    private void showStretchEditor(FitsFileInformation frame) {
+        if (sessions.current() == null || closing) return;
+        if (stretchEditorWindow == null || !stretchEditorWindow.isDisplayable()) {
+            stretchEditorWindow = viewers.register(new StretchEditorWindow(frmIpodImage, stretchPanel));
+        }
+        FitsFileInformation selected = frame == null ? mainApplicationPanel.getSelectedFileInformation() : frame;
+        stretchEditorWindow.showEditor();
+        if (!stretchPanel.selectPreviewFrame(selected)) stretchEditorWindow.setVisible(false);
     }
 
     public StretchPanel getStretchPanel() {

@@ -15,7 +15,7 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
 import java.util.Locale;
 
 /**
- * "Show full size" on the Image Stretch tab: the frames of the session at full resolution with the tab's stretch,
+ * "Show full size" on the Image Stretch editor: the frames of the session at full resolution with the shared stretch,
  * which applies at once while the window is open. Frames are read as Blink reads them, so colour frames show in
  * colour.
  */

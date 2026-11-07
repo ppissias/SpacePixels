@@ -35,7 +35,7 @@ import java.util.prefs.Preferences;
 
 /**
  * Plays the selected frames in turn, the classic way of hunting moving objects by eye. The speed, the display
- * stretch (shared with the Image Stretch tab) and the zoom can change while it plays, and the findings of the last
+ * stretch (shared with the Image Stretch editor) and the zoom can change while it plays, and the findings of the last
  * detection run and the catalogue can be drawn on top, chosen in the side panel. The list on the left shows every
  * frame, with a band where the capture times have a gap; while paused, frames can be left out of the loop. Under the
  * image, the transport bar steps and plays the loop, with a timeline by capture time. The window opens as soon as the
@@ -71,7 +71,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     private final Runnable layerListener = this::layersChanged;
     private final FindingsSection findings;
     private final ViewerSidePanel sidePanel = new ViewerSidePanel();
-    /** Holds the Display stretch section, which is made when the first blink brings the Image Stretch tab. */
+    /** Holds the Display stretch section, which is made when the first blink brings the Image Stretch editor. */
     private final JPanel stretchHolder = new JPanel(new BorderLayout());
     private final JLabel frameLabel = new JLabel(" ");
     private final JLabel cursorLabel = new JLabel(" ");
@@ -198,7 +198,8 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     void open(BlinkSequence sequence, FitsFileInformation[] files, FitsFileInformation[] sessionFiles,
               StretchPanel stretchPanel, TrackOverlay overlay, VariableStarOverlay variables, FitsFileInformation startAt) {
-        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::showCurrent, stretchHolder);
+        stretch = ViewerSupport.bindStretch(stretch, stretchPanel, this::showCurrent, stretchHolder,
+                () -> open && this.sequence != null ? this.sequence.getFrames().get(current).getInfo() : null);
         release();
         this.sequence = sequence;
         this.files = files == null ? null : files.clone();

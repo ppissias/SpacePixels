@@ -45,7 +45,7 @@ public final class DisplayStretch {
         return ASINH_LINEAR_STRENGTH * Math.pow(ASINH_LARGEST_FACTOR / ASINH_LINEAR_STRENGTH, share);
     }
 
-    /** Full-range linear display, matching the Image Stretch tab's original preview; no histogram rescaling. */
+    /** Full-range linear display, matching the Image Stretch editor's original preview; no histogram rescaling. */
     public static byte[] linearLookupTable() {
         byte[] table = new byte[VALUES];
         for (int value = 0; value < VALUES; value++) {

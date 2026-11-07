@@ -46,7 +46,8 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         assertTrue(showingLabel("Drop a folder").contains("aligned frames"));
         assertTrue(showingLabel("calibrated and aligned").contains("XISF"));
         assertTrue(tabEnabled("Astrometry Config"));
-        assertFalse(tabEnabled("Image Stretch"));
+        requireButton("Image Stretch…", false);
+        assertEquals(-1, GuiActionRunner.execute(() -> application().getTabbedPane().indexOfTab("Image Stretch")).intValue());
         assertFalse(tabEnabled("Detection Settings"));
     }
 
@@ -66,7 +67,7 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         waitFor("the status line reports the imported files",
                 () -> showingLabel("Imported 5 file").contains("Imported 5 file"));
         assertTrue(tabEnabled("Astrometry Config"));
-        assertTrue(tabEnabled("Image Stretch"));
+        requireButton("Image Stretch…", true);
         assertTrue(tabEnabled("Detection Settings"));
         requireButton("Detect Moving Targets", true);
         requireButton("Convert to Mono", false);

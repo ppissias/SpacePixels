@@ -3,6 +3,9 @@ package eu.startales.spacepixels.gui.mechanics;
 import org.assertj.swing.core.GenericTypeMatcher;
 import org.assertj.swing.edt.GuiActionRunner;
 import org.assertj.swing.finder.JOptionPaneFinder;
+import org.assertj.swing.finder.WindowFinder;
+import org.assertj.swing.fixture.FrameFixture;
+import javax.swing.JFrame;
 import org.assertj.swing.fixture.JOptionPaneFixture;
 import org.assertj.swing.fixture.JSliderFixture;
 import org.junit.Test;
@@ -10,8 +13,6 @@ import eu.startales.spacepixels.testsupport.SyntheticDatasetFactory;
 
 import javax.swing.JLabel;
 import javax.swing.JSlider;
-import javax.swing.SwingUtilities;
-import javax.swing.JCheckBox;
 import java.awt.Component;
 import java.awt.Container;
 import java.awt.image.BufferedImage;
@@ -31,18 +32,19 @@ import static org.junit.Assert.assertTrue;
  * Run with {@code ./gradlew guiMechanicsTest}.
  */
 public class StretchMechanicsTest extends MechanicsTestCase {
+    private FrameFixture stretchEditor;
 
     @Test(timeout = 180_000)
     public void slidersChangeThePreviewAndBatchStretchCompletes() throws Exception {
         Path session = importSyntheticSequence();
-        window().tabbedPane().selectTab("Image Stretch");
-        window().checkBox(VisibleText.checkBox("Stretch display")).check();
+        openEditor();
+        editor().checkBox(VisibleText.checkBox("Stretch display")).check();
         waitUntilPreviewSettled("the first frame is previewed");
 
         long[] before = previewSignatures();
         assertNotEquals("the stretched preview differs from the linear one", before[0], before[1]);
 
-        List<JSlider> sliders = VisibleText.showingSliders(window().target());
+        List<JSlider> sliders = VisibleText.showingSliders(editor().target());
         assertEquals("the two stretch sliders", 2, sliders.size());
         int[] movedTo = new int[sliders.size()];
         for (int i = 0; i < sliders.size(); i++) {
@@ -59,30 +61,25 @@ public class StretchMechanicsTest extends MechanicsTestCase {
                 before[0], afterSliders[0]);
         assertNotEquals("moving the sliders changes the stretched preview", before[1], afterSliders[1]);
 
-        window().checkBox(VisibleText.checkBox("Stretch display")).uncheck();
+        editor().checkBox(VisibleText.checkBox("Stretch display")).uncheck();
         waitFor("turning stretch display off shows the linear frame on both sides", () -> {
             if (frameCaption().contains("rendering")) {
                 return false;
             }
             long[] now = previewSignatures();
-            return showingLabel("Linear (stretch off)").contains("Linear (stretch off)")
+            return editor().label(VisibleText.labelContaining("Linear (stretch off)")).target().getText().contains("Linear (stretch off)")
                     && now[0] != 0 && now[0] == now[1] && now[1] != afterSliders[1];
         });
 
-        window().button(VisibleText.button("Next ▶")).click();
+        editor().button(VisibleText.button("Next ▶")).click();
         waitFor("the preview steps to the next frame", () -> {
             String label = frameCaption();
             return label.contains("Frame 2 of") && label.contains("frame_02.fit") && !label.contains("rendering");
         });
 
-        var button = window().button(VisibleText.button("Batch Stretch")).target();
-        GuiActionRunner.execute(() -> {
-            assertTrue("Batch Stretch belongs to Image Stretch", SwingUtilities.isDescendingFrom(button,
-                    application().getTabbedPane().getSelectedComponent()));
-            assertFalse("The enable checkbox was removed", hasBatchCheckbox(window().target()));
-        });
-        assertTrue(window().button(VisibleText.button("Batch Stretch")).target().isEnabled());
-        window().button(VisibleText.button("Batch Stretch")).click();
+        editor().button(VisibleText.button("Export stretched copies…")).click();
+        var export = JOptionPaneFinder.findOptionPane().withTimeout(15_000).using(robot());
+        export.button(VisibleText.button("Export")).click();
 
         JOptionPaneFixture done = JOptionPaneFinder.findOptionPane().withTimeout(60_000).using(robot());
         Object message = GuiActionRunner.execute(() -> done.target().getMessage());
@@ -92,6 +89,82 @@ public class StretchMechanicsTest extends MechanicsTestCase {
         File[] stretched = session.toFile().listFiles(file -> file.isDirectory() && file.getName().contains("stretched"));
         assertEquals(1, stretched.length);
         assertEquals(5, stretched[0].listFiles(File::isFile).length);
+    }
+
+    /** Editor navigation preserves Main's selection, while viewer links reuse it and all controls remain live. */
+    @Test(timeout = 180_000)
+    public void editorSharesControlsAndViewerFrameWithoutChangingMainSelection() throws Exception {
+        Path sequence = importSyntheticSequence();
+        GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 2));
+        openEditor();
+        java.awt.Frame firstEditor = editor().target();
+        waitUntilPreviewSettled("initial comparison renders");
+        editor().button(VisibleText.button("Next ▶")).click();
+        waitFor("editor steps independently", () -> frameCaption().contains("Frame 2 of") && !frameCaption().contains("rendering"));
+        assertEquals(3, GuiActionRunner.execute(() -> window().table().target().getSelectedRowCount()).intValue());
+        editor().button(VisibleText.button("Close")).click();
+
+        window().button(VisibleText.button("Preview Frame")).click();
+        FrameFixture preview = viewer("Preview Frame");
+        preview.button(VisibleText.button("▶")).click();
+        waitFor("Preview shows frame two", () -> preview.label(VisibleText.labelContaining("Frame 2 of")).target().getText().contains("frame_02.fit"));
+        GuiActionRunner.execute(() -> preview.button(VisibleText.button("Open stretch editor…")).target().doClick());
+        stretchEditor = findEditor();
+        assertTrue("the same editor window is reused", firstEditor == editor().target());
+        waitFor("editor opens on Preview's frame", () -> frameCaption().contains("frame_02.fit") && !frameCaption().contains("rendering"));
+
+        var editorNumber = GuiActionRunner.execute(() -> VisibleText.spinnerByLabel(editor().target(), "Black Point"));
+        var viewerNumber = preview.spinner(new GenericTypeMatcher<javax.swing.JSpinner>(javax.swing.JSpinner.class, true) {
+            @Override protected boolean isMatching(javax.swing.JSpinner spinner) {
+                return spinner.getAccessibleContext().getAccessibleName().contains("Black Point");
+            }
+        }).target();
+        GuiActionRunner.execute(() -> editorNumber.setValue(35));
+        waitFor("editor numeric input reaches Preview", () -> GuiActionRunner.execute(() -> ((Number) viewerNumber.getValue()).intValue() == 35));
+        GuiActionRunner.execute(() -> viewerNumber.setValue(40));
+        waitFor("Preview numeric input reaches editor", () -> GuiActionRunner.execute(() -> ((Number) editorNumber.getValue()).intValue() == 40));
+        assertEquals(3, GuiActionRunner.execute(() -> window().table().target().getSelectedRowCount()).intValue());
+
+        editor().button(VisibleText.button("Export stretched copies…")).click();
+        var cancelled = JOptionPaneFinder.findOptionPane().withTimeout(15_000).using(robot());
+        cancelled.button(VisibleText.button("Cancel")).click();
+        assertFalse("cancelling export writes no copies", sequence.resolve("_stretched").toFile().exists());
+        GuiActionRunner.execute(() -> window().target().toFront());
+        importSyntheticSequence();
+        waitFor("a new session disposes the editor", () -> !GuiActionRunner.execute(firstEditor::isDisplayable));
+        openEditor();
+        assertEquals("shared stretch survives closing and importing", 40,
+                GuiActionRunner.execute(() -> application().getStretchPanel().getStretchSlider().getValue()).intValue());
+    }
+
+    /** Blink can open the editor on its displayed frame while its existing export/job lock remains in force. */
+    @Test(timeout = 180_000)
+    public void blinkOpensStretchEditorWithExportDisabled() throws Exception {
+        importSyntheticSequence();
+        GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 2));
+        window().button(VisibleText.button("Blink Selected")).click();
+        FrameFixture blink = viewer("Blink");
+        blink.button(VisibleText.button("❚❚ Pause")).click();
+        String shown = blink.label(VisibleText.labelContaining("Frame ")).target().getText();
+        String frameName = java.util.regex.Pattern.compile("frame_\\d+\\.fit").matcher(shown).results()
+                .map(java.util.regex.MatchResult::group).findFirst().orElseThrow();
+        GuiActionRunner.execute(() -> blink.button(VisibleText.button("Open stretch editor…")).target().doClick());
+        stretchEditor = findEditor();
+        waitFor("editor uses the frame Blink displays", () -> frameCaption().contains(frameName) && !frameCaption().contains("rendering"));
+        assertFalse("Blink continues to guard disk export", editor().button(VisibleText.button("Export stretched copies…")).target().isEnabled());
+        assertTrue("opening the editor retains paused playback", blink.button(VisibleText.button("▶ Play")).target().isEnabled());
+        assertTrue(GuiActionRunner.execute(blink.target()::isShowing));
+        GuiActionRunner.execute(() -> blink.target().dispatchEvent(new java.awt.event.WindowEvent(blink.target(), java.awt.event.WindowEvent.WINDOW_CLOSING)));
+        waitFor("closing Blink releases export", () -> editor().button(VisibleText.button("Export stretched copies…")).target().isEnabled());
+    }
+
+    /** Finds a showing sequence viewer using its public window title. */
+    private FrameFixture viewer(String title) {
+        return WindowFinder.findFrame(new GenericTypeMatcher<>(JFrame.class) {
+            @Override protected boolean isMatching(JFrame frame) {
+                return frame.isShowing() && frame.getTitle().startsWith(title);
+            }
+        }).withTimeout(20_000).using(robot());
     }
 
     /** Conversion remains linear even after selecting an aggressive display stretch in the same application. */
@@ -105,11 +178,12 @@ public class StretchMechanicsTest extends MechanicsTestCase {
         assertTrue(String.valueOf(GuiActionRunner.execute(() -> offered.target().getMessage()))
                 .contains("Convert the dataset to linear monochrome copies now?"));
         offered.noButton().click();
-        window().tabbedPane().selectTab("Image Stretch");
-        window().checkBox(VisibleText.checkBox("Stretch display")).check();
-        for (JSlider slider : VisibleText.showingSliders(window().target())) {
+        openEditor();
+        editor().checkBox(VisibleText.checkBox("Stretch display")).check();
+        for (JSlider slider : VisibleText.showingSliders(editor().target())) {
             new JSliderFixture(robot(), slider).slideTo(slider.getMaximum());
         }
+        editor().button(VisibleText.button("Close")).click();
         window().tabbedPane().selectTab("Main");
         window().button(VisibleText.button("Convert to Mono")).click();
         var done = JOptionPaneFinder.findOptionPane().withTimeout(60_000).using(robot());
@@ -142,18 +216,27 @@ public class StretchMechanicsTest extends MechanicsTestCase {
         assertFalse(sequence.resolve("_stretched").toFile().exists());
     }
 
-    /** Searches every tab, including hidden controls, for the obsolete disk-output switch. */
-    private static boolean hasBatchCheckbox(Container parent) {
-        for (Component child : parent.getComponents()) {
-            if (child instanceof JCheckBox box && "Enable batch stretch".equals(box.getText())) return true;
-            if (child instanceof Container nested && hasBatchCheckbox(nested)) return true;
-        }
-        return false;
+    /** Opens the workspace using Main's visible entry point. */
+    private void openEditor() {
+        window().button(VisibleText.button("Image Stretch…")).click();
+        stretchEditor = findEditor();
+    }
+
+    /** The mounted editor, also available to assertions already running on the EDT. */
+    private FrameFixture editor() { return stretchEditor; }
+
+    /** Finds the one shared, modeless stretch workspace after an entry point opens it. */
+    private FrameFixture findEditor() {
+        return WindowFinder.findFrame(new GenericTypeMatcher<>(JFrame.class) {
+            @Override protected boolean isMatching(JFrame frame) {
+                return frame.isShowing() && "Image Stretch".equals(frame.getTitle());
+            }
+        }).withTimeout(15_000).using(robot());
     }
 
     /** The preview's own caption, not the help text that also says "Preview Frame". */
     private String frameCaption() {
-        return window().label(new GenericTypeMatcher<>(JLabel.class, true) {
+        return editor().label(new GenericTypeMatcher<>(JLabel.class, true) {
             @Override
             protected boolean isMatching(JLabel label) {
                 String text = label.getText();
@@ -164,7 +247,7 @@ public class StretchMechanicsTest extends MechanicsTestCase {
 
     private void waitUntilPreviewSettled(String description) {
         waitFor(description, () -> {
-            String label = showingLabel("Frame 1 of");
+            String label = frameCaption();
             return label.contains("Frame 1 of") && !label.contains("rendering") && previewSignatures()[0] != 0;
         });
     }
@@ -173,7 +256,7 @@ public class StretchMechanicsTest extends MechanicsTestCase {
     private long[] previewSignatures() {
         return GuiActionRunner.execute(() -> {
             List<Component> views = new ArrayList<>();
-            collectPreviews(window().target(), views);
+            collectPreviews(editor().target(), views);
             if (views.size() != 2) {
                 throw new AssertionError("Expected the two stretch previews, found " + views.size());
             }

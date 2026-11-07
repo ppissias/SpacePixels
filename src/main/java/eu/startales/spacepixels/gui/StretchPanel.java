@@ -22,15 +22,18 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.Locale;
 import java.util.prefs.Preferences;
+import java.util.function.Consumer;
 
 /**
- * The Image Stretch tab: the display stretch used by the frame viewers (Blink, Preview Frame, Manual Transient
- * Inspection and "Show full size", whose windows show the same controls) and the optional stretched copies, with a
- * linked, zoomable preview of the whole frame. The settings are remembered between sessions.
+ * Shared display-stretch controls and the editor's linked, zoomable linear/stretched previews. Viewer controls
+ * share these models; settings are remembered between sessions. The editor navigates independently of the Main
+ * table selection. All controls and preview requests are owned by the Swing event dispatch thread.
  */
 public class StretchPanel extends JPanel {
     private final SessionAccess sessions;
-    private final FrameList frames;
+    private final Consumer<FitsFileInformation> editorOpener;
+    private FitsFileInformation[] previewFiles = new FitsFileInformation[0];
+    private int previewIndex = -1;
     private final FullSizeViewer fullSize;
 
     // Controls
@@ -38,6 +41,8 @@ public class StretchPanel extends JPanel {
     private final JCheckBox displayStretchCheckbox = new JCheckBox("Stretch display", true);
     private final JComboBox<StretchAlgorithm> stretchAlgoCombo = new JComboBox<>(StretchAlgorithm.values());
     private final JSlider stretchIterationsSlider = new JSlider();
+    private final JSpinner primaryNumber = parameterNumber(stretchSlider);
+    private final JSpinner secondaryNumber = parameterNumber(stretchIterationsSlider);
     private final JButton showFullSizeButton = new JButton("Show full size");
     private final JLabel stretchIntensityLabel = new JLabel();
     private final JLabel stretchIterationsLabel = new JLabel();
@@ -74,14 +79,15 @@ public class StretchPanel extends JPanel {
         return view;
     }
 
-    /** Captures frame access, the shared batch command and the full-size viewer factory on the EDT. */
-    public StretchPanel(SessionAccess sessions, FrameList frames, Action batchStretch, FullSizeViewer fullSize) {
+    /** Captures session access, the guarded export command and the editor/viewer openers on the EDT. */
+    public StretchPanel(SessionAccess sessions, Action batchStretch, FullSizeViewer fullSize,
+                        Consumer<FitsFileInformation> editorOpener) {
         this.sessions = sessions;
-        this.frames = frames;
+        this.editorOpener = editorOpener;
         this.fullSize = fullSize;
 
         setLayout(new BorderLayout());
-        setBorder(new EmptyBorder(10, 20, 20, 20));
+        setBorder(new EmptyBorder(UiStyle.space(8), UiStyle.space(12), UiStyle.space(10), UiStyle.space(12)));
 
         previewDebounceTimer = new Timer(250, e -> executePreviewTask());
         previewDebounceTimer.setRepeats(false);
@@ -91,14 +97,6 @@ public class StretchPanel extends JPanel {
         // ==========================================
         JPanel controls = new JPanel();
         controls.setLayout(new BoxLayout(controls, BoxLayout.Y_AXIS));
-        controls.add(createSectionHeader("Display Stretch"));
-        WrappingHelpLabel explanation = new WrappingHelpLabel(
-                "Used by <b>Blink Selected</b>, <b>Preview Frame</b>, <b>Manual Transient Inspection</b>, "
-                + "<b>Show full size</b> and the optional stretched copies. "
-                + "Detection always works on the linear data, and report images use their own stretch "
-                + "(Detection Settings → Report Visualization).", 620);
-        controls.add(left(explanation));
-
         stretchAlgoCombo.setRenderer(new DefaultListCellRenderer() {
             @Override
             public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
@@ -111,7 +109,7 @@ public class StretchPanel extends JPanel {
         resetButton.addActionListener(e -> resetStretchToDefaults());
         JPanel algorithmRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
         algorithmRow.setBorder(new EmptyBorder(12, 0, 6, 0));
-        displayStretchCheckbox.setToolTipText("Apply the display stretch in this tab and all frame viewers. Untick for a linear view; your stretch settings are kept.");
+        displayStretchCheckbox.setToolTipText("Apply the display stretch in this editor and all frame viewers. Untick for a linear view; your stretch settings are kept.");
         algorithmRow.add(displayStretchCheckbox);
         algorithmRow.add(Box.createHorizontalStrut(8));
         algorithmRow.add(new JLabel("Algorithm:"));
@@ -124,34 +122,24 @@ public class StretchPanel extends JPanel {
         stretchIterationsLabel.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         JPanel slidersRow = new JPanel(new GridLayout(1, 2, 40, 0));
         slidersRow.setBorder(new EmptyBorder(6, 0, 6, 0));
-        slidersRow.add(sliderPanel(stretchIntensityLabel, stretchSlider));
-        slidersRow.add(sliderPanel(stretchIterationsLabel, stretchIterationsSlider));
+        slidersRow.add(sliderPanel(stretchIntensityLabel, stretchSlider, primaryNumber));
+        slidersRow.add(sliderPanel(stretchIterationsLabel, stretchIterationsSlider, secondaryNumber));
         controls.add(left(slidersRow));
 
-        JButton batchStretchButton = new JButton(batchStretch);
-        batchStretchButton.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
-        JPanel outputRow = new WrappingControlsPanel(UiStyle.space(12), UiStyle.space(6));
-        outputRow.setBorder(new EmptyBorder(UiStyle.space(6), 0, UiStyle.space(6), 0));
-        outputRow.add(batchStretchButton);
-        outputRow.add(new WrappingHelpLabel("<b>Batch stretch the entire dataset.</b><br>"
-                + "Write stretched copies in _stretched using the algorithm and sliders, even when Stretch display is off. "
-                + "Source files remain unchanged.", 500));
-        controls.add(left(outputRow));
-        add(controls, BorderLayout.NORTH);
+        add(WindowSizing.viewerControls(controls), BorderLayout.NORTH);
 
         // ==========================================
         // PREVIEW
         // ==========================================
         previousButton.setToolTipText("Preview the previous frame.");
         nextButton.setToolTipText("Preview the next frame.");
-        previousButton.addActionListener(e -> frames.selectFrameOffset(-1));
-        nextButton.addActionListener(e -> frames.selectFrameOffset(1));
+        previousButton.addActionListener(e -> stepFrame(-1));
+        nextButton.addActionListener(e -> stepFrame(1));
         frameLabel.setForeground(UiStyle.helpColor());
         JLabel hint = new JLabel("Scroll to zoom, drag to pan, double-click to fit; both previews move together.");
         hint.setForeground(UiStyle.helpColor());
 
-        JPanel previewHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
-        previewHeader.add(createSectionHeader("Preview"));
+        JPanel previewHeader = new WrappingControlsPanel(UiStyle.space(8), UiStyle.space(2));
         previewHeader.add(previousButton);
         previewHeader.add(nextButton);
         previewHeader.add(frameLabel);
@@ -168,11 +156,20 @@ public class StretchPanel extends JPanel {
         previewPanel.add(images, BorderLayout.CENTER);
         add(previewPanel, BorderLayout.CENTER);
 
-        JPanel actionPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
-        actionPanel.setBorder(new EmptyBorder(10, 0, 0, 0));
-        showFullSizeButton.setToolTipText("Step through the whole sequence at full size with this stretch.");
+        JPanel footer = new JPanel(new BorderLayout(0, UiStyle.space(6)));
+        WrappingHelpLabel sharedNote = new WrappingHelpLabel(
+                "Changes apply immediately to all frame viewers; detection uses the linear data.", 850);
+        footer.add(sharedNote, BorderLayout.NORTH);
+        JPanel actionPanel = new WrappingControlsPanel(UiStyle.space(8), UiStyle.space(4));
+        JButton export = new JButton(batchStretch);
+        actionPanel.add(export);
+        showFullSizeButton.setToolTipText("Step through the whole sequence at full size with this stretch, including colour frames.");
         actionPanel.add(showFullSizeButton);
-        add(actionPanel, BorderLayout.SOUTH);
+        JButton close = new JButton("Close");
+        close.addActionListener(e -> SwingUtilities.getWindowAncestor(this).setVisible(false));
+        actionPanel.add(close);
+        footer.add(actionPanel, BorderLayout.SOUTH);
+        add(footer, BorderLayout.SOUTH);
 
         loadSettings();
 
@@ -198,20 +195,18 @@ public class StretchPanel extends JPanel {
         stretchIterationsSlider.addChangeListener(e -> sliderChanged());
         showFullSizeButton.addActionListener(e -> openFullSize());
 
-        // Preview whenever the tab becomes visible; selection changes elsewhere only refresh a visible tab. A hidden
-        // tab shows no render that was under way: it renders again when it is shown.
+        // Preview only while the editor is visible. Hiding it cancels requests and drops its images; reopening
+        // starts from the caller's frame, independently of Main's selection.
         addHierarchyListener(e -> {
             if ((e.getChangeFlags() & HierarchyEvent.SHOWING_CHANGED) == 0) {
                 return;
             }
             if (isShowing()) {
-                frames.selectFirstFileIfNoneSelected();
                 updateFrameLabel();
                 triggerPreviewUpdate();
             } else {
                 previewDebounceTimer.stop();
-                renderer.cancel();
-                rendering = false;
+                closeEditorPreview();
             }
         });
     }
@@ -234,8 +229,10 @@ public class StretchPanel extends JPanel {
         if (algorithm == null) {
             return;
         }
-        stretchIntensityLabel.setText(algorithm.getPrimaryParameterLabel() + ": " + stretchSlider.getValue());
-        stretchIterationsLabel.setText(algorithm.getSecondaryParameterLabel() + ": " + stretchIterationsSlider.getValue());
+        stretchIntensityLabel.setText(algorithm.getPrimaryParameterLabel());
+        primaryNumber.getAccessibleContext().setAccessibleName(algorithm.getPrimaryParameterLabel());
+        stretchIterationsLabel.setText(algorithm.getSecondaryParameterLabel());
+        secondaryNumber.getAccessibleContext().setAccessibleName(algorithm.getSecondaryParameterLabel());
     }
 
     /** Sets the slider ranges for the selected algorithm, with its saved values or, when {@code reset}, its defaults. */
@@ -307,6 +304,8 @@ public class StretchPanel extends JPanel {
         stretchAlgoCombo.setEnabled(enabled);
         stretchSlider.setEnabled(enabled);
         stretchIterationsSlider.setEnabled(enabled);
+        primaryNumber.setEnabled(enabled);
+        secondaryNumber.setEnabled(enabled);
         stretchIntensityLabel.setEnabled(enabled);
         stretchIterationsLabel.setEnabled(enabled);
         resetButton.setEnabled(enabled);
@@ -337,26 +336,57 @@ public class StretchPanel extends JPanel {
     // PREVIEW
     // ==========================================
 
-    /** Called by the main window whenever the frame selection changes. */
-    public void onFrameSelectionChanged() {
-        updateFrameLabel();
-        if (isShowing()) {
-            triggerPreviewUpdate();
-        }
+    /** Opens or raises the shared editor on the caller's frame; null lets Main choose its selected frame. EDT only. */
+    void openEditor(FitsFileInformation frame) {
+        editorOpener.accept(frame);
     }
 
+    /** Captures the active sequence and selects the requested frame without changing the Main table. EDT only. */
+    boolean selectPreviewFrame(FitsFileInformation requested) {
+        if (sessions.current() == null) return false;
+        FitsFileInformation[] files = sessions.current().getFiles();
+        if (files.length == 0) return false;
+        int index = 0;
+        if (requested != null) {
+            index = -1;
+            for (int i = 0; i < files.length; i++) {
+                if (java.util.Objects.equals(files[i].getFilePath(), requested.getFilePath())) { index = i; break; }
+            }
+            if (index < 0) return false;
+        }
+        previewFiles = files;
+        previewIndex = index;
+        updateFrameLabel();
+        triggerPreviewUpdate();
+        return true;
+    }
+
+    /** Moves the editor's frame cursor, leaving selection-dependent commands unchanged. EDT only. */
+    private void stepFrame(int delta) {
+        if (previewFiles.length == 0) return;
+        previewIndex = Math.max(0, Math.min(previewFiles.length - 1, previewIndex + delta));
+        triggerPreviewUpdate();
+    }
+
+    /** The editor's current metadata, or null after the editor closes. EDT only. */
+    private FitsFileInformation previewFile() {
+        return previewIndex >= 0 && previewIndex < previewFiles.length ? previewFiles[previewIndex] : null;
+    }
+
+    /** Updates navigation and the caption from the editor's cursor, never the Main selection. EDT only. */
     private void updateFrameLabel() {
-        int[] selection = frames.frameSelection();
-        FitsFileInformation selected = frames.getSelectedFileInformation();
-        previousButton.setEnabled(selection[0] > 0);
-        nextButton.setEnabled(selection[0] >= 0 && selection[0] < selection[1] - 1);
-        frameLabel.setText(selection[0] < 0 || selected == null ? "No frame selected"
-                : "Frame " + (selection[0] + 1) + " of " + selection[1] + " · " + new File(selected.getFilePath()).getName()
+        FitsFileInformation selected = previewFile();
+        previousButton.setEnabled(previewIndex > 0);
+        nextButton.setEnabled(previewIndex >= 0 && previewIndex < previewFiles.length - 1);
+        showFullSizeButton.setEnabled(selected != null);
+        frameLabel.setText(selected == null ? "No frame selected"
+                : "Frame " + (previewIndex + 1) + " of " + previewFiles.length + " · " + new File(selected.getFilePath()).getName()
                 + (rendering ? " · rendering…" : ""));
     }
 
+    /** Schedules a debounced render only while the editor is visible. EDT only. */
     public void triggerPreviewUpdate() {
-        // Only a visible tab renders; the tab renders again when it is shown (for example after blinking).
+        // Only a visible editor renders; reopening it renders the requested frame again.
         if (!isShowing()) {
             return;
         }
@@ -372,7 +402,7 @@ public class StretchPanel extends JPanel {
     }
 
     private void executePreviewTask() {
-        FitsFileInformation selected = frames.getSelectedFileInformation();
+        FitsFileInformation selected = previewFile();
         if (selected == null || sessions.current() == null) {
             clearPreviews("Import frames and select one to preview it");
             return;
@@ -423,8 +453,7 @@ public class StretchPanel extends JPanel {
             sequenceFrame.closeForSessionChange();
             sequenceFrame = null;
         }
-        clearPreviews("Select a frame to preview it");
-        triggerPreviewUpdate();
+        closeEditorPreview();
     }
 
     /** Forwards a session frame metadata replacement to the full-size sequence viewer when it is present. */
@@ -432,28 +461,24 @@ public class StretchPanel extends JPanel {
         if (sequenceFrame != null) {
             sequenceFrame.replaceFrameMetadata(previous, updated);
         }
+        for (int i = 0; i < previewFiles.length; i++) {
+            if (previewFiles[i] == previous) previewFiles[i] = updated;
+        }
     }
 
+    /** Cancels preview work and releases the editor's images and frame cursor, keeping shared stretch settings. */
+    void closeEditorPreview() {
+        previewDebounceTimer.stop();
+        previewFiles = new FitsFileInformation[0];
+        previewIndex = -1;
+        clearPreviews("Open the editor on a frame to adjust its stretch");
+    }
+
+    /** Opens the linear/colour sequence viewer at the editor's frame. EDT only. */
     private void openFullSize() {
-        var session = sessions.current();
-        FitsFileInformation[] files = session == null ? null : session.getFiles();
-        if (files == null || files.length == 0) {
-            return;
-        }
-        FitsFileInformation selectedFile = frames.getSelectedFileInformation();
-        int startIndex = 0;
-        if (selectedFile != null) {
-            for (int i = 0; i < files.length; i++) {
-                if (files[i].getFilePath().equals(selectedFile.getFilePath())) {
-                    startIndex = i;
-                    break;
-                }
-            }
-        }
-        if (sequenceFrame == null || !sequenceFrame.isDisplayable()) {
-            sequenceFrame = fullSize.create(this);
-        }
-        sequenceFrame.openSequence(files, startIndex);
+        if (previewFile() == null) return;
+        if (sequenceFrame == null || !sequenceFrame.isDisplayable()) sequenceFrame = fullSize.create(this);
+        sequenceFrame.openSequence(previewFiles.clone(), previewIndex);
     }
 
     // ==========================================
@@ -497,11 +522,37 @@ public class StretchPanel extends JPanel {
     // UI HELPERS
     // ==========================================
 
-    private static JPanel sliderPanel(JLabel label, JSlider slider) {
+    /** A labelled slider with an exact numeric value on the same bounded model. */
+    private static JPanel sliderPanel(JLabel label, JSlider slider, JSpinner number) {
         JPanel panel = new JPanel(new BorderLayout(0, 5));
         panel.add(label, BorderLayout.NORTH);
         panel.add(slider, BorderLayout.CENTER);
+        panel.add(number, BorderLayout.EAST);
+        label.setLabelFor(number);
         return panel;
+    }
+
+    /** Keeps an editor number field and slider in sync, including range changes when the function changes. */
+    private static JSpinner parameterNumber(JSlider slider) {
+        var range = slider.getModel();
+        var number = new SpinnerNumberModel(range.getValue(), range.getMinimum(), range.getMaximum(), 1);
+        JSpinner spinner = new JSpinner(number);
+        boolean[] syncing = {false};
+        range.addChangeListener(e -> {
+            if (syncing[0]) return;
+            syncing[0] = true;
+            try {
+                number.setMinimum(range.getMinimum());
+                number.setMaximum(range.getMaximum());
+                number.setValue(range.getValue());
+            } finally { syncing[0] = false; }
+        });
+        number.addChangeListener(e -> {
+            if (syncing[0]) return;
+            range.setValue(((Number) number.getValue()).intValue());
+        });
+        UiStyle.numberInput(spinner);
+        return spinner;
     }
 
     private static JPanel titled(String title, JComponent view, JComponent below) {
@@ -522,15 +573,6 @@ public class StretchPanel extends JPanel {
     private static JComponent left(JComponent component) {
         component.setAlignmentX(Component.LEFT_ALIGNMENT);
         return component;
-    }
-
-    private JLabel createSectionHeader(String title) {
-        JLabel headerLabel = new JLabel(title);
-        headerLabel.setFont(UiStyle.sectionFont());
-        headerLabel.setForeground(DetectionConfigurationPanel.accentColor());
-        headerLabel.setBorder(new EmptyBorder(10, 0, 6, 0));
-        headerLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
-        return headerLabel;
     }
 
     private static Preferences preferences() {

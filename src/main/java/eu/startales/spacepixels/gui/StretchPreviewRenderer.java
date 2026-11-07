@@ -20,7 +20,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
- * Renders the previews of the Image Stretch tab one request at a time, as Preview Frame prepares its frames. A request
+ * Renders the previews of the Image Stretch editor one request at a time, as Preview Frame prepares its frames. A request
  * made while another renders waits, replacing any request already waiting, and a result is shown only if its request
  * is still the newest one; so a slow render of an earlier frame or stretch can never replace a later one. All methods
  * are called on the event thread.

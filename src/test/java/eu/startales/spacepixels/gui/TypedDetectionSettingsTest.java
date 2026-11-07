@@ -173,9 +173,6 @@ public class TypedDetectionSettingsTest {
                     @Override public FitsFileInformation[] getImportedFiles() { return frames.clone(); }
                     @Override public FitsFileInformation[] getSelectedFilesInformation() { return frames.clone(); }
                     @Override public FitsFileInformation getSelectedFileInformation() { return frames[0]; }
-                    @Override public int[] frameSelection() { return new int[]{0, frames.length}; }
-                    @Override public void selectFrameOffset(int delta) { }
-                    @Override public void selectFirstFileIfNoneSelected() { }
                     @Override public void refreshCommands() { }
                     @Override public Action detectAction() { return noop; }
                     @Override public Action previewAction() { return noop; }

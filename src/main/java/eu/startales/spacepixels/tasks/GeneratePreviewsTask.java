@@ -18,7 +18,7 @@ import java.awt.image.BufferedImage;
 import java.util.concurrent.Callable;
 
 /**
- * Renders the Image Stretch previews of one frame: {original (linear), stretched}. The Image Stretch tab runs it on its
+ * Renders the Image Stretch previews of one frame: {original (linear), stretched}. The Image Stretch editor runs it on its
  * own worker, one frame at a time, and shows a result only while it is the newest one asked for.
  */
 public class GeneratePreviewsTask implements Callable<BufferedImage[]> {

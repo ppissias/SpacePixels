@@ -84,12 +84,16 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> application().importFolder(sequence.toFile()));
         waitFor("viewer sizing session imported", () -> GuiActionRunner.execute(() ->
                 application().getSession() != null && application().getJobCoordinator().current() == null));
-        window().tabbedPane().selectTab("Image Stretch");
-        GuiActionRunner.execute(() -> window().button(VisibleText.button("Show full size")).target().doClick());
+        window().button(VisibleText.button("Image Stretch…")).click();
+        FrameFixture editor = viewer("Image Stretch");
+        shrink(editor.target());
+        waitFor("editor controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(editor.target())));
+        GuiActionRunner.execute(() -> editor.button(VisibleText.button("Show full size")).target().doClick());
         FrameFixture stretch = viewer("Full Size");
         shrink(stretch.target());
         waitFor("stretch controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(stretch.target())));
         close(stretch);
+        close(editor);
         window().tabbedPane().selectTab("Main");
         GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 2));
         GuiActionRunner.execute(() -> window().button(VisibleText.button("Blink Selected")).target().doClick());

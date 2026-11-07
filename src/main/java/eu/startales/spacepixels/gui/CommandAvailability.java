@@ -19,9 +19,9 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
  */
 final class CommandAvailability {
 
-    /** The application workflow commands, including Batch Stretch on the Image Stretch tab. */
+    /** The application workflow commands, including the stretch editor and stretched-copy export. */
     enum Command {
-        PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, SOLAR_SYSTEM, BLINK, PREVIEW, INSPECTION,
+        PREPARE_FRAMES, IMPORT, CONVERT_TO_MONO, IMAGE_STRETCH, BATCH_STRETCH, PLATE_SOLVE, SKY_CATALOGUE, SOLAR_SYSTEM, BLINK, PREVIEW, INSPECTION,
         AUTO_TUNE, DETECT, DETECT_ITERATIVELY, QUALITY_CONTROL
     }
 
@@ -98,6 +98,7 @@ final class CommandAvailability {
             case CONVERT_TO_MONO:
                 return facts.monochrome() ? Availability.unavailable("all frames are already monochrome.")
                         : Availability.AVAILABLE;
+            case IMAGE_STRETCH:
             case BATCH_STRETCH:
                 return Availability.AVAILABLE;
             case SKY_CATALOGUE:

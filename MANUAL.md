@@ -18,7 +18,7 @@ This manual walks through the everyday workflows with screenshots from real sess
 4. [Reading the report](#4-reading-the-report)
 5. [Identifying objects](#5-identifying-objects)
 6. [Examples from real sessions](#6-examples-from-real-sessions)
-7. [Other tools](#7-other-tools): [prepare exposures](#preparing-an-observing-session), [faint movers](#faint-movers-experimental), [variable stars](#variable-stars), [Blink](#blink-selected), [iterative detection](#detect-iteratively-large-datasets), [command line](#command-line)
+7. [Other tools](#7-other-tools): [prepare exposures](#preparing-an-observing-session), [faint movers](#faint-movers-experimental), [variable stars](#variable-stars), [Blink](#blink-selected), [Image Stretch](#image-stretch), [iterative detection](#detect-iteratively-large-datasets), [command line](#command-line)
 8. [Detection settings in brief](#8-detection-settings-in-brief)
 9. [Tips and troubleshooting](#9-tips-and-troubleshooting)
 
@@ -81,17 +81,16 @@ At larger display scales or text sizes, controls wrap onto more rows. If the mai
 
 ![SpacePixels at start](docs/images/manual/ui-start.png)
 
-The window has five tabs:
+The window has four tabs:
 
 | Tab | What it is for |
 |---|---|
 | **Main** | importing frames and running the tools, in four groups from left to right: **1 Prepare**, **2 Astrometry**, **3 Inspect**, **4 Detect** |
 | **Astrometry Config** | the plate solver and your observing site |
-| **Image Stretch** | how frames are displayed in the viewers |
 | **Detection Settings** | Auto-Tune and every detection setting |
 | **Appearance** | desktop colours, interface size and an optional custom style file |
 
-**Astrometry Config** is available before import, so you can choose ASTAP and enter your observing site first. Unsaved valid defaults stay in use when another folder is imported; importing does not save or discard them. **Image Stretch** and **Detection Settings** open once frames are imported. After importing a colour dataset, SpacePixels offers to convert it to linear monochrome copies. **Yes** starts conversion; afterwards, the usual prompt lets you import the new mono folder. **No** leaves the colour dataset open, with a persistent information notice: you can blink, stretch, convert to mono and use astrometry. **Preview Frame**, **Manual Transient Inspection**, **Auto-Tune** and detection (including variable-star photometry) require monochrome frames. **Convert to Mono** remains available under **1 Prepare** if you want to convert later. Each group has a status under its heading that tells you what is ready and what is missing, and **2 Astrometry** and **3 Inspect** are marked optional. One action is highlighted as the next step: **Choose Folder…** with no frames, **Convert to Mono** for colour frames, **Detect Moving Targets** for monochrome ones, and **Open last report** after a run that wrote a report, until you change the settings. When a button is greyed out, its tooltip says why.
+**Astrometry Config** is available before import, so you can choose ASTAP and enter your observing site first. Unsaved valid defaults stay in use when another folder is imported; importing does not save or discard them. **Detection Settings** opens once frames are imported. **Image Stretch…** under **3 Inspect** opens the separate stretch editor, including for colour datasets. After importing a colour dataset, SpacePixels offers to convert it to linear monochrome copies. **Yes** starts conversion; afterwards, the usual prompt lets you import the new mono folder. **No** leaves the colour dataset open, with a persistent information notice: you can blink, stretch, convert to mono and use astrometry. **Preview Frame**, **Manual Transient Inspection**, **Auto-Tune** and detection (including variable-star photometry) require monochrome frames. **Convert to Mono** remains available under **1 Prepare** if you want to convert later. Each group has a status under its heading that tells you what is ready and what is missing, and **2 Astrometry** and **3 Inspect** are marked optional. One action is highlighted as the next step: **Choose Folder…** with no frames, **Convert to Mono** for colour frames, **Detect Moving Targets** for monochrome ones, and **Open last report** after a run that wrote a report, until you change the settings. When a button is greyed out, its tooltip says why.
 
 **4 Detect** says under its heading which settings are in use and, after this folder has a saved auto-tune, when that auto-tune was run. Below it is split in two. On the left, **Auto-Tune Settings** sits over a small box with the detection settings now in use: **Sigma**, **Grow** and **Min px** of the detection and of the star mask, then the mask overlap and the star jitter. **Edit settings…** in the corner of that box opens Detection Settings. On the right are **Detect Moving Targets**, **Detect Iteratively** and, once there is a report, **Open last report** and **Open output folder**.
 
@@ -219,7 +218,7 @@ During **Faint-mover search**, the view shows a bounded crop of an example input
 
 The text above the picture is the progress. **Hide picture** removes the view and the work of making its pictures, and SpacePixels remembers the choice. **Detect Iteratively** shows the same view, including its optional Auto-Tune, clears it at the start of each pass and names the pass in the caption. The pictures are copies for display only: the tuned settings, detection results and report are the same with the view shown or hidden.
 
-**Cancel** in the progress window (or closing it) requests that the run stop; the status bar says it was cancelled after its workers finish cleanup. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono, Batch Stretch and Plate Solve.
+**Cancel** in the progress window (or closing it) requests that the run stop; the status bar says it was cancelled after its workers finish cleanup. This works for the detection runs, Manual Transient Inspection, Test Star Mask, Auto-Tune, import, Convert to Mono, stretched-copy export and Plate Solve.
 - **A run that doesn't stop.** If it hasn't stopped after a while, the button offers to exit SpacePixels instead.
 - **What can't be cancelled:**
   - Writing the plate solution into a frame must finish, so the file is not left half written.
@@ -228,7 +227,7 @@ The text above the picture is the progress. **Hide picture** removes the view an
 - **What a cancelled run leaves:**
   - A cancelled detection removes the report folder it was writing.
   - A cancelled iterative run keeps the passes it finished, with an index page that says the run was cancelled, and removes the pass it was writing. When no pass had finished, it also removes the converted copy of the frames it made for the run.
-  - Convert to Mono and Batch Stretch keep the frames converted or stretched so far.
+  - Convert to Mono and **Export stretched copies…** keep the copies written so far.
 
 SpacePixels checks the quality of every frame (blank, blurred or failed frames are left out), builds a star mask from the median of the frames, extracts candidate transient sources in each frame, links the detections into tracks, and writes the report with crops and animations of the included findings. When it finishes, it offers to open the report:
 
@@ -635,7 +634,7 @@ Select three or more frames in the table and click **Blink Selected** to play th
 - **The transport bar** above the image: **▶ Play / ❚❚ Pause** (Space), and **◀ ▶** (← →) to step through the frames of the loop one at a time, passing over the frames left out. Stepping back and forth between two frames is the surest way to confirm a faint mover. The image's top-left corner and the bar show the frame's place, for example *7 / 15 · +7:44*.
 - **The timeline** places one tick per frame by its capture time, so gaps in the session show, labelled *↔ gap*. Frames left out of the loop have hollow ticks, and the frame shown a larger accent tick. Click a tick to show that frame.
 - **Speed**: from 0.5 to 30 frames per second, with the time per frame beside it, also with the ↑ and ↓ keys while playing. While paused, ↑ and ↓ step back and forward through the frames, as in the list. SpacePixels remembers the speed.
-- **Display stretch** (side panel): switch it off for a linear view, or on to use the function and parameters shared with the Image Stretch tab. Changes apply at once while blinking and in the other viewers. Switching it off keeps your settings for when you switch it on again.
+- **Display stretch** (side panel): switch it off for a linear view, or on to use the function and parameters shared with the Image Stretch editor. Changes apply at once while blinking and in the other viewers. Switching it off keeps your settings for when you switch it on again.
 - **Export GIF…** (G) in the toolbar pauses playback and dims the image: drag a rectangle on it, then click **Export GIF** in the bar over the image (or Ctrl+E, Command+E on macOS, or right-click inside the rectangle). The size in the bar is the exported screen pixels, including the display scale; the rectangle keeps its viewing size at any zoom. **Cancel (Esc)** returns to ordinary drag-to-pan.
 - **Zoom**, directly above the image: Fit, 100 %, 200 % and 400 %, or scroll to zoom around the cursor and drag to pan. Double-click switches between fit and 100 %. The view stays on the same spot while the frames change.
 - **Open in Preview ↗** pauses the blink and shows the frame in Preview Frame, to try the detection on it. Both windows stay open: **Blink ↗** in Preview Frame comes back on the frame it shows, without reading the frames again, and plays again if the blink was playing.
@@ -648,7 +647,7 @@ Select three or more frames in the table and click **Blink Selected** to play th
 
 - **Report findings**: the latest run's or restored report's findings, one row per layer with its count. **Variable stars** (V), **Faint movers** and **Tracks** (T) have their own rows; **Other findings** unfolds into single streaks and anomalies (S, A), slow-mover candidates (DS), local rescue and activity (LR, LC), and camera-fixed and common-motion groups (FC, CM). The eye shows or hides a layer, and **Aa** its labels; hiding Other findings hides all its rows, which keep their own choices. A row that has nothing to show says why, for example *none in report*.
 - **Catalog annotations** (A): the known objects of the field, once fetched. The switch in the header shows them; the rows choose **Known stars**, **Known variables**, **Deep-sky objects** and **Known asteroids & comets**, each with its count on the frame shown. The **⋯** menu holds **Faintest magnitude…**. **Align markers to corrected plate solution** (C) is here too.
-- **Display stretch**: the switch, the function and its two parameters, each with a slider and a number field, shared with the Image Stretch tab. **Reset display** returns the parameters to the function's defaults. A small histogram shows the pixel values of the frame shown: the values the stretch shows as black are drawn darker, and an accent line marks the black point, so you can see how much of the sky is clipped.
+- **Display stretch**: the switch, the function and its two parameters, each with a slider and a number field, shared with the Image Stretch editor. **Reset display** returns the parameters to the function's defaults. A small histogram shows the pixel values of the frame shown: the values the stretch shows as black are drawn darker, and an accent line marks the black point, so you can see how much of the sky is clipped. **Open stretch editor…** opens the [full comparison workspace](#image-stretch) on the frame currently shown, leaving the viewer open.
 
 The swatch beside each row looks like the marks it draws. Findings keep the colours of their report categories; everything already in a catalogue is drawn in off-white, so a white diamond inside a magenta ring reads as a detected variable that is already catalogued. The choices are shared by all viewers, so a layer hidden in Preview Frame is hidden in Blink too, and they are remembered.
 
@@ -686,7 +685,7 @@ Runs the detection on all frames of the session (not only the selected ones) and
 
 Manual Transient Inspection uses the normal detection only; the faint-streak search runs in Detect Moving Targets.
 
-Both windows, and **Show full size** on the Image Stretch tab, work like the blink window: the same stretch as the Image Stretch tab, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same one-line status bar: the frame and its time since the first frame on the left, and on the right, under the cursor, the pixel position, on a plate-solved frame RA and Dec, and the value. The **Raw detections** switch (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
+Both windows, and **Show full size** in the Image Stretch editor, work like the blink window: the same stretch as the Image Stretch editor, the same zoom (Fit, 100 %, 200 %, 400 %, scroll to zoom, drag to pan, double-click), and the same one-line status bar: the frame and its time since the first frame on the left, and on the right, under the cursor, the pixel position, on a plate-solved frame RA and Dec, and the value. The **Raw detections** switch (D) hides the markers to see the frame underneath. From 100 % zoom the detected pixels are tinted too. When there are too many detections on screen to tell apart, the markers are left out until you zoom in. Esc closes the window.
 
 ### Annotate: stars, deep-sky objects and variable stars
 
@@ -767,21 +766,23 @@ When a field has few bright stars, SpacePixels fetches fainter Gaia stars for th
 
 ![Image Stretch](docs/images/manual/ui-stretch.png)
 
-Sets how frames look in Blink, Preview Frame, Manual Transient Inspection and **Show full size**; their windows show the same stretch controls, and a change in any of them shows everywhere. The detection always uses the original linear data, so the stretch does not change what is found. The report images have their own stretch (Detection Settings → Report Visualization). Optional **Batch Stretch** and **Convert to Mono** write new copies of the frames.
+Open **Image Stretch…** under **3 Inspect**, or **Open stretch editor…** in a viewer's **Display stretch** section. The editor is a separate resizable window that stays open alongside the viewers. A viewer opens it on the frame currently shown; Main opens it on the selected frame, or the first frame when none is selected. Opening it again brings the same editor forward. Previous/Next navigates the editor without changing the Main table selection or Auto-Tune's frame pool.
 
-**Stretch display** switches between the selected stretch and a linear view. Unticking it disables the algorithm and sliders without resetting their values; ticking it restores the same stretch. The choice is shared by the tab and all viewers and remembered between sessions. Minimum slider values still apply the selected algorithm; the checkbox provides the linear view, which will often look very dark. With stretch off, both tab previews show the linear image.
+The editor compares the original linear frame and the stretched image, with linked zoom/pan, histograms and clipping percentages. The function, parameter sliders and numeric fields change the display immediately in Blink, Preview Frame, Manual Transient Inspection and **Show full size**. Changes in those viewers update the editor too. **Reset to Defaults** restores the selected function's parameters; **Close** or **Esc** keeps your stretch settings and releases the editor's preview images. Importing a different session closes the editor. Detection always uses the original linear data; report images retain their separate stretch under Detection Settings → Report Visualization.
+
+**Stretch display** switches between the selected stretch and a linear view. Unticking it disables the function and parameters without resetting them; ticking it restores the same stretch. The shared settings are remembered between sessions. Minimum parameter values still apply the selected algorithm; the checkbox provides the linear view. With stretch off, both editor previews show the linear image.
 
 **Asinh** has two parameters. **Black Point** (0 to 95 %) is the share of the frame's pixels shown as black. About 50 % is the sky level; higher values darken the sky further, which helps to separate a nebula from its background, and near the top they also hide faint stars. **Stretch Strength** (1 to 100) sets how much the faint parts are lifted. Above 50 each step lifts them about 10 % more, so 100 is much stronger than 50: it suits frames with a very wide brightness range, whose sky stays dark at 50. Other frames may just look washed out there.
 
-The prominent **Batch Stretch** button on this tab stretches the **entire imported dataset**, including frames that are not selected in the table. It uses the selected algorithm and slider values independently of **Stretch display**, and writes new copies in `_stretched` while preserving the source files. It is available whenever a dataset is imported and no processing job or blink holds the window; there is no separate enable checkbox.
+**Export stretched copies…** is a separate file operation at the bottom of the editor. Its dialog shows the function, captured parameter values, frame count and `_stretched` destination before **Export** starts. It stretches the entire imported dataset, regardless of the Main selection or **Stretch display**, while preserving the source files. Export is disabled while a processing job or an open Blink holds the main window. Closing the export dialog with **Cancel** writes nothing.
 
-**Convert to Mono** is a separate operation on the Main tab: it writes linear monochrome copies in `_mono` and offers to import them. It never applies a stretch or creates stretched copies automatically. To stretch a converted mono dataset, import `_mono`, choose the desired settings on **Image Stretch**, and click **Batch Stretch** explicitly. Use the linear copies for detection.
+**Convert to Mono** is a separate operation on the Main tab: it writes linear monochrome copies in `_mono` and offers to import them. It never applies a stretch or creates stretched copies automatically. To stretch a converted mono dataset, import `_mono`, open **Image Stretch…**, choose the desired settings, and use **Export stretched copies…** explicitly. Use the linear copies for detection.
 
-The preview on the tab shows the selected frame with the current stretch. While it is being drawn, the line above it ends in *rendering…*; it always shows the last frame and stretch you chose, however quickly you change them.
+The editor previews its own current frame with the shared stretch. While it is being drawn, the line above it ends in *rendering…*; it always shows the last frame and stretch you chose, however quickly you change them.
 
 ![Show full size](docs/images/manual/ui-fullsize.jpg)
 
-**Show full size** opens the frames of the session at full resolution, starting at the selected one, in a window that works like the other viewers: ← → to step, the same zoom and stretch, and the pixel value and RA/Dec under the cursor. Colour frames show in colour, and the status bar gives the frame size.
+**Show full size** opens the frames of the session at full resolution, starting at the editor's current frame, in a window that works like the other viewers: ← → to step, the same zoom and stretch, and the pixel value and RA/Dec under the cursor. Colour frames show in colour, and the status bar gives the frame size.
 
 ### Detect Iteratively (large datasets)
 
