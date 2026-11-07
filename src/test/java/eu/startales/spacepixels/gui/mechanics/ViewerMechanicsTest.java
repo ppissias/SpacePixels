@@ -16,7 +16,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Preview Frame and Blink on a solved session with a sky catalogue. Show tracks stays off: nothing has been detected.
+ * Preview Frame and Blink on a solved session with a sky catalogue. The track rows stay off: nothing has been detected.
  * Run with {@code ./gradlew guiMechanicsTest}.
  */
 public class ViewerMechanicsTest extends MechanicsTestCase {
@@ -51,16 +51,15 @@ public class ViewerMechanicsTest extends MechanicsTestCase {
         FrameFixture blink = viewer("Blink");
         waitFor("the blink is playing", () -> blink.checkBox(VisibleText.checkBox("Show catalog annotations")).isEnabled());
 
-        JCheckBoxFixture tracks = blink.checkBox(VisibleText.checkBox("Show tracks"));
-        assertFalse("Show tracks needs a detection", tracks.target().isEnabled());
+        JCheckBoxFixture tracks = blink.checkBox(VisibleText.checkBox("Show moving object tracks"));
+        assertFalse("The track rows need a detection", tracks.target().isEnabled());
 
         JCheckBoxFixture annotate = blink.checkBox(VisibleText.checkBox("Show catalog annotations"));
+        JCheckBoxFixture correct = blink.checkBox(VisibleText.checkBox("Align markers to corrected plate solution"));
+        annotate.uncheck();
+        assertFalse("the section's switch disables its controls", correct.target().isEnabled());
         annotate.check();
         assertTrue(annotate.target().isSelected());
-        annotate.uncheck();
-        assertFalse(annotate.target().isSelected());
-
-        JCheckBoxFixture correct = blink.checkBox(VisibleText.checkBox("Align markers to corrected plate solution"));
         assertTrue(correct.target().isEnabled());
         correct.check();
         assertTrue(correct.target().isSelected());

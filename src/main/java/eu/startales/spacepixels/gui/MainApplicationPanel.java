@@ -290,7 +290,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             blinkWindowClosed();
             this.viewers.unregister(blink);
         });
-        blink.setOpenInPreview(this::previewFromBlink);
+        blink.setOpenInPreview(this::showInPreview);
         jobs.setListener(new JobCoordinator.Listener() {
             @Override
             public void jobStarted(JobHandle handle) {
@@ -796,10 +796,10 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     }
 
     /**
-     * Blink's Open in Preview button: shows the frame in Preview Frame while the blink stays open. A Preview Frame
-     * already open keeps its zoom and trial values.
+     * Blink's Open in Preview and the stretch editor's Show in Preview: shows the frame in Preview Frame while that
+     * window stays open. A Preview Frame already open keeps its zoom and trial values.
      */
-    private void previewFromBlink(FitsFileInformation shown) {
+    void showInPreview(FitsFileInformation shown) {
         FitsFileTableModel model = (FitsFileTableModel) table.getModel();
         int row = 0;
         for (int i = 0; model != null && i < model.getRowCount(); i++) {
@@ -900,7 +900,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                         stretch, result.reference(), detectionSettings, sessions, viewers.layers()));
                 frame.setSkyCatalogueModel(skyCatalogue());
                 frame.setMarkerSettings(() -> detectionSettings.visualizationSettings());
-                if (frame.open(sessions.current() == null ? null : sessions.current().getTrackOverlay())) {
+                if (frame.open(sessions.current())) {
                     registerInspection(frame, handle.session());
                 } else {
                     JOptionPane.showMessageDialog(null, "The detection kept no frames to inspect.",
@@ -1783,6 +1783,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         owner.setLastRun(overlays);
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.showLastRun();
+        }
+        for (Map.Entry<TransientInspectionFrame, ProcessingSession> inspection : List.copyOf(inspectionFrames.entrySet())) {
+            if (inspection.getValue() == owner) inspection.getKey().showLastRun(owner);
         }
         if (detectionSettings != null) {
             detectionSettings.lastRunChanged();

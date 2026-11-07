@@ -82,14 +82,14 @@ final class TrialSettingsControls {
     private final JLabel note = new JLabel(" ");
     /** Told after every change of a trial value or of the saved settings, for a "Not saved" mark. */
     private Runnable onChange = () -> { };
-    /** Told when the user edits a trial value, for example to show the detections it changes. */
-    private Runnable onEdit = () -> { };
     private final Timer debounce;
     private final Runnable focusImage;
     private final Function<Map<String, Number>, DetectionConfig> applyChanges;
     private DetectionConfig basis;
     private boolean adjusting;
     private boolean editable = true;
+    /** Whether the viewer draws what these values change; its Raw detections switch can turn this off. */
+    private boolean shown = true;
     private boolean active = true;
     private boolean refreshPending;
     private String message;
@@ -117,10 +117,6 @@ final class TrialSettingsControls {
 
     void setOnChange(Runnable onChange) {
         this.onChange = onChange;
-    }
-
-    void setOnEdit(Runnable onEdit) {
-        this.onEdit = onEdit;
     }
 
     /** Whether a trial value differs from the saved setting. */
@@ -245,13 +241,28 @@ final class TrialSettingsControls {
     /** Pauses trial edits and delayed refresh during an application job, retaining any pending refresh for unlock. */
     void setEditable(boolean editable) {
         this.editable = editable;
-        for (Entry entry : entries) {
-            entry.spinner.setEnabled(editable);
-            entry.editor.getTextField().setEnabled(editable);
-        }
+        updateInputs();
         if (!editable) debounce.stop();
         else if (active && refreshPending) debounce.restart();
         showNote();
+    }
+
+    /** Disables the form while the viewer does not draw what it changes, giving the keys back to the image; values stay. */
+    void setShown(boolean shown) {
+        boolean hadFocus = entries.stream().anyMatch(entry -> entry.editor.getTextField().isFocusOwner());
+        this.shown = shown;
+        updateInputs();
+        showNote();
+        if (!shown && hadFocus) focusImage.run();
+    }
+
+    private void updateInputs() {
+        boolean usable = editable && shown;
+        for (Entry entry : entries) {
+            entry.label.setEnabled(shown);
+            entry.spinner.setEnabled(usable);
+            entry.editor.getTextField().setEnabled(usable);
+        }
     }
 
     /** Stops delayed work on close and discards unfinished editor text; an explicit load starts a reopened viewer. */
@@ -272,7 +283,6 @@ final class TrialSettingsControls {
         refreshPending = true;
         if (active && editable) debounce.restart();
         showNote();
-        onEdit.run();
     }
 
     /** Aligns displayed trial pairs without treating an automatic adjustment as an edit of an untouched field. */
@@ -288,7 +298,7 @@ final class TrialSettingsControls {
 
     /** Validates every field before applying an edited-field delta; a stale session callback cannot report success. */
     private void apply() {
-        if (!active || !editable) return;
+        if (!active || !editable || !shown) return;
         for (Entry entry : entries) {
             if (!entry.editor.isTextValid()) {
                 entry.editor.getTextField().requestFocusInWindow();
@@ -336,7 +346,7 @@ final class TrialSettingsControls {
 
     /** Returns to the saved values without changing the session settings. */
     private void reset() {
-        if (!active || !editable) return;
+        if (!active || !editable || !shown) return;
         adjusting = true;
         try {
             for (Entry entry : entries) {
@@ -397,7 +407,7 @@ final class TrialSettingsControls {
             if (entry.editor.isTextValid()) entry.spinner.putClientProperty("JComponent.outline", differs ? "warning" : null);
             entry.saved.setText(differs ? "saved: " + format(entry.baseline) : " ");
         }
-        reset.setEnabled(active && editable && unsaved);
+        reset.setEnabled(active && editable && shown && unsaved);
         onChange.run();
         for (Entry entry : entries) {
             if (!entry.editor.isTextValid()) {
@@ -411,8 +421,9 @@ final class TrialSettingsControls {
         }
         note.setForeground(UiStyle.helpColor());
         note.setText("<html>" + (!editable ? "Trial settings are paused while a job runs."
+                : !shown ? "Raw detections are off.<br>Switch them on to try values."
                 : message != null ? message : "Previews in this window only.<br>Typed values apply on Enter.") + "</html>");
-        apply.setEnabled(active && editable && unsaved);
+        apply.setEnabled(active && editable && shown && unsaved);
     }
 
     private static String format(Number value) {

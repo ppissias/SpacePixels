@@ -171,7 +171,9 @@ final class ViewerSupport {
     /** The keys and mouse actions every frame viewer shares, after its own. */
     static List<Shortcut> commonShortcuts() {
         return List.of(
-                new Shortcut("T", "Show or hide the tracks"),
+                new Shortcut("R", "Show or hide all report findings"),
+                new Shortcut("T", "Show or hide the moving object tracks"),
+                new Shortcut("Shift+T", "Show or hide the streak tracks"),
                 new Shortcut("V", "Show or hide the variable-star candidates"),
                 new Shortcut("A", "Show or hide the catalog annotations"),
                 new Shortcut("C", "Align markers to the corrected plate solution"),

@@ -102,7 +102,7 @@ public class StretchMechanicsTest extends MechanicsTestCase {
         editor().button(VisibleText.button("Next ▶")).click();
         waitFor("editor steps independently", () -> frameCaption().contains("Frame 2 of") && !frameCaption().contains("rendering"));
         assertEquals(3, GuiActionRunner.execute(() -> window().table().target().getSelectedRowCount()).intValue());
-        editor().button(VisibleText.button("Close")).click();
+        closeEditor();
 
         window().button(VisibleText.button("Preview Frame")).click();
         FrameFixture preview = viewer("Preview Frame");
@@ -135,6 +135,47 @@ public class StretchMechanicsTest extends MechanicsTestCase {
         openEditor();
         assertEquals("shared stretch survives closing and importing", 40,
                 GuiActionRunner.execute(() -> application().getStretchPanel().getStretchSlider().getValue()).intValue());
+    }
+
+    /** Show in Preview opens the one Preview Frame on the editor's frame; the editor stays open and has no Close button. */
+    @Test(timeout = 180_000)
+    public void showInPreviewFollowsTheEditorsFrame() throws Exception {
+        importSyntheticSequence();
+        openEditor();
+        waitUntilPreviewSettled("initial comparison renders");
+        assertTrue("the window's own close is enough", robot().finder().findAll(editor().target(), new GenericTypeMatcher<>(javax.swing.JButton.class, true) {
+            @Override protected boolean isMatching(javax.swing.JButton button) {
+                return "Close".equals(button.getText()) || "Show full size".equals(button.getText());
+            }
+        }).isEmpty());
+        editor().button(VisibleText.button("Next ▶")).click();
+        waitFor("editor steps to frame two", () -> frameCaption().contains("Frame 2 of") && !frameCaption().contains("rendering"));
+        GuiActionRunner.execute(() -> editor().button(VisibleText.button("Show in Preview")).target().doClick());
+        FrameFixture preview = viewer("Preview Frame");
+        waitFor("Preview shows the editor's frame", () -> preview.label(VisibleText.labelContaining("Frame 2 of")).target().getText().contains("frame_02.fit"));
+        assertTrue("the editor stays open", GuiActionRunner.execute(editor().target()::isShowing));
+
+        // Preview is in front of the editor now, so a real click would land on it.
+        GuiActionRunner.execute(() -> editor().button(VisibleText.button("Next ▶")).target().doClick());
+        waitFor("editor steps to frame three", () -> frameCaption().contains("Frame 3 of") && !frameCaption().contains("rendering"));
+        GuiActionRunner.execute(() -> editor().button(VisibleText.button("Show in Preview")).target().doClick());
+        waitFor("the open Preview follows", () -> preview.label(VisibleText.labelContaining("Frame 3 of")).target().getText().contains("frame_03.fit"));
+    }
+
+    /** Colour frames, which the detection cannot read, show in Preview in colour without raw detections. */
+    @Test(timeout = 180_000)
+    public void showInPreviewShowsColourFramesWithoutRawDetections() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createColor16FitsSequence(folder.newFolder("colour-preview").toPath(), "session", 5);
+        GuiActionRunner.execute(() -> application().importFolder(sequence.toFile()));
+        var offered = JOptionPaneFinder.findOptionPane().withTimeout(30_000).using(robot());
+        offered.noButton().click();
+        openEditor();
+        waitFor("the colour frame renders", () -> frameCaption().contains("Frame 1 of") && !frameCaption().contains("rendering"));
+        GuiActionRunner.execute(() -> editor().button(VisibleText.button("Show in Preview")).target().doClick());
+        FrameFixture preview = viewer("Preview Frame");
+        waitFor("Preview says what it shows", () -> preview.label(VisibleText.labelContaining("colour · no raw detections on this frame")).target().isShowing());
+        preview.button(VisibleText.button("▶")).click();
+        waitFor("Preview steps through the colour frames", () -> preview.label(VisibleText.labelContaining("Frame 2 of")).target().getText().contains("no raw detections"));
     }
 
     /** Blink can open the editor on its displayed frame while its existing export/job lock remains in force. */
@@ -183,7 +224,7 @@ public class StretchMechanicsTest extends MechanicsTestCase {
         for (JSlider slider : VisibleText.showingSliders(editor().target())) {
             new JSliderFixture(robot(), slider).slideTo(slider.getMaximum());
         }
-        editor().button(VisibleText.button("Close")).click();
+        closeEditor();
         window().tabbedPane().selectTab("Main");
         window().button(VisibleText.button("Convert to Mono")).click();
         var done = JOptionPaneFinder.findOptionPane().withTimeout(60_000).using(robot());
@@ -220,6 +261,13 @@ public class StretchMechanicsTest extends MechanicsTestCase {
     private void openEditor() {
         window().button(VisibleText.button("Image Stretch…")).click();
         stretchEditor = findEditor();
+    }
+
+    /** Closes the workspace as the window's close button does. */
+    private void closeEditor() {
+        GuiActionRunner.execute(() -> editor().target().dispatchEvent(
+                new java.awt.event.WindowEvent(editor().target(), java.awt.event.WindowEvent.WINDOW_CLOSING)));
+        waitFor("the editor closes", () -> !GuiActionRunner.execute(editor().target()::isShowing));
     }
 
     /** The mounted editor, also available to assertions already running on the EDT. */

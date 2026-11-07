@@ -12,16 +12,18 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.report.FindingCategory;
 
 /**
- * The overlay layers of the frame viewers, as listed in their side panel. Two layers are groups: Other findings holds
- * the report's remaining categories, and Catalog annotations the known objects; a child is drawn only while its
- * group is on too. Raw detections, the groups and the known stars have no label switch of their own where noted.
+ * The overlay layers of the frame viewers, as listed in their side panel. Report findings and Catalog annotations are
+ * groups, and Other findings is a group inside Report findings; a child is drawn, and can be switched, only while every
+ * group above it is on. Raw detections, the groups and the known stars have no label switch of their own where noted.
  */
 enum ViewerLayer {
     RAW_DETECTIONS("Raw detections", null, true, false, false),
-    VARIABLE_STARS("Variable stars", null, true, true, true),
-    FAINT_MOVERS("Faint movers", null, true, true, true),
-    TRACKS("Tracks", null, true, true, true),
-    OTHER_FINDINGS("Other findings", null, true, false, false),
+    REPORT_FINDINGS("Report findings", null, true, false, false),
+    VARIABLE_STARS("Variable stars", REPORT_FINDINGS, true, true, true),
+    FAINT_MOVERS("Faint movers", REPORT_FINDINGS, true, true, true),
+    MOVING_TRACKS("Moving object tracks", REPORT_FINDINGS, true, true, true),
+    STREAK_TRACKS("Streak tracks", REPORT_FINDINGS, true, true, true),
+    OTHER_FINDINGS("Other findings", REPORT_FINDINGS, true, false, false),
     SINGLE_FRAME("Single streaks & anomalies", OTHER_FINDINGS, true, false, true),
     SLOW_MOVERS("Slow-mover candidates", OTHER_FINDINGS, true, false, true),
     LOCAL_RESIDUALS("Local rescue & activity", OTHER_FINDINGS, true, false, true),
@@ -48,14 +50,15 @@ enum ViewerLayer {
         this.hasLabels = hasLabels;
     }
 
-    /** The Other findings layer of a report category, or null for the categories with layers of their own. */
+    /** The layer that draws a report category. */
     static ViewerLayer of(FindingCategory category) {
         return switch (category) {
             case SINGLE_STREAK, ANOMALY -> SINGLE_FRAME;
             case SLOW_MOVER -> SLOW_MOVERS;
             case LOCAL_RESCUE, LOCAL_ACTIVITY -> LOCAL_RESIDUALS;
             case CAMERA_FIXED, COMMON_MOTION -> GROUPS;
-            case MOVING_TARGET, STREAK_TRACK -> TRACKS;
+            case MOVING_TARGET -> MOVING_TRACKS;
+            case STREAK_TRACK -> STREAK_TRACKS;
             case VARIABLE_STAR -> VARIABLE_STARS;
             case FAINT_MOVER -> FAINT_MOVERS;
         };

@@ -195,6 +195,48 @@ public class TrialSettingsControlsTest {
         });
     }
 
+    /** Raw detections switched off disables the form, a finished job does not bring it back, and values are kept. */
+    @Test public void theRawDetectionsSwitchDisablesItsControlsAndKeepsTheirValues() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            DetectionConfig live = config();
+            AtomicReference<Map<String, Number>> delta = new AtomicReference<>();
+            TrialSettingsControls controls = controls(live, delta);
+            ViewerLayerState state = new ViewerLayerState(null);
+            RawDetectionsSection section = new RawDetectionsSection(state, controls);
+            JComponent panel = section.section();
+            try {
+                JSpinner sigma = spinner(panel, "Detection Sigma");
+                sigma.setValue(6.5);
+                assertTrue(sigma.isEnabled());
+                assertTrue(button(panel, "Save to settings").isEnabled());
+
+                state.setVisible(ViewerLayer.RAW_DETECTIONS, false);
+                section.refresh();
+                assertFalse(sigma.isEnabled());
+                assertFalse(field(sigma).isEnabled());
+                assertFalse(button(panel, "Save to settings").isEnabled());
+                assertFalse(button(panel, "Revert").isEnabled());
+                button(panel, "Save to settings").doClick();
+                button(panel, "Revert").doClick();
+                assertNull(delta.get());
+                assertEquals("the trial value is kept", 6.5, ((Number) sigma.getValue()).doubleValue(), 0);
+
+                controls.setEditable(false);
+                controls.setEditable(true);
+                assertFalse("the end of a job does not enable it", sigma.isEnabled());
+
+                state.setVisible(ViewerLayer.RAW_DETECTIONS, true);
+                section.refresh();
+                assertTrue(sigma.isEnabled());
+                assertTrue(button(panel, "Save to settings").isEnabled());
+                controls.setEditable(false);
+                assertFalse("a job still locks it", sigma.isEnabled());
+            } finally {
+                controls.stop();
+            }
+        });
+    }
+
     /** Uses ordinary valid per-frame settings with a grow threshold that can be aligned downward. */
     private static DetectionConfig config() {
         DetectionConfig config = new DetectionConfig();

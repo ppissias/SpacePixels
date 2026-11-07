@@ -15,6 +15,7 @@ import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.TrackOverlay;
 import eu.startales.spacepixels.detection.VariableStarOverlay;
+import eu.startales.spacepixels.session.ProcessingSession;
 import io.github.ppissias.jtransient.execution.CancellationScope;
 
 import javax.swing.*;
@@ -173,7 +174,11 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         }
         ViewerSupport.bind(getRootPane(), "A", "annotate", sky::toggle);
         ViewerSupport.bind(getRootPane(), "C", "correct", sky::toggleCorrection);
-        ViewerSupport.bind(getRootPane(), "T", "tracks", () -> toggleFindingLayer(ViewerLayer.TRACKS));
+        ViewerSupport.bind(getRootPane(), "R", "findings", () -> {
+            if (findings.section().isVisible()) findings.toggleShown();
+        });
+        ViewerSupport.bind(getRootPane(), "T", "movingTracks", () -> toggleFindingLayer(ViewerLayer.MOVING_TRACKS));
+        ViewerSupport.bind(getRootPane(), "shift T", "streakTracks", () -> toggleFindingLayer(ViewerLayer.STREAK_TRACKS));
         ViewerSupport.bind(getRootPane(), "V", "variables", () -> toggleFindingLayer(ViewerLayer.VARIABLE_STARS));
         layerState.addListener(layerListener);
         view.setLayers(layerState.snapshot());
@@ -250,6 +255,17 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
             frameLabel.setText(frameText(shownIndex, shown.summary));
         }
         sky.replaceFrame(previous, updated);
+    }
+
+    /**
+     * Shows all the findings of the session's last detection run or restored report, as Blink does; a null session has
+     * none. Nothing is detected again. Call it after {@link #openAt}.
+     */
+    protected void setLastRun(ProcessingSession session, FitsFileInformation[] files) {
+        setTrackOverlay(session == null ? null : session.getTrackOverlay(), files);
+        setVariableStarOverlay(session == null ? null : session.getVariableStarOverlay(), files);
+        setFaintMoverOverlay(session == null ? null : session.getFaintMoverOverlay(), files);
+        setFindingOverlay(session == null ? null : session.getFindingOverlay(), files);
     }
 
     /**

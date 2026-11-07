@@ -50,7 +50,7 @@ public class FrameViewExportTest {
                 BufferedImage full = new BufferedImage((int) Math.ceil(400 * dpi), (int) Math.ceil(320 * dpi), BufferedImage.TYPE_INT_RGB);
                 var graphics = full.createGraphics(); graphics.scale(dpi, dpi); view.paint(graphics); graphics.dispose();
                 FrameView frozen = view.copyForExport();
-                view.fit(); view.setLayers(without(ViewerLayer.RAW_DETECTIONS, ViewerLayer.TRACKS, ViewerLayer.VARIABLE_STARS));
+                view.fit(); view.setLayers(without(ViewerLayer.RAW_DETECTIONS, ViewerLayer.MOVING_TRACKS, ViewerLayer.VARIABLE_STARS));
                 view.setOverlay(null); view.setVariableStarOverlay(null); view.setSkyMarks(null, 15);
                 view.setMarkerSettings(() -> VisualizationSettings.defaults().withPointSourceMinBoxRadius(30));
                 BufferedImage crop = frozen.renderRegion(region, device);

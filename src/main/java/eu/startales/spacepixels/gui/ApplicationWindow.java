@@ -236,7 +236,7 @@ public class ApplicationWindow {
         configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
                 storage, () -> closing);
         stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel.batchStretchAction(),
-                stretch -> viewers.register(new StretchedSequenceFrame(this, stretch)), this::showStretchEditor);
+                mainApplicationPanel::showInPreview, this::showStretchEditor);
         detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
                 () -> closing, () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel),
                 mainApplicationPanel, mainApplicationPanel, viewers);

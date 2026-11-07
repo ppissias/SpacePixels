@@ -14,9 +14,8 @@ import java.awt.*;
 
 /**
  * The Raw detections section of a viewer that extracts its frames' sources: the switch that draws them (key D), what
- * was found on the frame shown, and the trial thresholds. Editing a threshold switches the detections on, and the
- * header says "Not saved" while a trial value differs from the saved settings. The section is folded while its
- * switch is off.
+ * was found on the frame shown, and the trial thresholds. The header says "Not saved" while a trial value differs from
+ * the saved settings. While the switch is off the section is folded and its controls are disabled, keeping their values.
  */
 final class RawDetectionsSection {
 
@@ -27,6 +26,7 @@ final class RawDetectionsSection {
     private final JCheckBox shown = SidePanelIcons.onOff("Show raw detections");
     private final JLabel badge = new JLabel("Not saved");
     private final JLabel summary = new JLabel(" ");
+    private final JLabel caption = new JLabel("TRIAL PARAMETERS");
     private final SidePanelSection section;
     private boolean initialised;
 
@@ -40,7 +40,6 @@ final class RawDetectionsSection {
         badge.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD, UiStyle.bodyFont().getSize2D() - 1f));
         badge.setToolTipText("A trial value differs from the saved Detection Settings.");
         summary.setForeground(UiStyle.helpColor());
-        JLabel caption = new JLabel("TRIAL PARAMETERS");
         caption.setForeground(UiStyle.helpColor());
         caption.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD, UiStyle.bodyFont().getSize2D() - 2f));
         caption.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(8), 0, UiStyle.space(2), 0));
@@ -56,7 +55,6 @@ final class RawDetectionsSection {
         section.title().setIcon(OverlayStyle.swatch(ViewerLayer.RAW_DETECTIONS));
         section.title().setIconTextGap(UiStyle.space(8));
         trials.setOnChange(() -> badge.setVisible(trials.hasUnsavedChanges()));
-        trials.setOnEdit(() -> state.setVisible(ViewerLayer.RAW_DETECTIONS, true));
         badge.setVisible(trials.hasUnsavedChanges());
         refresh();
     }
@@ -70,13 +68,16 @@ final class RawDetectionsSection {
         summary.setText(text == null ? " " : text + " on this frame");
     }
 
-    /** Follows the shared layer state: the switch, and the section unfolded while the detections are shown. */
+    /** Follows the shared layer state: the switch, its controls, and the section unfolded while the detections are shown. */
     void refresh() {
         boolean on = state.isVisible(ViewerLayer.RAW_DETECTIONS);
         // Folded or unfolded only when the switch changes, so a section unfolded by hand stays open.
         boolean changed = !initialised || shown.isSelected() != on;
         initialised = true;
         shown.setSelected(on);
+        trials.setShown(on);
+        summary.setEnabled(on);
+        caption.setEnabled(on);
         if (changed) {
             section.setExpanded(on || trials.hasUnsavedChanges());
         }

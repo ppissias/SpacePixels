@@ -41,7 +41,8 @@ import static org.junit.Assert.*;
 
 /**
  * Preview Frame and Manual Transient Inspection show the tracks of the session's last detection run, as Blink does:
- * Show tracks (T) is off until a run has tracks, and a run that ends while Preview Frame is open makes them available.
+ * the moving object tracks (T) are off until a run has them, and a run that ends while Preview Frame is open makes them
+ * available.
  * A run gives its overlays to its session when it ends, and only while that session is the current one.
  */
 public class LastRunTracksMechanicsTest extends MechanicsTestCase {
@@ -53,8 +54,8 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         window().button(VisibleText.button("Preview Frame")).click();
         FrameFixture preview = viewer("Preview Frame");
         waitFor("first preview frame", () -> caption(preview).contains("Frame 1 of") && !caption(preview).contains("detecting"));
-        JCheckBoxFixture previewTracks = preview.checkBox(VisibleText.checkBox("Show tracks"));
-        assertFalse("Show tracks needs a detection run", previewTracks.target().isEnabled());
+        JCheckBoxFixture previewTracks = preview.checkBox(VisibleText.checkBox("Show moving object tracks"));
+        assertFalse("The track rows need a detection run", previewTracks.target().isEnabled());
 
         endARunWithOverlays();
         waitFor("the run's tracks become available", () -> previewTracks.target().isEnabled());
@@ -70,19 +71,30 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
         waitFor("T hides the default-visible tracks", () -> !previewTracks.target().isSelected());
         robot().pressAndReleaseKeys(KeyEvent.VK_T);
         waitFor("T shows the tracks", () -> previewTracks.target().isSelected());
-        waitForDescription(image, "Tracks on.", "Preview Frame describes its tracks");
+        waitForDescription(image, "Moving object tracks on.", "Preview Frame describes its tracks");
+        JCheckBoxFixture findings = preview.checkBox(VisibleText.checkBox("Show report findings"));
+        findings.requireEnabled().requireSelected();
+        focus(image);
+        robot().pressAndReleaseKeys(KeyEvent.VK_R);
+        waitFor("R switches all the findings off", () -> !findings.target().isSelected());
+        waitFor("their rows are disabled", () -> !previewTracks.target().isEnabled());
+        robot().pressAndReleaseKeys(KeyEvent.VK_T);
+        assertTrue("T does nothing while the section is off", previewTracks.target().isSelected());
+        robot().pressAndReleaseKeys(KeyEvent.VK_R);
+        waitFor("R switches them on again", () -> findings.target().isSelected() && previewTracks.target().isEnabled());
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape on the image closes Preview Frame", () -> !preview.target().isShowing());
 
         window().button(VisibleText.button("Manual Transient Inspection")).click();
         FrameFixture inspection = viewer("Manual Transient Inspection");
         waitFor("first inspected frame", () -> caption(inspection).contains("Frame 1 of") && !caption(inspection).contains("preparing"));
-        JCheckBoxFixture inspectionTracks = inspection.checkBox(VisibleText.checkBox("Show tracks"));
+        JCheckBoxFixture inspectionTracks = inspection.checkBox(VisibleText.checkBox("Show moving object tracks"));
         assertTrue("The last run's tracks are offered here too", inspectionTracks.target().isEnabled());
+        assertTrue("and its other findings", inspection.checkBox(VisibleText.checkBox("Show faint movers")).target().isEnabled());
         JComponent inspected = image(inspection, "Manual Transient Inspection image");
         focus(inspected);
         inspectionTracks.check().requireSelected();
-        waitForDescription(inspected, "Tracks on.", "Manual Transient Inspection describes its tracks");
+        waitForDescription(inspected, "Moving object tracks on.", "Manual Transient Inspection describes its tracks");
         focus(inspected);
         robot().pressAndReleaseKeys(KeyEvent.VK_ESCAPE);
         waitFor("Escape on the image closes the inspection", () -> !inspection.target().isShowing());

@@ -31,6 +31,7 @@ import java.util.Locale;
  * through all frames of the session, starting at the selected one. Each frame is detected with the settings in use
  * when it is prepared, with this window's three trial thresholds. Changes refresh this preview only; Apply to
  * Settings copies edited values into the current session, preserving other settings. Closing discards unapplied trials.
+ * A frame the detection cannot read, such as a colour frame from the stretch editor, is shown without raw detections.
  */
 public class DetectionSequenceFrame extends SequenceViewerFrame {
 
@@ -88,16 +89,12 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         showLastRun();
     }
 
-    /** Takes the tracks and variable-star candidates of the session's last detection run, for example after a run ends. */
+    /** Takes all the findings of the session's last detection run, for example after a run ends. */
     void showLastRun() {
         if (files == null || !isVisible()) {
             return;
         }
-        ProcessingSession session = sessions.current();
-        setTrackOverlay(session == null ? null : session.getTrackOverlay(), files);
-        setVariableStarOverlay(session == null ? null : session.getVariableStarOverlay(), files);
-        setFaintMoverOverlay(session == null ? null : session.getFaintMoverOverlay(), files);
-        setFindingOverlay(session == null ? null : session.getFindingOverlay(), files);
+        setLastRun(sessions.current(), files);
     }
 
     /** Enables trial edits, Save and Blink only while the application has no active job; an open blink is not one. */
@@ -131,19 +128,24 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
         config = trials.snapshot(detection.settingsInUse());
     }
 
-    /** Reads the frame as the detection does (16-bit mono, the image HDU) and extracts its sources. */
     @Override
     protected Result prepare(int index) throws Exception {
-        FitsFileInformation info = files[index];
-        DetectionConfig settings = config;
+        return read(files[index], config);
+    }
+
+    /**
+     * Reads a frame as the detection does (16-bit mono, the image HDU) and extracts its sources. Any other frame is
+     * read for display only, as Blink reads it.
+     */
+    static Result read(FitsFileInformation info, DetectionConfig settings) throws Exception {
         short[][] data;
         try (Fits fits = new Fits(new File(info.getFilePath()))) {
             Object kernel = FitsInput.getImageHDU(fits).getKernel();
-            if (!(kernel instanceof short[][])) {
-                return Result.problem("The detection needs 16-bit monochrome frames. Convert 32-bit, compressed or XISF "
-                        + "frames when you import them, and colour frames with Convert to Mono.");
-            }
-            data = (short[][]) kernel;
+            data = kernel instanceof short[][] mono ? mono : null;
+        }
+        if (data == null) {
+            BlinkSequence.Frame shown = BlinkSequence.load(info);
+            return Result.of(shown, null, (shown.getChannelCount() == 3 ? "colour" : "not 16-bit") + " · no raw detections");
         }
         DataArea frameArea = DataArea.ofFrame(data);
         List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(

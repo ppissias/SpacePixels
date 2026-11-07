@@ -41,9 +41,12 @@ final class ViewerLayerState {
             return new Snapshot(visible, labelled);
         }
 
-        /** Whether the layer is drawn: it is on, and so is its group. */
+        /** Whether the layer is drawn: it is on, and so is every group above it. */
         boolean shows(ViewerLayer layer) {
-            return visible.contains(layer) && (layer.parent == null || visible.contains(layer.parent));
+            for (ViewerLayer current = layer; current != null; current = current.parent) {
+                if (!visible.contains(current)) return false;
+            }
+            return true;
         }
 
         /** Whether the layer's labels are written, when it is drawn. */
@@ -85,6 +88,15 @@ final class ViewerLayerState {
 
     boolean isLabelled(ViewerLayer layer) {
         return labelled.contains(layer);
+    }
+
+    /** The outermost group above this layer that is off, the one to switch on first; null when none is off. */
+    ViewerLayer offGroup(ViewerLayer layer) {
+        ViewerLayer off = null;
+        for (ViewerLayer group = layer.parent; group != null; group = group.parent) {
+            if (!visible.contains(group)) off = group;
+        }
+        return off;
     }
 
     void setVisible(ViewerLayer layer, boolean on) {

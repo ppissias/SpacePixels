@@ -69,6 +69,22 @@ public class TrialSettingsMechanicsTest extends MechanicsTestCase {
         assertNumber(sigma, 7);
     }
 
+    /** The Raw detections switch disables the trial form with a real key press, and a value edited before is kept. */
+    @Test(timeout = 180_000)
+    public void rawDetectionsSwitchDisablesTheTrialForm() throws Exception {
+        importSyntheticSequence();
+        FrameFixture preview = openPreview();
+        JSpinner trial = spinner(preview, "Detection Sigma");
+        GuiActionRunner.execute(() -> trial.setValue(6.0));
+        focus(image(preview));
+        robot().pressAndReleaseKeys(KeyEvent.VK_D);
+        waitFor("D switches the detections off and disables the form", () -> GuiActionRunner.execute(() -> !trial.isEnabled()));
+        assertFalse(GuiActionRunner.execute(() -> preview.button(VisibleText.button("Save to settings")).target().isEnabled()));
+        robot().pressAndReleaseKeys(KeyEvent.VK_D);
+        waitFor("D switches them on and enables the form", () -> GuiActionRunner.execute(trial::isEnabled));
+        assertNumber(trial, 6);
+    }
+
     /** Real Enter/Escape events commit or discard trial text while arrows resume image navigation afterward. */
     @Test(timeout = 180_000)
     public void typedPreviewValuesStayLocalAndInvalidTextDoesNotApply() throws Exception {

@@ -80,7 +80,7 @@ final class StartupTips {
             new Tip("SpacePixels can also find variable stars. Switch on variable-star photometry under <b>Analyses in This "
                     + "Run</b> on the Overview of Detection Settings. It needs at least 20 frames after quality control.",
                     "variable-stars"),
-            new Tip("Press ? in a frame viewer to list its keyboard shortcuts: for example T shows the tracks and A the "
+            new Tip("Press ? in a frame viewer to list its keyboard shortcuts: for example T shows the moving object tracks and A the "
                     + "catalog annotations.", BLINK),
             new Tip("Too many frames to fit in memory? <b>Detect Iteratively</b> runs several spaced passes across the "
                     + "session instead of one large run.", "detect-iteratively-large-datasets"),

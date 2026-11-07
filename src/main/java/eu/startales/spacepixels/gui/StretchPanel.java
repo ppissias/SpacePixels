@@ -34,7 +34,7 @@ public class StretchPanel extends JPanel {
     private final Consumer<FitsFileInformation> editorOpener;
     private FitsFileInformation[] previewFiles = new FitsFileInformation[0];
     private int previewIndex = -1;
-    private final FullSizeViewer fullSize;
+    private final Consumer<FitsFileInformation> previewOpener;
 
     // Controls
     private final JSlider stretchSlider = new JSlider();
@@ -43,7 +43,7 @@ public class StretchPanel extends JPanel {
     private final JSlider stretchIterationsSlider = new JSlider();
     private final JSpinner primaryNumber = parameterNumber(stretchSlider);
     private final JSpinner secondaryNumber = parameterNumber(stretchIterationsSlider);
-    private final JButton showFullSizeButton = new JButton("Show full size");
+    private final JButton showInPreviewButton = new JButton("Show in Preview");
     private final JLabel stretchIntensityLabel = new JLabel();
     private final JLabel stretchIterationsLabel = new JLabel();
     private final JButton resetButton = new JButton("Reset to Defaults");
@@ -69,8 +69,6 @@ public class StretchPanel extends JPanel {
     /** True while the controls are set programmatically, so the change is not saved or previewed twice. */
     private boolean adjusting;
 
-    private StretchedSequenceFrame sequenceFrame;
-
     /** A stretch preview with the previous preferred size, sharing zoom and pan with its pair. */
     private static FrameView linkedPreview(FrameView.ViewLink link) {
         FrameView view = new FrameView(link);
@@ -79,12 +77,12 @@ public class StretchPanel extends JPanel {
         return view;
     }
 
-    /** Captures session access, the guarded export command and the editor/viewer openers on the EDT. */
-    public StretchPanel(SessionAccess sessions, Action batchStretch, FullSizeViewer fullSize,
+    /** Captures session access, the guarded export command and the Preview Frame and editor openers on the EDT. */
+    public StretchPanel(SessionAccess sessions, Action batchStretch, Consumer<FitsFileInformation> previewOpener,
                         Consumer<FitsFileInformation> editorOpener) {
         this.sessions = sessions;
         this.editorOpener = editorOpener;
-        this.fullSize = fullSize;
+        this.previewOpener = previewOpener;
 
         setLayout(new BorderLayout());
         setBorder(new EmptyBorder(UiStyle.space(8), UiStyle.space(12), UiStyle.space(10), UiStyle.space(12)));
@@ -163,11 +161,8 @@ public class StretchPanel extends JPanel {
         JPanel actionPanel = new WrappingControlsPanel(UiStyle.space(8), UiStyle.space(4));
         JButton export = new JButton(batchStretch);
         actionPanel.add(export);
-        showFullSizeButton.setToolTipText("Step through the whole sequence at full size with this stretch, including colour frames.");
-        actionPanel.add(showFullSizeButton);
-        JButton close = new JButton("Close");
-        close.addActionListener(e -> SwingUtilities.getWindowAncestor(this).setVisible(false));
-        actionPanel.add(close);
+        showInPreviewButton.setToolTipText("Show this frame in Preview Frame with this stretch, including colour frames. This editor stays open.");
+        actionPanel.add(showInPreviewButton);
         footer.add(actionPanel, BorderLayout.SOUTH);
         add(footer, BorderLayout.SOUTH);
 
@@ -193,7 +188,7 @@ public class StretchPanel extends JPanel {
         });
         stretchSlider.addChangeListener(e -> sliderChanged());
         stretchIterationsSlider.addChangeListener(e -> sliderChanged());
-        showFullSizeButton.addActionListener(e -> openFullSize());
+        showInPreviewButton.addActionListener(e -> showInPreview());
 
         // Preview only while the editor is visible. Hiding it cancels requests and drops its images; reopening
         // starts from the caller's frame, independently of Main's selection.
@@ -378,7 +373,7 @@ public class StretchPanel extends JPanel {
         FitsFileInformation selected = previewFile();
         previousButton.setEnabled(previewIndex > 0);
         nextButton.setEnabled(previewIndex >= 0 && previewIndex < previewFiles.length - 1);
-        showFullSizeButton.setEnabled(selected != null);
+        showInPreviewButton.setEnabled(selected != null);
         frameLabel.setText(selected == null ? "No frame selected"
                 : "Frame " + (previewIndex + 1) + " of " + previewFiles.length + " · " + new File(selected.getFilePath()).getName()
                 + (rendering ? " · rendering…" : ""));
@@ -449,18 +444,11 @@ public class StretchPanel extends JPanel {
 
     /** The previews belong to the session they were rendered for: another session removes them. */
     void sessionChanged(FitsFileInformation[] files) {
-        if (sequenceFrame != null) {
-            sequenceFrame.closeForSessionChange();
-            sequenceFrame = null;
-        }
         closeEditorPreview();
     }
 
-    /** Forwards a session frame metadata replacement to the full-size sequence viewer when it is present. */
+    /** Keeps the editor's frames up to date after a session frame's metadata is replaced. */
     void replaceFrameMetadata(FitsFileInformation previous, FitsFileInformation updated) {
-        if (sequenceFrame != null) {
-            sequenceFrame.replaceFrameMetadata(previous, updated);
-        }
         for (int i = 0; i < previewFiles.length; i++) {
             if (previewFiles[i] == previous) previewFiles[i] = updated;
         }
@@ -474,15 +462,14 @@ public class StretchPanel extends JPanel {
         clearPreviews("Open the editor on a frame to adjust its stretch");
     }
 
-    /** Opens the linear/colour sequence viewer at the editor's frame. EDT only. */
-    private void openFullSize() {
-        if (previewFile() == null) return;
-        if (sequenceFrame == null || !sequenceFrame.isDisplayable()) sequenceFrame = fullSize.create(this);
-        sequenceFrame.openSequence(previewFiles.clone(), previewIndex);
+    /** Shows the editor's frame in Preview Frame; this editor stays open. EDT only. */
+    private void showInPreview() {
+        FitsFileInformation frame = previewFile();
+        if (frame != null) previewOpener.accept(frame);
     }
 
     // ==========================================
-    // ACCESSORS (used by Blink, Batch Stretch and the full-size viewer)
+    // ACCESSORS (used by the frame viewers and Batch Stretch)
     // ==========================================
 
     public StretchAlgorithm getStretchAlgorithm() {

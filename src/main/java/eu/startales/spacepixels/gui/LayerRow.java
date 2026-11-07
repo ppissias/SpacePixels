@@ -16,7 +16,8 @@ import java.util.Locale;
 
 /**
  * One overlay layer in a viewer's side panel: {@code [swatch] Name …… count [Aa] [eye]}. The switches change the
- * shared layer state, so every viewer follows. A layer that cannot be shown says why in place of its count.
+ * shared layer state, so every viewer follows. A layer that cannot be shown says why in place of its count, and its
+ * switches stay disabled while a group above it is off; it keeps its own choices for when the group comes back.
  */
 final class LayerRow extends JPanel {
 
@@ -99,28 +100,47 @@ final class LayerRow extends JPanel {
 
     /** Shows the shared state: the switches, and the name and swatch dimmed while the layer is off. */
     void refresh() {
+        ViewerLayer offGroup = state.offGroup(layer);
+        boolean usable = available && offGroup == null;
         labels.setSelected(state.isLabelled(layer));
         eye.setSelected(state.isVisible(layer));
-        labels.setEnabled(available);
-        eye.setEnabled(available);
-        boolean shown = available && state.isVisible(layer);
+        labels.setEnabled(usable);
+        eye.setEnabled(usable);
+        boolean shown = usable && state.isVisible(layer);
         if (swatch != null) swatch.setDimmed(!shown);
         Color fore = UIManager.getColor("Label.foreground");
         name.setForeground(shown || fore == null ? fore : UiStyle.helpColor());
-        name.setEnabled(available);
+        name.setEnabled(usable);
+        count.setEnabled(usable);
         String hint = tooltip == null ? layer.title : tooltip;
         setToolTipText(hint);
         name.setToolTipText(hint);
         count.setToolTipText(hint);
-        eye.setToolTipText((state.isVisible(layer) ? "Hide " : "Show ") + layer.title.toLowerCase(Locale.ROOT)
-                + (key == null ? "." : " (" + key + ")."));
-        labels.setToolTipText((state.isLabelled(layer) ? "Hide" : "Show") + " the labels of " + layer.title.toLowerCase(Locale.ROOT) + ".");
+        String title = layer.title.toLowerCase(Locale.ROOT);
+        eye.setToolTipText(switchTip((state.isVisible(layer) ? "Hide " : "Show ") + title + (key == null ? "." : " (" + key + ")."), offGroup));
+        labels.setToolTipText(switchTip((state.isLabelled(layer) ? "Hide" : "Show") + " the labels of " + title + ".", offGroup));
         repaint();
+    }
+
+    /** What a switch does and, while a group above it is off, what to do first. */
+    private static String switchTip(String action, ViewerLayer offGroup) {
+        return offGroup == null ? action
+                : "<html>" + action + "<br><i>Not available: switch on " + offGroup.title + " first.</i></html>";
+    }
+
+    /** Whether the layer has anything to show, whatever the groups above it. */
+    boolean hasContent() {
+        return available;
     }
 
     /** The show/hide switch. */
     JCheckBox eye() {
         return eye;
+    }
+
+    /** The count shown, or the reason there is none. */
+    String countText() {
+        return count.getText();
     }
 
     /** Names the key that switches this layer in the eye's tooltip, for example "T". */

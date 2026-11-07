@@ -631,7 +631,9 @@ public class BlinkFrame extends JFrame implements SessionViewer {
                 setSkipped(current, !skipped[current]);
             }
         });
-        bind("T", "tracks", () -> toggleFindingLayer(ViewerLayer.TRACKS));
+        bind("R", "findings", findings::toggleShown);
+        bind("T", "movingTracks", () -> toggleFindingLayer(ViewerLayer.MOVING_TRACKS));
+        bind("shift T", "streakTracks", () -> toggleFindingLayer(ViewerLayer.STREAK_TRACKS));
         bind("V", "variables", () -> toggleFindingLayer(ViewerLayer.VARIABLE_STARS));
         bind("A", "annotate", sky::toggle);
         layerState.addListener(layerListener);

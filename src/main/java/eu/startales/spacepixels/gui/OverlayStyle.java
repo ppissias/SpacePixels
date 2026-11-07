@@ -31,7 +31,8 @@ import java.awt.geom.RoundRectangle2D;
 /**
  * How each overlay layer is drawn: colours, strokes and shapes, used by the frame view and by the swatches of the
  * side panel, so a swatch looks like its marks. Findings take the colours of their report categories, as in the
- * HTML report; everything already in a catalogue is drawn in one off-white.
+ * HTML report; everything already in a catalogue is drawn in one off-white. A finding is vivid where it was measured in
+ * the frame shown and faint where it was measured in another frame of the run.
  */
 final class OverlayStyle {
 
@@ -45,12 +46,29 @@ final class OverlayStyle {
     private static final float[] REFERENCE_DASH = {3, 3};
     private static final float[] DEEP_SKY_DASH = {4, 3};
     private static final float[] PATH_DASH = {6, 4};
+    /** Opacity of a finding's marks on the frames it was not measured in. */
+    private static final int FAINT_ALPHA = 110;
 
     private OverlayStyle() {
     }
 
     static Color trackColour(boolean streak) {
         return (streak ? FindingCategory.STREAK_TRACK : FindingCategory.MOVING_TARGET).color();
+    }
+
+    /** The colour of a finding's marks on the frames it was not measured in. */
+    static Color faint(Color color) {
+        return new Color(color.getRed(), color.getGreen(), color.getBlue(), FAINT_ALPHA);
+    }
+
+    /** A finding's marks on the frames it was not measured in. */
+    static Stroke faintStroke() {
+        return new BasicStroke(1f);
+    }
+
+    /** A finding's marks on the frame it was measured in. */
+    static Stroke vividStroke() {
+        return new BasicStroke(1.6f);
     }
 
     static Stroke variableStroke(boolean highConfidence) {
@@ -108,7 +126,8 @@ final class OverlayStyle {
 
     /** The swatch of a layer, or null for the groups, which have none. */
     static Swatch swatch(ViewerLayer layer) {
-        return layer == ViewerLayer.OTHER_FINDINGS || layer == ViewerLayer.CATALOGUE ? null : new Swatch(layer);
+        return layer == ViewerLayer.REPORT_FINDINGS || layer == ViewerLayer.OTHER_FINDINGS || layer == ViewerLayer.CATALOGUE
+                ? null : new Swatch(layer);
     }
 
     /** A small dark tile with the layer's mark on it; dimmed while the layer is off or unavailable. */
@@ -172,13 +191,8 @@ final class OverlayStyle {
                     g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10, new float[]{2.5f, 2.5f}, 0));
                     g2.draw(ring(c, c, 5.5));
                 }
-                case TRACKS -> {
-                    g2.setColor(trackColour(false));
-                    g2.setStroke(new BasicStroke(1f));
-                    g2.draw(new Line2D.Double(2, 16, 7, 11));
-                    g2.setStroke(new BasicStroke(1.6f));
-                    g2.draw(ring(10.5, 7.5, 4.5));
-                }
+                case MOVING_TRACKS -> track(g2, trackColour(false));
+                case STREAK_TRACKS -> track(g2, trackColour(true));
                 case SINGLE_FRAME -> halves(g2, FindingCategory.SINGLE_STREAK.color(), FindingCategory.ANOMALY.color());
                 case SLOW_MOVERS -> {
                     g2.setColor(FindingCategory.SLOW_MOVER.color());
@@ -212,6 +226,15 @@ final class OverlayStyle {
                 default -> {
                 }
             }
+        }
+
+        /** A track's line leading to the ring at its position in the frame shown. */
+        private static void track(Graphics2D g2, Color color) {
+            g2.setColor(color);
+            g2.setStroke(new BasicStroke(1f));
+            g2.draw(new Line2D.Double(2, 16, 7, 11));
+            g2.setStroke(new BasicStroke(1.6f));
+            g2.draw(ring(10.5, 7.5, 4.5));
         }
 
         /** A measured-position ring for a layer of two report categories: one half in each category's colour. */

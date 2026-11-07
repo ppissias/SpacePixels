@@ -76,7 +76,8 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                     : frame.getWidth() + " by " + frame.getHeight() + " pixels; "
                     + Math.round(scale() * 100) + " percent zoom. "
                     + (skyMarks == null ? "Catalogue annotations off. " : "Catalogue annotations on. ")
-                    + (layers.shows(ViewerLayer.TRACKS) && overlay != null ? "Tracks on. " : "")
+                    + (layers.shows(ViewerLayer.MOVING_TRACKS) && overlay != null ? "Moving object tracks on. " : "")
+                    + (layers.shows(ViewerLayer.STREAK_TRACKS) && overlay != null ? "Streak tracks on. " : "")
                     + (layers.shows(ViewerLayer.FAINT_MOVERS) && faintMoverOverlay != null ? "Faint movers on. " : "")
                     + (layers.shows(ViewerLayer.OTHER_FINDINGS) && findingOverlay != null ? "Other findings on. " : "")
                     + (layers.shows(ViewerLayer.VARIABLE_STARS) && variableStarOverlay != null ? "Variable candidates on." : ""));
@@ -719,9 +720,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             if (layers.shows(ViewerLayer.RAW_DETECTIONS) && detections != null) {
                 drawDetections(g2);
             }
-            if (layers.shows(ViewerLayer.TRACKS) && overlay != null) {
-                drawOverlay(g2);
-            }
+            if (overlay != null) drawOverlay(g2);
             if (hasVariableStars()) drawVariableStars(g2);
             if (layers.shows(ViewerLayer.FAINT_MOVERS) && faintMoverOverlay != null) drawFaintMovers(g2);
             // Each marker follows its own layer: older reports give tracks as reference markers here too.
@@ -1055,7 +1054,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     /**
      * Each track as a thin line through all its positions, with a ring and its label at the position in the shown
-     * frame. Tracks that are not in this frame are drawn fainter.
+     * frame. Tracks that are not in this frame are drawn fainter. Moving object and streak tracks are separate layers.
      */
     private void drawOverlay(Graphics2D g2) {
         String fileName = new java.io.File(frame.getInfo().getFilePath()).getName();
@@ -1065,8 +1064,10 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         double ring = Math.max(9, 4 * scale);
-        boolean labels = layers.labels(ViewerLayer.TRACKS);
         for (TrackOverlay.Track track : overlay.getTracks()) {
+            ViewerLayer layer = track.streak ? ViewerLayer.STREAK_TRACKS : ViewerLayer.MOVING_TRACKS;
+            if (!layers.shows(layer)) continue;
+            boolean labels = layers.labels(layer);
             Color color = OverlayStyle.trackColour(track.streak);
             List<TrackOverlay.Point> here = track.pointsIn(fileName);
             Path2D.Double path = new Path2D.Double();
@@ -1092,7 +1093,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 }
                 continue;
             }
-            g2.setStroke(new BasicStroke(1.6f));
+            g2.setStroke(OverlayStyle.vividStroke());
             g2.setColor(color);
             for (TrackOverlay.Point point : here) {
                 double x = left + (point.x + 0.5) * scale;
@@ -1107,64 +1108,128 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         }
     }
 
-    /** Draws report-category markers only at measured frame positions; dashed squares explicitly denote references. */
+    /**
+     * The report's other categories. A finding is vivid where it was measured in the frame shown and faint where it was
+     * measured in another frame, so it can be found from any frame and stands out on its own. Dashed squares marked ref
+     * are report references, which belong to no frame and look the same on all of them.
+     */
     private void drawFindings(Graphics2D g2) {
         if (frame == null) return;
         Integer number = findingOverlay.frameNumber(frame.getInfo());
         if (number == null) return;
         double scale = scale(), left = left(scale), top = top(scale), radius = Math.max(5, scale * 2);
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setFont(UiStyle.bodyFont().deriveFont(Math.max(9f, UiStyle.bodyFont().getSize2D() - 1)));
         for (var marker : findingOverlay.markers()) {
             var category = eu.startales.spacepixels.report.FindingCategory.fromId(marker.id());
             ViewerLayer layer = ViewerLayer.of(category);
             if (!layers.shows(layer)) continue;
-            boolean reference = marker.positions().isEmpty();
-            var positions = reference ? java.util.List.of(new eu.startales.spacepixels.detection.FindingOverlay.Position(number,marker.x(),marker.y())) : marker.positions();
-            g2.setColor(withAlpha(category.color(), 190));
-            g2.setStroke(reference ? OverlayStyle.referenceStroke() : new BasicStroke(1.2f));
-            for (var point : positions) if (point.frameNumber() == number) {
+            boolean labels = layers.labels(layer);
+            Color color = category.color();
+            if (marker.positions().isEmpty()) {
+                double x = left + (marker.x() + .5) * scale, y = top + (marker.y() + .5) * scale;
+                g2.setColor(withAlpha(color, 190));
+                g2.setStroke(OverlayStyle.referenceStroke());
+                g2.draw(OverlayStyle.square(x, y, radius));
+                if (labels) g2.drawString(marker.id() + " ref", (float) (x + radius + 3), (float) (y - radius));
+                continue;
+            }
+            // A camera-fixed group measures almost one place in every frame. Drawn as one shape its rings do not add up to
+            // a vivid mark, and leaving out those next to a ring already there keeps them from merging into a thick band.
+            Path2D.Double elsewhere = new Path2D.Double();
+            List<double[]> drawn = new java.util.ArrayList<>();
+            boolean measuredHere = false;
+            for (var point : marker.positions()) {
+                if (point.frameNumber() == number) {
+                    measuredHere = true;
+                } else {
+                    double x = left + (point.x() + .5) * scale, y = top + (point.y() + .5) * scale;
+                    boolean onScreen = x >= -radius && y >= -radius && x <= getWidth() + radius && y <= getHeight() + radius;
+                    if (onScreen && drawn.stream().noneMatch(ring -> Math.hypot(ring[0] - x, ring[1] - y) < radius)) {
+                        drawn.add(new double[]{x, y});
+                        elsewhere.append(OverlayStyle.ring(x, y, radius), false);
+                    }
+                }
+            }
+            g2.setColor(OverlayStyle.faint(color));
+            g2.setStroke(OverlayStyle.faintStroke());
+            g2.draw(elsewhere);
+            if (!measuredHere) {
+                if (labels) {
+                    g2.drawString(marker.id(), (float) (left + (marker.x() + .5) * scale + radius + 3),
+                            (float) (top + (marker.y() + .5) * scale - radius));
+                }
+                continue;
+            }
+            g2.setColor(color);
+            g2.setStroke(OverlayStyle.vividStroke());
+            for (var point : marker.positions()) if (point.frameNumber() == number) {
                 double x = left + (point.x() + .5) * scale, y = top + (point.y() + .5) * scale;
-                g2.draw(reference ? OverlayStyle.square(x, y, radius) : OverlayStyle.ring(x, y, radius));
-                if (layers.labels(layer)) g2.drawString(marker.id() + (reference ? " ref" : ""),(float)(x+radius+3),(float)(y-radius));
+                g2.draw(OverlayStyle.ring(x, y, radius));
+                if (labels) g2.drawString(marker.id(), (float) (x + radius + 3), (float) (y - radius));
             }
         }
     }
 
-    /** Returns a nearby additional finding's evidence kind without claiming a reference is a current-frame detection. */
+    /**
+     * The nearby finding of the report's other categories, preferring what was measured in the frame shown. A faint mark
+     * names the frame of the session it was measured in, as the report numbers them: Blink and Manual Transient Inspection
+     * can show only some of the frames. A reference is never described as a detection in this frame.
+     */
     private String findingAt(Point pixel) {
         if (findingOverlay == null || frame == null || pixel == null) return null;
         Integer number = findingOverlay.frameNumber(frame.getInfo());
         if (number == null) return null;
-        double distance = 8 / scale();String found = null;
+        double reach = 8 / scale(), nearestHere = reach, nearestElsewhere = reach;
+        String here = null, elsewhere = null;
         for (var marker : findingOverlay.markers()) {
             if (!layers.shows(ViewerLayer.of(eu.startales.spacepixels.report.FindingCategory.fromId(marker.id())))) continue;
-            var positions = marker.positions().isEmpty()
-                    ? java.util.List.of(new eu.startales.spacepixels.detection.FindingOverlay.Position(number,marker.x(),marker.y())) : marker.positions();
-            for (var point : positions) if (point.frameNumber() == number) {
-                double separation = Math.hypot(point.x()-pixel.x,point.y()-pixel.y);
-                if (separation <= distance) { distance = separation; found = marker.id() + " · " + marker.description(); }
+            String text = marker.id() + " · " + marker.description();
+            if (marker.positions().isEmpty()) {
+                double separation = Math.hypot(marker.x() - pixel.x, marker.y() - pixel.y);
+                if (separation <= nearestHere) { nearestHere = separation; here = text; }
+                continue;
+            }
+            for (var point : marker.positions()) {
+                double separation = Math.hypot(point.x() - pixel.x, point.y() - pixel.y);
+                if (point.frameNumber() == number) {
+                    if (separation <= nearestHere) { nearestHere = separation; here = text; }
+                } else if (separation <= nearestElsewhere) {
+                    nearestElsewhere = separation;
+                    elsewhere = text + " · in frame " + point.frameNumber() + " of the session";
+                }
             }
         }
-        return found;
+        return here != null ? here : elsewhere;
     }
 
-    /** Draws dashed fitted paths and exposure-midpoint rings only on frames actually searched by the engine. */
+    /**
+     * Each fitted path as a faint dashed line, with a vivid ring and its label at this frame's exposure midpoint. A frame
+     * the engine did not search has no position to mark, so it shows the path only.
+     */
     private void drawFaintMovers(Graphics2D g2) {
         if (frame == null) return;
-        Long midpoint = faintMoverOverlay.midpoint(frame.getInfo());
         var times = faintMoverOverlay.times();
-        if (midpoint == null || times.isEmpty()) return;
+        if (times.isEmpty()) return;
+        Long midpoint = faintMoverOverlay.midpoint(frame.getInfo());
         double scale = scale(), left = left(scale), top = top(scale), radius = Math.max(9, scale * 4);
-        g2.setColor(eu.startales.spacepixels.report.FindingCategory.FAINT_MOVER.color());
+        Color color = eu.startales.spacepixels.report.FindingCategory.FAINT_MOVER.color();
+        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         g2.setFont(UiStyle.bodyFont().deriveFont(Font.BOLD));
         g2.setStroke(OverlayStyle.faintMoverStroke());
         boolean labels = layers.labels(ViewerLayer.FAINT_MOVERS);
         for (var candidate : faintMoverOverlay.candidates()) {
             double[] start = candidate.positionAt(times.getFirst()), end = candidate.positionAt(times.getLast());
-            double[] here = candidate.positionAt(midpoint);
-            double x = left + (here[0] + .5) * scale, y = top + (here[1] + .5) * scale;
+            g2.setColor(OverlayStyle.faint(color));
             g2.draw(new java.awt.geom.Line2D.Double(left + (start[0] + .5) * scale, top + (start[1] + .5) * scale,
                     left + (end[0] + .5) * scale, top + (end[1] + .5) * scale));
+            if (midpoint == null) {
+                if (labels) g2.drawString(candidate.id(), (float) (left + (start[0] + .5) * scale + 6), (float) (top + (start[1] + .5) * scale - 6));
+                continue;
+            }
+            double[] here = candidate.positionAt(midpoint);
+            double x = left + (here[0] + .5) * scale, y = top + (here[1] + .5) * scale;
+            g2.setColor(color);
             g2.draw(OverlayStyle.ring(x, y, radius));
             if (labels) g2.drawString(candidate.id(), (float) (x + radius + 3), (float) (y - radius));
         }

@@ -77,7 +77,7 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         close(mask);
     }
 
-    /** Full-size stretch and Blink share the protected viewer sizing, including their additional control rows. */
+    /** The stretch editor, Preview Frame and Blink use the protected viewer sizing, including their additional control rows. */
     @Test(timeout = 180_000) public void stretchAndBlinkCannotHideTheirControlsByShrinking() throws Exception {
         var sequence = eu.startales.spacepixels.testsupport.SyntheticDatasetFactory.createMono16FitsSequence(
                 folder.newFolder("viewer-sizing").toPath(), "session", 5);
@@ -88,11 +88,11 @@ public class ResponsiveLayoutMechanicsTest extends MechanicsTestCase {
         FrameFixture editor = viewer("Image Stretch");
         shrink(editor.target());
         waitFor("editor controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(editor.target())));
-        GuiActionRunner.execute(() -> editor.button(VisibleText.button("Show full size")).target().doClick());
-        FrameFixture stretch = viewer("Full Size");
-        shrink(stretch.target());
-        waitFor("stretch controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(stretch.target())));
-        close(stretch);
+        GuiActionRunner.execute(() -> editor.button(VisibleText.button("Show in Preview")).target().doClick());
+        FrameFixture preview = viewer("Preview Frame");
+        shrink(preview.target());
+        waitFor("Preview controls fit at the minimum", () -> GuiActionRunner.execute(() -> controlsVisible(preview.target())));
+        close(preview);
         close(editor);
         window().tabbedPane().selectTab("Main");
         GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 2));

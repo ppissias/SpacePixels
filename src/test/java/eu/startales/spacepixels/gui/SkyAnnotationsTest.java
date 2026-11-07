@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.fits.FitsFileInformation;
@@ -48,6 +49,68 @@ public class SkyAnnotationsTest {
             }
             assertEquals(0, secondModel.listenerCount());
         });
+    }
+
+    /** Catalog annotations switched off disables its rows, settings menu and correction, and C does nothing. */
+    @Test
+    public void theSectionSwitchDisablesItsControls() throws Exception {
+        javax.swing.SwingUtilities.invokeAndWait(() -> {
+            var model = new eu.startales.spacepixels.session.SkyCatalogueModel();
+            var correction = new eu.startales.spacepixels.platesolve.PlateSolutionCorrection();
+            correction.global = new eu.startales.spacepixels.platesolve.PlateSolutionCorrection.Polynomial();
+            model.setCorrection(correction);
+            model.set(new SkyCatalogue());
+            ViewerLayerState state = new ViewerLayerState(null);
+            state.setVisible(ViewerLayer.CATALOGUE, true);
+            SkyAnnotations sky = new SkyAnnotations(new FrameView(), state);
+            sky.bind(model);
+            sky.attach(null);
+            sky.showFrame(null);
+            try {
+                var box = find(sky.section(), javax.swing.JCheckBox.class, "Align markers to corrected plate solution");
+                var eye = find(sky.section(), javax.swing.JCheckBox.class, "Show known stars");
+                var menu = find(sky.section(), javax.swing.JButton.class, "Catalog annotation settings");
+                assertTrue(box.isEnabled());
+                assertTrue(eye.isEnabled());
+                assertTrue(menu.isEnabled());
+
+                state.setVisible(ViewerLayer.CATALOGUE, false);
+                sky.layersChanged();
+                assertFalse(box.isEnabled());
+                assertFalse(eye.isEnabled());
+                assertFalse(menu.isEnabled());
+                assertTrue(box.getToolTipText(), box.getToolTipText().contains("switch on Catalog annotations first"));
+                boolean corrected = model.isCorrectionEnabled();
+                sky.toggleCorrection();
+                assertEquals("C does nothing while the section is off", corrected, model.isCorrectionEnabled());
+
+                state.setVisible(ViewerLayer.CATALOGUE, true);
+                sky.layersChanged();
+                assertTrue(box.isEnabled());
+                assertTrue(eye.isEnabled());
+                assertTrue(menu.isEnabled());
+            } finally {
+                sky.detach();
+            }
+        });
+    }
+
+    /** The control of this type with this visible text or accessible name. */
+    private static <C extends javax.swing.AbstractButton> C find(java.awt.Container root, Class<C> type, String name) {
+        for (java.awt.Component child : root.getComponents()) {
+            if (type.isInstance(child)) {
+                C control = type.cast(child);
+                if (name.equals(control.getText()) || name.equals(control.getAccessibleContext().getAccessibleName())) return control;
+            }
+            if (child instanceof java.awt.Container container) {
+                try {
+                    return find(container, type, name);
+                } catch (AssertionError notInThisBranch) {
+                    // The next branch can hold it.
+                }
+            }
+        }
+        throw new AssertionError("no control named " + name);
     }
 
     @Test

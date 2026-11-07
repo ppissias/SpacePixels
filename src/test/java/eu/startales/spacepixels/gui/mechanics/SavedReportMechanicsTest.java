@@ -77,7 +77,7 @@ public class SavedReportMechanicsTest extends MechanicsTestCase {
 
     /** Every available report category group starts visible and remains independently switchable. */
     private void requireAllLayers(FrameFixture viewer) {
-        for (String text : List.of("Show tracks","Show variable stars","Show faint movers","Show other findings"))
+        for (String text : List.of("Show moving object tracks","Show variable stars","Show faint movers","Show other findings"))
             viewer.checkBox(VisibleText.checkBox(text)).requireEnabled().requireSelected();
         viewer.checkBox(VisibleText.checkBox("Show other findings")).uncheck().requireNotSelected();
         viewer.checkBox(VisibleText.checkBox("Show other findings")).check().requireSelected();

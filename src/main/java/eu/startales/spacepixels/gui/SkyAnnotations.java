@@ -35,7 +35,7 @@ import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
  * are fetched in the main window. When either arrives while the viewer is open, the switch becomes available and a
  * note says so, but nothing changes on the frame until it is turned on. Below the rows, "Align markers to corrected
  * plate solution" (key C) switches the session's correction to the Gaia stars on or off, for all viewers at once and
- * for what else uses the plate solution.
+ * for what else uses the plate solution. While the section's switch is off, its other controls are disabled.
  */
 final class SkyAnnotations {
 
@@ -43,6 +43,8 @@ final class SkyAnnotations {
     /** Marks are kept for this many plate solutions; aligned frames usually share one. */
     private static final int CACHED_SOLUTIONS = 3;
     private static final Color NOTICE_COLOR = new Color(255, 200, 80);
+    private static final String SETTINGS_TIP = "Catalogue display settings: the faintest stars and variables shown.";
+    private static final String SWITCH_ON_FIRST = "<html>%s<br><i>Not available: switch on Catalog annotations first.</i></html>";
     private static final List<ViewerLayer> ROWS = List.of(ViewerLayer.KNOWN_STARS, ViewerLayer.KNOWN_VARIABLES,
             ViewerLayer.DEEP_SKY, ViewerLayer.SOLAR_SYSTEM);
 
@@ -76,6 +78,8 @@ final class SkyAnnotations {
     private SolarSystemObjects solarSystem;
     private boolean attached;
     private SkyCatalogueModel model = new SkyCatalogueModel();
+    /** Whether the session has a correction that can be switched, whatever the section's switch; for the notes when one arrives. */
+    private boolean correctionUsable;
 
     /** Creates viewer-owned controls, restoring display preferences without changing the session catalogue. */
     SkyAnnotations(FrameView view, ViewerLayerState state) {
@@ -93,7 +97,6 @@ final class SkyAnnotations {
         limitsItem.addActionListener(e -> editMagnitudeLimits());
         settings.add(limitsItem);
         settingsButton.putClientProperty("JButton.buttonType", "borderless");
-        settingsButton.setToolTipText("Catalogue display settings: the faintest stars and variables shown.");
         settingsButton.getAccessibleContext().setAccessibleName("Catalog annotation settings");
         settingsButton.addActionListener(e -> settings.show(settingsButton, 0, settingsButton.getHeight()));
         correctBox.addActionListener(e -> setCorrection(correctBox.isSelected()));
@@ -217,7 +220,7 @@ final class SkyAnnotations {
 
     /** The shared layer state changed, possibly in another viewer: show it and draw the marks again. */
     void layersChanged() {
-        annotateSwitch.setSelected(isShowing());
+        updateEnabled();
         rows.values().forEach(LayerRow::refresh);
         if (isShowing()) {
             notice.setText(" ");
@@ -372,14 +375,14 @@ final class SkyAnnotations {
 
     private void correctionChanged() {
         marksBySolution.clear();
-        boolean wasAvailable = correctBox.isEnabled();
+        boolean wasUsable = correctionUsable;
         updateEnabled();
         apply();
         onSolutionChanged.run();
-        if (!wasAvailable && correctBox.isEnabled() && !correctBox.isSelected()) {
-            notice.setText("Plate solution check ready · C corrects it");
-        } else if (!wasAvailable && correctBox.isSelected()) {
-            notice.setText("Plate solution corrected · " + model.getCorrection().improvementText() + " · C switches it off");
+        if (!wasUsable && correctionUsable && !correctBox.isSelected()) {
+            notice.setText("Plate solution check ready" + (isShowing() ? " · C corrects it" : ""));
+        } else if (!wasUsable && correctBox.isSelected()) {
+            notice.setText("Plate solution corrected · " + model.getCorrection().improvementText() + (isShowing() ? " · C switches it off" : ""));
         }
         if (model.getSaveFailure() != null) {
             notice.setText("Cannot save the correction: " + model.getSaveFailure().getMessage() + "; it stays in use until SpacePixels closes.");
@@ -392,7 +395,9 @@ final class SkyAnnotations {
 
     private void updateEnabled() {
         eu.startales.spacepixels.platesolve.PlateSolutionCorrection correction = model.getCorrection();
-        correctBox.setEnabled(!model.isClosed() && correction != null && correction.isNeeded());
+        boolean showing = isShowing();
+        correctionUsable = !model.isClosed() && correction != null && correction.isNeeded();
+        correctBox.setEnabled(correctionUsable && showing);
         correctBox.setSelected(correction != null && correction.enabled);
         correctHint.setEnabled(correctBox.isEnabled());
         if (correction == null) {
@@ -402,6 +407,8 @@ final class SkyAnnotations {
             correctBox.setToolTipText(String.format(java.util.Locale.US, "<html>Use the plate solution corrected to the Gaia stars (C)."
                     + "<br><i>Not needed: the FITS header solution already matches the stars (%.2f px median).</i></html>",
                     correction.beforeMedianPx));
+        } else if (!showing) {
+            correctBox.setToolTipText(SWITCH_ON_FIRST.formatted("Use the plate solution corrected to the Gaia stars (C)."));
         } else {
             correctBox.setToolTipText("<html>Use the plate solution corrected to the Gaia stars (C). Distance from the "
                     + "catalogue stars to the stars<br>in the frames: " + correction.improvementText() + " (median). "
@@ -410,8 +417,9 @@ final class SkyAnnotations {
         }
         boolean available = hasContent();
         annotateSwitch.setEnabled(available);
-        annotateSwitch.setSelected(isShowing());
-        settingsButton.setEnabled(available);
+        annotateSwitch.setSelected(showing);
+        settingsButton.setEnabled(available && showing);
+        settingsButton.setToolTipText(available && !showing ? SWITCH_ON_FIRST.formatted(SETTINGS_TIP) : SETTINGS_TIP);
         hint.setText(available ? "Known objects in this field." : "Nothing fetched for this session yet.");
         if (!available) {
             annotateSwitch.setToolTipText("<html>Show the known objects of the field (A).<br><i>Not available: "

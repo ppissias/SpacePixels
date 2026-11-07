@@ -15,7 +15,6 @@ import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.fits.FitsFileInformation;
-import eu.startales.spacepixels.detection.TrackOverlay;
 import eu.startales.spacepixels.detection.TransientInspectionDetector;
 import eu.startales.spacepixels.util.DebugOutput;
 import io.github.ppissias.jtransient.engine.FrameTransients;
@@ -102,16 +101,21 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
     /**
      * Shows the first frame; returns false, showing nothing, when the engine kept no frames.
      *
-     * @param lastRunTracks the tracks of the session's last detection run, for "Show tracks"; null when none has run
+     * @param session the session whose last detection run or restored report supplies the findings, or null
      */
-    public boolean open(TrackOverlay lastRunTracks) {
+    public boolean open(ProcessingSession session) {
         if (allTransients.isEmpty()) {
             dispose();
             return false;
         }
         openAt(0, stretchPanel, filesInfo);
-        setTrackOverlay(lastRunTracks, filesInfo);
+        setLastRun(session, filesInfo);
         return true;
+    }
+
+    /** Takes all the findings of the session's last detection run, when a run ends while this window is open. */
+    void showLastRun(ProcessingSession session) {
+        setLastRun(session, filesInfo);
     }
 
     @Override
