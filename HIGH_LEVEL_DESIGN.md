@@ -319,8 +319,10 @@ Primary GUI workflow facade.
 
 Owns:
 
-- a workflow strip of four groups (1 Prepare, 2 Astrometry, 3 Inspect, 4 Detect) laid out by `WrapLayout`; each group has a status line
-- FITS metadata table, with the quality-control buttons above it, a right-click menu for the frame actions and a double click for Preview Frame
+- a workflow strip of four `WorkflowStep`s (1 Prepare, 2 Astrometry, 3 Inspect, 4 Detect) laid out by `WrapLayout`; each has a status under its heading, and they share one height and one status height so their controls line up
+- the one highlighted next step, chosen by `CommandAvailability.emphasis` from the same facts as the commands
+- FITS metadata table, with a toolbar above it (the quality-control buttons, frame, verdict and selection counts), a right-click menu for the frame actions and a double click for Preview Frame; before any import, `DropZonePanel` takes the table's place
+- command captions that name what the selection means for them, keeping the room of their widest caption (`SteadyWidthButton`)
 - plate solve controls
 - blink controls
 - batch conversion and stretch controls
