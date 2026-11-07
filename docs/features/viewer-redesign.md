@@ -15,7 +15,7 @@ Mock-up screenshots (placeholders in `[brackets]`, counts illustrative):
 ├──────────────┬─────────────────────────────────────┬──────────────────┤
 │ (Blink only) │ image viewer                        │ side panel       │
 │ frame list   │                                     │ ~312 px, scrolls,│
-│ ~248 px      │ (Blink: transport bar under image)  │ can be hidden    │
+│ ~248 px      │ (Blink: transport bar above image)  │ can be hidden    │
 ├──────────────┴─────────────────────────────────────┴──────────────────┤
 │ status bar (one line)                                                 │
 └───────────────────────────────────────────────────────────────────────┘
@@ -40,7 +40,7 @@ Sections 2–4 are shared components, so the viewers cannot drift apart. Section
 
 - Zoom is one segmented control (a `ButtonGroup` of toggle buttons).
 - The panel toggle shows or hides the side panel; its visibility and width are remembered.
-- "Blink ↗" and "Open in Preview ↗" open the other window on the current frame.
+- "Blink ↗" and "Open in Preview ↗" bring the other window forward on the current frame. Both windows stay open: leaving Blink pauses it, and coming back does not read its frames again.
 
 ### 1.2 Layer rows
 
@@ -59,7 +59,7 @@ Each overlay layer is one row: `[swatch] Name ……… count  [Aa] [eye]`.
 - Trial parameters: Detection σ, Grow σ (hysteresis), Min pixels.
   - Editing any field switches the layer on.
   - A changed field gets an amber border and a `saved: <value>` hint; a "Not saved" badge appears in the header.
-  - One hint line: "Previews on this frame only. Typed values apply on Enter."
+  - One hint line: "Previews in this window only. Typed values apply on Enter."
   - **Revert** (was Reset) and **Save to settings** (was Apply to Settings), enabled only when the values differ from the saved settings.
 - The markers keep their current look: green boxes for point sources, red lines for streaks, sized by the marker settings.
 
@@ -110,7 +110,7 @@ Clicking a finding shows a selection ring and a card: swatch, ID, type, close; p
 - A gap row ("5 min 17 s gap") where the interval to the previous frame exceeds 1.5 × the median interval.
 - Footer: "Untick or press S to leave a frame out of the loop." The "Skip this frame" checkbox goes.
 
-### 3.2 Transport bar (under the image)
+### 3.2 Transport bar (above the image)
 
 `◀  ▶/❚❚  ▶ │ timeline │ 17 / 33 +37:17 │ Speed [slider] 10 fps · 100 ms`
 

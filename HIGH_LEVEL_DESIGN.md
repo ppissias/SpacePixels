@@ -320,7 +320,7 @@ Primary GUI workflow facade.
 Owns:
 
 - a workflow strip of four groups (1 Prepare, 2 Astrometry, 3 Inspect, 4 Detect) laid out by `WrapLayout`; each group has a status line
-- FITS metadata table, with a right-click menu for the frame actions
+- FITS metadata table, with the quality-control buttons above it, a right-click menu for the frame actions and a double click for Preview Frame
 - plate solve controls
 - blink controls
 - batch conversion and stretch controls
@@ -488,12 +488,11 @@ Responsibilities:
 - build global maps, masks, crops, shape maps, and diagnostic imagery
 - coordinate section writers
 - generate standard `detection_report.html`
-- generate iterative index reports
 - build `ReportData`: report-local finding IDs/anchors, included variables and common-motion groups, and one shared quality-filtered frame selection
 - export versioned `report-data.json` without input paths or observing-site coordinates
 - publish HTML, JSON and CSV text artifacts through `AtomicReportFile` (built on `StagedFile`), checking write errors before replacing final files
-- emit testable `report-lookups.js` and `report-interactions.js` resources; GIF exports include PNG posters for pause/reduced-motion controls
-- write the page styles from resources: `report-theme.css` defines the named colour roles (`--sp-page`, `--sp-text`, `--sp-accent` and so on) for the dark theme, the default, and the light theme (`:root[data-theme='light']`), and the text sizes; `ReportThemeRoles` adds a role per finding type made from its `FindingCategory` colour, darkened for the light page. `report.css`, `report-index.css` and `faint-mover-review.css` use the roles, with text sizes in `rem`. Section writers' inline styles use the same roles. Like the scripts, the styles are written into each page, so a report is one self-contained HTML file plus its pictures. A small script in the page head applies the theme and text size the browser remembers. Each page then links `report-custom.css` in its folder, the user's own rules: a copy of the **Report Style File** setting, or a file holding only a comment
+- write `report.js` beside the page from testable resources such as `report-lookups.js` and `report-interactions.js`, and `report.css` from the style resources (`ReportAssets`); the page keeps its data as JSON blocks; GIF exports include PNG posters for pause/reduced-motion controls
+- build the page styles from resources: `report-theme.css` defines the named colour roles (`--sp-page`, `--sp-text`, `--sp-accent` and so on) for the dark theme, the default, and the light theme (`:root[data-theme='light']`), and the text sizes; `ReportThemeRoles` adds a role per finding type made from its `FindingCategory` colour, darkened for the light page. The report's sheets and those of the iterative pages use the roles, with text sizes in `rem`. Section writers' inline styles use the same roles. The styles and scripts are files beside the page, so a report is a folder: the page with its data, `report.css`, `report.js` and its pictures. A small script in the page head applies the theme and text size the browser remembers. Each page then links `report-custom.css` in its folder, the user's own rules: a copy of the **Report Style File** setting, or a file holding only a comment
 
 `ReportData` describes report presentation; it never changes the JTransient result. `DetectionReportContext` uses the catalogue and WCS captured once by `ReportRunContext` at run admission, including their valid absence. The run's `VisualizationSettings` applies throughout image rendering. Long moving/streak GIFs stream images one at a time. Motion/lookup calculations use exposure midpoint times, while observing-span duration remains a separate metric. Detection-quality rejections are shared by all inspection animations.
 
