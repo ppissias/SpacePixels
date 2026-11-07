@@ -60,7 +60,7 @@ public class ApplicationWindow {
     }
 
     private static final String RELEASES_PAGE_URL = "https://github.com/ppissias/SpacePixels/releases";
-    private static final String MANUAL_URL = "https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md";
+    static final String MANUAL_URL = "https://github.com/ppissias/SpacePixels/blob/master/MANUAL.md";
     private static final String LATEST_RELEASE_API_URL = "https://api.github.com/repos/ppissias/SpacePixels/releases/latest";
     private static final int RELEASE_CHECK_TIMEOUT_MS = 4000;
 
@@ -105,6 +105,8 @@ public class ApplicationWindow {
 
     /** The "new version" notice: a pill in the accent colour at the right end of the tab bar, hidden until a newer release is found. */
     private final JButton updateNoticeLabel = new JButton();
+    /** The tips screen, made when it is first opened. */
+    private TipsDialog tipsDialog;
 
     public static void main(String[] args) {
         DebugOutput.configureApplicationLogging();
@@ -149,6 +151,10 @@ public class ApplicationWindow {
 
                 ApplicationWindow window = new ApplicationWindow(new ApplicationStorage(), appearance.settings(), warning, restart);
                 window.frmIpodImage.setVisible(true);
+                if (TipsDialog.wantedAtStartup()) {
+                    // After the main window has come up, so the tip opens over it.
+                    EventQueue.invokeLater(window::showTips);
+                }
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Failed to initialize application UI", e);
             }
@@ -754,6 +760,11 @@ public class ApplicationWindow {
         manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
         manualLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+        JButton tipsLink = AccessibleControls.link("Tips", "Open the SpacePixels tips", this::showTips);
+        tipsLink.setForeground(UiStyle.linkColor());
+        tipsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        tipsLink.setToolTipText("Short tips on features you may not have met yet.");
+        tipsLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
         JButton acknowledgementsLink = AccessibleControls.link("Acknowledgements", "Open credits and acknowledgements",
                 () -> AcknowledgementsDialog.show(frmIpodImage));
         acknowledgementsLink.setForeground(UiStyle.linkColor());
@@ -772,6 +783,7 @@ public class ApplicationWindow {
         links.setOpaque(false);
         links.add(updateNoticeLabel);
         links.add(acknowledgementsLink);
+        links.add(tipsLink);
         links.add(manualLink);
         JPanel trailing = new JPanel(new GridBagLayout());
         trailing.setOpaque(false);
@@ -780,6 +792,14 @@ public class ApplicationWindow {
         right.anchor = GridBagConstraints.EAST;
         trailing.add(links, right);
         tabbedPane.putClientProperty("JTabbedPane.trailingComponent", trailing);
+    }
+
+    /** Opens the tips over the main window; they stay available from the link in the tab bar. */
+    private void showTips() {
+        if (tipsDialog == null) {
+            tipsDialog = new TipsDialog(frmIpodImage, this::openInBrowser);
+        }
+        tipsDialog.open();
     }
 
     private void openInBrowser(String url) {
