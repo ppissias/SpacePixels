@@ -25,20 +25,6 @@ final class FaintMoverReviewWriter {
     /** Prevents construction of this report rendering utility. */
     private FaintMoverReviewWriter() { }
 
-    /** Embeds styles only in reports containing the new review surface. */
-    static void appendStyle(PrintWriter out) throws IOException { appendResource(out, "faint-mover-review.css", "style"); }
-
-    /** Installs the offline viewer after the shared report animation controller. */
-    static void appendScript(PrintWriter out) throws IOException { appendResource(out, "faint-mover-review.js", "script"); }
-
-    /** Reads a packaged, local-only presentation resource into the standalone report. */
-    private static void appendResource(PrintWriter out, String name, String tag) throws IOException {
-        try (var stream = FaintMoverReviewWriter.class.getResourceAsStream(name)) {
-            if (stream == null) throw new IOException("Missing faint-mover review resource: " + name);
-            out.println("<" + tag + ">" + new String(stream.readAllBytes(), StandardCharsets.UTF_8) + "</" + tag + ">");
-        }
-    }
-
     /** Writes the candidate's small assets and accessible fallback, then supplies controls for progressive enhancement. */
     static void write(PrintWriter out, DetectionReportContext c, FaintMoverPresentation.Entry entry,
                       FaintMoverCandidate candidate) throws IOException {

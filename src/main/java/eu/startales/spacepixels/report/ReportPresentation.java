@@ -2,7 +2,6 @@ package eu.startales.spacepixels.report;
 
 import com.google.gson.Gson;
 import java.io.*;
-import java.nio.charset.StandardCharsets;
 import java.util.*;
 import eu.startales.spacepixels.util.BuildInfo;
 
@@ -59,13 +58,6 @@ final class ReportPresentation {
         out.println("<script type='application/json' id='report-animations-data'>");
         out.println(new Gson().toJson(map));
         out.println("</script>");
-    }
-
-    static void appendScript(PrintWriter out) {
-        try (InputStream in = ReportPresentation.class.getResourceAsStream("report-interactions.js")) {
-            if (in == null) throw new IllegalStateException("Missing report interactions");
-            out.println("<script>" + new String(in.readAllBytes(), StandardCharsets.UTF_8) + "</script>");
-        } catch (IOException e) { throw new UncheckedIOException(e); }
     }
 
 }

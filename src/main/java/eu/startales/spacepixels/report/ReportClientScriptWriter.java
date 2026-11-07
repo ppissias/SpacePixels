@@ -10,25 +10,24 @@
 package eu.startales.spacepixels.report;
 
 import com.google.gson.Gson;
-import java.io.*;
-import java.nio.charset.StandardCharsets;
+import java.io.PrintWriter;
 import eu.startales.spacepixels.report.lookup.ReportLookupProxyServer;
 
-/** Embeds the standalone, testable lookup client in each static report. */
+/** The lookup client's data in each static report, and its testable script with this application's addresses. */
 final class ReportClientScriptWriter {
-    static void appendLiveReportRenderingScript(PrintWriter report) {
-        CatalogueComparisonWriter.appendScript(report);
+    /** Writes the data the lookup client reads from the page; the proxy saves its results into the marked block. */
+    static void appendLiveReportData(PrintWriter report) {
+        CatalogueComparisonWriter.appendSourceNotes(report);
         report.println(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_START_MARKER);
         report.println("<script type='application/json' id='" + ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID
                 + "'>{\"version\":1,\"entries\":{}}</script>");
         report.println(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_END_MARKER);
-        try (InputStream in = ReportClientScriptWriter.class.getResourceAsStream("report-lookups.js")) {
-            if (in == null) throw new IllegalStateException("Missing report lookup script");
-            Gson json = new Gson();
-            String script = new String(in.readAllBytes(), StandardCharsets.UTF_8)
-                    .replace("__SPACEPIXELS_PROXY_URL__", json.toJson(ReportLookupProxyServer.getServiceBaseUrl()))
-                    .replace("__SPACEPIXELS_CACHE_ID__", json.toJson(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID));
-            report.println("<script>" + script + "</script>");
-        } catch (IOException e) { throw new UncheckedIOException(e); }
+    }
+
+    /** Fills in the lookup script's proxy address and the identity of the saved-results block. */
+    static String lookupScript(String script) {
+        Gson json = new Gson();
+        return script.replace("__SPACEPIXELS_PROXY_URL__", json.toJson(ReportLookupProxyServer.getServiceBaseUrl()))
+                .replace("__SPACEPIXELS_CACHE_ID__", json.toJson(ReportLookupProxyServer.PERSISTED_LOOKUP_CACHE_SCRIPT_ID));
     }
 }

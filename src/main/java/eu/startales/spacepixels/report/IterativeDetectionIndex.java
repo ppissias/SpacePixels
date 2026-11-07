@@ -29,13 +29,9 @@ public final class IterativeDetectionIndex {
         if (run.visualization() != null) {
             DetectionReportDocumentWriter.writeCustomStyle(run.visualization().getReportStyleFile(), directory);
         }
+        ReportAssets.writeIterativeResultsStyle(directory);
         StringBuilder html = new StringBuilder("<!doctype html><html lang='en'><meta charset='utf-8'>"
-                + "<title>Iterative detection results</title><style>" + DetectionReportDocumentWriter.themeStyle()
-                + "body{font-family:system-ui;font-size:1rem;margin:2rem;max-width:100rem;background:var(--sp-page);color:var(--sp-text)}"
-                + "h1{color:var(--sp-text-strong)}a{color:var(--sp-link)}a:visited{color:var(--sp-link-visited)}"
-                + "table{border-collapse:collapse;width:100%;background:var(--sp-inset)}"
-                + "th,td{border:1px solid var(--sp-border-strong);padding:.6rem;text-align:left}th{background:var(--sp-sunken);color:var(--sp-accent)}"
-                + "td{vertical-align:top}small{display:block;margin-top:.4rem;color:var(--sp-text-muted)}</style>"
+                + "<title>Iterative detection results</title>" + ReportAssets.STYLE_LINK
                 + DetectionReportDocumentWriter.CUSTOM_STYLE + DetectionReportDocumentWriter.REMEMBERED_APPEARANCE
                 + "<h1>Iterative detection results</h1>");
         html.append("<p>Source: ").append(escape(run.sourceDirectory())).append("</p><p>Outcome: ")

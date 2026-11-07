@@ -40,7 +40,8 @@ public class ReportThemeTest {
         Set<String> defined = matches(DEFINITION, theme.substring(root));
         defined.addAll(matches(DEFINITION, ReportThemeRoles.findingRoles()));
         Set<String> used = new TreeSet<>();
-        for (String sheet : new String[]{"report.css", "report-index.css", "faint-mover-review.css"}) {
+        for (String sheet : new String[]{"report.css", "iterative-results.css", "faint-mover-review.css",
+                "session-pictures.css", "unclassified-inspector.css"}) {
             used.addAll(matches(USE, withoutComments(resource(sheet))));
         }
         used.removeAll(defined);
@@ -64,16 +65,14 @@ public class ReportThemeTest {
         }
     }
 
-    /** The report page carries the theme before its own styles, so the roles apply. */
-    @Test public void reportPageCarriesTheThemeFirst() {
-        StringWriter out = new StringWriter();
-        DetectionReportDocumentWriter.appendDetectionReportStart(new PrintWriter(out, true));
-        String html = out.toString();
-        int theme = html.indexOf("--sp-page:");
-        int body = html.indexOf("body { font-family");
+    /** The report's style file carries the theme before its own styles, so the roles apply. */
+    @Test public void reportStyleCarriesTheThemeFirst() throws Exception {
+        String style = ReportAssets.reportStyle();
+        int theme = style.indexOf("--sp-page:");
+        int body = style.indexOf("body { font-family");
         assertTrue(theme > 0 && body > theme);
-        String ownStyles = withoutComments(html.substring(body, html.indexOf("</style>")));
-        assertFalse("no hardcoded colour remains in the report's own styles", ownStyles.matches("(?s).*#[0-9a-fA-F]{6}\\b.*"));
+        assertFalse("no hardcoded colour remains in the report's own styles",
+                withoutComments(resource("report.css")).matches("(?s).*#[0-9a-fA-F]{6}\\b.*"));
     }
 
     /** The page links the folder's custom style after its own styles, so the custom rules take precedence. */
@@ -81,11 +80,9 @@ public class ReportThemeTest {
         StringWriter out = new StringWriter();
         DetectionReportDocumentWriter.appendDetectionReportStart(new PrintWriter(out, true));
         String html = out.toString();
-        assertTrue(html.indexOf(DetectionReportDocumentWriter.CUSTOM_STYLE) > html.lastIndexOf("</style>"));
+        assertFalse("the styles are in their own file", html.contains("<style"));
+        assertTrue(html.contains(ReportAssets.STYLE_LINK + DetectionReportDocumentWriter.CUSTOM_STYLE));
         assertTrue(html.indexOf(DetectionReportDocumentWriter.CUSTOM_STYLE) < html.indexOf("</head>"));
-        out = new StringWriter();
-        DetectionReportDocumentWriter.appendIterativeIndexReportStart(new PrintWriter(out, true));
-        assertTrue(out.toString().contains("</style>" + DetectionReportDocumentWriter.CUSTOM_STYLE));
     }
 
     /**

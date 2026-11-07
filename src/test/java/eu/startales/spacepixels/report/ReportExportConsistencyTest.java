@@ -198,7 +198,7 @@ public class ReportExportConsistencyTest {
         for (File entry : Objects.requireNonNull(report.listFiles())) {
             if (entry.isDirectory()) assertTrue("Unknown folder " + entry.getName(), folders.contains(entry.getName()));
             else assertTrue("Unexpected top-level file " + entry.getName(),
-                    List.of("detection_report.html", "report-data.json", "detection_config.json", "report-custom.css").contains(entry.getName()));
+                    List.of("detection_report.html", "report-data.json", "detection_config.json", "report-custom.css", "report.css", "report.js").contains(entry.getName()));
         }
         String html = Files.readString(new File(report, "detection_report.html").toPath());
         var matcher = Pattern.compile("(?:src|href|data-strip)=['\"]([^'\"#][^'\"]*)['\"]").matcher(html);

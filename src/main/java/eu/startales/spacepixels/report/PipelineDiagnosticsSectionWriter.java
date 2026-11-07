@@ -251,7 +251,6 @@ final class PipelineDiagnosticsSectionWriter {
             report.println("<div class='astro-note' style='margin-top: -6px; margin-bottom: 14px;'>Nothing found: "
                     + ReportFormat.escapeHtml(String.join(", ", empty)) + ".</div>");
         }
-        SessionPictureSectionWriter.writeAssets(report);
         SessionPictureSectionWriter.write(report, reportContext, localRescueTracks);
 
         report.println("<div class='flex-container' style='margin-bottom: 4px;'>");

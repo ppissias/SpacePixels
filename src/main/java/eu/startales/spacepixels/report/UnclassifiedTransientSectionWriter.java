@@ -119,7 +119,7 @@ final class UnclassifiedTransientSectionWriter {
                 || (!inclusion.cameraFixed && cameraFixedCount > 0)
                 || (!inclusion.localRescue && rescueCount > 0);
 
-        report.println("<div class='panel' id='unclassified-transient-inspector'>");
+        report.println("<div class='panel' id='unclassified-transient-inspector' data-frame-delay='" + Math.max(100, context.settings.getGifBlinkSpeedMs()) + "'>");
         report.println("<h2>Unclassified Transient Inspector</h2>");
         report.println("<p class='astro-note'>Detections left after accepted tracks, streak parts, standalone anomalies, common-motion groups, camera-fixed groups (hot pixels, dust) and local rescue candidates."
                 + (groupsLeftOut ? " Groups left out of this report are counted here but not shown." : "")
@@ -163,32 +163,9 @@ final class UnclassifiedTransientSectionWriter {
         for (int frame : frameNumbers) report.println("<option value='" + frame + "'>" + frame + "</option>");
         report.println("</select></label><span id='unclassified-visible-count'></span><span class='astro-note'>Focus a marker and use ← / → to review visible detections.</span></div>");
 
-        report.println("<style>");
-        report.println("#unclassified-transient-inspector .unclassified-layout{display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap}");
-        report.println("#unclassified-transient-inspector .unclassified-map-column{flex:3 1 560px;min-width:0}");
-        report.println("#unclassified-transient-inspector .unclassified-map{position:relative;display:block;width:" + width + "px;max-width:100%;line-height:0;border:1px solid var(--sp-border-strong);border-radius:5px;overflow:hidden}");
-        report.println("#unclassified-transient-inspector .unclassified-map img{display:block;width:100%;height:auto;max-width:none;border:0;border-radius:0}");
-        report.println("#unclassified-transient-inspector .unclassified-map svg{position:absolute;inset:0;width:100%;height:100%}");
-        report.println("#unclassified-transient-inspector .unclassified-footprint{fill-opacity:.85;pointer-events:none}");
-        report.println("#unclassified-transient-inspector .unclassified-source:hover .unclassified-footprint,#unclassified-transient-inspector .unclassified-source.selected .unclassified-footprint{fill-opacity:1}");
-        report.println("#unclassified-transient-inspector .unclassified-marker{fill:transparent;stroke-width:2.5;cursor:pointer;pointer-events:all;transition:stroke-width .12s}");
-        report.println("#unclassified-transient-inspector .unclassified-marker:hover,#unclassified-transient-inspector .unclassified-marker:focus,#unclassified-transient-inspector .unclassified-marker.selected{stroke-width:5;outline:none}");
-        report.println("#unclassified-transient-inspector .unclassified-tooltip{position:absolute;z-index:2;display:none;max-width:230px;padding:8px 10px;background:var(--sp-tooltip);border:1px solid var(--sp-border-strong);border-radius:5px;color:var(--sp-text-strong);font:12px/1.45 sans-serif;white-space:pre-line;pointer-events:none;box-shadow:0 4px 14px #0009}");
-        report.println("#unclassified-transient-inspector .unclassified-details{flex:1 1 240px;max-width:340px;background:var(--sp-raised);border:1px solid var(--sp-border-strong);border-radius:6px;padding:14px}");
-        report.println("#unclassified-transient-inspector .unclassified-details h3{margin:0 0 10px;color:var(--sp-text-strong)}");
-        report.println("#unclassified-transient-inspector .unclassified-details canvas{display:block;width:100%;max-width:320px;height:auto;background:var(--sp-image-well);border:1px solid var(--sp-border-strong)}");
-        report.println("#unclassified-transient-inspector .unclassified-details dl{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;font-size:0.75rem;line-height:1.35}");
-        report.println("#unclassified-transient-inspector .unclassified-details dt{color:var(--sp-text-muted)}");
-        report.println("#unclassified-transient-inspector .unclassified-details dd{margin:0;color:var(--sp-text-bright);overflow-wrap:anywhere}");
-        report.println("#unclassified-transient-inspector .unclassified-cutout-controls{display:flex;gap:8px;margin:8px 0 0}");
-        report.println("#unclassified-transient-inspector .unclassified-cutout-controls[hidden]{display:none}");
-        report.println("#unclassified-transient-inspector .unclassified-cutout-controls button{background:var(--sp-raised);color:var(--sp-text-bright);border:1px solid var(--sp-border-strong);border-radius:4px;padding:3px 10px;font-size:0.75rem;cursor:pointer}");
-        report.println("#unclassified-transient-inspector .unclassified-cutout-controls button:hover{background:var(--sp-hover)}");
-        report.println("#unclassified-transient-inspector .unclassified-time-legend{height:10px;max-width:360px;margin:12px 0 3px;background:linear-gradient(to right,#1500ff,#00ff9a,#ffee00,#ff0000);border-radius:3px}");
-        report.println("</style>");
         report.println("<div class='unclassified-layout'>");
         report.println("<div class='unclassified-map-column'>");
-        report.println("<div class='unclassified-map' id='unclassified-map'>");
+        report.println("<div class='unclassified-map' id='unclassified-map' style='width:" + width + "px'>");
         report.println("<img loading='lazy' decoding='async' id='unclassified-background' src='" + BACKGROUND_FILE + "' width='" + width
                 + "' height='" + height + "' alt='Subdued " + (medianAvailable ? context.fieldName() : "first frame") + "' />");
         report.println("<svg viewBox='0 0 " + width + " " + height
@@ -220,7 +197,6 @@ final class UnclassifiedTransientSectionWriter {
             report.println("<p class='astro-note'>No remaining unclassified detections are available to inspect.</p>");
         }
         report.println("</div>");
-        appendInteractionScript(report, context.settings.getGifBlinkSpeedMs());
     }
 
     private static boolean hasPixels(short[][] imageData) {
@@ -543,81 +519,6 @@ final class UnclassifiedTransientSectionWriter {
 
     private static String escape(String value) {
         return ReportFormat.escapeHtml(value).replace("'", "&#39;");
-    }
-
-    private static void appendInteractionScript(PrintWriter report, int frameDelayMs) {
-        report.println("<script>(function(){");
-        report.println("const panel=document.getElementById('unclassified-transient-inspector');");
-        report.println("const map=panel.querySelector('#unclassified-map');");
-        report.println("const image=panel.querySelector('#unclassified-background');");
-        report.println("const tooltip=panel.querySelector('#unclassified-tooltip');");
-        report.println("const metadata=panel.querySelector('#unclassified-metadata');");
-        report.println("const canvas=panel.querySelector('#unclassified-cutout');");
-        report.println("const markers=Array.from(panel.querySelectorAll('.unclassified-marker'));");
-        report.println("let selected=null;");
-        report.println("function setDetails(marker){");
-        report.println("const data=marker.dataset;");
-        report.println("const rows=[['Status','UNCLASSIFIED'],['Transient ID',data.id],['Frame',data.frame+' (index '+data.index+')'],['Timestamp',data.time],['Source file',data.filename],['X',data.x],['Y',data.y],['Peak sigma',data.peak],['Integrated sigma',data.integrated],['Total flux',data.flux],['Pixel count',data.pixels],['Elongation',data.elongation],['FWHM',data.fwhm]];");
-        report.println("metadata.replaceChildren();");
-        report.println("rows.forEach(([label,value])=>{const term=document.createElement('dt');const detail=document.createElement('dd');term.textContent=label;detail.textContent=value;metadata.append(term,detail);});");
-        report.println("}");
-        report.println("function drawCutout(marker){");
-        report.println("if(!image.complete||!image.naturalWidth)return;");
-        report.println("const context=canvas.getContext('2d');const size=80;");
-        report.println("const sourceWidth=Math.min(size,image.naturalWidth);const sourceHeight=Math.min(size,image.naturalHeight);");
-        report.println("const x=Number(marker.dataset.x);const y=Number(marker.dataset.y);");
-        report.println("const left=Math.max(0,Math.min(image.naturalWidth-sourceWidth,Math.round(x-sourceWidth/2)));");
-        report.println("const top=Math.max(0,Math.min(image.naturalHeight-sourceHeight,Math.round(y-sourceHeight/2)));");
-        report.println("context.clearRect(0,0,canvas.width,canvas.height);context.imageSmoothingEnabled=false;");
-        report.println("context.drawImage(image,left,top,sourceWidth,sourceHeight,0,0,canvas.width,canvas.height);");
-        report.println("const footprint=marker.parentElement.querySelector('.unclassified-footprint');");
-        report.println("if(footprint){context.save();context.setTransform(canvas.width/sourceWidth,0,0,canvas.height/sourceHeight,-left*canvas.width/sourceWidth,-top*canvas.height/sourceHeight);context.fillStyle=marker.getAttribute('stroke');context.globalAlpha=.85;context.fill(new Path2D(footprint.getAttribute('d')));context.restore();}");
-        report.println("const markerX=(x-left)*canvas.width/sourceWidth;const markerY=(y-top)*canvas.height/sourceHeight;");
-        report.println("context.strokeStyle='#ffffff';context.lineWidth=3;context.beginPath();context.arc(markerX,markerY,13,0,Math.PI*2);context.stroke();");
-        report.println("context.strokeStyle=marker.getAttribute('stroke');context.lineWidth=2;context.beginPath();context.arc(markerX,markerY,17,0,Math.PI*2);context.stroke();");
-        report.println("}");
-        // Frame animation: the strip of the selected detection is loaded on demand and played in the cutout canvas.
-        report.println("const controls=panel.querySelector('#unclassified-cutout-controls');const playButton=panel.querySelector('#unclassified-play');");
-        report.println("const viewButton=panel.querySelector('#unclassified-view');const note=panel.querySelector('#unclassified-cutout-note');");
-        report.println("const staticLabel=viewButton.textContent;const strips={};const delay=" + Math.max(100, frameDelayMs) + ";");
-        report.println("let timer=null;let frame=0;let playing=true;let showStatic=false;let globalPaused=false;");
-        report.println("function stopTimer(){if(timer){clearInterval(timer);timer=null;}}");
-        report.println("function drawStripFrame(marker){");
-        report.println("const data=marker.dataset;const strip=strips[data.strip];if(!strip||!strip.complete||!strip.naturalWidth)return;");
-        report.println("const count=Number(data.stripCount);const w=strip.naturalWidth;const h=strip.naturalHeight/count;const context=canvas.getContext('2d');");
-        report.println("context.clearRect(0,0,canvas.width,canvas.height);context.imageSmoothingEnabled=false;");
-        report.println("context.drawImage(strip,0,frame*h,w,h,0,0,canvas.width,canvas.height);");
-        report.println("const markerX=(Number(data.x)-Number(data.stripLeft))*canvas.width/w;const markerY=(Number(data.y)-Number(data.stripTop))*canvas.height/h;");
-        report.println("const detection=frame===Number(data.stripDetection);");
-        report.println("context.strokeStyle=detection?marker.getAttribute('stroke'):'rgba(255,255,255,.55)';context.lineWidth=detection?3:1.5;context.beginPath();context.arc(markerX,markerY,17,0,Math.PI*2);context.stroke();");
-        report.println("const frames=data.stripFrames.split(',').map(Number);const offset=frames[frame]-frames[Number(data.stripDetection)];const label='Frame '+frames[frame]+(offset===0?' · detection':' ('+(offset>0?'+':'')+offset+')');");
-        report.println("context.font='bold 14px sans-serif';const textWidth=context.measureText(label).width;context.fillStyle='rgba(10,12,20,.75)';context.fillRect(6,6,textWidth+12,22);");
-        report.println("context.fillStyle=detection?marker.getAttribute('stroke'):'#ffffff';context.fillText(label,12,22);");
-        report.println("}");
-        report.println("function startAnimation(marker){");
-        report.println("const data=marker.dataset;let strip=strips[data.strip];");
-        report.println("if(!strip){strip=new Image();strip.onload=()=>{if(selected===marker&&!showStatic)drawStripFrame(marker);};strip.src=data.strip;strips[data.strip]=strip;}");
-        report.println("drawStripFrame(marker);");
-        report.println("if(playing&&!globalPaused)timer=setInterval(()=>{frame=(frame+1)%Number(data.stripCount);drawStripFrame(marker);},delay);");
-        report.println("}");
-        report.println("function render(marker){");
-        report.println("stopTimer();const data=marker.dataset;const animated=!!data.strip;controls.hidden=!animated;");
-        report.println("if(animated&&!showStatic){startAnimation(marker);const frames=data.stripFrames.split(',');");
-        report.println("note.textContent='80 × 80 pixel cutout from frames '+frames.join(', ')+', detection in frame '+frames[Number(data.stripDetection)]+'. Frames rejected by quality control are skipped; all frames share one stretch. Click the image to step when paused.';}");
-        report.println("else{drawCutout(marker);note.textContent=note.dataset.static;}");
-        report.println("playButton.textContent=playing?'Pause':'Play';playButton.disabled=showStatic;viewButton.textContent=showStatic?'Show frames':staticLabel;");
-        report.println("}");
-        report.println("playButton.addEventListener('click',()=>{playing=!playing;if(selected)render(selected);});");
-        report.println("document.addEventListener('spacepixels-animation-state',event=>{globalPaused=event.detail.paused;if(selected)render(selected);});");
-        report.println("viewButton.addEventListener('click',()=>{showStatic=!showStatic;if(selected)render(selected);});");
-        report.println("canvas.addEventListener('click',()=>{if(selected&&selected.dataset.strip&&!showStatic&&!playing){frame=(frame+1)%Number(selected.dataset.stripCount);drawStripFrame(selected);}});");
-        report.println("function select(marker){if(selected){selected.classList.remove('selected');selected.parentElement.classList.remove('selected');}selected=marker;marker.classList.add('selected');marker.parentElement.classList.add('selected');setDetails(marker);frame=Number(marker.dataset.stripDetection||0);render(marker);}");
-        report.println("function positionTooltip(event){const bounds=map.getBoundingClientRect();const left=Math.min(event.clientX-bounds.left+12,bounds.width-tooltip.offsetWidth-8);const top=Math.min(event.clientY-bounds.top+12,bounds.height-tooltip.offsetHeight-8);tooltip.style.left=Math.max(8,left)+'px';tooltip.style.top=Math.max(8,top)+'px';}");
-        report.println("function showTooltip(marker,event){const data=marker.dataset;tooltip.textContent=data.id+' · Frame '+data.frame+' · '+data.time+'\\nX '+data.x+', Y '+data.y+' · Peak '+data.peak+'σ · '+data.pixels+' pixels';tooltip.style.display='block';if(event&&typeof event.clientX==='number')positionTooltip(event);}");
-        report.println("markers.forEach(marker=>{marker.addEventListener('mouseenter',event=>showTooltip(marker,event));marker.addEventListener('mousemove',positionTooltip);marker.addEventListener('mouseleave',()=>tooltip.style.display='none');marker.addEventListener('focus',()=>showTooltip(marker));marker.addEventListener('blur',()=>tooltip.style.display='none');marker.addEventListener('click',()=>select(marker));marker.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();select(marker);}});});");
-        report.println("image.addEventListener('load',()=>{if(selected&&(showStatic||!selected.dataset.strip))drawCutout(selected);});");
-        report.println("if(markers.length)select(markers[0]);");
-        report.println("})();</script>");
     }
 
     private static final class Marker {

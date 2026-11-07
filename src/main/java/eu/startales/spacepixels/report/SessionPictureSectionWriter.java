@@ -450,41 +450,4 @@ final class SessionPictureSectionWriter {
     private static String hex(Color color) {
         return String.format("#%02x%02x%02x", color.getRed(), color.getGreen(), color.getBlue());
     }
-
-    /** Styles and the script of the layer buttons, and of links that open a collapsed section. */
-    static void writeAssets(PrintWriter report) {
-        report.println("<style>"
-                + ".session-picture { margin: 6px 0 14px 0; }"
-                + ".sp-buttons { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }"
-                + ".sp-title { color: var(--sp-text-bright); font-weight: 600; margin-right: 6px; }"
-                + ".sp-toggle[disabled] { opacity: 0.4; cursor: default; }"
-                + ".sp-toggle.active { background: var(--sp-toggle-on); border-color: var(--sp-accent); color: var(--sp-text-strong); }"
-                + ".sp-full { margin-left: auto; color: var(--sp-link); font-size: 0.75rem; }"
-                + ".sp-frame { position: relative; display: inline-block; max-width: 100%; line-height: 0; border: 1px solid var(--sp-border-strong); border-radius: 4px; overflow: hidden; }"
-                + ".sp-base { max-width: 100%; height: auto; display: block; }"
-                + ".sp-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; pointer-events: none; }"
-                + "svg.sp-layer ellipse, svg.sp-layer path { pointer-events: stroke; }svg.sp-layer a,svg.sp-layer a text,svg.sp-layer a circle{pointer-events:all;}"
-                + ".sp-caption { color: var(--sp-text-faint); font-size: 0.75rem; margin-top: 6px; }"
-                + ".sp-help { color: var(--sp-text-soft); font-size: 0.8125rem; }"
-                + "</style>");
-        report.println("<script>(function(){"
-                + "function layer(frame,name){return frame?frame.querySelector(\"[data-layer='\"+name+\"']\"):null;}"
-                + "document.addEventListener('click',function(e){"
-                + "var b=e.target.closest?e.target.closest('.sp-toggle'):null;"
-                + "if(b&&!b.disabled){var f=b.closest('.session-picture').querySelector('.sp-frame');var l=layer(f,b.getAttribute('data-layer'));"
-                + "b.classList.toggle('active');var on=b.classList.contains('active');b.setAttribute('aria-pressed',String(on));if(l){l.style.display=on?'block':'none';}"
-                + "if(b.getAttribute('data-layer')==='variables'){var c=b.closest('.session-picture').querySelector(\"[data-report-category='V']\");if(c)c.setAttribute('aria-pressed',String(on));}return;}"
-                + "var a=e.target.closest?e.target.closest('a[href^=\"#\"]'):null;"
-                + "if(a){var t=document.getElementById(a.getAttribute('href').substring(1));"
-                + "for(var n=t;n;n=n.parentElement){if(n.tagName==='DETAILS'){n.open=true;}}}"
-                + "});"
-                + "document.addEventListener('mouseover',function(e){var b=e.target.closest?e.target.closest(\".sp-toggle[data-layer='mask']\"):null;"
-                + "if(b&&!b.disabled&&!b.classList.contains('active')){var l=layer(b.closest('.session-picture').querySelector('.sp-frame'),'mask');if(l){l.style.display='block';}}});"
-                + "document.addEventListener('mouseout',function(e){var b=e.target.closest?e.target.closest(\".sp-toggle[data-layer='mask']\"):null;"
-                + "if(b&&!b.classList.contains('active')){var l=layer(b.closest('.session-picture').querySelector('.sp-frame'),'mask');if(l){l.style.display='none';}}});"
-                + "function openHash(){var h=location.hash.substring(1);var t=h?document.getElementById(h):null;"
-                + "for(var n=t;n;n=n.parentElement){if(n.tagName==='DETAILS'){n.open=true;}}}"
-                + "window.addEventListener('hashchange',openHash);openHash();"
-                + "})();</script>");
-    }
 }

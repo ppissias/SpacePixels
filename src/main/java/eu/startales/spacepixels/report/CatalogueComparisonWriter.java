@@ -124,9 +124,8 @@ final class CatalogueComparisonWriter {
         return data;
     }
 
-    static void appendScript(PrintWriter report) {
+    static void appendSourceNotes(PrintWriter report) {
         report.println("<script type='application/json' id='catalogue-source-notes'>" + resource("catalogue-source-notes.json").replace("<", "\\u003c") + "</script>");
-        report.println("<script>" + resource("catalogue-comparison.js") + "</script>");
     }
 
     private static String resource(String name) {

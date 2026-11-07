@@ -108,7 +108,7 @@ public class UnclassifiedTransientSectionWriterTest {
         assertEquals(1, html.toString().split("<circle class='unclassified-marker'", -1).length - 1);
         assertTrue(html.toString().contains("data-pixels='3'"));
         assertTrue(html.toString().contains("M35 32h1v1h-1z"));
-        assertTrue(html.toString().contains("new Path2D"));
+        assertTrue(ReportAssets.reportScript().contains("new Path2D"));
         assertTrue(html.toString().contains("&lt;script&gt;alert(1)&lt;/script&gt;.fits"));
         assertFalse(html.toString().contains("<script>alert(1)</script>.fits"));
     }

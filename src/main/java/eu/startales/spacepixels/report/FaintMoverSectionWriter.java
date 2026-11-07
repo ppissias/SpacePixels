@@ -29,7 +29,6 @@ final class FaintMoverSectionWriter {
             out.println("<p><strong>Search skipped:</strong> " + escape(telemetry.skippedReason) + "</p>");
             return;
         }
-        if (!c.faintMoverPresentation.isEmpty()) FaintMoverReviewWriter.appendStyle(out);
         out.printf(Locale.ROOT, "<p><strong>%s</strong>: %d of %d tiles; %,d searched pixels; %d frames over %.2f min "
                         + "(%d kept frames outside the searched session). Motion %.4f–%.4f px/min, %d coarse trials. "
                         + "FWHM %.2f px (%s); elapsed %.1f s.</p>%n",

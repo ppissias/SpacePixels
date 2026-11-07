@@ -51,6 +51,7 @@ public final class ReportExporter {
         File exportDir = reportContext.exportDir;
         ReportProgress progress = reportContext.progress;
         reportContext.data.writeJson(exportDir);
+        ReportAssets.writeReportFiles(exportDir);
         DetectionReportDocumentWriter.writeCustomStyle(reportContext.settings.getReportStyleFile(), exportDir);
         if (reportContext.enhancedStack != null) {
             progress.step(2, 3, "saving the enhanced stack");
@@ -150,13 +151,12 @@ public final class ReportExporter {
                     result.driftPoints,
                     fieldDepth);
 
-            ReportClientScriptWriter.appendLiveReportRenderingScript(report);
+            ReportClientScriptWriter.appendLiveReportData(report);
             ReportPresentation.appendAnimationsData(report, reportContext);
-            ReportPresentation.appendScript(report);
-            if (!reportContext.faintMoverPresentation.isEmpty()) FaintMoverReviewWriter.appendScript(report);
             report.printf(Locale.US, "<p class='astro-note'>SpacePixels %s · JTransient %s · Generated %s · Report preparation %.2f s</p>%n",
                     ReportPresentation.version("spacepixels"), ReportPresentation.version("jtransient"), reportContext.data.generatedAtUtc,
                     (System.nanoTime() - reportStarted) / 1e9);
+            report.println(ReportAssets.SCRIPT_TAG);
             DetectionReportDocumentWriter.appendHtmlDocumentEnd(report);
             output.commit();
         }
