@@ -261,6 +261,8 @@ tasks.register('guiMechanicsTest', Test) {
     include '**/gui/mechanics/**'
     maxParallelForks = 1
     systemProperty 'java.awt.headless', 'false'
+    // The tests start from the default preferences and never touch the user's own.
+    systemProperty 'java.util.prefs.PreferencesFactory', 'eu.startales.spacepixels.gui.mechanics.MemoryPreferencesFactory'
     // AssertJ Swing's timer monitor reflects on TimerTask state on Java 21.
     jvmArgs '--add-opens=java.base/java.util=ALL-UNNAMED'
     shouldRunAfter tasks.named('test')

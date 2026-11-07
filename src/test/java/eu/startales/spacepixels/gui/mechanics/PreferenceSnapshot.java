@@ -5,8 +5,10 @@ import java.io.ByteArrayOutputStream;
 import java.util.prefs.Preferences;
 
 /**
- * A copy of the SpacePixels preference node, taken before a window test and put back afterwards.
- * On Windows these values live in the registry, so a scratch {@code user.home} does not cover them.
+ * A copy of the SpacePixels preference node, taken before a window test and put back afterwards, so each test starts
+ * from the preferences the one before it found. The {@code guiMechanicsTest} task keeps them in memory
+ * ({@link MemoryPreferencesFactory}); a test run outside it, from an IDE, reaches the user's own, in the registry on
+ * Windows, which a scratch {@code user.home} does not cover.
  */
 final class PreferenceSnapshot {
 
