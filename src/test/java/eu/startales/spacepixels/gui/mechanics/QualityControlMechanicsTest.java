@@ -42,6 +42,9 @@ public class QualityControlMechanicsTest extends MechanicsTestCase {
         assertEquals(2, GuiActionRunner.execute(() -> window().table().target().getSelectedRow()).intValue());
         var model = (FitsFileTableModel) window().table().target().getModel();
         assertEquals("Would reject", GuiActionRunner.execute(() -> model.getValueAt(2, FitsFileTableModel.COL_QUALITY)));
+        waitFor("the toolbar counts the verdicts", () -> showingLabel("4 keep").contains("4 keep") && showingLabel("1 reject").contains("1 reject"));
+        window().label(VisibleText.labelExactly("5 frames")).requireVisible();
+        assertTrue(showingLabel("Quality control run").contains("✓"));
         assertTrue(snapshot.result().frames().get(2).reason().contains("registration"));
         assertArrayEquals(original, Files.readAllBytes(failed));
         window().button(VisibleText.button("Quality details…")).requireEnabled().click();
@@ -72,6 +75,8 @@ public class QualityControlMechanicsTest extends MechanicsTestCase {
         waitFor("old quality marked stale", () -> !GuiActionRunner.execute(model::isQualityCurrent));
         assertTrue(GuiActionRunner.execute(() -> model.getValueAt(2, FitsFileTableModel.COL_QUALITY)).toString().startsWith("Stale"));
         window().tabbedPane().selectTab("Main");
+        waitFor("the toolbar and the Inspect step say it is stale", () -> window().label(VisibleText.labelExactly("QC stale")).target().isShowing()
+                && showingLabel("rerun quality control").contains("rerun"));
         window().button(VisibleText.button("Run quality control")).click();
         waitFor("fresh complete quality replaces stale result", () -> GuiActionRunner.execute(() ->
                 application().getSession().getQualityControl() != snapshot && model.isQualityCurrent()));

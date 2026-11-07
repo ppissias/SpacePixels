@@ -42,6 +42,30 @@ final class CommandAvailability {
                  boolean busy, boolean blinking, boolean skyFetching, boolean solarSystemFetching) {
     }
 
+    /** The fewest frames a blink can show. */
+    static final int MIN_BLINK_FRAMES = 3;
+
+    /** The one next step the main window highlights. */
+    enum Emphasis {
+        CHOOSE_FOLDER, CONVERT_TO_MONO, DETECT, OPEN_REPORT
+    }
+
+    /**
+     * The next step of a session: frames first, then monochrome ones, then a detection, then its report. An older
+     * report, or one made with other settings, leaves the highlight on Detect.
+     *
+     * @param currentReport whether a report of a run of this session, with the settings still in use, can be opened
+     */
+    static Emphasis emphasis(Facts facts, boolean currentReport) {
+        if (facts.frames() == 0) {
+            return Emphasis.CHOOSE_FOLDER;
+        }
+        if (!facts.monochrome()) {
+            return Emphasis.CONVERT_TO_MONO;
+        }
+        return currentReport ? Emphasis.OPEN_REPORT : Emphasis.DETECT;
+    }
+
     /** Whether a command can run; when it cannot, why, worded to follow "Not available: ". */
     record Availability(boolean enabled, String reason) {
         static final Availability AVAILABLE = new Availability(true, null);
@@ -81,8 +105,8 @@ final class CommandAvailability {
                 return facts.solvedFrames() > 0 ? Availability.AVAILABLE
                         : Availability.unavailable("plate solve at least one frame first, and write the solution to its FITS header.");
             case BLINK:
-                return facts.selectedFrames() >= 3 ? Availability.AVAILABLE
-                        : Availability.unavailable("select at least 3 frames in the table.");
+                return facts.selectedFrames() >= MIN_BLINK_FRAMES ? Availability.AVAILABLE
+                        : Availability.unavailable("select at least " + MIN_BLINK_FRAMES + " frames in the table.");
             case PLATE_SOLVE:
                 if (facts.selectedFrames() == 0) {
                     return Availability.unavailable("select one frame in the table.");

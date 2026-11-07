@@ -70,7 +70,7 @@ final class TipsDialog extends JDialog {
         body.add(manualRow, BorderLayout.SOUTH);
 
         JCheckBox atStartup = new JCheckBox("Show tips at startup", wantedAtStartup());
-        atStartup.setToolTipText("You can always open the tips with the Tips link at the right end of the tab bar.");
+        atStartup.setToolTipText("You can always open the tips from the Help menu at the right end of the tab bar.");
         atStartup.addActionListener(event -> remember(preferences -> preferences.putBoolean(SHOW_AT_STARTUP, atStartup.isSelected())));
         JButton previous = new JButton("◀ Previous");
         previous.addActionListener(event -> show(index - 1));

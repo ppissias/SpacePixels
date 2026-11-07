@@ -61,6 +61,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Look of the primary action (Detect Moving Targets): accent colours of the look and feel, larger and bold. */
     static final String PRIMARY_BUTTON_STYLE = "font: +2 bold; background: $Button.default.background; foreground: $Button.default.foreground;"
             + " borderColor: $Button.default.borderColor; margin: 6,16,6,16";
+    /** The accent colours alone, for a highlighted button that keeps its size. */
+    private static final String ACCENT_BUTTON_STYLE = "background: $Button.default.background; foreground: $Button.default.foreground;"
+            + " borderColor: $Button.default.borderColor";
+    /** Detect Moving Targets without the accent colours: the same size, so nothing moves when the highlight does. */
+    private static final String LARGE_BUTTON_STYLE = "font: +2 bold; margin: 6,16,6,16";
 
     private final JFrame windowFrame;
     private final BlinkFrame blink;
@@ -88,11 +93,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JButton importButton = new JButton("Import Aligned Frames…");
     private final JButton convertMonoButton = new JButton("Convert to Mono");
     private static final String BLINK_SELECTED = "Blink Selected";
-    private final JButton blinkButton = new JButton(BLINK_SELECTED);
-    private final JButton solveButton = new JButton("Plate Solve Selected");
+    private final SteadyWidthButton blinkButton = new SteadyWidthButton();
+    private final SteadyWidthButton solveButton = new SteadyWidthButton();
     private final JButton skyCatalogueButton = new JButton(FETCH_SKY_CATALOGUE);
     private final JButton solarSystemButton = new JButton(FETCH_SOLAR_SYSTEM);
-    private final JButton detectSingleButton = new JButton("Preview Frame");
+    private final SteadyWidthButton detectSingleButton = new SteadyWidthButton();
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton qualityControlButton = new JButton("Run quality control");
     private final JButton qualityDetailsButton = new JButton("Quality details…");
@@ -103,6 +108,10 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JButton lastReportButton = new JButton();
     private final JButton outputFolderButton = AccessibleControls.link("Open output folder", "Open last report output folder",
             this::openOutputFolder);
+    /** What follows "Open last report" on its button: the report's date, and whether it is iterative. */
+    private String lastReportDetail = "";
+    /** The settings of the last run of this session that wrote a report, or null: the report is current while they are in use. */
+    private String currentReportSettings;
     private final WrappingHelpLabel analysisScope = new WrappingHelpLabel("", 1000);
     private String enabledAnalyses = "moving objects and streaks";
     private final SkyCatalogueModel emptySkyCatalogue = new SkyCatalogueModel();
@@ -134,7 +143,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             "Animate the selected frames in a new window for manual visual inspection (Ctrl+B).",
             CommandAvailability.Command.BLINK, this::commandFacts, this::startOrStopBlink);
     private final CommandAction solveAction = new CommandAction("Plate Solve Selected",
-            "Calculate the celestial coordinates (WCS) for the selected frame.",
+            "Calculate the celestial coordinates (WCS) for the selected frame, or the first of several.",
             CommandAvailability.Command.PLATE_SOLVE, this::commandFacts, this::solveSelectedFrame);
     // The commands with one entry point, enabled the same way.
     private final CommandAction prepareFramesAction = new CommandAction("Prepare Frames…",
@@ -171,9 +180,16 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final CommandAction iterativeAction = new CommandAction("Detect Iteratively (large datasets)",
             "For datasets too large for the standard run: multiple temporally spaced passes across the sequence.",
             CommandAvailability.Command.DETECT_ITERATIVELY, this::commandFacts, this::startIterativeDetection);
+    // The empty window's two ways on, the same commands as Import Aligned Frames… and Prepare Frames….
+    private final CommandAction chooseFolderAction = new CommandAction("Choose Folder…",
+            "Choose a folder of aligned FITS or XISF frames to import.",
+            CommandAvailability.Command.IMPORT, this::commandFacts, this::chooseAndImportFolder);
+    private final CommandAction prepareRawAction = new CommandAction("Prepare Raw Frames…",
+            "For exposures that still need calibration or alignment: prepare the session with Siril in a separate window.",
+            CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.run());
     private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, solveAction,
             skyCatalogueAction, solarSystemAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction,
-            iterativeAction, qualityControlAction);
+            iterativeAction, qualityControlAction, chooseFolderAction, prepareRawAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
 
@@ -187,11 +203,29 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JLabel inspectStatus = new JLabel();
     private final JLabel detectStatus = new JLabel();
     /** Readout of the settings the calibrated auto-tuner sets, shown beside Detect Moving Targets. */
-    private final JLabel activeDetectionValue = new JLabel("—");
-    private final JLabel activeMaskValue = new JLabel("—");
-    private final JLabel activeOverlapValue = new JLabel("—");
-    private final JLabel activeJitterValue = new JLabel("—");
-    private final List<JPanel> workflowGroups = new ArrayList<>();
+    private final JLabel activeDetectionSigma = new JLabel("—");
+    private final JLabel activeDetectionGrow = new JLabel("—");
+    private final JLabel activeDetectionPixels = new JLabel("—");
+    private final JLabel activeMaskSigma = new JLabel("—");
+    private final JLabel activeMaskGrow = new JLabel("—");
+    private final JLabel activeMaskPixels = new JLabel("—");
+    private final JLabel activeLimits = new JLabel("—");
+    private final List<WorkflowStep> workflowSteps = new ArrayList<>();
+    // The frame list: its toolbar, and its table or, before any import, the drop zone.
+    private static final String CARD_TABLE = "table";
+    private static final String CARD_DROP_ZONE = "dropZone";
+    private final CardLayout frameCards = new CardLayout();
+    private final JPanel frameArea = new JPanel(frameCards);
+    private final DropZonePanel dropZone = new DropZonePanel(chooseFolderAction, prepareRawAction, this::openWorkflowHelp);
+    private final JPanel frameListActions = new JPanel(new WrapLayout(FlowLayout.LEFT, UiStyle.space(6), UiStyle.space(4)));
+    private final JLabel frameTotal = new JLabel();
+    private final FrameChip keepChip = new FrameChip(QualityControlTable.KEEP_COLOUR, "Frames quality control would keep.");
+    private final FrameChip rejectChip = new FrameChip(QualityControlTable.REJECT_COLOUR,
+            "Frames a detection run would leave out. The table gives each one's reason.");
+    private final FrameChip qualityNote = new FrameChip(QualityControlTable.REJECT_COLOUR, null);
+    private final JLabel selectionCount = new JLabel();
+    private final JButton clearSelectionLink = AccessibleControls.link("Clear selection", "Clear the frame selection",
+            () -> table.clearSelection());
     private volatile boolean uiLocked;
     private boolean hasSolvedFrame;
 
@@ -346,82 +380,66 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         solverGroup.add(astrometryNetSolveRadio);
         astapSolveRadio.setSelected(true);
 
-        // The primary action: accent colours of the look and feel, larger and bold.
-        detectBatchButton.putClientProperty("FlatLaf.style", PRIMARY_BUTTON_STYLE);
-        // As tall as the primary button next to it, without its accent colours.
+        // As tall as Detect Moving Targets beside it, without its accent colours.
         autoTuneButton.putClientProperty("FlatLaf.style", "font: +2; margin: 5,10,5,14; iconTextGap: 6");
 
-        JPanel prepareGroup = workflowGroup("1  Prepare", prepareStatus,
+        JPanel prepareGroup = new WorkflowStep(workflowSteps, 1, "Prepare", false, prepareStatus,
                 buttonRow(prepareFramesButton),
                 buttonRow(importButton),
                 buttonRow(convertMonoButton));
-        JPanel astrometryGroup = workflowGroup("2  Astrometry", correctionStatusRow(),
+        JPanel astrometryGroup = new WorkflowStep(workflowSteps, 2, "Astrometry", true, correctionStatusRow(),
                 buttonRow(solveButton),
                 buttonRow(skyCatalogueButton),
                 buttonRow(solarSystemButton),
                 buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
-        JPanel inspectGroup = workflowGroup("3  Inspect", inspectStatus,
+        JPanel inspectGroup = new WorkflowStep(workflowSteps, 3, "Inspect", true, inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
                 buttonRow(manualTransientInspectionButton));
+        prepareStatus.setForeground(UiStyle.helpColor());
+        inspectStatus.setForeground(UiStyle.helpColor());
         detectStatus.setForeground(UiStyle.helpColor());
-        detectStatus.setBorder(BorderFactory.createEmptyBorder(6, 2, 0, 0));
-        detectStatus.setAlignmentX(Component.LEFT_ALIGNMENT);
-        // The note wraps under the button. Its own preferred width must not push the Detect button away.
-        JPanel tuneColumn = new JPanel() {
-            @Override
-            public Dimension getPreferredSize() {
-                int width = autoTuneButton.getPreferredSize().width;
-                int height = autoTuneButton.getPreferredSize().height + wrappedStatusHeight(width);
-                Insets insets = getInsets();
-                return new Dimension(width + insets.left + insets.right, height + insets.top + insets.bottom);
-            }
-
-            @Override
-            public Dimension getMaximumSize() {
-                return new Dimension(getPreferredSize().width, Integer.MAX_VALUE);
-            }
-        };
-        tuneColumn.setLayout(new BoxLayout(tuneColumn, BoxLayout.Y_AXIS));
-        tuneColumn.setOpaque(false);
-        autoTuneButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tuneColumn.add(autoTuneButton);
-        tuneColumn.add(detectStatus);
-        JComponent settingsCard = activeSettingsCard();
-        JPanel detectColumn = new JPanel();
-        detectColumn.setLayout(new BoxLayout(detectColumn, BoxLayout.Y_AXIS));
-        detectColumn.setOpaque(false);
-        detectBatchButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        detectIterativelyButton.setAlignmentX(Component.LEFT_ALIGNMENT);
-        settingsCard.setAlignmentX(Component.LEFT_ALIGNMENT);
-        detectColumn.add(detectBatchButton);
-        detectColumn.add(Box.createVerticalStrut(4));
-        detectColumn.add(detectIterativelyButton);
-        detectColumn.add(Box.createVerticalStrut(6));
-        detectColumn.add(settingsCard);
-        // A button, so the keyboard reaches it, drawn like the Edit settings… link.
-        lastReportButton.putClientProperty("JButton.buttonType", "borderless");
-        lastReportButton.setForeground(UiStyle.linkColor());
+        // A button, so the keyboard reaches it; drawn like the Edit settings… link until it is the next step.
         lastReportButton.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         lastReportButton.setHorizontalAlignment(SwingConstants.LEFT);
         lastReportButton.setMargin(new Insets(2, 2, 2, 2));
-        lastReportButton.setAlignmentX(Component.LEFT_ALIGNMENT);
         lastReportButton.setVisible(false);
         lastReportButton.addActionListener(e -> openLastReport());
-        detectColumn.add(Box.createVerticalStrut(2));
-        detectColumn.add(lastReportButton);
-        outputFolderButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        outputFolderButton.setHorizontalAlignment(SwingConstants.LEFT);
+        outputFolderButton.setMargin(new Insets(2, 2, 2, 2));
         outputFolderButton.setVisible(false);
-        detectColumn.add(outputFolderButton);
-        JPanel detectBody = new JPanel();
-        detectBody.setLayout(new BoxLayout(detectBody, BoxLayout.X_AXIS));
+        // Auto-Tune over the settings it sets; Detect over the other run and the links to the last report. The settings
+        // are as tall as those rows with the links in them, so the step keeps its height when a report appears.
+        JPanel detectBody = new JPanel(new GridBagLayout()) {
+            @Override
+            public Dimension getMaximumSize() {
+                return new Dimension(Integer.MAX_VALUE, getPreferredSize().height);
+            }
+        };
         detectBody.setOpaque(false);
-        detectBody.setAlignmentX(Component.LEFT_ALIGNMENT);
-        tuneColumn.setAlignmentY(Component.TOP_ALIGNMENT);
-        detectColumn.setAlignmentY(Component.TOP_ALIGNMENT);
-        detectBody.add(tuneColumn);
-        detectBody.add(Box.createHorizontalStrut(8));
-        detectBody.add(detectColumn);
-        JPanel detectGroup = workflowGroup("4  Detect", null, detectBody);
+        GridBagConstraints cell = new GridBagConstraints();
+        cell.fill = GridBagConstraints.HORIZONTAL;
+        cell.anchor = GridBagConstraints.NORTHWEST;
+        cell.insets = new Insets(0, 0, UiStyle.space(4), UiStyle.space(8));
+        cell.gridx = 0;
+        cell.gridy = 0;
+        detectBody.add(autoTuneButton, cell);
+        cell.gridy = 1;
+        cell.gridheight = 3;
+        detectBody.add(activeSettingsCard(), cell);
+        cell.gridheight = 1;
+        cell.insets = new Insets(0, 0, UiStyle.space(4), 0);
+        cell.gridx = 1;
+        cell.weightx = 1;
+        cell.gridy = 0;
+        detectBody.add(detectBatchButton, cell);
+        cell.gridy = 1;
+        detectBody.add(detectIterativelyButton, cell);
+        cell.insets = new Insets(0, 0, 0, 0);
+        cell.gridy = 2;
+        detectBody.add(lastReportButton, cell);
+        cell.gridy = 3;
+        detectBody.add(outputFolderButton, cell);
+        JPanel detectGroup = new WorkflowStep(workflowSteps, 4, "Detect", false, detectStatus, detectBody);
 
         JPanel workflowStrip = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
         workflowStrip.add(prepareGroup);
@@ -454,19 +472,33 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         };
         workflowScroll.setBorder(null);
         add(workflowScroll, BorderLayout.NORTH);
-        refreshWorkflowStatus();
 
         // ==========================================
         // MAIN TABLE AREA
         // ==========================================
-        // The checks of the frames in the list sit over the list, at its left.
-        JPanel frameListActions = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), UiStyle.space(4)));
+        // The checks of the frames in the list sit over the list, at its left, followed by what the list holds.
         frameListActions.add(qualityControlButton);
         frameListActions.add(qualityDetailsButton);
+        frameTotal.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(8), 0, UiStyle.space(2)));
+        frameListActions.add(frameTotal);
+        keepChip.setVisible(false);
+        rejectChip.setVisible(false);
+        qualityNote.setVisible(false);
+        frameListActions.add(keepChip);
+        frameListActions.add(rejectChip);
+        frameListActions.add(qualityNote);
+        selectionCount.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(8), 0, 0));
+        selectionCount.setVisible(false);
+        clearSelectionLink.setToolTipText("Select no frames: Preview starts on the first frame and Auto-Tune uses all frames.");
+        clearSelectionLink.setVisible(false);
+        frameListActions.add(selectionCount);
+        frameListActions.add(clearSelectionLink);
         JScrollPane scrollPane = new JScrollPane();
+        frameArea.add(scrollPane, CARD_TABLE);
+        frameArea.add(dropZone, CARD_DROP_ZONE);
         JPanel frameList = new JPanel(new BorderLayout());
         frameList.add(frameListActions, BorderLayout.NORTH);
-        frameList.add(scrollPane, BorderLayout.CENTER);
+        frameList.add(frameArea, BorderLayout.CENTER);
         add(frameList, BorderLayout.CENTER);
 
         JPanel statusBar = new JPanel(new BorderLayout(10, 0));
@@ -502,8 +534,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         });
 
         // A viewer switches the correction on or off; the Astrometry status follows.
-
-
+        refreshWorkflowStatus();
     }
 
     // ==========================================
@@ -555,12 +586,42 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         CommandAvailability.Facts facts = commandFacts();
         preparationLock.accept(facts.busy());
-        blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : BLINK_SELECTED);
+        int frame = firstSelectedFrame();
+        blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : AnalysisScopeText.blinkCaption(facts.selectedFrames()));
+        previewAction.putValue(Action.NAME, AnalysisScopeText.previewCaption(frame));
+        solveAction.putValue(Action.NAME, AnalysisScopeText.plateSolveCaption(frame));
+        // Room for a number as long as the session's largest, so the panels do not move as the selection changes.
+        int widest = Integer.parseInt("8".repeat(Integer.toString(Math.max(1, facts.frames())).length()));
+        blinkButton.reserveFor(AnalysisScopeText.blinkCaption(Math.max(CommandAvailability.MIN_BLINK_FRAMES, widest)));
+        detectSingleButton.reserveFor(AnalysisScopeText.previewCaption(widest));
+        solveButton.reserveFor(AnalysisScopeText.plateSolveCaption(widest));
         skyCatalogueAction.putValue(Action.NAME, facts.skyFetching() ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
         solarSystemAction.putValue(Action.NAME, facts.solarSystemFetching() ? "Cancel Asteroids and Comets" : FETCH_SOLAR_SYSTEM);
         qualityDetailsButton.setEnabled(!facts.busy() && table != null && table.getSelectedRowCount() == 1
                 && table.getModel() instanceof FitsFileTableModel model
                 && model.qualityAt(table.convertRowIndexToModel(table.getSelectedRow())) != null);
+        refreshActionEmphasis();
+    }
+
+    /** The number of the first selected frame, as the viewers and the reports count it, or 0 without a selection. */
+    private int firstSelectedFrame() {
+        int row = table == null ? -1 : table.getSelectedRow();
+        return row < 0 ? 0 : table.convertRowIndexToModel(row) + 1;
+    }
+
+    /** Highlights the one next step of the session, without changing the size of the buttons it moves between. */
+    private void refreshActionEmphasis() {
+        boolean currentReport = currentReportSettings != null && lastReportButton.isVisible()
+                && currentReportSettings.equals(activeQualitySettingsKey);
+        CommandAvailability.Emphasis emphasis = CommandAvailability.emphasis(commandFacts(), currentReport);
+        convertMonoButton.putClientProperty("FlatLaf.style", emphasis == CommandAvailability.Emphasis.CONVERT_TO_MONO ? ACCENT_BUTTON_STYLE : null);
+        detectBatchButton.putClientProperty("FlatLaf.style", emphasis == CommandAvailability.Emphasis.DETECT ? PRIMARY_BUTTON_STYLE : LARGE_BUTTON_STYLE);
+        boolean reportNext = emphasis == CommandAvailability.Emphasis.OPEN_REPORT;
+        lastReportButton.putClientProperty("JButton.buttonType", reportNext ? null : "borderless");
+        lastReportButton.putClientProperty("FlatLaf.style", reportNext ? ACCENT_BUTTON_STYLE : null);
+        lastReportButton.setForeground(reportNext ? UIManager.getColor("Button.default.foreground") : UiStyle.linkColor());
+        lastReportButton.setText(UiStyle.htmlWrappedTo(detectIterativelyButton.getPreferredSize().width - UiStyle.space(12),
+                (reportNext ? "Open last report" : "<u>Open last report</u>") + lastReportDetail));
     }
 
     /** Runs exact engine QC on all imported frames with a detached profile, independent of selection. EDT only. */
@@ -577,7 +638,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     resizeTableColumns(table);
                 }
                 refreshWorkflowStatus();
-                showStatus(qualityStatusText());
+                showStatus("Quality control finished.");
             } else {
                 showDetectionProblem(outcome);
             }
@@ -599,13 +660,38 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 ? model.qualityAt(table.convertRowIndexToModel(row)) : null;
     }
 
-    /** Compact session verdict; fewer than three retained frames is an engine stop, not a successful detection. */
+    /** Whether quality control has run, for the Inspect step; the frame toolbar holds its counts. */
     private String qualityStatusText() {
         if (!(table.getModel() instanceof FitsFileTableModel model) || model.quality() == null) return "Quality not measured";
-        var result = model.quality().result();
         if (!model.isQualityCurrent()) return "QC stale — rerun quality control";
-        return "QC: " + result.keptFrames() + " keep · " + result.rejectedFrames() + " reject / " + result.frames().size()
-                + (result.tooFewFrames() ? " · too few for detection" : "");
+        // Fewer than three retained frames is an engine stop, not a successful detection.
+        return model.quality().result().tooFewFrames() ? "⚠ Too few frames kept for detection" : "✓ Quality control run";
+    }
+
+    /** The frame toolbar and whether the list or the drop zone shows. */
+    private void refreshFrameList(int frames) {
+        frameListActions.setVisible(frames > 0);
+        frameCards.show(frameArea, frames > 0 ? CARD_TABLE : CARD_DROP_ZONE);
+        frameTotal.setText(frames == 1 ? "1 frame" : frames + " frames");
+        FitsFileTableModel model = table != null && table.getModel() instanceof FitsFileTableModel loaded ? loaded : null;
+        var quality = model == null || model.quality() == null ? null : model.quality().result();
+        boolean current = quality != null && model.isQualityCurrent();
+        keepChip.setVisible(current);
+        rejectChip.setVisible(current);
+        if (current) {
+            keepChip.setText("✓ " + quality.keptFrames() + " keep");
+            rejectChip.setText("✕ " + quality.rejectedFrames() + " reject");
+        }
+        boolean stale = quality != null && !current;
+        boolean tooFew = current && quality.tooFewFrames();
+        qualityNote.setVisible(stale || tooFew);
+        qualityNote.setText(stale ? "QC stale" : "⚠ too few for detection");
+        qualityNote.setToolTipText(stale ? "The settings or frames changed after quality control ran. Run it again for current results."
+                : "Quality control would keep fewer than three frames, so a detection run would stop there.");
+        int selected = table == null ? 0 : table.getSelectedRowCount();
+        selectionCount.setVisible(selected > 0);
+        selectionCount.setText(selected + " selected");
+        clearSelectionLink.setVisible(selected > 0);
     }
 
     /** Wires the independent preparation window and its job lock without taking the application window as a dependency. */
@@ -703,7 +789,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             return;
         }
         FitsFileInformation[] selected = getSelectedFilesInformation();
-        startBlink(selected != null && selected.length >= 3 ? selected : getImportedFiles(), shown);
+        startBlink(selected != null && selected.length >= CommandAvailability.MIN_BLINK_FRAMES ? selected : getImportedFiles(), shown);
     }
 
     /**
@@ -862,7 +948,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
 
         for (int column = 0; column < table.getColumnCount(); column++) {
-            int width = 50;
+            int width = table.convertColumnIndexToModel(column) == FitsFileTableModel.COL_NUMBER ? UiStyle.space(18) : 50;
 
             Component headerComp = table.getTableHeader().getDefaultRenderer().getTableCellRendererComponent(
                     table, table.getColumnModel().getColumn(column).getHeaderValue(), false, false, 0, column);
@@ -930,44 +1016,12 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     // WORKFLOW STRIP
     // ==========================================
 
-    private JPanel workflowGroup(String title, JComponent status, JComponent... rows) {
-        // Every group is as tall as the tallest one, so the tops and the status lines line up.
-        JPanel group = new JPanel() {
-            @Override
-            public Dimension getPreferredSize() {
-                Dimension own = super.getPreferredSize();
-                int height = own.height;
-                for (JPanel other : workflowGroups) {
-                    if (other != this) {
-                        height = Math.max(height, other.getLayout().preferredLayoutSize(other).height);
-                    }
-                }
-                return new Dimension(own.width, height);
-            }
-        };
-        workflowGroups.add(group);
-        group.setLayout(new BoxLayout(group, BoxLayout.Y_AXIS));
-        group.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createTitledBorder(title), BorderFactory.createEmptyBorder(0, 4, 4, 4)));
-        for (JComponent row : rows) {
-            row.setAlignmentX(Component.LEFT_ALIGNMENT);
-            group.add(row);
-        }
-        group.add(Box.createVerticalGlue());
-        if (status != null) {
-            status.setAlignmentX(Component.LEFT_ALIGNMENT);
-            status.setForeground(UiStyle.helpColor());
-            status.setBorder(BorderFactory.createEmptyBorder(4, 4, 0, 0));
-            group.add(status);
-        }
-        return group;
-    }
-
     /** Keeps the compact correction switch beside the final astrometry-status line, on the EDT. */
     private JPanel correctionStatusRow() {
         JPanel row = new JPanel(new GridBagLayout());
         row.setOpaque(false);
         astrometryStatus.setForeground(UiStyle.helpColor());
+        astrometryStatus.setVerticalAlignment(SwingConstants.TOP);
         applyCorrection.setOpaque(false);
         applyCorrection.getAccessibleContext().setAccessibleName("Apply plate-solution correction");
         applyCorrection.setToolTipText("Use the fitted correction in viewers and future reports. FITS headers are unchanged.");
@@ -1003,8 +1057,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     public void refreshWorkflowStatus() {
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         colourNotice.setVisible(frames > 0 && containsColorImages);
-        // The import button is the primary action until frames are loaded, then an ordinary button for another dataset.
-        importButton.putClientProperty("FlatLaf.style", frames == 0 ? PRIMARY_BUTTON_STYLE : null);
+        refreshFrameList(frames);
         if (frames == 0) {
             prepareStatus.setText("No frames imported");
             astrometryStatus.setText(" ");
@@ -1023,7 +1076,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             // One solved frame is enough: the frames are aligned, so the report uses its solution for all of them.
             hasSolvedFrame = solved > 0;
             if (hasSolvedFrame) {
-                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved<br>" + skyCatalogueStatusText() + "</html>");
+                astrometryStatus.setText("<html>✓ " + solved + " / " + frames + " solved · " + skyCatalogueStatusText() + "</html>");
                 astrometryStatus.setToolTipText(skyCatalogueTooltip());
             } else {
                 astrometryStatus.setText("Solve one frame to identify objects");
@@ -1032,16 +1085,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                         + "It also lets " + FETCH_SKY_CATALOGUE + " download the stars and deep-sky objects of the field,<br>"
                         + "and " + FETCH_SOLAR_SYSTEM + " ask JPL for the asteroids and comets that cross it.</html>");
             }
-            int selected = table.getSelectedRowCount();
-            inspectStatus.setText("<html>" + (selected == 0 ? "No frames selected" : selected + (selected == 1 ? " frame selected" : " frames selected"))
-                    + "<br>" + qualityStatusText() + "</html>");
-            if (containsColorImages) {
-                setDetectStatus("Convert to monochrome first");
-            } else {
-                String saved = savedAutoTuneLine();
-                setDetectStatus(saved == null ? "Settings: " + detectionSettingsSummary()
-                        : "Settings: " + detectionSettingsSummary() + "<br>" + saved);
-            }
+            inspectStatus.setText(qualityStatusText());
+            setDetectStatus(containsColorImages ? "Convert to monochrome first"
+                    : AnalysisScopeText.settingsNote(detectionSettingsSummary(), savedAutoTuneLine()));
         }
         PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         boolean usefulCorrection = frames > 0 && hasSolvedFrame && correction != null && correction.isNeeded();
@@ -1051,6 +1097,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         updateAutoTuneTooltip();
         refreshAnalysisScope();
         refreshCommands();
+        WorkflowStep.statusChanged(workflowSteps);
     }
 
     /** Updates the configured analyses after settings apply, without committing editor text during selection changes. */
@@ -1066,8 +1113,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         int selected = table == null ? 0 : table.getSelectedRowCount();
         analysisScope.setVisible(frames > 0);
         if (frames == 0) return;
-        String scopes = "Blink: " + selected + " selected frames · Preview: sequence from "
-                + (selected == 0 ? "the first frame" : "the selected frame") + " · " + AnalysisScopeText.autoTune(frames, selected);
+        String scopes = AnalysisScopeText.selectionScope(frames, selected, firstSelectedFrame());
         analysisScope.setText("<html><b>Run:</b> all " + frames + " imported frames · " + enabledAnalyses
                 + "<br>" + scopes + "</html>");
         analysisScope.setToolTipText("Analyses use current settings; report-category choices only affect export. "
@@ -1082,12 +1128,14 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         activeQualitySettingsKey = QualityControlSnapshot.settingsKey(config);
         if (table != null && table.getModel() instanceof FitsFileTableModel model)
             model.activeSettingsChanged(activeQualitySettingsKey);
-        activeDetectionValue.setText(String.format(Locale.US, "%.2f / %.2f / %d",
-                config.detectionSigmaMultiplier, config.growSigmaMultiplier, config.minDetectionPixels));
-        activeMaskValue.setText(String.format(Locale.US, "%.2f / %.2f / %d",
-                config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels));
-        activeOverlapValue.setText(String.format(Locale.US, "%.2f", config.maxMaskOverlapFraction));
-        activeJitterValue.setText(String.format(Locale.US, "%.2f px", config.maxStarJitter));
+        activeDetectionSigma.setText(String.format(Locale.US, "%.2f", config.detectionSigmaMultiplier));
+        activeDetectionGrow.setText(String.format(Locale.US, "%.2f", config.growSigmaMultiplier));
+        activeDetectionPixels.setText(Integer.toString(config.minDetectionPixels));
+        activeMaskSigma.setText(String.format(Locale.US, "%.2f", config.masterSigmaMultiplier));
+        activeMaskGrow.setText(String.format(Locale.US, "%.2f", config.masterGrowSigmaMultiplier));
+        activeMaskPixels.setText(Integer.toString(config.masterMinDetectionPixels));
+        activeLimits.setText(String.format(Locale.US, "Overlap %.2f · Jitter %.2f px", config.maxMaskOverlapFraction, config.maxStarJitter));
+        refreshActionEmphasis();
     }
 
     /** Small rectangle of the active detection settings, with the link that opens Detection Settings. */
@@ -1099,19 +1147,24 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         card.setBorder(BorderFactory.createCompoundBorder(
                 BorderFactory.createLineBorder(border != null ? border : new Color(0x666666)),
                 BorderFactory.createEmptyBorder(3, 6, 2, 6)));
-        card.setToolTipText("<html>The detection settings in use, the ones the calibrated Auto-Tuner sets.<br>"
-                + "Detection and star mask are sigma / grow sigma / minimum pixels.</html>");
+        card.setToolTipText("The detection settings in use, the ones the calibrated Auto-Tuner sets.");
+        addReadoutHeading(card, small, nameColor, 1, "Sigma", "Detection Sigma and Master Sigma.");
+        addReadoutHeading(card, small, nameColor, 2, "Grow", "Grow Sigma (Hysteresis) and Master Grow Sigma.");
+        addReadoutHeading(card, small, nameColor, 3, "Min px", "Min Detection Pixels and Master Min Pixels.");
+        addReadoutRow(card, small, nameColor, 1, "Detection", "Detection Sigma, Grow Sigma (Hysteresis) and Min Detection Pixels.",
+                activeDetectionSigma, activeDetectionGrow, activeDetectionPixels);
+        addReadoutRow(card, small, nameColor, 2, "Star mask", "Master Sigma, Master Grow Sigma and Master Min Pixels.",
+                activeMaskSigma, activeMaskGrow, activeMaskPixels);
         GridBagConstraints c = new GridBagConstraints();
         c.anchor = GridBagConstraints.WEST;
-        c.insets = new Insets(0, 0, 1, 0);
-        addReadoutRow(card, c, 0, small, nameColor, "Detection", activeDetectionValue,
-                "Detection sigma, grow sigma and minimum pixels.");
-        addReadoutRow(card, c, 1, small, nameColor, "Star mask", activeMaskValue,
-                "Master sigma, master grow sigma and master minimum pixels.");
-        addReadoutRow(card, c, 2, small, nameColor, "Overlap", activeOverlapValue,
-                "Maximum share of a detection that may overlap the star mask.");
-        addReadoutRow(card, c, 3, small, nameColor, "Jitter", activeJitterValue,
-                "Base star jitter radius, in pixels. Detections that move less than this are treated as star jitter.");
+        activeLimits.setFont(small);
+        activeLimits.setToolTipText("<html>Max Mask Overlap Fraction: the share of a detection that may overlap the star mask.<br>"
+                + "Base Star Jitter Radius: detections that move less than this are treated as star jitter.</html>");
+        c.gridy = 3;
+        c.gridx = 0;
+        c.gridwidth = 4;
+        c.insets = new Insets(1, 0, 1, 0);
+        card.add(activeLimits, c);
         JButton editSettingsLink = AccessibleControls.link("Edit settings…", "Edit detection settings", () -> {
             if (!uiLocked) {
                 showDetectionSettings.run();
@@ -1121,48 +1174,54 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         editSettingsLink.setForeground(UiStyle.linkColor());
         editSettingsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         editSettingsLink.setToolTipText("Open Detection Settings to change these values.");
-        c.gridy = 4;
-        c.gridx = 0;
-        c.gridwidth = 2;
-        c.insets = new Insets(3, 0, 0, 0);
+        editSettingsLink.setHorizontalAlignment(SwingConstants.LEFT);
+        editSettingsLink.setMargin(new Insets(0, 0, 0, 0));
+        // In the empty corner over the names, which saves a row.
+        c.gridy = 0;
+        c.gridwidth = 1;
+        c.insets = new Insets(0, 0, 1, 0);
         card.add(editSettingsLink, c);
         return card;
     }
 
-    private static void addReadoutRow(JPanel card, GridBagConstraints c, int row, Font font, Color nameColor,
-                                      String name, JLabel value, String tip) {
+    /** A column's heading over the readout's values. */
+    private static void addReadoutHeading(JPanel card, Font font, Color color, int column, String name, String tip) {
+        JLabel heading = new JLabel(name);
+        heading.setFont(font);
+        heading.setForeground(color);
+        heading.setToolTipText(tip);
+        GridBagConstraints c = new GridBagConstraints();
+        c.gridy = 0;
+        c.gridx = column;
+        c.anchor = GridBagConstraints.WEST;
+        c.insets = new Insets(0, UiStyle.space(10), 1, 0);
+        card.add(heading, c);
+    }
+
+    /** One line of the readout: its name, then a value under each heading. */
+    private static void addReadoutRow(JPanel card, Font font, Color nameColor, int row, String name, String tip, JLabel... values) {
         JLabel nameLabel = new JLabel(name);
         nameLabel.setFont(font);
         nameLabel.setForeground(nameColor);
         nameLabel.setToolTipText(tip);
-        value.setFont(font);
-        value.setToolTipText(tip);
+        GridBagConstraints c = new GridBagConstraints();
         c.gridy = row;
         c.gridx = 0;
-        c.gridwidth = 1;
-        c.insets = new Insets(0, 0, 1, 8);
-        card.add(nameLabel, c);
-        c.gridx = 1;
+        c.anchor = GridBagConstraints.WEST;
         c.insets = new Insets(0, 0, 1, 0);
-        card.add(value, c);
-    }
-
-    /** The note under Auto-Tune: which settings are in use, and when a saved auto-tune was run. */
-    private void setDetectStatus(String body) {
-        int width = Math.max(120, autoTuneButton.getPreferredSize().width - 4);
-        detectStatus.setText(UiStyle.htmlWrappedTo(width, body));
-    }
-
-    /** Height of the Auto-Tune note when wrapped to the button width. */
-    private int wrappedStatusHeight(int width) {
-        javax.swing.text.View view = (javax.swing.text.View) detectStatus.getClientProperty(
-                javax.swing.plaf.basic.BasicHTML.propertyKey);
-        if (view == null) {
-            return detectStatus.getPreferredSize().height;
+        card.add(nameLabel, c);
+        c.insets = new Insets(0, UiStyle.space(10), 1, 0);
+        for (JLabel value : values) {
+            value.setFont(font);
+            value.setToolTipText(tip);
+            c.gridx++;
+            card.add(value, c);
         }
-        view.setSize(width, 0);
-        Insets insets = detectStatus.getInsets();
-        return (int) Math.ceil(view.getPreferredSpan(javax.swing.text.View.Y_AXIS)) + insets.top + insets.bottom;
+    }
+
+    /** The Detect step's status: which settings are in use, and when a saved auto-tune was run. */
+    private void setDetectStatus(String body) {
+        detectStatus.setText("<html>" + body + "</html>");
     }
 
     private String detectionSettingsSummary() {
@@ -1243,6 +1302,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             return;
         }
 
+        DefaultTableCellRenderer number = new DefaultTableCellRenderer();
+        number.setHorizontalAlignment(SwingConstants.RIGHT);
+        table.getColumnModel().getColumn(FitsFileTableModel.COL_NUMBER).setCellRenderer(number);
         table.getColumnModel().getColumn(FitsFileTableModel.COL_EARTH).setCellRenderer(new DefaultTableCellRenderer() {
             @Override
             public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
@@ -1330,6 +1392,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         openExternalUrl(googleEarthUrl, "Google Earth");
     }
 
+    /** The manual's walk through a session, from the empty window. */
+    private void openWorkflowHelp() {
+        openExternalUrl(ApplicationWindow.MANUAL_URL + "#" + DropZonePanel.WORKFLOW_SECTION, "User manual");
+    }
+
     private void openExternalUrl(String url, String label) {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             try {
@@ -1411,18 +1478,17 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         refreshWorkflowStatus();
     }
 
-    /** The third line of the Astrometry status: the predicted asteroids and comets. */
+    /** The Astrometry status's short word on the predicted asteroids and comets; the tooltip has the rest. */
     private String solarSystemStatusText() {
         if (solarController != null && solarController.isRunning()) {
-            return "Fetching asteroids and comets…";
+            return "fetching asteroids…";
         }
         SolarSystemObjects objects = skyCatalogue().getSolarSystem();
         String problem = solarController == null ? null : solarController.problem();
         if (objects == null) {
-            return problem != null ? "⚠ Asteroids and comets not fetched" : "No asteroids or comets yet";
+            return problem != null ? "⚠ no asteroids" : "no asteroids yet";
         }
-        return (objects.problems.isEmpty() && problem == null ? "✓ " : "⚠ ")
-                + Character.toUpperCase(objects.summary().charAt(0)) + objects.summary().substring(1);
+        return (objects.problems.isEmpty() && problem == null ? "" : "⚠ ") + objects.summary();
     }
 
     /** The asteroid and comet part of the Astrometry tooltip. */
@@ -1463,9 +1529,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         return skyController == null ? null : skyController.correctionProblem();
     }
 
-    /** The saved catalogue/predictions and, last, the correction line beside its Apply switch. */
+    /** The saved catalogue and predictions on one line and, on the next, the correction beside its Apply switch. */
     private String skyCatalogueStatusText() {
-        String catalogueText = catalogueStatusText() + "<br>" + solarSystemStatusText();
+        String catalogueText = catalogueStatusText() + " · " + solarSystemStatusText();
         PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         if (skyCatalogue().getSaveFailure() != null) {
             return catalogueText + "<br>⚠ Correction setting not saved; "
@@ -1484,15 +1550,16 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         return catalogueText;
     }
 
+    /** The Astrometry status's short word on the sky catalogue; the tooltip has the rest. */
     private String catalogueStatusText() {
         if (skyController != null && skyController.isRunning()) {
-            return skyController.stage().startsWith("Checking") ? "Checking the plate solution…" : "Fetching sky catalogue…";
+            return skyController.stage().startsWith("Checking") ? "checking the solution…" : "fetching catalogue…";
         }
         SkyCatalogue catalogue = skyCatalogue().get();
         if (catalogue == null) {
-            return skyCatalogueProblem() != null ? "⚠ Sky catalogue not fetched" : "No sky catalogue yet";
+            return skyCatalogueProblem() != null ? "⚠ no catalogue" : "no catalogue yet";
         }
-        return (catalogue.problems.isEmpty() && skyCatalogueProblem() == null ? "✓ Sky catalogue · " : "⚠ Sky catalogue · ")
+        return (catalogue.problems.isEmpty() && skyCatalogueProblem() == null ? "" : "⚠ ")
                 + String.format(Locale.US, "%,d stars", catalogue.stars.size());
     }
 
@@ -1624,6 +1691,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             ((JScrollPane) parent).setTransferHandler(handler);
         }
         setTransferHandler(handler);
+        dropZone.installFolderDrop(handler);
     }
 
     /** What the Auto-Tune command runs: show the Overview and start Auto-Tune there with its tuner and profile. */
@@ -1720,6 +1788,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
             if (sessions.isCurrent(handle.session())) {
+                currentReportSettings = activeQualitySettingsKey;
                 showLastReport(completed.result());
             }
             promptUserToOpenReport(completed.result());
@@ -1806,7 +1875,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         blink.close();
         statusLabel.setText(files.length == 0 ? "No files loaded" : "Imported " + files.length + " file(s)");
-        // The import names the new session's last report, if it has one.
+        // The import names the new session's last report, if it has one: an older report, not the next step.
+        currentReportSettings = null;
         showLastReport(sessions.current() == null ? null : sessions.current().getLastReport());
     }
 
@@ -1831,19 +1901,23 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     void showLastReport(File report) {
         if (sessions.current() != null) sessions.current().setLastReport(report);
         if (report == null) {
+            currentReportSettings = null;
+            lastReportDetail = "";
             lastReportButton.setVisible(false);
             outputFolderButton.setVisible(false);
+            refreshActionEmphasis();
             return;
         }
         java.time.LocalDateTime written = java.time.LocalDateTime.ofInstant(
                 java.time.Instant.ofEpochMilli(report.lastModified()), java.time.ZoneId.systemDefault());
         String pattern = written.getYear() == java.time.LocalDate.now().getYear() ? "d MMM HH:mm" : "d MMM yyyy";
-        lastReportButton.setText("<html><u>Open last report</u> · " + written.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
-                + (SessionReports.isIterative(report) ? " (iterative)" : "") + "</html>");
+        lastReportDetail = " · " + written.format(java.time.format.DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH))
+                + (SessionReports.isIterative(report) ? " (iterative)" : "");
         lastReportButton.setToolTipText(report.getAbsolutePath());
         lastReportButton.setVisible(true);
         outputFolderButton.setToolTipText(report.getAbsoluteFile().getParent());
         outputFolderButton.setVisible(true);
+        refreshActionEmphasis();
     }
 
     /** Opens the current session's completed output directory without starting or changing any analysis. */

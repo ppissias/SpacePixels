@@ -12,6 +12,39 @@ public class AnalysisScopeTextTest {
         assertEquals("Auto-Tune: pool from 4 selected frames", AnalysisScopeText.autoTune(12, 4));
     }
 
+    /** The line says what the selection does now, in Blink's own rule and with proper counts. */
+    @Test public void selectionScopeFollowsTheRules() {
+        assertEquals("Blink: select 3 or more frames · Preview: sequence from the first frame · Auto-Tune: pool from all 12 frames (selection below 4)",
+                AnalysisScopeText.selectionScope(12, 0, 0));
+        assertEquals("Blink: select 3 or more frames · Preview: sequence from frame 5 · Auto-Tune: pool from all 12 frames (selection below 4)",
+                AnalysisScopeText.selectionScope(12, 1, 5));
+        assertEquals("Blink: the 4 selected frames · Preview: sequence from frame 2 · Auto-Tune: pool from 4 selected frames",
+                AnalysisScopeText.selectionScope(12, 4, 2));
+    }
+
+    /** Captions keep the command's own words, for the manual and the tests, and add what it will act on. */
+    @Test public void captionsNameWhatTheCommandActsOn() {
+        assertEquals("Blink Selected", AnalysisScopeText.blinkCaption(2));
+        assertEquals("Blink Selected (3)", AnalysisScopeText.blinkCaption(3));
+        assertEquals("Preview Frame", AnalysisScopeText.previewCaption(0));
+        assertEquals("Preview Frame 7", AnalysisScopeText.previewCaption(7));
+        assertEquals("Plate Solve Selected", AnalysisScopeText.plateSolveCaption(0));
+        assertEquals("Plate Solve Frame 7", AnalysisScopeText.plateSolveCaption(7));
+    }
+
+    /** One run shows its date once; a saved run that is not the settings in use stays a separate fact. */
+    @Test public void settingsNoteShowsARunOnce() {
+        String saved = "Auto-tune saved: run at 2026-10-29 15:06 (4 min 56 s)";
+        assertEquals("High, auto-tuned · run 2026-10-29 15:06 (4 min 56 s)",
+                AnalysisScopeText.settingsNote("High, auto-tuned · run 2026-10-29 15:06", saved));
+        assertEquals("High, auto-tuned, edited · run 2026-10-29 15:06 (4 min 56 s)",
+                AnalysisScopeText.settingsNote("High, auto-tuned, edited · run 2026-10-29 15:06", saved));
+        assertEquals("Manual settings<br>" + saved, AnalysisScopeText.settingsNote("Manual settings", saved));
+        assertEquals("High, auto-tuned · run 2026-10-01 09:00<br>" + saved,
+                AnalysisScopeText.settingsNote("High, auto-tuned · run 2026-10-01 09:00", saved));
+        assertEquals("Manual settings", AnalysisScopeText.settingsNote("Manual settings", null));
+    }
+
     /** Residual subanalyses are listed only when enabled, while photometry is identified as readiness-dependent. */
     @Test public void configuredAnalysesDoNotInventReportOrReadinessDecisions() {
         DetectionConfig config = new DetectionConfig();

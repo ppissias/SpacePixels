@@ -23,6 +23,7 @@ import javax.swing.JDialog;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
+import javax.swing.JSpinner;
 import javax.swing.SwingUtilities;
 import java.awt.Component;
 import java.awt.Container;
@@ -106,6 +107,31 @@ public class LastRunTracksMechanicsTest extends MechanicsTestCase {
                 && showingDialog("Pipeline Complete") == null));
         assertSame(session, GuiActionRunner.execute(() -> application().getSession()));
         assertNotNull(session.getTrackOverlay());
+
+        // The report is now the next step, while the settings that made it are in use.
+        JButton report = window().button(new GenericTypeMatcher<>(JButton.class, true) {
+            /** The link to the last report, whose caption also gives its date. */
+            @Override protected boolean isMatching(JButton button) { return button.getText() != null && button.getText().contains("Open last report"); }
+        }).target();
+        waitFor("the report of this run is the next step", () -> isHighlighted(report) && !isHighlighted(detect));
+        window().tabbedPane().selectTab("Detection Settings");
+        JSpinner sigma = window().spinner(new GenericTypeMatcher<>(JSpinner.class, true) {
+            /** The core setting on the default Overview page. */
+            @Override protected boolean isMatching(JSpinner spinner) { return "Detection Sigma".equals(spinner.getAccessibleContext().getAccessibleName()); }
+        }).target();
+        Object used = GuiActionRunner.execute(sigma::getValue);
+        GuiActionRunner.execute(() -> sigma.setValue(((Number) used).doubleValue() + 0.25));
+        waitFor("other settings hand the highlight back to Detect", () -> isHighlighted(detect) && !isHighlighted(report));
+        GuiActionRunner.execute(() -> sigma.setValue(used));
+        waitFor("the report's own settings bring it back", () -> isHighlighted(report) && !isHighlighted(detect));
+        window().tabbedPane().selectTab("Main");
+
+        // Importing the folder again finds the report, but as an older one: a link, with Detect the next step.
+        File frames = GuiActionRunner.execute(() -> new File(session.getFiles()[0].getFilePath()).getParentFile());
+        GuiActionRunner.execute(() -> application().importFolder(frames));
+        waitFor("the session is imported again", () -> GuiActionRunner.execute(() -> application().getSession() != session
+                && application().getSession() != null && application().getJobCoordinator().current() == null));
+        waitFor("the older report stays a link", () -> GuiActionRunner.execute(report::isVisible) && !isHighlighted(report) && isHighlighted(detect));
     }
 
     /**

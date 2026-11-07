@@ -19,6 +19,9 @@ import java.util.function.Supplier;
  */
 final class CommandAction extends AbstractAction {
 
+    /** The command's own name, kept when its caption follows the selection ("Preview Frame 3"). */
+    static final String COMMAND_NAME = "SpacePixels.commandName";
+
     private final CommandAvailability.Command command;
     private final Supplier<CommandAvailability.Facts> facts;
     private final Runnable run;
@@ -36,6 +39,7 @@ final class CommandAction extends AbstractAction {
         this.run = run;
         this.description = description;
         putValue(SHORT_DESCRIPTION, description);
+        putValue(COMMAND_NAME, name);
     }
 
     /** Runs the command if it is available now: a shortcut pressed late, or a control not yet refreshed, does nothing. */

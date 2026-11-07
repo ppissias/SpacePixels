@@ -154,6 +154,11 @@ abstract class MechanicsTestCase extends AssertJSwingJUnitTestCase {
         throw new AssertionError(description, last);
     }
 
+    /** Whether this button has the accent colours of the one highlighted next step. */
+    static boolean isHighlighted(javax.swing.JButton button) {
+        return GuiActionRunner.execute(() -> String.valueOf(button.getClientProperty("FlatLaf.style")).contains("Button.default.background"));
+    }
+
     final String showingLabel(String text) {
         return window.label(VisibleText.labelContaining(text)).target().getText();
     }

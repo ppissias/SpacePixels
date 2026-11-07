@@ -41,6 +41,10 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         requireButton("Detect Moving Targets", false);
         requireButton("Detect Iteratively (large datasets)", true);
         assertTrue(showingLabel("No frames imported").contains("No frames imported"));
+        requireButton("Choose Folder…", true);
+        requireButton("Prepare Raw Frames…", true);
+        assertTrue(showingLabel("Drop a folder").contains("aligned frames"));
+        assertTrue(showingLabel("calibrated and aligned").contains("XISF"));
         assertTrue(tabEnabled("Astrometry Config"));
         assertFalse(tabEnabled("Image Stretch"));
         assertFalse(tabEnabled("Detection Settings"));
@@ -66,6 +70,49 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         assertTrue(tabEnabled("Detection Settings"));
         requireButton("Detect Moving Targets", true);
         requireButton("Convert to Mono", false);
+        assertFalse("the drop zone gives way to the table", GuiActionRunner.execute(() ->
+                window().robot().finder().findAll(window().target(), VisibleText.button("Choose Folder…")).size() > 0));
+        assertTrue(GuiActionRunner.execute(() -> window().table().target().isShowing()));
+        assertEquals("1", GuiActionRunner.execute(() -> window().table().target().getValueAt(0, 0)));
+    }
+
+    /** The captions name what a command will act on, and the panels stay put while they do. */
+    @Test(timeout = 120_000)
+    public void captionsAndToolbarFollowTheSelection() throws Exception {
+        importSyntheticSequence();
+        JButton preview = window().button(VisibleText.button("Preview Frame")).target();
+        JButton blink = window().button(VisibleText.button("Blink Selected")).target();
+        JButton solve = window().button(VisibleText.button("Plate Solve Selected")).target();
+        assertEquals("Preview Frame", GuiActionRunner.execute(preview::getText));
+        assertEquals("Blink Selected", GuiActionRunner.execute(blink::getText));
+        assertEquals("Plate Solve Selected", GuiActionRunner.execute(solve::getText));
+        java.awt.Rectangle previewAt = GuiActionRunner.execute(() -> preview.getBounds());
+
+        window().table().selectRows(1, 2, 3);
+        waitFor("the captions follow the selection", () -> "Blink Selected (3)".equals(GuiActionRunner.execute(blink::getText)));
+        assertEquals("Preview Frame 2", GuiActionRunner.execute(preview::getText));
+        assertEquals("Plate Solve Frame 2", GuiActionRunner.execute(solve::getText));
+        assertEquals("the buttons do not move with their captions", previewAt, GuiActionRunner.execute(() -> preview.getBounds()));
+        window().label(VisibleText.labelExactly("3 selected")).requireVisible();
+        assertTrue(showingLabel("Blink: the 3 selected").contains("Preview: sequence from frame 2"));
+
+        window().button(VisibleText.button("Clear selection")).click();
+        waitFor("the selection is cleared", () -> GuiActionRunner.execute(() -> window().table().target().getSelectedRowCount()) == 0);
+        waitFor("the captions return", () -> "Preview Frame".equals(GuiActionRunner.execute(preview::getText)));
+        assertTrue(showingLabel("Blink: select 3").contains("Preview: sequence from the first frame"));
+    }
+
+    /** The highlight is on the next step: frames first, and Detect once they are in. */
+    @Test(timeout = 120_000)
+    public void theHighlightMovesWithTheSession() throws Exception {
+        JButton detect = window().button(VisibleText.button("Detect Moving Targets")).target();
+        assertFalse("nothing to detect yet", isHighlighted(window().button(VisibleText.button("Detect Moving Targets")).target()));
+        assertTrue("an empty window highlights its way in", isHighlighted(window().button(VisibleText.button("Choose Folder…")).target()));
+        assertFalse(isHighlighted(window().button(VisibleText.button("Import Aligned Frames…")).target()));
+        java.awt.Dimension before = GuiActionRunner.execute(detect::getPreferredSize);
+        importSyntheticSequence();
+        waitFor("Detect is the next step", () -> isHighlighted(detect));
+        assertEquals("the button keeps its size", before.height, GuiActionRunner.execute(detect::getPreferredSize).height);
     }
 
     @Test(timeout = 180_000)

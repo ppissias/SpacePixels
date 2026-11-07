@@ -7,16 +7,21 @@ import org.junit.Test;
 
 import javax.swing.JDialog;
 import javax.swing.JLabel;
+import javax.swing.JMenuItem;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-/** The tips screen, opened from the tab bar: it goes through the tips, remembers its choice and blocks nothing. */
+/** The tips screen, opened from the Help menu: it goes through the tips, remembers its choice and blocks nothing. */
 public class TipsMechanicsTest extends MechanicsTestCase {
 
     @Test(timeout = 120_000)
     public void tipsOpenStepAndClose() {
-        window().button(VisibleText.button("Tips")).click();
+        window().button(VisibleText.button("Help ▾")).click();
+        window().menuItem(new GenericTypeMatcher<>(JMenuItem.class, true) {
+            /** The Help menu's item, showing once the menu has opened. */
+            @Override protected boolean isMatching(JMenuItem item) { return "Tips".equals(item.getText()); }
+        }).click();
         var tips = WindowFinder.findDialog(new GenericTypeMatcher<>(JDialog.class) {
             /** The showing tips screen. */
             @Override protected boolean isMatching(JDialog dialog) { return dialog.isShowing() && "SpacePixels tips".equals(dialog.getTitle()); }

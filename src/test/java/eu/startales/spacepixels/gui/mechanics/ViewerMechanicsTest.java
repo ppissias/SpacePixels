@@ -28,7 +28,7 @@ public class ViewerMechanicsTest extends MechanicsTestCase {
         waitFor("the session is solved and keeps its catalogue", () -> {
             String status = showingLabel("solved");
             return status.contains("5 / 5 solved")
-                    && status.contains("Sky catalogue")
+                    && status.contains("stars")
                     && status.contains("Correction available")
                     && !status.contains("Fetching")
                     && !status.contains("Checking");

@@ -19,20 +19,22 @@ import javax.swing.table.AbstractTableModel;
 public class FitsFileTableModel extends AbstractTableModel {
 
     // 1. Define constants for your visual columns
-    public static final int COL_FILENAME = 0;
-    public static final int COL_COLOR = 1;
-    public static final int COL_WIDTH = 2;
-    public static final int COL_HEIGHT = 3;
-    public static final int COL_DATE = 4;
-    public static final int COL_EXPOSURE = 5;
-    public static final int COL_LOCATION = 6;
-    public static final int COL_EARTH = 7;
-    public static final int COL_SOLVED = 8;
-    public static final int COL_QUALITY = 9;
-    public static final int COL_FWHM = 10;
-    public static final int COL_STARS = 11;
-    public static final int COL_ELONGATION = 12;
-    public static final int COL_QUALITY_REASON = 13;
+    /** The frame's number, as the viewers and the reports count it. */
+    public static final int COL_NUMBER = 0;
+    public static final int COL_FILENAME = 1;
+    public static final int COL_COLOR = 2;
+    public static final int COL_WIDTH = 3;
+    public static final int COL_HEIGHT = 4;
+    public static final int COL_DATE = 5;
+    public static final int COL_EXPOSURE = 6;
+    public static final int COL_LOCATION = 7;
+    public static final int COL_EARTH = 8;
+    public static final int COL_SOLVED = 9;
+    public static final int COL_QUALITY = 10;
+    public static final int COL_FWHM = 11;
+    public static final int COL_STARS = 12;
+    public static final int COL_ELONGATION = 13;
+    public static final int COL_QUALITY_REASON = 14;
 
     private QualityControlSnapshot quality;
     private String activeSettingsKey;
@@ -41,7 +43,7 @@ public class FitsFileTableModel extends AbstractTableModel {
     private final FitsFileInformation[] fitsfiles;
 
     // Formatted with nice capitalization
-    private final String[] columns = {"Filename", "Mono/Color", "Width", "Height", "Time (UTC)", "Exposure", "Location", "Loc Link", "Solved",
+    private final String[] columns = {"#", "Filename", "Mono/Color", "Width", "Height", "Time (UTC)", "Exposure", "Location", "Loc Link", "Solved",
             "Quality", "FWHM (px)", "Stars", "Elongation", "QC reason"};
 
     public FitsFileTableModel(FitsFileInformation[] fitsfiles) {
@@ -161,6 +163,9 @@ public class FitsFileTableModel extends AbstractTableModel {
         }
 
         switch (col) {
+            case COL_NUMBER:
+                return String.valueOf(row + 1);
+
             case COL_FILENAME:
                 return file.getFileName();
 

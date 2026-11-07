@@ -22,6 +22,16 @@ public class CommandAvailabilityTest {
 
     private static final int ENOUGH = SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
 
+    /** One next step: frames, then monochrome ones, then a detection, then its report while its settings are in use. */
+    @Test public void theHighlightIsOnTheNextStep() {
+        assertEquals(CommandAvailability.Emphasis.CHOOSE_FOLDER, CommandAvailability.emphasis(session().frames(0).build(), false));
+        assertEquals(CommandAvailability.Emphasis.CHOOSE_FOLDER, CommandAvailability.emphasis(session().frames(0).build(), true));
+        assertEquals(CommandAvailability.Emphasis.CONVERT_TO_MONO, CommandAvailability.emphasis(session().colour().build(), false));
+        assertEquals(CommandAvailability.Emphasis.CONVERT_TO_MONO, CommandAvailability.emphasis(session().colour().build(), true));
+        assertEquals(CommandAvailability.Emphasis.DETECT, CommandAvailability.emphasis(session().build(), false));
+        assertEquals(CommandAvailability.Emphasis.OPEN_REPORT, CommandAvailability.emphasis(session().build(), true));
+    }
+
     @Test
     public void importAndDirectoryBasedIterationAreAvailableBeforeASession() {
         Facts none = session().frames(0).build();

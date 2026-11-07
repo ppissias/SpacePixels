@@ -262,10 +262,10 @@ public class ApplicationWindow {
         setTabEnabled(configurationApplicationPanel, true);
         setTabEnabled(stretchPanel, false);
         setTabEnabled(detectionConfigurationPanel, false);
-        installManualLink();
+        installHelpMenu();
 
         // No menu bar: importing is the first button of the Main tab's workflow strip (or a folder dropped on the
-        // window), and the "new version" notice sits next to the User Manual link at the right end of the tab bar.
+        // window), and the "new version" notice sits next to the Help menu at the right end of the tab bar.
 
         TransferHandler folderDrop = new TransferHandler() {
             @Override
@@ -752,25 +752,22 @@ public class ApplicationWindow {
         updateNoticeLabel.addActionListener(event -> openInBrowser(latestRelease.htmlUrl));
     }
 
-    /** A "User Manual" link at the right end of the tab bar, so it is visible from every tab. */
-    private void installManualLink() {
-        JButton manualLink = AccessibleControls.link("User Manual", "Open SpacePixels user manual",
-                () -> openInBrowser(MANUAL_URL));
-        manualLink.setForeground(UiStyle.linkColor());
-        manualLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        manualLink.setToolTipText("Open the SpacePixels user manual in your browser: workflows, the report and examples.");
-        manualLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        JButton tipsLink = AccessibleControls.link("Tips", "Open the SpacePixels tips", this::showTips);
-        tipsLink.setForeground(UiStyle.linkColor());
-        tipsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        tipsLink.setToolTipText("Short tips on features you may not have met yet.");
-        tipsLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        JButton acknowledgementsLink = AccessibleControls.link("Acknowledgements", "Open credits and acknowledgements",
-                () -> AcknowledgementsDialog.show(frmIpodImage));
-        acknowledgementsLink.setForeground(UiStyle.linkColor());
-        acknowledgementsLink.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-        acknowledgementsLink.setToolTipText("Contributors, external services, catalogues and software used by SpacePixels.");
-        acknowledgementsLink.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+    /** A Help menu at the right end of the tab bar, so it is reachable from every tab; the update notice stays beside it. */
+    private void installHelpMenu() {
+        JPopupMenu menu = new JPopupMenu();
+        menu.add(helpItem("User Manual", "Open the SpacePixels user manual in your browser: workflows, the report and examples.",
+                () -> openInBrowser(MANUAL_URL)));
+        menu.add(helpItem("Tips", "Short tips on features you may not have met yet.", this::showTips));
+        menu.add(helpItem("Acknowledgements", "Contributors, external services, catalogues and software used by SpacePixels.",
+                () -> AcknowledgementsDialog.show(frmIpodImage)));
+        JButton help = new JButton("Help ▾");
+        help.putClientProperty("JButton.buttonType", "borderless");
+        help.setForeground(UiStyle.linkColor());
+        help.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        help.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
+        help.setToolTipText("User manual, tips and acknowledgements.");
+        help.getAccessibleContext().setAccessibleName("Help menu");
+        help.addActionListener(event -> menu.show(help, help.getWidth() - menu.getPreferredSize().width, help.getHeight()));
         updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.BOLD));
         updateNoticeLabel.setForeground(UIManager.getColor("Button.default.foreground"));
         updateNoticeLabel.setBackground(UIManager.getColor("Button.default.background"));
@@ -782,9 +779,7 @@ public class ApplicationWindow {
         JPanel links = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
         links.setOpaque(false);
         links.add(updateNoticeLabel);
-        links.add(acknowledgementsLink);
-        links.add(tipsLink);
-        links.add(manualLink);
+        links.add(help);
         JPanel trailing = new JPanel(new GridBagLayout());
         trailing.setOpaque(false);
         GridBagConstraints right = new GridBagConstraints();
@@ -794,7 +789,14 @@ public class ApplicationWindow {
         tabbedPane.putClientProperty("JTabbedPane.trailingComponent", trailing);
     }
 
-    /** Opens the tips over the main window; they stay available from the link in the tab bar. */
+    private static JMenuItem helpItem(String text, String tooltip, Runnable action) {
+        JMenuItem item = new JMenuItem(text);
+        item.setToolTipText(tooltip);
+        item.addActionListener(event -> action.run());
+        return item;
+    }
+
+    /** Opens the tips over the main window; they stay available from the Help menu. */
     private void showTips() {
         if (tipsDialog == null) {
             tipsDialog = new TipsDialog(frmIpodImage, this::openInBrowser);

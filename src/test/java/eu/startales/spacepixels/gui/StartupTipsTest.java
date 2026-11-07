@@ -36,6 +36,11 @@ public class StartupTipsTest {
         }
     }
 
+    @Test
+    public void theEmptyWindowLinksToTheManualsWorkflow() throws Exception {
+        assertTrue(manualAnchors().contains(DropZonePanel.WORKFLOW_SECTION));
+    }
+
     /** A bare ampersand or an unclosed tag would show as text or spoil the rest of the label. */
     @Test
     public void tipsAreWellFormedLabels() {

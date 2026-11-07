@@ -20,11 +20,13 @@ final class VisibleText {
     private VisibleText() {
     }
 
+    /** A showing button with this caption, or the button of the command of this name, whose caption can follow the selection. */
     static GenericTypeMatcher<JButton> button(String text) {
         return new GenericTypeMatcher<>(JButton.class, true) {
             @Override
             protected boolean isMatching(JButton component) {
-                return text.equals(component.getText());
+                return text.equals(component.getText())
+                        || (component.getAction() != null && text.equals(component.getAction().getValue("SpacePixels.commandName")));
             }
         };
     }
@@ -51,6 +53,16 @@ final class VisibleText {
         List<JSlider> sliders = new ArrayList<>();
         collectSliders(root, sliders);
         return sliders;
+    }
+
+    /** A showing label with exactly this text, where a shorter text would also be inside longer labels. */
+    static GenericTypeMatcher<JLabel> labelExactly(String text) {
+        return new GenericTypeMatcher<>(JLabel.class, true) {
+            @Override
+            protected boolean isMatching(JLabel component) {
+                return text.equals(component.getText());
+            }
+        };
     }
 
     static GenericTypeMatcher<JLabel> labelContaining(String text) {
