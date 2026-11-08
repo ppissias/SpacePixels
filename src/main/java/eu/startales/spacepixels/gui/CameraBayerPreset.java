@@ -44,20 +44,20 @@ enum CameraBayerPreset {
     PLAYER_ONE_ARTEMIS("Player One Artemis-C Pro", Bayer.RGGB),
     PLAYER_ONE_POSEIDON("Player One Poseidon-C Pro", Bayer.RGGB),
     PLAYER_ONE_URANUS("Player One Uranus-C Pro", Bayer.RGGB),
-    SBIG_ST2000XCM("SBIG ST-2000XCM", Bayer.BGGR, RowOrder.BOTTOM_UP),
-    SBIG_STF8300C("SBIG STF-8300C", Bayer.BGGR, RowOrder.BOTTOM_UP),
+    SBIG_ST2000XCM("SBIG ST-2000XCM", Bayer.RGGB),
+    SBIG_STF8300C("SBIG STF-8300C", Bayer.RGGB),
     SVBONY_SV605CC("SVBONY SV605CC", Bayer.GRBG);
 
     private final String label;
     private final Bayer pattern;
     private final RowOrder rowOrder;
 
-    /** A CMOS preset uses top-down storage. RAW and metadata shortcuts keep the decoder's row order. */
+    /** A camera preset uses top-down storage. RAW and metadata shortcuts keep the decoder's row order. */
     CameraBayerPreset(String label, Bayer pattern) {
         this(label, pattern, pattern == null || pattern == Bayer.METADATA ? null : RowOrder.TOP_DOWN);
     }
 
-    /** A camera whose usual files are stored bottom-up, such as classic SBIG FITS. */
+    /** A camera with an explicit row order, or null for none. */
     CameraBayerPreset(String label, Bayer pattern, RowOrder rowOrder) {
         this.label = label;
         this.pattern = pattern;

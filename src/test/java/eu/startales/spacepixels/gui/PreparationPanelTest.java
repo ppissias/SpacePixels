@@ -208,8 +208,8 @@ public class PreparationPanelTest {
                 assertEquals(PreparationRequest.Bayer.GBRG, request(panel).bayer());
                 assertEquals(PreparationRequest.RowOrder.TOP_DOWN, request(panel).rowOrder());
                 preset.select(CameraBayerPreset.SBIG_ST2000XCM);
-                assertEquals(PreparationRequest.Bayer.BGGR, request(panel).bayer());
-                assertEquals(PreparationRequest.RowOrder.BOTTOM_UP, request(panel).rowOrder());
+                assertEquals(PreparationRequest.Bayer.RGGB, request(panel).bayer());
+                assertEquals(PreparationRequest.RowOrder.TOP_DOWN, request(panel).rowOrder());
                 assertEquals(0, request(panel).offsetX());
                 assertEquals(0, request(panel).offsetY());
                 assertEquals("Earlier requests retain custom phase", 1, captured.offsetX());
