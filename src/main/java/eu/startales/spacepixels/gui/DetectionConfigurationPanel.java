@@ -1531,7 +1531,8 @@ public class DetectionConfigurationPanel extends JPanel {
         registerTypedBinding(FaintMoversSettings.MIN_DISPLACEMENT, spinFaintMoverMinMotion, () -> {
             double displayed = ((Number) spinFaintMoverMinMotion.getValue()).doubleValue();
             double current = jTransientConfig.faintMoverMinDisplacementFwhm;
-            return displayed == faintMoverDisplayNumber(current * faintMoverMinimumScale) ? current : Math.max(2, displayed / faintMoverMinimumScale);
+            double stored = storedFromDisplay(displayed, current, v -> v * faintMoverMinimumScale, v -> v / faintMoverMinimumScale);
+            return stored == current ? current : Math.max(2, stored);
         }, value -> spinFaintMoverMinMotion.setValue(faintMoverDisplayNumber(value * faintMoverMinimumScale)));
         addSettingRow(panel, FaintMoversSettings.MIN_DISPLACEMENT.id(), FaintMoversSettings.MIN_DISPLACEMENT.title(),
                 FaintMoversSettings.MIN_DISPLACEMENT.help(), false, spinFaintMoverMinMotion);
@@ -1540,7 +1541,7 @@ public class DetectionConfigurationPanel extends JPanel {
         registerTypedBinding(FaintMoversSettings.MAX_SPEED, spinFaintMoverMaxSpeed, () -> {
             double displayed = ((Number) spinFaintMoverMaxSpeed.getValue()).doubleValue();
             double current = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
-            return displayed == faintMoverDisplayNumber(current * faintMoverSpeedScale) ? current : displayed / faintMoverSpeedScale;
+            return storedFromDisplay(displayed, current, v -> v * faintMoverSpeedScale, v -> v / faintMoverSpeedScale);
         }, value -> spinFaintMoverMaxSpeed.setValue(faintMoverDisplayNumber(value * faintMoverSpeedScale)));
         addSettingRow(panel, FaintMoversSettings.MAX_SPEED.id(), FaintMoversSettings.MAX_SPEED.title(), FaintMoversSettings.MAX_SPEED.help(), false, spinFaintMoverMaxSpeed);
         faintMoverMaxInfo = addFaintMoverMotionInfo(spinFaintMoverMaxSpeed, "Fastest motion equivalents");
@@ -1550,7 +1551,7 @@ public class DetectionConfigurationPanel extends JPanel {
         registerTypedBinding(FaintMoversSettings.TIME_LIMIT, time, () -> {
             double displayed = ((Number) time.getValue()).doubleValue();
             double current = jTransientConfig.faintMoverMaxSeconds;
-            return displayed == faintMoverDisplayNumber(current / 60) ? current : displayed * 60;
+            return storedFromDisplay(displayed, current, v -> v / 60, v -> v * 60);
         }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
         addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), "Time limit (minutes)", FaintMoversSettings.TIME_LIMIT.help(), false, time);
         showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, time);
@@ -1576,6 +1577,36 @@ public class DetectionConfigurationPanel extends JPanel {
     private static double faintMoverDisplayNumber(double value) {
         double bounded = Math.max(Double.MIN_VALUE, Math.min(Double.MAX_VALUE, value));
         return BigDecimal.valueOf(bounded).round(new java.math.MathContext(6, java.math.RoundingMode.HALF_UP)).doubleValue();
+    }
+
+    /**
+     * The value to store for a control shown in one unit and stored in another: the current value while the display
+     * still shows it, otherwise the shortest decimal that the display shows the same way. A conversion then never leaves
+     * a tail such as 0.99999889 for 1.0 px/min, just as the decimal spinners keep unconverted settings clean.
+     *
+     * @param displayed   the number in the control, in display units
+     * @param current     the stored value now
+     * @param toDisplay   converts a stored value into display units
+     * @param fromDisplay converts a display value into stored units
+     */
+    static double storedFromDisplay(double displayed, double current, java.util.function.DoubleUnaryOperator toDisplay,
+                                    java.util.function.DoubleUnaryOperator fromDisplay) {
+        double shown = faintMoverDisplayNumber(displayed);
+        if (shown == faintMoverDisplayNumber(toDisplay.applyAsDouble(current))) {
+            return current;
+        }
+        double exact = fromDisplay.applyAsDouble(displayed);
+        if (!Double.isFinite(exact) || exact == 0) {
+            return exact;
+        }
+        BigDecimal value = BigDecimal.valueOf(exact);
+        for (int digits = 1; digits <= 17; digits++) {
+            double candidate = value.round(new java.math.MathContext(digits, java.math.RoundingMode.HALF_UP)).doubleValue();
+            if (faintMoverDisplayNumber(toDisplay.applyAsDouble(candidate)) == shown) {
+                return candidate;
+            }
+        }
+        return exact;
     }
 
     /** Refreshes metadata-only units and estimates on the EDT, preserving the canonical setting and saved baseline. */

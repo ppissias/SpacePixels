@@ -47,6 +47,27 @@ public class TypedDetectionSettingsTest {
         assertEquals(75, identities.size());
     }
 
+    /** Controls shown in one unit and stored in another store clean values, never a tail from the conversion. */
+    @Test public void convertedControlsStoreTheShortestValueTheDisplayShows() {
+        double scale = 7.4583383; // arcsec per pixel: 1 px/min shows as 7.45834 arcsec/min
+        java.util.function.DoubleUnaryOperator toArcsec = v -> v * scale;
+        java.util.function.DoubleUnaryOperator toPixels = v -> v / scale;
+        // The display shows 1 px/min, but the stored value it is compared with differs: 1.0 is stored, not 0.99999889.
+        assertEquals(1.0, DetectionConfigurationPanel.storedFromDisplay(7.45834, 0.5, toArcsec, toPixels), 0);
+        // Minutes to seconds: 0.1 min is 6 s, not 6.000000000000001.
+        assertEquals(6.0, DetectionConfigurationPanel.storedFromDisplay(0.1, 600, v -> v / 60, v -> v * 60), 0);
+        // An unchanged display keeps the stored value exactly, however many digits it has.
+        double stored = 0.123456789;
+        double shown = java.math.BigDecimal.valueOf(stored * scale)
+                .round(new java.math.MathContext(6, java.math.RoundingMode.HALF_UP)).doubleValue();
+        assertEquals(stored, DetectionConfigurationPanel.storedFromDisplay(shown, stored, toArcsec, toPixels), 0);
+        // A new value typed in arcsec/min is stored as the shortest pixel rate that shows the same number.
+        double typed = DetectionConfigurationPanel.storedFromDisplay(7.5, 1.0, toArcsec, toPixels);
+        assertEquals(7.5, java.math.BigDecimal.valueOf(typed * scale)
+                .round(new java.math.MathContext(6, java.math.RoundingMode.HALF_UP)).doubleValue(), 0);
+        assertTrue(java.math.BigDecimal.valueOf(typed).stripTrailingZeros().precision() <= 7);
+    }
+
     /** Invalid numeric input is rejected before mutation and the engine remains the source of issue identities. */
     @Test public void nonFiniteValuesAndUnsupportedContractsAreExplicit() {
         DetectionConfig config = new DetectionConfig();
