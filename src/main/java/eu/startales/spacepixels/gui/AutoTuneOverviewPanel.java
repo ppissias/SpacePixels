@@ -100,7 +100,6 @@ public class AutoTuneOverviewPanel extends JPanel {
     private final JButton reportButton = new JButton("Measurement Report…");
     private final JButton chartButton = new JButton("Show Auto-Tune Chart…");
     private final JButton previewButton = new JButton("Preview Frame");
-    private final JButton detectButton = new JButton("Detect Moving Targets");
     private final JLabel profileLabel = new JLabel();
     private final WrappingHelpLabel tableNoteLabel = new WrappingHelpLabel(" ", 480);
     private final JLabel lastRunLabel = new JLabel(" ");
@@ -147,7 +146,8 @@ public class AutoTuneOverviewPanel extends JPanel {
         JLabel intro = new WrappingHelpLabel("<b>Start here:</b> click <b>Run Auto-Tune</b>. It tests your frames and prepares a ready-to-use set of settings for "
                 + "each sensitivity profile, from <b>Low</b> (fewest false candidates) to <b>Maximum</b> (faintest objects, many more "
                 + "candidates to review). Pick the profile that suits your session in the table (<b>High</b> is the default), then click "
-                + "<b>Detect Moving Targets</b>. The pages on the left hold every setting in detail.", 600);
+                + "<b>Detect Moving Targets</b> at the top right, which stays there on every page. The pages on the left hold "
+                + "every setting in detail.", 600);
         intro.setBorder(new EmptyBorder(0, 0, UiStyle.space(6), 0));
         add(left(intro));
 
@@ -274,8 +274,6 @@ public class AutoTuneOverviewPanel extends JPanel {
         actions.add(useProfileButton);
         actions.add(reportButton);
         actions.add(chartButton);
-        actions.add(Box.createHorizontalStrut(14));
-        actions.add(detectButton);
         box.add(left(actions));
 
         statusLabel.setBorder(new EmptyBorder(8, 2, 0, 0));
@@ -285,12 +283,10 @@ public class AutoTuneOverviewPanel extends JPanel {
 
     /** Adds a core setting row; the spinner stays owned by the settings panel. */
     /**
-     * Gives Detect Moving Targets and Preview Frame here the main window's commands: the same action, enabled state
-     * and tooltip (including the reason when it is not available).
+     * Gives Preview Frame here the main window's command: the same action, enabled state and tooltip (including the
+     * reason when it is not available). Detect Moving Targets is in the settings tab's top bar, for every page.
      */
-    void bindCommands(Action detect, Action preview) {
-        detectButton.setAction(detect);
-        detectButton.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
+    void bindPreview(Action preview) {
         previewButton.setAction(preview);
     }
 

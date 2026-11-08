@@ -103,10 +103,15 @@ public class CommandAvailabilityTest {
     }
 
     @Test
-    public void blinkNeedsThreeSelectedFramesAndStopsABlinkInProgress() {
-        assertEquals("select at least 3 frames in the table.",
-                CommandAvailability.of(Command.BLINK, session().selected(2).build()).reason());
+    public void blinkPlaysTheSelectionOrAllFramesAndStopsABlinkInProgress() {
+        // Fewer than three selected: Blink plays every frame of the session, as from Preview Frame.
+        assertTrue(enabled(Command.BLINK, session().build()));
+        assertTrue(enabled(Command.BLINK, session().selected(2).build()));
         assertTrue(enabled(Command.BLINK, session().selected(3).build()));
+        assertFalse(CommandAvailability.blinksSelection(2));
+        assertTrue(CommandAvailability.blinksSelection(3));
+        assertEquals("a blink needs at least 3 frames.",
+                CommandAvailability.of(Command.BLINK, session().frames(2).build()).reason());
         // While a blink loads or plays, the window is busy, and Blink (then Stop Blinking) stays available.
         Facts blinking = session().selected(3).busy().blinking().build();
         assertTrue(enabled(Command.BLINK, blinking));

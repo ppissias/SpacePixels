@@ -35,16 +35,23 @@ final class AnalysisScopeText {
 
     /** What the frame selection does for Blink, Preview and Auto-Tune; {@code frame} is its first frame's number, or 0. */
     static String selectionScope(int importedFrames, int selectedFrames, int frame) {
-        String blink = selectedFrames >= CommandAvailability.MIN_BLINK_FRAMES
+        String blink = CommandAvailability.blinksSelection(selectedFrames)
                 ? "Blink: the " + selectedFrames + " selected frames"
-                : "Blink: select " + CommandAvailability.MIN_BLINK_FRAMES + " or more frames";
+                : importedFrames >= CommandAvailability.MIN_BLINK_FRAMES ? "Blink: all " + importedFrames + " frames"
+                : "Blink: needs " + CommandAvailability.MIN_BLINK_FRAMES + " or more frames";
         return blink + " · Preview: sequence from " + (frame > 0 ? "frame " + frame : "the first frame")
                 + " · " + autoTune(importedFrames, selectedFrames);
     }
 
-    /** The caption of Blink Selected, with the number of frames once they can be blinked. */
-    static String blinkCaption(int selectedFrames) {
-        return selectedFrames >= CommandAvailability.MIN_BLINK_FRAMES ? "Blink Selected (" + selectedFrames + ")" : "Blink Selected";
+    /**
+     * The caption of the blink command: Blink Selected with the count when it plays the selection, Blink All with the
+     * session's count when it plays every frame, and plain Blink Selected when there is nothing to blink.
+     */
+    static String blinkCaption(int importedFrames, int selectedFrames) {
+        if (CommandAvailability.blinksSelection(selectedFrames)) {
+            return "Blink Selected (" + selectedFrames + ")";
+        }
+        return importedFrames >= CommandAvailability.MIN_BLINK_FRAMES ? "Blink All (" + importedFrames + ")" : "Blink Selected";
     }
 
     /** The caption of Preview Frame, naming the frame it starts on; {@code frame} is 0 without a selection. */

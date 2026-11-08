@@ -14,18 +14,22 @@ public class AnalysisScopeTextTest {
 
     /** The line says what the selection does now, in Blink's own rule and with proper counts. */
     @Test public void selectionScopeFollowsTheRules() {
-        assertEquals("Blink: select 3 or more frames · Preview: sequence from the first frame · Auto-Tune: pool from all 12 frames (selection below 4)",
+        assertEquals("Blink: all 12 frames · Preview: sequence from the first frame · Auto-Tune: pool from all 12 frames (selection below 4)",
                 AnalysisScopeText.selectionScope(12, 0, 0));
-        assertEquals("Blink: select 3 or more frames · Preview: sequence from frame 5 · Auto-Tune: pool from all 12 frames (selection below 4)",
+        assertEquals("Blink: all 12 frames · Preview: sequence from frame 5 · Auto-Tune: pool from all 12 frames (selection below 4)",
                 AnalysisScopeText.selectionScope(12, 1, 5));
         assertEquals("Blink: the 4 selected frames · Preview: sequence from frame 2 · Auto-Tune: pool from 4 selected frames",
                 AnalysisScopeText.selectionScope(12, 4, 2));
+        assertTrue(AnalysisScopeText.selectionScope(2, 0, 0).startsWith("Blink: needs 3 or more frames · "));
     }
 
     /** Captions keep the command's own words, for the manual and the tests, and add what it will act on. */
     @Test public void captionsNameWhatTheCommandActsOn() {
-        assertEquals("Blink Selected", AnalysisScopeText.blinkCaption(2));
-        assertEquals("Blink Selected (3)", AnalysisScopeText.blinkCaption(3));
+        assertEquals("Blink All (12)", AnalysisScopeText.blinkCaption(12, 0));
+        assertEquals("Blink All (12)", AnalysisScopeText.blinkCaption(12, 2));
+        assertEquals("Blink Selected (3)", AnalysisScopeText.blinkCaption(12, 3));
+        assertEquals("Blink Selected", AnalysisScopeText.blinkCaption(0, 0));
+        assertEquals("Blink Selected", AnalysisScopeText.blinkCaption(2, 0));
         assertEquals("Preview Frame", AnalysisScopeText.previewCaption(0));
         assertEquals("Preview Frame 7", AnalysisScopeText.previewCaption(7));
         assertEquals("Plate Solve Selected", AnalysisScopeText.plateSolveCaption(0));

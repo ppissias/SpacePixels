@@ -590,12 +590,14 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         CommandAvailability.Facts facts = commandFacts();
         preparationLock.accept(facts.busy());
         int frame = firstSelectedFrame();
-        blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking" : AnalysisScopeText.blinkCaption(facts.selectedFrames()));
+        blinkAction.putValue(Action.NAME, facts.blinking() ? "Stop Blinking"
+                : AnalysisScopeText.blinkCaption(facts.frames(), facts.selectedFrames()));
         previewAction.putValue(Action.NAME, AnalysisScopeText.previewCaption(frame));
         solveAction.putValue(Action.NAME, AnalysisScopeText.plateSolveCaption(frame));
         // Room for a number as long as the session's largest, so the panels do not move as the selection changes.
         int widest = Integer.parseInt("8".repeat(Integer.toString(Math.max(1, facts.frames())).length()));
-        blinkButton.reserveFor(AnalysisScopeText.blinkCaption(Math.max(CommandAvailability.MIN_BLINK_FRAMES, widest)));
+        // Blink Selected (n) is wider than Blink All (n) for the same count.
+        blinkButton.reserveFor(AnalysisScopeText.blinkCaption(widest, Math.max(CommandAvailability.MIN_BLINK_FRAMES, widest)));
         detectSingleButton.reserveFor(AnalysisScopeText.previewCaption(widest));
         solveButton.reserveFor(AnalysisScopeText.plateSolveCaption(widest));
         skyCatalogueAction.putValue(Action.NAME, facts.skyFetching() ? "Cancel Sky Catalogue" : FETCH_SKY_CATALOGUE);
@@ -766,7 +768,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         });
     }
 
-    /** Blinks the selected frames, or stops the blink that is loading or playing. */
+    /** Blinks the frames {@link #blinkFrames()} chooses, or stops the blink that is loading or playing. */
     private void startOrStopBlink() {
         JobHandle running = jobs.current();
         if (blinkPlaying || (running != null && running.kind() == JobKind.BLINK)) {
@@ -774,13 +776,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             blink.close();
             return;
         }
-        startBlink(getSelectedFilesInformation(), null);
+        startBlink(blinkFrames(), null);
     }
 
     /**
-     * Preview Frame's Blink button: blinks the frames selected in the table when at least three are, otherwise all
-     * frames of the session, starting on the frame Preview shows. A blink already open has those frames, since the
-     * table is locked while it is open, so it comes back on that frame without reading them again.
+     * Preview Frame's Blink button: blinks the frames {@link #blinkFrames()} chooses, starting on the frame Preview
+     * shows. A blink already open has those frames, since the table is locked while it is open, so it comes back on that
+     * frame without reading them again.
      */
     void blinkFromPreview(FitsFileInformation shown) {
         if (blinkPlaying) {
@@ -791,8 +793,16 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             statusLabel.setText("Wait until the current task has finished.");
             return;
         }
+        startBlink(blinkFrames(), shown);
+    }
+
+    /**
+     * The frames a blink plays: those selected in the table when at least three are, otherwise all frames of the
+     * session ({@link CommandAvailability#blinksSelection}).
+     */
+    private FitsFileInformation[] blinkFrames() {
         FitsFileInformation[] selected = getSelectedFilesInformation();
-        startBlink(selected != null && selected.length >= CommandAvailability.MIN_BLINK_FRAMES ? selected : getImportedFiles(), shown);
+        return selected != null && CommandAvailability.blinksSelection(selected.length) ? selected : getImportedFiles();
     }
 
     /**

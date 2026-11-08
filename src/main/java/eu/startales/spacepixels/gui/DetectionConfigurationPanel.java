@@ -226,8 +226,16 @@ public class DetectionConfigurationPanel extends JPanel {
         navigator.addPage("REPORT", "Report Visualization", buildAdvancedVisualizationPanel(), List.of());
 
         add(navigator, BorderLayout.CENTER);
+        // Detect Moving Targets stays at the top right on every page, so a changed setting can be tried at once: the
+        // main window's command, with its enabled state and the reason when it is not available.
+        JButton detectButton = new JButton(frames.detectAction());
+        detectButton.putClientProperty("FlatLaf.style", MainApplicationPanel.PRIMARY_BUTTON_STYLE);
+        JPanel topBar = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        topBar.setBorder(new EmptyBorder(0, 0, 8, 0));
+        topBar.add(detectButton);
+        add(topBar, BorderLayout.NORTH);
         buildAnalyses(overviewPanel);
-        overviewPanel.bindCommands(frames.detectAction(), frames.previewAction());
+        overviewPanel.bindPreview(frames.previewAction());
         frames.setAutoTuneCommand(this::openOverviewAndRunAutoTune);
 
         setupFrameRejectionPreset();

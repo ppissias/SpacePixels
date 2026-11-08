@@ -45,6 +45,14 @@ final class CommandAvailability {
     /** The fewest frames a blink can show. */
     static final int MIN_BLINK_FRAMES = 3;
 
+    /**
+     * Whether Blink plays the selected frames. With fewer than {@link #MIN_BLINK_FRAMES} selected, it plays all frames of
+     * the session instead, from the main window and from Preview Frame alike.
+     */
+    static boolean blinksSelection(int selectedFrames) {
+        return selectedFrames >= MIN_BLINK_FRAMES;
+    }
+
     /** The one next step the main window highlights. */
     enum Emphasis {
         CHOOSE_FOLDER, CONVERT_TO_MONO, DETECT, OPEN_REPORT
@@ -106,8 +114,9 @@ final class CommandAvailability {
                 return facts.solvedFrames() > 0 ? Availability.AVAILABLE
                         : Availability.unavailable("plate solve at least one frame first, and write the solution to its FITS header.");
             case BLINK:
-                return facts.selectedFrames() >= MIN_BLINK_FRAMES ? Availability.AVAILABLE
-                        : Availability.unavailable("select at least " + MIN_BLINK_FRAMES + " frames in the table.");
+                // The selection when it is large enough, otherwise every frame of the session.
+                return blinksSelection(facts.selectedFrames()) || facts.frames() >= MIN_BLINK_FRAMES ? Availability.AVAILABLE
+                        : Availability.unavailable("a blink needs at least " + MIN_BLINK_FRAMES + " frames.");
             case PLATE_SOLVE:
                 if (facts.selectedFrames() == 0) {
                     return Availability.unavailable("select one frame in the table.");

@@ -85,7 +85,7 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         JButton blink = window().button(VisibleText.button("Blink Selected")).target();
         JButton solve = window().button(VisibleText.button("Plate Solve Selected")).target();
         assertEquals("Preview Frame", GuiActionRunner.execute(preview::getText));
-        assertEquals("Blink Selected", GuiActionRunner.execute(blink::getText));
+        assertEquals("Blink All (" + SyntheticDatasetFactory.DEFAULT_FRAME_COUNT + ")", GuiActionRunner.execute(blink::getText));
         assertEquals("Plate Solve Selected", GuiActionRunner.execute(solve::getText));
         java.awt.Rectangle previewAt = GuiActionRunner.execute(() -> preview.getBounds());
 
@@ -100,7 +100,8 @@ public class WindowMechanicsTest extends MechanicsTestCase {
         window().button(VisibleText.button("Clear selection")).click();
         waitFor("the selection is cleared", () -> GuiActionRunner.execute(() -> window().table().target().getSelectedRowCount()) == 0);
         waitFor("the captions return", () -> "Preview Frame".equals(GuiActionRunner.execute(preview::getText)));
-        assertTrue(showingLabel("Blink: select 3").contains("Preview: sequence from the first frame"));
+        assertTrue(showingLabel("Blink: all " + SyntheticDatasetFactory.DEFAULT_FRAME_COUNT + " frames")
+                .contains("Preview: sequence from the first frame"));
     }
 
     /** The highlight is on the next step: frames first, and Detect once they are in. */

@@ -23,6 +23,7 @@ final class StartupTips {
     private static final String KNOWN_OBJECTS = "known-asteroids-and-comets";
     private static final String FAINT_MOVERS = "faint-movers-experimental";
     private static final String IDENTIFYING = "5-identifying-objects";
+    private static final String STAR_MASK = "star-mask-explorer";
 
     static final List<Tip> ALL = List.of(
             new Tip("After a detection, you can draw what it found on the frames themselves in <b>Preview Frame</b> and "
@@ -66,6 +67,11 @@ final class StartupTips {
                     + "forth between two frames with ← and → is the surest way to confirm a faint mover.", BLINK),
             new Tip("<b>Auto-Tune Settings</b> (Ctrl+T) measures the noise and the faintest stars in your frames and sets the "
                     + "detection settings to match, so you do not have to guess them.", "step-3-auto-tune"),
+            new Tip("The star mask hides the stable part of the sky, the stars and whatever else stays put, so that what is "
+                    + "left of them in each frame is not taken for a moving object. <b>Test Star Mask…</b> on the Overview of "
+                    + "<b>Detection Settings</b> shows the mask a run would use over the median stack of your frames. Try the "
+                    + "star-mask settings that Auto-Tune chose, see how much of the sky they hide, and <b>Save to settings</b> "
+                    + "keeps the ones you like.", STAR_MASK),
             new Tip("<b>Run quality control</b>, above the frame list, shows which frames a detection would reject and why, "
                     + "before you run one. Right-click a frame to see its measurements beside the session's limits.",
                     "frame-quality-control"),

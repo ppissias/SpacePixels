@@ -150,7 +150,7 @@ The table lists every frame with its number, as the viewers and reports count it
 
 The **Run** line below the workflow groups lists the configured analyses and makes their frame scope explicit. Normal detection uses the whole imported sequence; Blink uses the selection; Preview opens the sequence from the selected frame (or the first). Auto-Tune uses a selection of at least four frames, otherwise the whole imported sequence; its candidate-frame limit still applies. Variable-star photometry must also pass its runtime readiness checks. Report-category choices affect exported presentation, while these analysis switches control computation. **Open output folder**, under **Open last report**, opens the completed report's directory; it never starts detection.
 
-The buttons say what the selection means for them: **Preview Frame 3** starts on frame 3, **Blink Selected (5)** blinks those five frames, and **Plate Solve Frame 3** solves that one frame, the first of several selected. The toolbar above the list counts the frames and the selection; **Clear selection** selects none again.
+The buttons say what the selection means for them: **Preview Frame 3** starts on frame 3, **Blink Selected (5)** blinks those five frames (with fewer than three selected, **Blink All** blinks every frame), and **Plate Solve Frame 3** solves that one frame, the first of several selected. The toolbar above the list counts the frames and the selection; **Clear selection** selects none again.
 
 ### Step 2 (optional): plate-solve one frame
 
@@ -204,7 +204,7 @@ The result is also written next to the frames, as `auto_tune.json`, in the same 
 
 ### Step 4: detect
 
-Click **Detect Moving Targets**, on the Overview or on the Main tab (or press **Ctrl+D**). A progress window shows each stage.
+Click **Detect Moving Targets**, on the Main tab or at the top right of Detection Settings, where it stays on every page (or press **Ctrl+D**). A progress window shows each stage.
 
 Below the progress bar, the **Live view** shows a small picture of the work under way. A new picture appears at most once every 3 seconds, including when the stage changes. A short stage may show nothing, and the last picture stays until a new one is allowed. Nothing is repeated in a loop.
 
@@ -629,7 +629,7 @@ The report's expandable **Following up an unmatched candidate** note describes t
 
 ![Blink, paused on comet Africano with its track shown](docs/images/manual/ui-blink.jpg)
 
-Select three or more frames in the table and click **Blink Selected** to play them as an animation, the classic way of hunting by eye. The blink window opens at once and shows the progress while it reads the frames (**Cancel** or Esc stops it), then plays them. Above, it is paused at 100 % on comet Africano, with the track found by **Detect Moving Targets** (T1) and frame 11 left out of the loop:
+Click **Blink All** to play every frame of the session as an animation, the classic way of hunting by eye. To blink only some frames, select three or more in the table first: the button then reads **Blink Selected** and plays those. **Blink ↗** in Preview Frame follows the same rule. The blink window opens at once and shows the progress while it reads the frames (**Cancel** or Esc stops it), then plays them. Above, it is paused at 100 % on comet Africano, with the track found by **Detect Moving Targets** (T1) and frame 11 left out of the loop:
 
 - **The transport bar** above the image: **▶ Play / ❚❚ Pause** (Space), and **◀ ▶** (← →) to step through the frames of the loop one at a time, passing over the frames left out. Stepping back and forth between two frames is the surest way to confirm a faint mover. The image's top-left corner and the bar show the frame's place, for example *7 / 15 · +7:44*.
 - **The timeline** places one tick per frame by its capture time, so gaps in the session show, labelled *↔ gap*. Frames left out of the loop have hollow ticks, and the frame shown a larger accent tick. Click a tick to show that frame.
@@ -822,7 +822,7 @@ On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `h
 
 ## 8. Detection settings in brief
 
-The **Detection Settings** tab has a list of pages on the left, a search box at the top (Ctrl+F) and **Save**, **Revert** and **Load Defaults** at the bottom.
+The **Detection Settings** tab has a list of pages on the left, a search box at the top (Ctrl+F), **Detect Moving Targets** at the top right (Ctrl+D), and **Save**, **Revert** and **Load Defaults** at the bottom. **Detect Moving Targets** stays there on every page, so you can try a changed setting at once.
 
 - **Overview**: Auto-Tune, the most important settings (detection, star mask and star jitter) and the analyses of a run: slow movers, experimental faint movers, anomaly rescue, residual analysis and variable stars, each with a switch and a link to its settings.
 - **Detection**: how objects are found in each frame (Streak Detection, with the **Faint Streak Search** switch; switch it off to save time on very large frames, where it can add about a third to the detection time) and which frames are used (Quality Control, with a **Strictness** choice of Lenient, Normal or Strict for leaving out frames that differ from the rest of the session).
