@@ -16,6 +16,7 @@ import java.awt.Component;
 import java.awt.Rectangle;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -35,11 +36,11 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         showPage("Faint Movers (experimental)");
         var checkbox = window().checkBox(VisibleText.checkBox("Search for faint movers")).target();
         int origin = inputX(checkbox);
-        window().checkBox(VisibleText.checkBox("Search for faint movers")).check();
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).uncheck();
         waitFor("a checkbox change preserves the input edge", () -> inputX(checkbox) == origin);
-        assertEquals(origin, inputX(spinner("Fastest motion")));
         window().button(VisibleText.button("Reset")).click();
         assertEquals(origin, inputX(checkbox));
+        assertEquals(origin, inputX(spinner("Fastest motion")));
         showPage("Streak Detection");
         assertEquals(origin, inputX(spinner(WHOLE)));
         showPage("Report Visualization");
@@ -111,25 +112,30 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         assertEquals(changedPixels, number(spinner(WHOLE)), 0.02);
     }
 
-    /** The new page shares its Overview switch and saves minutes in canonical engine seconds. */
+    /**
+     * The search is on by default, and a fastest motion below the short session's slowest stays valid with a note. The
+     * page shares its Overview switch and saves minutes in canonical engine seconds.
+     */
     @Test(timeout = 180_000)
-    public void faintMoversAreOptInAndSettingsSurviveSaveAndReopen() throws Exception {
+    public void faintMoversAreOnByDefaultAndSettingsSurviveSaveAndReopen() throws Exception {
         importSyntheticSequence();
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
-        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireNotSelected().check();
+        window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
         double originalScale = faintMoverDisplayScale();
         assertEquals(originalScale, number(spinner("Fastest motion")), originalScale * 0.000005);
         assertTrue(motionInfo("Slowest motion equivalents").contains("FWHM/session"));
         assertTrue(motionInfo("Fastest motion equivalents").contains("px/min"));
         assertTrue(motionInfo("Fastest motion equivalents").contains("No usable WCS"));
+        assertTrue("the short fixture session is slower than the default fastest motion allows",
+                motionInfo("Fastest motion equivalents").contains("skips the search"));
         assertEquals(10.0, number(spinner("Time limit (minutes)")), 0.001);
         field(spinner("Time limit (minutes)")).setText("0.5");
         field(spinner("Fastest motion")).setText("123.123");
-        assertTrue("The round-trip fixture must exceed its short session's speed floor", 123.123
-                > ((Number) ((SpinnerNumberModel) spinner("Fastest motion").getModel()).getMinimum()).doubleValue());
         window().button(VisibleText.button("Save")).click();
         waitFor("faint mover settings saved", () -> showingLabel("Saved settings").contains("Saved settings"));
+        assertFalse("a fastest motion above the session's slowest has no note",
+                motionInfo("Fastest motion equivalents").contains("skips the search"));
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
                 eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
             var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();

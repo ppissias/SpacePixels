@@ -1619,17 +1619,16 @@ public class DetectionConfigurationPanel extends JPanel {
         faintMoverAngularScale = FaintMoverRuntimeEstimate.angularPixelScale(files);
         double maximumScale = Double.isFinite(faintMoverAngularScale) ? faintMoverAngularScale : 1;
         double minimumScale = session.hasSpan() ? maximumScale / displacementScale : 1;
-        double maximumFloor = session.hasSpan() ? faintMoverDisplayNumber(2 * maximumScale / displacementScale) : Double.MIN_VALUE;
+        // The fastest motion has no floor from the session: a value at or below this session's slowest motion stays valid,
+        // the page notes it, and the run skips the search and says why, so a short session never blocks the other actions.
         if (Double.compare(maximumScale, faintMoverSpeedScale) != 0
-                || Double.compare(minimumScale, faintMoverMinimumScale) != 0
-                || Double.compare(((Number) ((SpinnerNumberModel) spinFaintMoverMaxSpeed.getModel()).getMinimum()).doubleValue(), maximumFloor) != 0) {
+                || Double.compare(minimumScale, faintMoverMinimumScale) != 0) {
             boolean previous = suppressAutoApply;
             suppressAutoApply = true;
             try {
                 faintMoverSpeedScale = maximumScale;
                 faintMoverMinimumScale = minimumScale;
                 ((SpinnerNumberModel) spinFaintMoverMinMotion.getModel()).setMinimum(faintMoverDisplayNumber(2 * minimumScale));
-                ((SpinnerNumberModel) spinFaintMoverMaxSpeed.getModel()).setMinimum(maximumFloor);
                 // Keep legacy out-of-range values visible for correction; a context change never rewrites the profile.
                 spinFaintMoverMinMotion.setValue(faintMoverDisplayNumber(jTransientConfig.faintMoverMinDisplacementFwhm * minimumScale));
                 spinFaintMoverMaxSpeed.setValue(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSpeedPixelsPerMinute * maximumScale));
@@ -1647,8 +1646,10 @@ public class DetectionConfigurationPanel extends JPanel {
         faintMoverMinInfo.setText("<html>" + (session.hasSpan() ? rateUnit + " (est.)<br>"
                 + faintMoverRate(minimumRate, "px/min", true) : "FWHM/session<br>Session times unavailable")
                 + "<br>Minimum: 2 FWHM/session</html>");
+        boolean belowSlowest = Double.isFinite(minimumRate) && !(maximumRate > minimumRate);
         faintMoverMaxInfo.setText("<html>" + rateUnit + (Double.isFinite(faintMoverAngularScale)
-                ? "<br>" + faintMoverRate(maximumRate, "px/min", false) : "<br>No usable WCS") + "</html>");
+                ? "<br>" + faintMoverRate(maximumRate, "px/min", false) : "<br>No usable WCS")
+                + (belowSlowest ? "<br>Not above the slowest (est.): the run skips the search" : "") + "</html>");
         spinFaintMoverMinMotion.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MIN_DISPLACEMENT.help()
                 + " " + faintMoverMinInfo.getText().replaceAll("<[^>]*>", " "));
         spinFaintMoverMaxSpeed.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MAX_SPEED.help()
@@ -1668,7 +1669,7 @@ public class DetectionConfigurationPanel extends JPanel {
                 : String.format(java.util.Locale.ROOT, "Rates use %.6f arcsec/pixel at the first usable WCS field centre.", faintMoverAngularScale);
         return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig) + "<br>" + units
                 + " The slowest rate is estimated from imported times and an assumed seeing width; it cannot be set below 2 FWHM/session. "
-                + "The fastest rate must exceed the slowest. Without WCS the controls use pixel rates; without timing the minimum uses session displacement. "
+                + "When the fastest rate is not above the slowest, the run skips the search and the report says why. Without WCS the controls use pixel rates; without timing the minimum uses session displacement. "
                 + "The report gives the actual search range from kept frames and measured seeing (or its labelled fallback).</html>";
     }
 

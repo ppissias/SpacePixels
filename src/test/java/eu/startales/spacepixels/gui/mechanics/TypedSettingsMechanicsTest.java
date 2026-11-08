@@ -42,7 +42,8 @@ public class TypedSettingsMechanicsTest extends MechanicsTestCase {
         try (FileReader reader = new FileReader(profileFile)) {
             var saved = SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
             assertEquals(11.5, saved.localActivityClusterRadiusPixels, 0);
-            assertFalse("An inactive faint-mover search cannot block an unrelated save", saved.enableFaintMoverSearch);
+            assertTrue("The faint-mover search, on by default, cannot block an unrelated save on a short session",
+                    saved.enableFaintMoverSearch);
             assertEquals("Imported timing must not rewrite a saved speed", new DetectionConfig().faintMoverMaxSpeedPixelsPerMinute,
                     saved.faintMoverMaxSpeedPixelsPerMinute, 0);
         }

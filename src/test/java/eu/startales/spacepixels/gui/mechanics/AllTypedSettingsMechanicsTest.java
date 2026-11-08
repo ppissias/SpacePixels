@@ -100,7 +100,13 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             saved = SpacePixelsDetectionProfileIO.load(reader);
         }
         for (DetectionSetting<?> setting : DetectionSettings.all()) {
-            sameValue(setting.id(), canonicalValue(setting.id(), expected.get(setting.id())), setting.read(saved.getDetectionConfig()));
+            Object stored = setting.read(saved.getDetectionConfig());
+            if (CONVERTED.contains(setting.id())) {
+                // A converted control stores the shortest value that shows the same number, not the exact quotient.
+                double shown = ((Number) expected.get(setting.id())).doubleValue();
+                double storedShown = ((Number) stored).doubleValue() / ((Number) canonicalValue(setting.id(), 1.0)).doubleValue();
+                assertEquals(setting.id(), shown, storedShown, Math.abs(shown) * 0.000005);
+            } else sameValue(setting.id(), canonicalValue(setting.id(), expected.get(setting.id())), stored);
         }
         assertEquals(expected.get("autoTuneMaxCandidateFrames"), saved.getAutoTuneMaxCandidateFrames());
         assertEquals(expected.get("variableStarMaxCandidateCards"), saved.getVariableStarReportOptions().maxCandidateCards());
@@ -252,6 +258,10 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         });
         return result;
     }
+
+    /** The settings shown in one unit and stored in another. */
+    private static final Set<String> CONVERTED = Set.of("faintMoverMaxSeconds", "faintMoverMaxSpeedPixelsPerMinute",
+            "faintMoverMinDisplacementFwhm");
 
     /** Converts displayed motion/time units into canonical profile values for persistence checks. */
     private Object canonicalValue(String id, Object value) {

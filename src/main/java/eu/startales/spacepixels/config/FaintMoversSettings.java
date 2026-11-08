@@ -18,7 +18,7 @@ public final class FaintMoversSettings {
             false, Double.class, c -> c.faintMoverMinDisplacementFwhm, (c, v) -> c.faintMoverMinDisplacementFwhm = v);
     public static final DetectionSetting<Double> MAX_SPEED = new DetectionSetting<>(
             "faintMoverMaxSpeedPixelsPerMinute", "Fastest motion", "",
-            "Largest rate searched, in arcsec/min when WCS is available, otherwise px/min. It must exceed the slowest rate. "
+            "Largest rate searched, in arcsec/min when WCS is available, otherwise px/min. When it is not above the slowest rate, the run skips the search. "
                     + "The profile preserves the pixel rate; the default is 1 px/min converted through this field's WCS. "
                     + "Cost grows approximately with the square of the maximum speed.",
             false, Double.class, c -> c.faintMoverMaxSpeedPixelsPerMinute, (c, v) -> c.faintMoverMaxSpeedPixelsPerMinute = v);
