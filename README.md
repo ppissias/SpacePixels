@@ -178,7 +178,7 @@ Many thanks to Austral Kiwi at Cloudynights for providing data.
 
 ## Command-line utilities
 
-The Windows installer includes `spacepixels-batch.exe` and `injectStars.exe` beside `SpacePixels.exe`, with its example detection profile at `app/config/default_detection_profile.json`.
+The Windows installer includes `spacepixels-batch.exe` and `injectStars.exe` beside `SpacePixels.exe`, with its example detection profile at `app/config/default_detection_profile.json`. That profile also runs variable-star photometry and the experimental faint-mover search.
 
 Archive distributions keep the generated application and tool launchers in `bin`, with top-level `StartSpacePixels` wrappers that delegate to the generated launcher. After building or unpacking an archive, you should find:
 

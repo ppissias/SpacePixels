@@ -71,8 +71,17 @@ public final class PlateCorrectionFitter {
     private static final double SEARCH_RANGE = 80;
     private static final double MATCH_RADIUS = 4;
     private static final double[] DEEPER_STARS = {17, 18.5};
+    /** The frame stars are grown down to 3 sigma, kept fixed so that a change of the detection defaults does not move them. */
+    private static final double STAR_GROW_SIGMA = 3.0;
 
     private PlateCorrectionFitter() {
+    }
+
+    /** The settings that find the frame stars: the detection defaults with the fixed grow threshold. */
+    private static DetectionConfig starExtractionConfig() {
+        DetectionConfig config = new DetectionConfig();
+        config.growSigmaMultiplier = STAR_GROW_SIGMA;
+        return config;
     }
 
     /**
@@ -113,6 +122,7 @@ public final class PlateCorrectionFitter {
             chosen.add(files[(int) i]);
         }
         List<FramePairs> frames = new ArrayList<>();
+        DetectionConfig starConfig = starExtractionConfig();
         for (int i = 0; i < chosen.size(); i++) {
             if (Thread.interrupted()) {
                 throw new InterruptedException();
@@ -125,7 +135,7 @@ public final class PlateCorrectionFitter {
                 continue;
             }
             DataArea frameArea = DataArea.ofFrame(data);
-            List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(data, 5.0, 5, new DetectionConfig(),
+            List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(data, 5.0, 5, starConfig,
                     frameArea, frameArea)).objects;
             FramePairs pairs = FramePairs.match(file.getFileName(), stars, header, objects, width, height, file.getObservationTimestamp());
             if (pairs.size() >= MIN_FRAME_PAIRS) {

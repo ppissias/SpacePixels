@@ -39,10 +39,10 @@ final class StartupTips {
                     + "clusters and variable stars of your field. Switch on <b>Catalog annotations</b> (A) in <b>Preview "
                     + "Frame</b> or <b>Blink</b> to draw them on the frames.",
                     "annotate-stars-deep-sky-objects-and-variable-stars"),
-            new Tip("SpacePixels can search for moving objects too faint to see in a single frame. Turn on <b>Search for "
-                    + "faint movers</b> under <b>Detection Settings → Faint Movers (experimental)</b>. It adds up the frames "
-                    + "along many trial motions, so a faint mover builds up while the noise does not. It is off by default, "
-                    + "takes extra time, and its candidates are unverified.", FAINT_MOVERS),
+            new Tip("SpacePixels searches for moving objects too faint to see in a single frame: <b>Search for faint "
+                    + "movers</b> under <b>Detection Settings → Faint Movers (experimental)</b>. It adds up the frames along "
+                    + "many trial motions, so a faint mover builds up while the noise does not. It is on by default, takes "
+                    + "extra time, and its candidates are unverified; switch it off there for quicker runs.", FAINT_MOVERS),
             new Tip("You choose what the faint-mover search looks for: <b>Slowest motion</b>, <b>Fastest motion</b> and a "
                     + "<b>Time limit</b>. As a guide, main-belt asteroids typically move about 0.2 to 0.7 arcsec/min, Jupiter "
                     + "Trojans about 0.2 to 0.3, Kuiper belt objects about 0.05, and near-Earth objects from about 1 to tens "
@@ -83,8 +83,8 @@ final class StartupTips {
                     + "frames.", IDENTIFYING),
             new Tip("<b>Stellarium Local</b> in the report slews a desktop Stellarium to a finding, so you can see what else "
                     + "was in that part of the sky.", "annex-local-stellarium-integration"),
-            new Tip("SpacePixels can also find variable stars. Switch on variable-star photometry under <b>Analyses in This "
-                    + "Run</b> on the Overview of Detection Settings. It needs at least 20 frames after quality control.",
+            new Tip("SpacePixels also finds variable stars: variable-star photometry is on by default, under <b>Analyses in "
+                    + "This Run</b> on the Overview of Detection Settings. It needs at least 20 frames after quality control.",
                     "variable-stars"),
             new Tip("Press ? in a frame viewer to list its keyboard shortcuts: for example T shows the moving object tracks and A the "
                     + "catalog annotations.", BLINK),

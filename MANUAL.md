@@ -522,7 +522,7 @@ The scan does not split images within one folder by filter, exposure, camera or 
 
 ### Faint movers (experimental)
 
-Turn on **Search for faint movers** on the **Faint Movers (experimental)** page of Detection Settings, or use its switch under **Analyses in This Run** on Overview. It is off by default. This additional digital-tracking search adds weak signals along trial motions; known-object positions never seed the search. Auto-Tune preserves its six settings.
+**Search for faint movers**, on the **Faint Movers (experimental)** page of Detection Settings and under **Analyses in This Run** on Overview, is on by default. Switch it off there when you do not need it, since it adds run time. This additional digital-tracking search adds weak signals along trial motions; known-object positions never seed the search. Auto-Tune preserves its six settings.
 
 | Setting | Meaning | Default |
 |---|---|---|
@@ -554,7 +554,7 @@ In **Blink Selected** and **Preview Frame**, the **Faint movers** layer of the s
 
 ### Variable stars
 
-Variable-star photometry is an optional analysis. Switch it on under **Analyses in This Run** on the Overview of Detection Settings, or on the Variable Stars page, before you click **Detect Moving Targets**. It measures the brightness of the field stars in every frame and reports stars that change. It needs at least 20 frames after quality control, and the original, unstretched (linear) frames.
+Variable-star photometry is an optional analysis, on by default. Switch it off under **Analyses in This Run** on the Overview of Detection Settings, or on the Variable Stars page, if you do not need it. It measures the brightness of the field stars in every frame and reports stars that change. It needs at least 20 frames after quality control, and the original, unstretched (linear) frames.
 
 SpacePixels uses JTransient's forced multi-aperture photometry. Its flux-error estimate includes the sky-background and finite-annulus terms discussed by [Howell (1989)](#annex-scientific-references-and-algorithms), with an empirical blank-sky correction for correlated noise. Relative frame transparency is fitted with the star-magnitude plus frame-zero-point model of inhomogeneous ensemble photometry ([Honeycutt 1992](#annex-scientific-references-and-algorithms)); Cauchy iteratively reweighted least squares and spatial transparency planes are JTransient extensions. Variability is evaluated using excess scatter and an adaptation of the [Stetson (1996)](#annex-scientific-references-and-algorithms) $J$ index over consecutive usable measurements, with a noise estimate from local magnitude neighbours, followed by consistency gates (aperture consistency, persistence, split-half stability, and systematic driver responses).
 
@@ -817,7 +817,7 @@ From an unpacked Windows archive:
 bin\batchDetect.bat "C:\astro\session1" "config\default_detection_profile.json" --auto-tune high
 ```
 
-On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`. The CLI requires already prepared, uncompressed unsigned 16-bit monochrome FITS. It does not calibrate, align or convert input images. See the [command-line guide in the README](README.md#command-line-utilities) for launcher examples, profile files and memory settings; `--help` lists the accepted arguments.
+On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`. The CLI requires already prepared, uncompressed unsigned 16-bit monochrome FITS. It does not calibrate, align or convert input images. The example profile also runs variable-star photometry and the experimental faint-mover search, which add run time; switch them off in a copy for quicker runs. See the [command-line guide in the README](README.md#command-line-utilities) for launcher examples, profile files and memory settings; `--help` lists the accepted arguments.
 
 ---
 

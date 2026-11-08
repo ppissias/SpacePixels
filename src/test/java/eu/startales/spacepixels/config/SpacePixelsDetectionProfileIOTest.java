@@ -66,6 +66,28 @@ public class SpacePixelsDetectionProfileIOTest {
         assertTrue(SpacePixelsDetectionProfileIO.load(new StringReader(json)).getDetectionConfig().enableFaintStreakSearch);
     }
 
+    /**
+     * The shipped profile is the defaults written out: every engine field at its {@code new DetectionConfig()} value and
+     * the application fields at theirs, so the app, the engine and the command-line example start from the same settings.
+     */
+    @Test
+    public void shippedProfileIsExactlyTheDefaults() throws Exception {
+        String json = Files.readString(new File("src/dist/config/default_detection_profile.json").toPath(), StandardCharsets.UTF_8);
+        com.google.gson.JsonObject keys = new Gson().fromJson(json, com.google.gson.JsonObject.class);
+        SpacePixelsDetectionProfile shipped = SpacePixelsDetectionProfileIO.load(new StringReader(json));
+        DetectionConfig defaults = new DetectionConfig();
+        for (java.lang.reflect.Field field : DetectionConfig.class.getFields()) {
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
+            assertTrue("missing from the shipped profile: " + field.getName(), keys.has(field.getName()));
+            assertEquals("differs from the engine default: " + field.getName(), field.get(defaults), field.get(shipped.getDetectionConfig()));
+        }
+        assertEquals(SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, shipped.getAutoTuneMaxCandidateFrames());
+        assertEquals(VariableStarReportOptions.DEFAULT, shipped.getVariableStarReportOptions());
+        assertFalse(SpacePixelsDetectionProfileIO.needsMigration(new StringReader(json)));
+    }
+
     @Test
     public void writeAndLoadRoundTripPreservesAutoTuneMaxCandidateFrames() throws Exception {
         DetectionConfig config = new DetectionConfig();
