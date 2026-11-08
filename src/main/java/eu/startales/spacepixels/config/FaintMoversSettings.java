@@ -27,6 +27,13 @@ public final class FaintMoversSettings {
             "Higher is stricter. This is an empirical stacked-signal score, not a calibrated significance or an identity probability. "
                     + "Stellar residuals and other artifacts can still appear.",
             false, Double.class, c -> c.faintMoverMinScore, (c, v) -> c.faintMoverMinScore = v);
+    public static final DetectionSetting<Boolean> FRAME_LIMIT = new DetectionSetting<>(
+            "enableFaintMoverFrameLimit", "Reject few-frame candidates", "",
+            "Reject a candidate whose score comes from a few frames: no frame may add more than the path's typical frame "
+                    + "plus three frame noises, and the score must still reach the minimum. A real faint mover is about equally "
+                    + "faint in every frame; faint star tails that a run of frames shares, for example from wind or a mount "
+                    + "movement, are not. On by default; switch it off only to compare.",
+            true, Boolean.class, c -> c.enableFaintMoverFrameLimit, (c, v) -> c.enableFaintMoverFrameLimit = v);
     public static final DetectionSetting<Double> TIME_LIMIT = new DetectionSetting<>(
             "faintMoverMaxSeconds", "Time limit (minutes)", "",
             "Maximum additional search time, displayed in minutes and stored in seconds. A stopped search reports its partial coverage; "
@@ -38,6 +45,6 @@ public final class FaintMoversSettings {
 
     /** Returns all bindings in display order; Auto-Tune preserves these values. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, TIME_LIMIT);
+        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, TIME_LIMIT);
     }
 }

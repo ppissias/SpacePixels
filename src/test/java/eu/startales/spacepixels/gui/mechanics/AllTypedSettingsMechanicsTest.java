@@ -59,7 +59,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("74 engine fields, 13 application fields and the rejection preset", 88, inputs.size());
+        assertEquals("75 engine fields, 13 application fields and the rejection preset", 89, inputs.size());
         for (String hidden : Set.of("linearityMaxConcentrationDrift", "linearityMinRangeMag", "linearityMaxFrameSlope",
                 "linearityMaxFailingFrameFraction", "variableLimitedMinAmplitudeMag", "variableAmplitudeNoiseFactor",
                 "variableMinSplitHalfCorrelation", "variableMaxApertureAmplitudeDifference",

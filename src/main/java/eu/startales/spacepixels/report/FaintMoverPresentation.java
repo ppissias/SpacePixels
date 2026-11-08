@@ -213,7 +213,8 @@ final class FaintMoverPresentation {
         data.put("searchedPixels", t.searchedPixels); data.put("elapsedMs", t.elapsedMs);
         data.put("diagnosticsAvailable", t.diagnosticsAvailable); data.put("diagnosticBytes", t.diagnosticBytes);
         data.put("refinedPeaks", t.refinedPeaks); data.put("belowScore", t.belowScore);
-        data.put("rejectedSplitHalf", t.rejectedSplitHalf); data.put("rejectedStationary", t.rejectedStationary);
+        data.put("rejectedSplitHalf", t.rejectedSplitHalf); data.put("rejectedFewFrames", t.rejectedFewFrames);
+        data.put("rejectedStationary", t.rejectedStationary);
         data.put("followingCamera", t.followingCamera); data.put("duplicates", t.duplicates);
         data.put("matchedTracks", t.matchedTracks); data.put("nearStronger", t.nearStronger); data.put("candidates", t.candidates);
         data.put("scoreInterpretation", "empirical score; candidates are unverified; fitted positions are not individual detections");

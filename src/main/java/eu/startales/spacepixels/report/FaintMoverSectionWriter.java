@@ -41,9 +41,9 @@ final class FaintMoverSectionWriter {
                 "<p>Searched angular motion range: %.5g–%.5g arcsec/min (field-centre WCS equivalent). "
                         + "This uses the completed search's retained session and seeing above.</p>%n",
                 telemetry.minSpeedPixelsPerMinute * angularScale, telemetry.maxSpeedPixelsPerMinute * angularScale);
-        out.printf(Locale.ROOT, "<details><summary>Search checks and diagnostic coverage</summary><p>Candidate checks: %d below score, %d split-half, %d stationary, %d camera-fixed, "
+        out.printf(Locale.ROOT, "<details><summary>Search checks and diagnostic coverage</summary><p>Candidate checks: %d below score, %d split-half, %d few frames, %d stationary, %d camera-fixed, "
                         + "%d duplicates, %d matching tracks, %d near stronger paths; %d candidates retained.</p>%n",
-                telemetry.belowScore, telemetry.rejectedSplitHalf, telemetry.rejectedStationary, telemetry.followingCamera,
+                telemetry.belowScore, telemetry.rejectedSplitHalf, telemetry.rejectedFewFrames, telemetry.rejectedStationary, telemetry.followingCamera,
                 telemetry.duplicates, telemetry.matchedTracks, telemetry.nearStronger, telemetry.candidates);
         out.printf(Locale.ROOT, "<p>Bounded residual/support evidence: %d / %d candidates, %.2f MiB. "
                         + "Resource-limited evidence is labelled on each card; it does not change candidate selection.</p></details>%n",

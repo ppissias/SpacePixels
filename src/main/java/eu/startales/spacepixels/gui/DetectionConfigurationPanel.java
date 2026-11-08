@@ -1545,6 +1545,7 @@ public class DetectionConfigurationPanel extends JPanel {
         addSettingRow(panel, FaintMoversSettings.MAX_SPEED.id(), FaintMoversSettings.MAX_SPEED.title(), FaintMoversSettings.MAX_SPEED.help(), false, spinFaintMoverMaxSpeed);
         faintMoverMaxInfo = addFaintMoverMotionInfo(spinFaintMoverMaxSpeed, "Fastest motion equivalents");
         JSpinner score = addTypedDouble(panel, FaintMoversSettings.MIN_SCORE, Double.MIN_VALUE, Double.MAX_VALUE, 0.5);
+        JCheckBox frameLimit = addTypedCheckbox(panel, FaintMoversSettings.FRAME_LIMIT);
         JSpinner time = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSeconds / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
         registerTypedBinding(FaintMoversSettings.TIME_LIMIT, time, () -> {
             double displayed = ((Number) time.getValue()).doubleValue();
@@ -1552,7 +1553,7 @@ public class DetectionConfigurationPanel extends JPanel {
             return displayed == faintMoverDisplayNumber(current / 60) ? current : displayed * 60;
         }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
         addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), "Time limit (minutes)", FaintMoversSettings.TIME_LIMIT.help(), false, time);
-        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, time);
+        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, time);
         faintMoverEstimate = new WrappingHelpLabel("", 560);
         faintMoverEstimate.setForeground(UiStyle.helpColor());
         faintMoverEstimate.setAlignmentX(Component.LEFT_ALIGNMENT);

@@ -522,13 +522,14 @@ The scan does not split images within one folder by filter, exposure, camera or 
 
 ### Faint movers (experimental)
 
-Turn on **Search for faint movers** on the **Faint Movers (experimental)** page of Detection Settings, or use its switch under **Analyses in This Run** on Overview. It is off by default. This additional digital-tracking search adds weak signals along trial motions; known-object positions never seed the search. Auto-Tune preserves its five settings.
+Turn on **Search for faint movers** on the **Faint Movers (experimental)** page of Detection Settings, or use its switch under **Analyses in This Run** on Overview. It is off by default. This additional digital-tracking search adds weak signals along trial motions; known-object positions never seed the search. Auto-Tune preserves its six settings.
 
 | Setting | Meaning | Default |
 |---|---|---|
 | **Slowest motion** | Rate in arcsec/min when WCS and timing are available; estimated before the run, with a floor of 2 FWHM/session | Rate corresponding to 2 FWHM/session |
 | **Fastest motion** | Upper rate in arcsec/min with WCS, otherwise px/min; must exceed the slowest rate | Field equivalent of the saved 1 px/min default |
 | **Minimum score** | Higher is stricter; an empirical score, not calibrated significance | 8 |
+| **Reject few-frame candidates** (expert) | Rejects a candidate whose score comes from a few frames: no frame may add more than the path's typical frame plus three frame noises. A real faint mover is about equally faint in every frame; faint star tails shared by a run of frames, for example from wind or a mount movement, are not. The report counts these as *few frames* | On |
 | **Time limit (minutes)** | Additional search-time budget, checked cooperatively; profiles store seconds | 10 min |
 
 The page estimates additional time and memory from imported frame metadata, an assumed 2.5 px FWHM and the speed range. It is approximate: quality control, seeing and the computer change the actual work. Increasing the maximum speed roughly squares its cost. At least eight kept frames with usable capture times are required. Gaps over two hours separate sessions; only the session with the most kept frames is searched. Resource limits can skip a search, and the time limit can leave partial coverage. The report states the reason or the frames, speed range, searched pixels and completed tile count; an empty or partial search does not establish that the field contains no movers.
