@@ -49,12 +49,18 @@ public final class SirilPreparationRecipe {
         boolean calibrate = counts.containsKey(Role.DARKS) || counts.containsKey(Role.FLATS)
                 || counts.containsKey(Role.BIASES) || request.sensor() == PreparationRequest.Sensor.CFA;
         if (calibrate) {
+            boolean cfa = request.sensor() == PreparationRequest.Sensor.CFA;
             script.append("calibrate lights");
             // A dark master contains its bias. Subtracting a separate bias again would double-subtract it.
-            if (counts.containsKey(Role.DARKS)) script.append(" -dark=../../masters/darks");
+            // With a dark, the pixels it shows as hot are replaced by their neighbours' median in every frame (cold
+            // pixels are left alone, Siril's default). Left in, they become blobs after debayering that Auto-Tune
+            // counts as noise, and dark-subtraction residue widens the stored value range.
+            if (counts.containsKey(Role.DARKS)) script.append(" -dark=../../masters/darks -cc=dark");
             else if (counts.containsKey(Role.BIASES)) script.append(" -bias=../../masters/biases");
             if (counts.containsKey(Role.FLATS)) script.append(" -flat=../../masters/flats");
-            if (request.sensor() == PreparationRequest.Sensor.CFA) script.append(" -cfa -debayer");
+            // A colour flat's channels are scaled to one mean, so the flat adds no channel imbalance (a fine
+            // checkerboard in the mosaic that debayering turns into correlated noise).
+            if (cfa) script.append(counts.containsKey(Role.FLATS) ? " -cfa -equalize_cfa -debayer" : " -cfa -debayer");
             script.append('\n');
         }
         String sequence = calibrate ? "pp_lights" : "lights";

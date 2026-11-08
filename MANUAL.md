@@ -877,10 +877,10 @@ The goal of data preparation for SpacePixels is a sequence of individual sub-exp
 
 Whether you prepare your sub-exposures with Siril, PixInsight (WBPP), DeepSkyStacker, Astro Pixel Processor, or custom scripts, leave out the following operations:
 
-### 1. Cosmetic correction and hot pixel removal
-- **What to avoid:** Defect maps, automated hot/cold pixel detection and replacement (such as Siril `-cc` or PixInsight CosmeticCorrection with auto-detect).
-- **Why:** A faint, slow-moving asteroid or a short streak in a single sub-exposure has a profile very similar to an isolated warm or hot pixel. Automated cosmetic filters can replace these faint targets with the surrounding background, erasing them before detection starts. In other cases, aggressive filtering leaves small negative pits ("holes") in the background that trigger false transient detections.
-- **What SpacePixels does instead:** SpacePixels natively identifies stationary sensor defects and hot pixels by tracking stationary features across the sequence and masking them out with its master star and defect mask. Real movers, which change position across exposures, are preserved.
+### 1. Per-frame cosmetic filters
+- **What to avoid:** Hot and cold pixel detection that looks at each frame on its own (PixInsight CosmeticCorrection with auto-detect, Siril's `find_cosme`), and single-frame outlier removal.
+- **Why:** A faint, slow-moving asteroid or a short streak in a single sub-exposure has a profile very similar to an isolated warm or hot pixel. A filter that judges each frame by itself can replace these faint targets with the surrounding background, erasing them before detection starts. Aggressive filtering also leaves small negative pits ("holes") in the background that trigger false transient detections.
+- **What to do instead:** Take the hot pixels from the master dark (Siril `-cc=dark`, PixInsight CosmeticCorrection with the master dark), as SpacePixels' own Siril recipe does. Those are fixed positions on the sensor, replaced the same way in every frame, so a mover is touched only in a frame where it falls on one of them. Uncorrected, colour cameras suffer most: debayering spreads each hot pixel into a small blob that Auto-Tune counts as noise, and it then raises **Min Detection Pixels** until faint movers are cut too. SpacePixels still sets aside the defects that remain, which stay at one camera position, before tracking.
 
 ### 2. Dark optimization and dark scaling
 - **What to avoid:** Dark frame optimization or adaptive dark scaling (for example Siril `-opt` or PixInsight "Optimize dark frames").
@@ -926,9 +926,8 @@ SpacePixels starts `siril-cli` on private copies in a new `spacepixels_prepared_
 These operations are absent because each one would rewrite pixels the search compares from frame to frame.
 
 - **Stretch, background extraction, photometric colour calibration, denoising and star removal.**
-- **Cosmetic correction** (`-cc`). A hot pixel and a short trail can look alike. Filling pixels in before the search removes samples the search should see.
+- **Per-frame cosmetic correction.** A hot pixel and a short trail can look alike, and a filter that judges each frame by itself can fill in a real target. The recipe takes hot pixels only from the master dark (see [Calibrating the lights](#calibrating-the-lights) below).
 - **Dark optimization** (`-opt`). Siril would scale the dark to the light. The dark is subtracted as recorded, so it has to belong to the same exposure group as the lights. The group rule is in the preparing section: the full range may differ by up to 2% of the shortest exposure, with a minimum of 0.1 s.
-- **CFA flat equalization** (`-equalize_cfa`). That rescales the colour channels of a flat toward the same mean and changes the tint of the calibrated lights.
 - **Drizzle, comet alignment, and stacking the lights into the detection input.** Drizzle resamples onto a finer grid. Comet alignment holds the comet still and trails the stars. Detection needs the separate registered exposures. An optional reference stack can be written beside them; it is not the sequence that is imported.
 
 ### Private settings
@@ -985,9 +984,10 @@ When a flat folder is supplied with a dark-flat, the flats are calibrated with t
 Lights are calibrated when a dark, a flat or a bias was supplied. **Colour (Bayer CFA)** is calibrated even without those files, because the mosaic still has to become RGB.
 
 - A dark is subtracted when one was supplied. A separate bias is not subtracted as well: the dark master already contains the bias, and subtracting both would remove it twice. That bias is still applied to the flats when no dark-flat was supplied.
+- With a dark, `-cc=dark` replaces the pixels that the master dark shows as hot by the median of their neighbours of the same colour, in every frame. Cold pixels are left alone, Siril's default. Hot pixels vary a little between the dark and the lights, so uncorrected they leave bright and dark spikes, and debayering spreads each one into a small blob. On a 38-frame colour session this replaced about 9,200 pixels per frame. Isolated hot pixels fell from about 57 to 16 per frame and cold pits from 62 to 2. Auto-Tune then chose **Min Detection Pixels** 3 instead of 8, and a faint asteroid became one 28-point track instead of no track.
 - With no dark, a bias is subtracted when one was supplied.
 - A flat is applied when one was supplied.
-- **Colour (Bayer CFA)** adds `-cfa -debayer`. Calibration runs on the mosaic, and `-debayer` then writes RGB with the RCD method from the private configuration. `-cfa` marks the frames as a colour mosaic. `-equalize_cfa` is not added.
+- **Colour (Bayer CFA)** adds `-cfa -debayer`. Calibration runs on the mosaic, and `-debayer` then writes RGB with the RCD method from the private configuration. `-cfa` marks the frames as a colour mosaic. With a flat, `-equalize_cfa` also scales the flat's colour channels to one mean, so the flat adds no channel imbalance: a fine checkerboard in the mosaic that debayering turns into correlated noise. It changes the tint of the calibrated lights, which detection does not use. On the same session it lowered the correlation between neighbouring noise pixels from 0.18 to 0.13.
 - **Monochrome** lights are not debayered. **Already debayered RGB** lights are not debayered again.
 
 A colour sequence with no dark, flat or bias still runs `calibrate lights -cfa -debayer`. A monochrome or already-RGB sequence with no calibration frames skips `calibrate` and registers the converted lights directly. After calibration the sequence name is `pp_lights`. Without calibration it stays `lights`.

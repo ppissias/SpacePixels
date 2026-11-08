@@ -17,13 +17,36 @@ public class PreparationRecipeTest {
         String lightLine = script.lines().filter(line -> line.startsWith("calibrate lights")).findFirst().orElseThrow();
         assertTrue(lightLine.contains("-dark="));
         assertFalse(lightLine.contains("-bias="));
-        assertTrue(lightLine.contains("-cfa -debayer"));
+        assertTrue(lightLine.contains("-cfa -equalize_cfa -debayer"));
         assertTrue(script.contains("seqapplyreg pp_lights"));
         assertTrue(script.contains("-framing=current"));
         assertFalse(script.contains("-framing=min"));
         assertFalse(script.contains("stack r_pp_lights"));
-        assertFalse(script.contains("-cc="));
-        assertFalse(script.contains("-equalize_cfa"));
+    }
+
+    /**
+     * The hot pixels of the dark are replaced in every light, and a colour flat's channels are equalised. Without a dark
+     * there is nothing to take hot pixels from; without a flat or a mosaic there is nothing to equalise.
+     */
+    @Test public void correctsHotPixelsFromTheDarkAndEqualisesColourFlats() {
+        var cfa = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, Path.of("."), false, false);
+        var mono = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.MONO,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, Path.of("."), false, false);
+        assertEquals("calibrate lights -dark=../../masters/darks -cc=dark -flat=../../masters/flats -cfa -equalize_cfa -debayer",
+                lightLine(cfa, Map.of(LIGHTS, 3, DARKS, 3, FLATS, 3)));
+        assertEquals("calibrate lights -dark=../../masters/darks -cc=dark -flat=../../masters/flats",
+                lightLine(mono, Map.of(LIGHTS, 3, DARKS, 3, FLATS, 3)));
+        assertEquals("calibrate lights -bias=../../masters/biases -flat=../../masters/flats -cfa -equalize_cfa -debayer",
+                lightLine(cfa, Map.of(LIGHTS, 3, BIASES, 3, FLATS, 3)));
+        assertEquals("calibrate lights -dark=../../masters/darks -cc=dark -cfa -debayer",
+                lightLine(cfa, Map.of(LIGHTS, 3, DARKS, 3)));
+        assertEquals("calibrate lights -cfa -debayer", lightLine(cfa, Map.of(LIGHTS, 3)));
+    }
+
+    private static String lightLine(PreparationRequest request, Map<PreparationInputs.Role, Integer> counts) {
+        return SirilPreparationRecipe.processing(request, counts, Set.of()).lines()
+                .filter(line -> line.startsWith("calibrate lights")).findFirst().orElseThrow();
     }
 
     /** A probe must identify a Siril version instead of accepting a different program's version text. */
