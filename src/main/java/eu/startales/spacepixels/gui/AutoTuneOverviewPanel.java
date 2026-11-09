@@ -146,7 +146,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         JLabel intro = new WrappingHelpLabel("<b>Start here:</b> click <b>Run Auto-Tune</b>. It tests your frames and prepares a ready-to-use set of settings for "
                 + "each sensitivity profile, from <b>Low</b> (fewest false candidates) to <b>Maximum</b> (faintest objects, many more "
                 + "candidates to review). Pick the profile that suits your session in the table (<b>High</b> is the default), then click "
-                + "<b>Detect Moving Targets</b> at the top right, which stays there on every page. The pages on the left hold "
+                + "<b>Detect Moving Targets</b> above, which stays at the top of every page. The pages on the left hold "
                 + "every setting in detail.", 600);
         intro.setBorder(new EmptyBorder(0, 0, UiStyle.space(6), 0));
         add(left(intro));

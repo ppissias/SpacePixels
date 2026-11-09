@@ -82,6 +82,7 @@ final class SettingsNavigator extends JPanel {
     private final JList<NavItem> navList = new JList<>(navModel);
     private final CardLayout cards = new CardLayout();
     private final JPanel cardPanel = new JPanel(cards);
+    private final JPanel rightArea = new JPanel(new BorderLayout());
     private final JTextField searchField = new JTextField();
     private final JCheckBox onlyChangedCheck = new JCheckBox("Show only unsaved changes");
     private final JCheckBox showExpertCheck = new JCheckBox("Show expert settings");
@@ -160,8 +161,14 @@ final class SettingsNavigator extends JPanel {
         side.add(navScroll, BorderLayout.CENTER);
         side.add(showExpertCheck, BorderLayout.SOUTH);
 
+        rightArea.add(cardPanel, BorderLayout.CENTER);
         add(side, BorderLayout.WEST);
-        add(cardPanel, BorderLayout.CENTER);
+        add(rightArea, BorderLayout.CENTER);
+    }
+
+    /** Places a header bar directly above the page column so it stays visible at the top of every settings page. */
+    void setPageHeader(JComponent header) {
+        rightArea.add(header, BorderLayout.NORTH);
     }
 
     JTextField searchField() {

@@ -204,7 +204,7 @@ The result is also written next to the frames, as `auto_tune.json`, in the same 
 
 ### Step 4: detect
 
-Click **Detect Moving Targets**, on the Main tab or at the top right of Detection Settings, where it stays on every page (or press **Ctrl+D**). A progress window shows each stage.
+Click **Detect Moving Targets**, on the Main tab or at the top of Detection Settings, where it stays on every page (or press **Ctrl+D**). A progress window shows each stage.
 
 Below the progress bar, the **Live view** shows a small picture of the work under way. A new picture appears at most once every 3 seconds, including when the stage changes. A short stage may show nothing, and the last picture stays until a new one is allowed. Nothing is repeated in a loop.
 
