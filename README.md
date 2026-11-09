@@ -38,8 +38,8 @@ The **Source code** ZIP/TAR links are source snapshots, not runnable application
 
 1. Start SpacePixels and choose **Import Aligned Frames…**. Select one folder of calibrated, registered exposures. Accept any required format conversion and import the resulting monochrome sequence.
 2. Use **Blink Selected** to check alignment and image quality. If the exposures need calibration or registration first, see [Preparing an observing session](MANUAL.md#preparing-an-observing-session).
-3. Optionally plate-solve one frame for sky coordinates and catalogue searches. Fetch the sky catalogue before detection if you want catalogue context in the report.
-4. Run **Auto-Tune Settings** and start with **High**. Variable-star photometry is optional: enable it under **Detection Settings → Overview → Analyses in This Run**.
+3. Optionally plate-solve one frame for sky coordinates and catalogue searches. Fetch the sky catalogue and known asteroids and comets before detection if you want catalogue context and known-object comparisons in the report.
+4. Run **Auto-Tune Settings** and start with **High**. Variable-star photometry and the experimental faint-mover search are on by default; switch them off under **Detection Settings → Overview → Analyses in This Run** when you do not need them.
 5. Click **Detect Moving Targets**, open the report when prompted, and inspect candidates in the animations and original frames.
 
 The [illustrated manual](MANUAL.md#3-workflow-find-moving-objects-in-a-session) explains each step and how to interpret the results. Local detection works without an online solver; catalogue downloads and online identification require internet access.
@@ -48,32 +48,33 @@ For supported formats and detailed preparation rules, see [Input requirements](#
 
 ## What SpacePixels does
 
-- Runs a standard multi-frame detection pipeline for moving targets, streak tracks, single-frame streaks, and bright anomalies.
+- Runs a standard multi-frame detection pipeline for moving targets, streak tracks, single-frame streaks, and bright anomalies, plus an optional experimental digital-tracking search for faint movers (**FM#**).
 - Reviews maximum-stack elongated morphology candidates using geometric shape and exact median-mask overlap filters; these are not confirmed moving tracks.
-- Provides an iterative detection mode for large datasets and very slow targets.
+- Provides an iterative detection mode for large datasets and very slow targets, and a standalone **Run quality control** check under **3 Inspect** before detection.
 - Auto-tunes the detection settings for each session. The calibrated tuner measures false detections and sensitivity on the session's own frames and offers four profiles: low, medium, high (the default) and maximum (as sensitive as possible, for small sensors or targeted searches for a faint object).
-- Optionally measures the photometry of the stationary stars and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue. Switch it on under Analyses in This Run on the Detection Settings Overview; plate-solve one frame so candidates can be matched against VSX.
-- Generates an HTML report with diagnostics, GIFs, geometric overlays, global maps and object-identification links.
-- Supports manual transient inspection and frame-by-frame single-image detection preview, where the per-frame detection thresholds can be tried directly on the frame.
+- Measures the photometry of the stationary stars (on by default; switch it off under **Analyses in This Run** on the Detection Settings Overview when not needed) and reports variable-star candidates with light curves, readiness checks and a lookup in the AAVSO VSX catalogue; plate-solve one frame so candidates can be matched against VSX.
+- Generates an HTML report with dark/light themes, adjustable text size, custom CSS support, diagnostics, GIFs, geometric overlays, global maps and object-identification links.
+- Supports manual transient inspection and frame-by-frame single-image detection preview, where the per-frame detection thresholds can be tried directly on the frame, and restores findings from the newest compatible report when importing a folder again.
 - Long jobs, such as a detection run or Auto-Tune, can be cancelled from their progress window.
-- Blinks aligned frames for traditional visual inspection.
-- Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays, SkyBoT/JPL moving-object identification, SatChecker satellite identification for streaks, and Stellarium Web context links.
-- Offers linear monochrome conversion after importing color FITS, and provides a shared Image Stretch editor with linear/stretched comparison and optional export of stretched copies of the entire dataset.
+- Blinks aligned frames for traditional visual inspection, with region GIF export.
+- Plate-solves images through ASTAP or Astrometry.net and uses WCS for RA/Dec overlays, SkyBoT/JPL moving-object identification, saved JPL known-asteroid/comet predictions and report comparisons, SatChecker satellite motion comparison for streaks, and Stellarium Web/Local sky-context links.
+- Offers linear monochrome conversion after importing color FITS, and provides a shared Image Stretch editor with 16-bit original/stretched histograms and statistics and optional export of stretched copies of the entire dataset.
 - Includes headless utilities for batch detection.
 - **Prepare Frames…** runs a separately installed Siril to calibrate and register exposures on private copies. The [manual](MANUAL.md#preparing-an-observing-session) explains the required inputs, and [how Siril is used](MANUAL.md#annex-preparing-data-with-siril) explains each option in the recipe.
 
 ## Report output
 
-The standard pipeline exports an HTML session report plus PNG and GIF assets. Depending on the data and configuration, the report can include:
+The standard pipeline exports an HTML session report (`detection_report.html` with `report.css`, `report.js` and `report-custom.css`) plus PNG, GIF and FITS assets. Depending on the data and configuration, the report can include:
 
-- A session header (field, time span, frames, camera, plate-solve status), a sticky section navigation and an overview whose cards jump to each result
-- Target visualizations for moving tracks, streak tracks, single-frame streaks, and anomalies
-- WCS-aware identification helpers: SkyBoT and JPL Small-Body Identification for moving-object tracks, SatChecker for streak tracks, and Stellarium Web sky-context links for both moving tracks and streaks
+- A session header (field, time span, frames, camera, plate-solve status), a sticky section navigation, theme/text-size and animation controls, and an overview whose cards jump to each result, followed by the noise-weighted enhanced stack (also saved as `enhanced_stack/enhanced_stack.fits`)
+- A **Known asteroids and comets in the field** comparison table (when predictions were fetched before detection), comparing predicted paths against ordinary tracks and faint-mover candidates, plus a common-clock check
+- Target visualizations for moving tracks, streak tracks, single-frame streaks, anomalies, slow-mover candidates (with original-frame centroid drift inspection and CSV) and experimental faint-mover candidates (with interactive source/residual review and shift stacks)
+- WCS-aware identification helpers: SkyBoT and JPL Small-Body Identification for moving-object tracks and faint movers, SatChecker exposure-path motion comparison for streak tracks and single-frame anomalies, and Stellarium Web and Stellarium Local sky-context controls
 - Deep-stack anomalies and maximum-stack streak hints
 - Global trajectory and transient maps
 - Interactive unclassified-transient map with time-colored source footprints and markers, metadata, and a zoomed inspection view that animates the detection frame and the two nearest quality-checked frames on either side
-- Variable-star photometry (when enabled): readiness verdict with its reasons, checks and star/frame funnels, noise model, per-frame diagnostics, a candidate table with "Identify all in VSX", candidate light curves, CSV exports
-- Collapsed diagnostics: astrometric context, frame quality control and rejected frames, the detection configuration (values that differ from the defaults highlighted, exported as `detection_config.json`), star mask, dither and drift, extraction, star removal and track linking
+- Variable-star photometry (when enabled): readiness verdict with its reasons, checks and star/frame funnels, noise model, per-frame diagnostics, a candidate table with VSX and catalogue-star matching, candidate light curves, field map with sparklines, and CSV exports
+- Collapsed likely artifacts (camera-fixed groups and common-motion groups) and diagnostics: Night & Equipment (seeing, transparency, sky brightness, optical shape/coma and flat-field maps), detection stage timings, faint-streak search statistics, astrometric context, frame quality control, field depth and rejected frames, the detection configuration (values that differ from the defaults highlighted, exported as `detection_config.json`), star mask, dither and drift, extraction, star removal and track linking
 
 ## Video Tutorials
 
