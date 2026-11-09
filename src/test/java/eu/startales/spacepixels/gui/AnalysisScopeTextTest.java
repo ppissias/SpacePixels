@@ -6,19 +6,20 @@ import static org.junit.Assert.*;
 
 /** Verifies the visible scope describes existing pipeline switches and tuning selection boundaries. */
 public class AnalysisScopeTextTest {
-    /** Too-small selection explicitly falls back; the threshold selection is described as the tuning pool. */
-    @Test public void tuningTextExplainsFallbackAndSelection() {
-        assertEquals("Auto-Tune: pool from all 12 frames (selection below 4)", AnalysisScopeText.autoTune(12, 3));
-        assertEquals("Auto-Tune: pool from 4 selected frames", AnalysisScopeText.autoTune(12, 4));
+    /** Auto-Tune always builds its pool from the full imported sequence regardless of table selection. */
+    @Test public void tuningTextAlwaysUsesAllImportedFrames() {
+        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12, 0));
+        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12, 3));
+        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12, 6));
     }
 
     /** The line says what the selection does now, in Blink's own rule and with proper counts. */
     @Test public void selectionScopeFollowsTheRules() {
-        assertEquals("Blink: all 12 frames · Preview: sequence from the first frame · Auto-Tune: pool from all 12 frames (selection below 4)",
+        assertEquals("Blink: all 12 frames · Preview: sequence from the first frame · Auto-Tune: pool from all 12 frames",
                 AnalysisScopeText.selectionScope(12, 0, 0));
-        assertEquals("Blink: all 12 frames · Preview: sequence from frame 5 · Auto-Tune: pool from all 12 frames (selection below 4)",
+        assertEquals("Blink: all 12 frames · Preview: sequence from frame 5 · Auto-Tune: pool from all 12 frames",
                 AnalysisScopeText.selectionScope(12, 1, 5));
-        assertEquals("Blink: the 4 selected frames · Preview: sequence from frame 2 · Auto-Tune: pool from 4 selected frames",
+        assertEquals("Blink: the 4 selected frames · Preview: sequence from frame 2 · Auto-Tune: pool from all 12 frames",
                 AnalysisScopeText.selectionScope(12, 4, 2));
         assertTrue(AnalysisScopeText.selectionScope(2, 0, 0).startsWith("Blink: needs 3 or more frames · "));
     }

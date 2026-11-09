@@ -1,7 +1,5 @@
 package eu.startales.spacepixels.gui;
 
-import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
-import eu.startales.spacepixels.detection.AutoTuneCandidatePoolBuilder;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,13 +22,9 @@ final class AnalysisScopeText {
         return String.join(", ", enabled);
     }
 
-    /** Explains the same selection/fallback rule used by the actual Auto-Tune request. */
+    /** Explains that Auto-Tune always builds its candidate pool from the full imported sequence. */
     static String autoTune(int importedFrames, int selectedFrames) {
-        if (AutoTuneCandidatePoolBuilder.usesSelectedFrames(selectedFrames)) {
-            return "Auto-Tune: pool from " + selectedFrames + " selected frames";
-        }
-        return "Auto-Tune: pool from all " + importedFrames + " frames (selection below "
-                + SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES + ")";
+        return "Auto-Tune: pool from all " + importedFrames + " frames";
     }
 
     /** What the frame selection does for Blink, Preview and Auto-Tune; {@code frame} is its first frame's number, or 0. */

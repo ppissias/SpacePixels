@@ -648,9 +648,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void runAutoTuner(AutoTuneProfile selectedProfile) {
-        FitsFileInformation[] selectedFiles = frames.getSelectedFilesInformation();
-        FitsFileInformation[] poolToUse = AutoTuneCandidatePoolBuilder.inputFrames(
-                frames.getImportedFiles(), selectedFiles);
+        FitsFileInformation[] poolToUse = AutoTuneCandidatePoolBuilder.inputFrames(frames.getImportedFiles());
 
         if (poolToUse == null || poolToUse.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             JOptionPane.showMessageDialog(this,

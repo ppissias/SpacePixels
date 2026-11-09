@@ -20,9 +20,9 @@ public class WorkspaceScopeMechanicsTest extends MechanicsTestCase {
         GuiActionRunner.execute(() -> application().importFolder(directory.toFile()));
         waitFor("session imported", () -> GuiActionRunner.execute(() -> application().getSession() != null));
         GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 0));
-        assertTrue(showingLabel("Auto-Tune: pool from all 5").contains("selection below 4"));
+        assertTrue(showingLabel("Auto-Tune: pool from all 5 frames").contains("Blink: all 5 frames"));
         GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 4));
-        assertTrue(showingLabel("Auto-Tune: pool from 5 selected").contains("Run:</b> all 5 imported frames"));
+        assertTrue(showingLabel("Auto-Tune: pool from all 5 frames").contains("Blink: the 5 selected frames"));
         JButton open = window().button(VisibleText.button("Open output folder")).target();
         assertEquals(output.toFile().getAbsolutePath(), open.getToolTipText());
         assertTrue(open.isFocusable());
