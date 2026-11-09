@@ -194,26 +194,8 @@ public class ApplicationWindow {
         frmIpodImage = new JFrame();
         frmIpodImage.setTitle("SpacePixels" + " " + version);
         AppIcon.apply(frmIpodImage);
-        // Resizable, sized to the screen or restored from the last session.
-        saveWindowPlacement = WindowPlacement.install(frmIpodImage, storage);
         frmIpodImage.setResizable(true);
         frmIpodImage.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frmIpodImage.addWindowListener(new WindowAdapter() {
-            @Override
-            public void windowClosing(WindowEvent e) {
-                int closeOperation = frmIpodImage.getDefaultCloseOperation();
-                frmIpodImage.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-                if (closing) return;
-                closing = true;
-                closeSessionResources();
-                finishStorage(closeOperation == JFrame.EXIT_ON_CLOSE);
-            }
-
-            @Override
-            public void windowClosed(WindowEvent e) {
-                closeSessionResources();
-            }
-        });
         frmIpodImage.getContentPane().setLayout(new BorderLayout(0, 0));
         frmIpodImage.getContentPane().add(tabbedPane, BorderLayout.CENTER);
 
@@ -262,6 +244,25 @@ public class ApplicationWindow {
         setTabEnabled(configurationApplicationPanel, true);
         setTabEnabled(detectionConfigurationPanel, false);
         installHelpMenu();
+        // Resizable, sized to the screen (wide enough for one workflow row) or restored from the last session.
+        saveWindowPlacement = WindowPlacement.install(frmIpodImage, storage, mainApplicationPanel.preferredSingleRowWidth());
+        frmIpodImage.addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                int closeOperation = frmIpodImage.getDefaultCloseOperation();
+                frmIpodImage.setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
+                if (closing) return;
+                if (saveWindowPlacement != null) saveWindowPlacement.run();
+                closing = true;
+                closeSessionResources();
+                finishStorage(closeOperation == JFrame.EXIT_ON_CLOSE);
+            }
+
+            @Override
+            public void windowClosed(WindowEvent e) {
+                closeSessionResources();
+            }
+        });
 
         // No menu bar: importing is the first button of the Main tab's workflow strip (or a folder dropped on the
         // window), and the "new version" notice sits next to the Help menu at the right end of the tab bar.

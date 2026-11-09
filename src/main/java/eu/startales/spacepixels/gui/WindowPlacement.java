@@ -32,6 +32,7 @@ final class WindowPlacement {
     static final double SCREEN_FRACTION = 0.85;
     static final int MAX_WIDTH = 1500;
     static final int MAX_HEIGHT = 950;
+    static final int DEFAULT_MIN_WIDTH = 1200;
     static final int MIN_WIDTH = 980;
     static final int MIN_HEIGHT = 560;
 
@@ -46,12 +47,17 @@ final class WindowPlacement {
 
     /** Applies placement and returns the same once-only EDT save used by normal closure and automatic restart. */
     static Runnable install(JFrame frame, ApplicationStorage storage) {
+        return install(frame, storage, DEFAULT_MIN_WIDTH);
+    }
+
+    /** Applies placement using {@code preferredWidth} as the minimum initial width when no saved bounds exist. */
+    static Runnable install(JFrame frame, ApplicationStorage storage, int preferredWidth) {
         Preferences preferences = preferences();
         Rectangle usable = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         frame.setMinimumSize(new java.awt.Dimension(Math.min(MIN_WIDTH, usable.width), Math.min(MIN_HEIGHT, usable.height)));
 
         Rectangle saved = savedBounds(preferences);
-        Rectangle bounds = saved != null && isMostlyVisible(saved) ? saved : defaultBounds(usable);
+        Rectangle bounds = saved != null && isMostlyVisible(saved) ? saved : defaultBounds(usable, preferredWidth);
         frame.setBounds(bounds);
         if (saved != null && preferences != null && preferences.getBoolean(KEY_MAXIMIZED, false)) {
             frame.setExtendedState(frame.getExtendedState() | Frame.MAXIMIZED_BOTH);
@@ -103,8 +109,15 @@ final class WindowPlacement {
 
     /** 85 % of the usable screen area, capped for large screens, never larger than the screen, centred. */
     static Rectangle defaultBounds(Rectangle usable) {
-        int width = Math.min(usable.width, Math.max(Math.min(MIN_WIDTH, usable.width),
-                Math.min(MAX_WIDTH, (int) Math.round(usable.width * SCREEN_FRACTION))));
+        return defaultBounds(usable, DEFAULT_MIN_WIDTH);
+    }
+
+    /** Ensures the initial width is at least {@code preferredWidth} (and {@link #DEFAULT_MIN_WIDTH}) when the screen allows. */
+    static Rectangle defaultBounds(Rectangle usable, int preferredWidth) {
+        int targetMinWidth = Math.max(DEFAULT_MIN_WIDTH, preferredWidth);
+        int targetMaxWidth = Math.max(MAX_WIDTH, targetMinWidth);
+        int width = Math.min(usable.width, Math.max(Math.min(targetMinWidth, usable.width),
+                Math.min(targetMaxWidth, (int) Math.round(usable.width * SCREEN_FRACTION))));
         int height = Math.min(usable.height, Math.max(Math.min(MIN_HEIGHT, usable.height),
                 Math.min(MAX_HEIGHT, (int) Math.round(usable.height * SCREEN_FRACTION))));
         return new Rectangle(usable.x + (usable.width - width) / 2, usable.y + (usable.height - height) / 2, width, height);

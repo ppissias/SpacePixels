@@ -91,7 +91,7 @@ public class AppearanceRestartMechanicsTest extends MechanicsTestCase {
             assertTrue(host.waitFor(15, TimeUnit.SECONDS));
             assertEquals(Files.readString(root.resolve("host.log")), 0, host.exitValue());
             waitFor("replacement records the completed save", () -> Files.exists(root.resolve("replacement")));
-            assertEquals(List.of("finished", "false", "1111", "777"), Files.readAllLines(root.resolve("replacement")));
+            assertEquals(List.of("finished", "false", "1234", "777"), Files.readAllLines(root.resolve("replacement")));
         } finally {
             host.destroyForcibly();
             helpers.forEach(handle -> { if (handle.isAlive()) handle.destroyForcibly(); });

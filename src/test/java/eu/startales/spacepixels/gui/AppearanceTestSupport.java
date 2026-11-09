@@ -46,22 +46,31 @@ public final class AppearanceTestSupport {
 
     /** Forked GUI fixture whose successful restart exercises production shutdown without exiting the test worker. */
     public static final class RestartHost {
+        private static final List<String> PLACEMENT_KEYS = List.of(
+                "mainWindow.x", "mainWindow.y", "mainWindow.width", "mainWindow.height", "mainWindow.maximized");
+
         /** Only started as a separate process. */
         private RestartHost() { }
 
         /** Holds a settings write pending while restarting; the replacement records the fully drained state. */
         public static void main(String[] arguments) throws Exception {
             Path root = Path.of(arguments[1]);
+            Path backup = root.resolve("placement-backup.properties");
             if ("child".equals(arguments[0])) {
                 Preferences placement = Preferences.userNodeForPackage(ApplicationWindow.class);
-                String result = String.join("\n", Files.readString(root.resolve("saved")),
-                        Boolean.toString(ProcessHandle.of(Long.parseLong(arguments[2])).map(ProcessHandle::isAlive).orElse(false)),
-                        Integer.toString(placement.getInt("mainWindow.width", 0)),
-                        Integer.toString(placement.getInt("mainWindow.height", 0)));
-                Files.writeString(root.resolve("complete"), result);
-                Files.move(root.resolve("complete"), root.resolve("replacement"));
+                try {
+                    String result = String.join("\n", Files.readString(root.resolve("saved")),
+                            Boolean.toString(ProcessHandle.of(Long.parseLong(arguments[2])).map(ProcessHandle::isAlive).orElse(false)),
+                            Integer.toString(placement.getInt("mainWindow.width", 0)),
+                            Integer.toString(placement.getInt("mainWindow.height", 0)));
+                    Files.writeString(root.resolve("complete"), result);
+                    Files.move(root.resolve("complete"), root.resolve("replacement"));
+                } finally {
+                    restorePlacement(placement, backup);
+                }
                 return;
             }
+            backupPlacement(Preferences.userNodeForPackage(ApplicationWindow.class), backup);
             ApplicationStorage storage = new ApplicationStorage();
             storage.submit("Restart regression", () -> {
                 long deadline = System.nanoTime() + java.time.Duration.ofSeconds(20).toNanos();
@@ -81,10 +90,36 @@ public final class AppearanceTestSupport {
                     catch (IOException failure) { pending.close(); throw failure; }
                     return pending;
                 });
-                application.getFrame().setBounds(20, 20, 1111, 777);
+                application.getFrame().setBounds(20, 20, 1234, 777);
                 application.getFrame().setVisible(true);
                 EventQueue.invokeLater(application::requestRestart);
             });
+        }
+
+        private static void backupPlacement(Preferences placement, Path file) throws IOException {
+            java.util.Properties saved = new java.util.Properties();
+            for (String key : PLACEMENT_KEYS) {
+                String value = placement.get(key, null);
+                if (value != null) saved.setProperty(key, value);
+            }
+            try (var out = Files.newOutputStream(file)) {
+                saved.store(out, null);
+            }
+        }
+
+        private static void restorePlacement(Preferences placement, Path file) {
+            if (!Files.exists(file)) return;
+            try (var in = Files.newInputStream(file)) {
+                java.util.Properties saved = new java.util.Properties();
+                saved.load(in);
+                for (String key : PLACEMENT_KEYS) {
+                    String value = saved.getProperty(key);
+                    if (value != null) placement.put(key, value);
+                    else placement.remove(key);
+                }
+                placement.flush();
+            } catch (Exception ignored) {
+            }
         }
     }
 

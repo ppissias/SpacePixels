@@ -2143,6 +2143,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         return inspectionFrames.size();
     }
 
+    /** Window width needed for all four workflow steps to sit on a single row, including frame and strip margins. */
+    int preferredSingleRowWidth() {
+        int width = UiStyle.space(48);
+        for (WorkflowStep step : workflowSteps) {
+            width += step.getPreferredSize().width + 8;
+        }
+        return width;
+    }
+
     /** The end of Convert to Mono: offers to import the new mono folder, or says what went wrong. */
     private void showConversionOutcome(JobHandle handle, JobOutcome<File> outcome) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
