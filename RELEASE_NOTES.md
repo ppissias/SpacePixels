@@ -3,7 +3,7 @@
 <!-- root-toc:start -->
 ## Contents
 
-- [Unreleased](#unreleased)
+- [2026.11-01](#202611-01)
   - [Added](#added)
   - [Changed](#changed)
 - [2026.10-04](#202610-04)
@@ -37,6 +37,37 @@
 
 ## 2026.11-01
 
+SpacePixels **2026.11-01** is a major release that brings synthetic digital tracking for faint moving objects
+alongside a redesigned, guided desktop workspace and overhauled inspection viewers. It also upgrades the interactive
+HTML reports with theme/text-size controls, known-asteroid and satellite trajectory comparisons, and richer visual
+evidence for reviewing candidates.
+
+- **Digital Tracking for Faint Movers (`FM#`):** Introduces an experimental shift-and-stack search that coherently
+  integrates signal along trial motion vectors across the session to recover asteroids too faint to register in single
+  frames, complete with interactive report review cards (synchronized source/residual blinks, adjustable native-
+  intensity stretch, zoom, and first-half / second-half shift stacks).
+- **Redesigned Main Workspace & Appearance Themes:** Replaces the top toolbar with a guided four-step workflow (**1
+  Prepare**, **2 Astrometry**, **3 Inspect**, **4 Detect**) that highlights the next recommended action, adds a drag-
+  and-drop welcome zone, supports **Dark**, **High contrast dark**, and **Light** desktop themes with interface
+  scaling (100%–300%), and reworks **Detection Settings** with a searchable left-hand category navigator and an
+  **Overview** page.
+- **Overhauled Blink & Preview Frame Viewers:** Moves layer switches, catalogue annotations, raw-detection trial
+  thresholds, and display stretch into a shared, collapsible right-hand side panel with 16-bit linear/stretched
+  histograms and statistics; adds a time-proportional transport bar and interactive GIF region export in **Blink**;
+  links **Blink ↗** and **Open in Preview ↗** seamlessly; and overlays all saved report findings and fitted faint-
+  mover paths across every frame.
+- **Customizable Report Themes, Text Scaling & Performance:** Adds instant **Dark / Light** theme switching, four
+  text-size presets, a global animation **Pause / Play** toggle, and `report-custom.css` styling to the HTML reports,
+  while replacing heavy multi-frame GIFs with lightweight sprite-sheet players so large reports load and scroll
+  smoothly.
+- **Known-Asteroid Inventory & Satellite Trajectory Comparison:** Fetches known asteroids and comets from JPL
+  Horizons before detection to cross-match predicted paths against ordinary tracks and faint-mover candidates in the
+  report, and adds multi-exposure **SatChecker** trajectory comparison overlays for streak tracks.
+- **Pre-Detection Quality Control & Improved Siril Calibration:** Lets you run the engine's exact per-frame quality
+  checks (**Run quality control** and **Quality details…**) directly under **3 Inspect** before starting a full
+  detection run, and improves **Prepare Frames…** with master-dark hot-pixel cosmetic correction and CFA flat-field
+  channel equalization for cleaner faint-target recovery.
+- 
 ### Added
 
 - **All-frame quality control under Inspect.** Run the detection engine's exact quality checks before detection, with cancellation, subtle table verdict colours, measured FWHM/star count/elongation, rejection reasons and detailed session limits. All imported frames and selections remain intact. Changed detection settings visibly stale previous results; cancelled/failed checks preserve the last completed result. JTransient adds the corresponding immutable quality-only result and bounded-memory loader APIs; existing pipeline calls and scientific decisions are unchanged.
