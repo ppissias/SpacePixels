@@ -98,20 +98,21 @@ These videos show the versions available when recorded. Use the manual for curre
 
 ## Screenshots and sample reports
 
-Many thanks to Klangwolke at Cloudynights for providing amazing data for this report.
+Many thanks to Klangwolke at Cloudynights for providing amazing data for some of the reports.
 
 Many thanks to Cloudynights user TheStarsabove for providing data.
 
-Many thanks to [Kumar](https://github.com/chvvkumar) for providing amazing data.
+Many thanks to [Kumar](https://github.com/chvvkumar) for providing plenty of datasets! :)
 
 Many thanks to Austral Kiwi at Cloudynights for providing data.
 
 **Check out sample reports.**
 
-<a href="https://startales.eu/various_files/detections_20261015_144623/detection_report.html" target="_blank">Sample SpacePixels session report</a><br/>
-<a href="https://startales.eu/various_files/detections_20261004_131720/detection_report_public.html" target="_blank">Earlier SpacePixels session report</a><br/>
-<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis)</a> <br/>
-<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report</a> <br/>
+<a href="https://startales.eu/various_files/detections_20261107_141108/detection_report.html" target="_blank">SpacePixels Report (Demonstrating digital tracking - 10 faint asteroids detected) - version 2026.11-01</a><br/>
+<a href="https://startales.eu/various_files/detections_20261015_144623/detection_report.html" target="_blank">Sample SpacePixels session report (earlier version)</a><br/>
+<a href="https://startales.eu/various_files/detections_20261004_131720/detection_report_public.html" target="_blank">SpacePixels session report (3 asteroids) (earlier version)</a><br/>
+<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis) (earlier version)</a> <br/>
+<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report (earlier version)</a> <br/>
 
 ![Main Interface](docs/images/user-interface-2026-10-01.png)
 <br/>*The SpacePixels Main Workspace.*
