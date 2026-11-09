@@ -158,7 +158,7 @@ Main classes:
 - `ApplicationWindow`
 - `MainApplicationPanel`
 - `ConfigurationPanel`
-- `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with two linked `FrameView`s and a histogram)
+- `StretchPanel` (display stretch, remembered in Java preferences; whole-frame preview with two linked `FrameView`s and 16-bit original/stretched `StretchHistogram` views with summary statistics)
 - `StretchPreviewRenderer` (renders the `StretchPanel` previews one request at a time and shows a result only while its request is the newest; a change of frame or stretch, closing the editor or another import makes a render under way stale)
 - `DetectionConfigurationPanel`
 - `StretchSamplePanel` (the stretch preview under Auto Stretch Black and White Sigma: crops around the last run's tracks, or picked from a frame before a run, with the share of each drawn black and white), and `SpinnerSlider` (the sliders of those two settings, kept in step with their fields)
@@ -204,7 +204,7 @@ Main tasks:
 - `AutoTuneTask`
 - `StarMaskStackTask`
 - `WriteWcsTask`
-- `GeneratePreviewsTask`, which renders the Image Stretch previews of one frame and returns them to `StretchPreviewRenderer`; the sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
+- `GeneratePreviewsTask`, which renders the Image Stretch previews and 16-bit valid-pixel histogram of one frame and returns them to `StretchPreviewRenderer`; the sequence viewers load frames through `SequenceViewerFrame` and `BlinkSequence`
 
 ### `eu.startales.spacepixels.tools`
 
