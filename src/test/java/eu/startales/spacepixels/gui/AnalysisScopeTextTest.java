@@ -4,13 +4,11 @@ import io.github.ppissias.jtransient.config.DetectionConfig;
 import org.junit.Test;
 import static org.junit.Assert.*;
 
-/** Verifies the visible scope describes existing pipeline switches and tuning selection boundaries. */
+/** Verifies the visible scope: Auto-Tune stays on the full import, and Blink and Preview follow the selection. */
 public class AnalysisScopeTextTest {
-    /** Auto-Tune always builds its pool from the full imported sequence regardless of table selection. */
-    @Test public void tuningTextAlwaysUsesAllImportedFrames() {
-        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12, 0));
-        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12, 3));
-        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12, 6));
+    /** The Auto-Tune line names the imported sequence. */
+    @Test public void tuningTextUsesTheImportedSequence() {
+        assertEquals("Auto-Tune: pool from all 12 frames", AnalysisScopeText.autoTune(12));
     }
 
     /** The line says what the selection does now, in Blink's own rule and with proper counts. */

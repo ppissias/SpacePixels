@@ -39,14 +39,9 @@ public final class AutoTuneCandidatePoolBuilder {
     private AutoTuneCandidatePoolBuilder() {
     }
 
-    /** Copies the imported sequence's metadata array for a stable job request; table selection does not restrict tuning. */
+    /** Copies the metadata array so an admitted job keeps the sequence captured when it started. */
     public static FitsFileInformation[] inputFrames(FitsFileInformation[] imported) {
         return imported == null ? null : imported.clone();
-    }
-
-    /** Copies the imported sequence's metadata array for a stable job request; table selection is ignored. */
-    public static FitsFileInformation[] inputFrames(FitsFileInformation[] imported, FitsFileInformation[] selected) {
-        return inputFrames(imported);
     }
 
     /**

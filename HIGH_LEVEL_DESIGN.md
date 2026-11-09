@@ -608,9 +608,8 @@ DetectionConfigurationPanel (AutoTuneTask), DefaultSpacePixelsPipelineApi or Bat
 
 SpacePixels owns candidate-pool preparation:
 
-- selected GUI frames when enough are selected
-- otherwise the full imported sequence
-- for large sets, a deterministic mix of best-quality, median-quality, and evenly spaced frames
+- the full input list: the imported sequence in the GUI, and the dataset given to the API or batch
+- when that list is longer than `autoTuneMaxCandidateFrames`, a deterministic mix of best-quality, median-quality, and evenly spaced frames
 
 JTransient owns the actual tuning search and validation. `AutoTunerRunner` passes the profile (`LOW`, `MEDIUM`, `HIGH`, `MAXIMUM`; the earlier names remain parsing aliases) and opens the engine diagnostics.
 

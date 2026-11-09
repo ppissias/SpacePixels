@@ -198,7 +198,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         runButton.putClientProperty("FlatLaf.style",
                 "font: bold; background: $Button.default.background; foreground: $Button.default.foreground;"
                         + " borderColor: $Button.default.borderColor");
-        runButton.setToolTipText("Measure the frames (the selected frames, or all frames when fewer than the minimum are selected) and choose settings.");
+        runButton.setToolTipText("Measure the imported sequence, up to the candidate-frame limit, and choose settings.");
         runButton.addActionListener(e -> host.startAutoTune((AutoTuneProfile) profileCombo.getSelectedItem()));
         updateProfileLabel();
 

@@ -493,7 +493,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         frameListActions.add(qualityNote);
         selectionCount.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(8), 0, 0));
         selectionCount.setVisible(false);
-        clearSelectionLink.setToolTipText("Select no frames: Preview starts on the first frame and Auto-Tune uses all frames.");
+        clearSelectionLink.setToolTipText("Select no frames: Preview starts on the first frame. Blink and plate-solve follow the selection.");
         clearSelectionLink.setVisible(false);
         frameListActions.add(selectionCount);
         frameListActions.add(clearSelectionLink);
@@ -1276,8 +1276,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private void updateAutoTuneTooltip() {
         int frames = table == null ? 0 : table.getRowCount();
         String saved = frames == 0 ? null : savedAutoTuneLine();
-        int selected = table == null ? 0 : table.getSelectedRowCount();
-        String scope = frames == 0 ? "" : "<br>" + AnalysisScopeText.autoTune(frames, selected) + ".";
+        String scope = frames == 0 ? "" : "<br>" + AnalysisScopeText.autoTune(frames) + ".";
         autoTuneAction.setDescription(AUTO_TUNE_TOOLTIP.replace("</html>", scope
                 + (saved == null ? "" : "<br>" + saved + ". A click measures the frames again.") + "</html>"));
     }

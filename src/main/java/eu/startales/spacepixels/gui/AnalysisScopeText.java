@@ -22,19 +22,19 @@ final class AnalysisScopeText {
         return String.join(", ", enabled);
     }
 
-    /** Explains that Auto-Tune always builds its candidate pool from the full imported sequence. */
-    static String autoTune(int importedFrames, int selectedFrames) {
+    /** The Auto-Tune scope line. The pool is taken from the imported sequence, not the table selection. */
+    static String autoTune(int importedFrames) {
         return "Auto-Tune: pool from all " + importedFrames + " frames";
     }
 
-    /** What the frame selection does for Blink, Preview and Auto-Tune; {@code frame} is its first frame's number, or 0. */
+    /** What the selection does for Blink and Preview. {@code frame} is the first selected frame's number, or 0. */
     static String selectionScope(int importedFrames, int selectedFrames, int frame) {
         String blink = CommandAvailability.blinksSelection(selectedFrames)
                 ? "Blink: the " + selectedFrames + " selected frames"
                 : importedFrames >= CommandAvailability.MIN_BLINK_FRAMES ? "Blink: all " + importedFrames + " frames"
                 : "Blink: needs " + CommandAvailability.MIN_BLINK_FRAMES + " or more frames";
         return blink + " · Preview: sequence from " + (frame > 0 ? "frame " + frame : "the first frame")
-                + " · " + autoTune(importedFrames, selectedFrames);
+                + " · " + autoTune(importedFrames);
     }
 
     /**

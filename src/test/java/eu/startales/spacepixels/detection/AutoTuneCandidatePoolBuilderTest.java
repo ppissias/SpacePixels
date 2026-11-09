@@ -13,19 +13,16 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
  */
 public class AutoTuneCandidatePoolBuilderTest {
 
-    /** Auto-Tune always uses the full imported sequence and snapshots the array so later edits cannot alter a captured job. */
-    @Test public void inputFramesAlwaysUsesFullImportedSequenceAndSnapshotsTheArray() {
+    /** The admitted job keeps the sequence captured at the start, including after the caller replaces an entry. */
+    @Test public void inputFramesSnapshotsTheImportedSequence() {
         FitsFileInformation[] imported = new FitsFileInformation[8];
-        FitsFileInformation[] selected = new FitsFileInformation[5];
         imported[0] = new FitsFileInformation("imported.fit", "imported.fit", true, 100, 100);
-        selected[0] = new FitsFileInformation("selected.fit", "selected.fit", true, 100, 100);
-        FitsFileInformation[] chosen = AutoTuneCandidatePoolBuilder.inputFrames(imported, selected);
+        FitsFileInformation[] chosen = AutoTuneCandidatePoolBuilder.inputFrames(imported);
         assertEquals(8, chosen.length);
         assertSame(imported[0], chosen[0]);
         assertNotSame(imported, chosen);
         imported[0] = null;
         assertNotNull(chosen[0]);
-        assertNull(AutoTuneCandidatePoolBuilder.inputFrames(null, selected));
         assertNull(AutoTuneCandidatePoolBuilder.inputFrames(null));
     }
 

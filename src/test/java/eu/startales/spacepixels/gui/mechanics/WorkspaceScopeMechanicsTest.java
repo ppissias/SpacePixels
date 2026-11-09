@@ -11,7 +11,7 @@ import static org.junit.Assert.*;
 
 /** Checks visible frame scope and completed-output actions without running detection or opening external programs. */
 public class WorkspaceScopeMechanicsTest extends MechanicsTestCase {
-    /** Selection changes describe the tuning fallback and completed-output controls belong to the imported session. */
+    /** Auto-Tune stays on the full import, Blink and Preview follow the selection, and output controls belong to the session. */
     @Test(timeout = 180_000) public void scopeAndOutputFollowTheCurrentSession() throws Exception {
         var directory = SyntheticDatasetFactory.createMono16FitsSequence(folder.newFolder("frames").toPath(),
                 "session", 5);
@@ -23,6 +23,12 @@ public class WorkspaceScopeMechanicsTest extends MechanicsTestCase {
         assertTrue(showingLabel("Auto-Tune: pool from all 5 frames").contains("Blink: all 5 frames"));
         GuiActionRunner.execute(() -> window().table().target().setRowSelectionInterval(0, 4));
         assertTrue(showingLabel("Auto-Tune: pool from all 5 frames").contains("Blink: the 5 selected frames"));
+        assertEquals("Select no frames: Preview starts on the first frame. Blink and plate-solve follow the selection.",
+                window().button(VisibleText.button("Clear selection")).target().getToolTipText());
+        window().tabbedPane().selectTab("Detection Settings");
+        assertEquals("Measure the imported sequence, up to the candidate-frame limit, and choose settings.",
+                window().button(VisibleText.button("Run Auto-Tune")).target().getToolTipText());
+        window().tabbedPane().selectTab("Main");
         JButton open = window().button(VisibleText.button("Open output folder")).target();
         assertEquals(output.toFile().getAbsolutePath(), open.getToolTipText());
         assertTrue(open.isFocusable());
