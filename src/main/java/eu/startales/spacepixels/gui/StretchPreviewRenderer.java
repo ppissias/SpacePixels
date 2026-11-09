@@ -61,13 +61,22 @@ final class StretchPreviewRenderer {
         final BufferedImage stretched;
         final int[] originalHistogram;
         final int[] stretchedHistogram;
+        final short[] stretchedValues;
+        final byte[] stretchTable;
 
         Previews(Request request, BufferedImage original, BufferedImage stretched, int[] originalHistogram, int[] stretchedHistogram) {
+            this(request, original, stretched, originalHistogram, stretchedHistogram, null, null);
+        }
+
+        Previews(Request request, BufferedImage original, BufferedImage stretched, int[] originalHistogram, int[] stretchedHistogram,
+                 short[] stretchedValues, byte[] stretchTable) {
             this.request = request;
             this.original = original;
             this.stretched = stretched;
             this.originalHistogram = originalHistogram;
             this.stretchedHistogram = stretchedHistogram;
+            this.stretchedValues = stretchedValues;
+            this.stretchTable = stretchTable;
         }
 
         boolean isRendered() {

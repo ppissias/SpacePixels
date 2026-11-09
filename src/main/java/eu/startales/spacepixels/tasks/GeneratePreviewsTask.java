@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.tasks;
 
 import nom.tam.fits.Fits;
+import eu.startales.spacepixels.fits.DisplayStretch;
 import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
 import eu.startales.spacepixels.fits.StretchAlgorithm;
 import eu.startales.spacepixels.fits.FitsInput;
@@ -46,27 +47,52 @@ public class GeneratePreviewsTask implements Callable<BufferedImage[]> {
         this.stretchEnabled = stretchEnabled;
     }
 
+    /** Rendered preview images alongside the 16-bit histogram of the frame's displayed channel. */
+    public record Result(BufferedImage[] images, int[] originalHistogram) {
+    }
+
     /** Longest side of the preview images; larger frames are reduced by taking every n-th pixel. */
     public static final int MAX_PREVIEW_SIDE = 2400;
 
     @Override
     public BufferedImage[] call() throws Exception {
+        return renderWithHistogram().images();
+    }
+
+    /** Renders both preview images and computes the 16-bit histogram of the displayed channel. */
+    public Result renderWithHistogram() throws Exception {
         try (Fits fitsImage = new Fits(filePath)) {
             Object kernelData = FitsInput.getImageHDU(fitsImage).getKernel();
+            int[] originalHistogram = frameHistogram(kernelData);
 
             // The whole frame, reduced to display size; the stretch statistics then cover the whole frame too.
             Object previewData = reduce(kernelData, MAX_PREVIEW_SIDE);
             if (previewData != null) {
                 int[] size = size(previewData);
                 BufferedImage linear = linearImage(previewData);
-                return new BufferedImage[]{linear, stretchEnabled
+                BufferedImage[] images = new BufferedImage[]{linear, stretchEnabled
                         ? renderer.getStretchedImageFullSize(previewData, size[0], size[1], stretchFactor, iterations, algo)
                         : linear};
+                return new Result(images, originalHistogram);
             }
             BufferedImage original = renderer.getImagePreview(kernelData);
-            return new BufferedImage[]{original, stretchEnabled
+            BufferedImage[] images = new BufferedImage[]{original, stretchEnabled
                     ? renderer.getStretchedImagePreview(kernelData, stretchFactor, iterations, algo) : original};
+            return new Result(images, originalHistogram);
         }
+    }
+
+    /** 16-bit histogram of the frame's displayed channel (mono or green channel of colour). */
+    static int[] frameHistogram(Object kernelData) {
+        if (kernelData instanceof short[][]) {
+            return DisplayStretch.histogram((short[][]) kernelData);
+        }
+        if (kernelData instanceof short[][][]) {
+            short[][][] channels = (short[][][]) kernelData;
+            int channel = channels.length >= 2 ? 1 : 0;
+            return DisplayStretch.histogram(channels[channel]);
+        }
+        return null;
     }
 
     /**

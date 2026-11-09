@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.tasks.GeneratePreviewsTask;
+import eu.startales.spacepixels.fits.DisplayStretch;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.FitsVisualizationRenderer;
 import eu.startales.spacepixels.fits.StretchAlgorithm;
@@ -53,8 +54,8 @@ public class StretchPanel extends JPanel {
     private final FrameView.ViewLink viewState = new FrameView.ViewLink();
     private final FrameView originalView = linkedPreview(viewState);
     private final FrameView stretchedView = linkedPreview(viewState);
-    private final HistogramView originalHistogramView = new HistogramView();
-    private final HistogramView histogramView = new HistogramView();
+    private final StretchHistogram originalHistogramView = StretchHistogram.original(null);
+    private final StretchHistogram histogramView = StretchHistogram.stretched(null);
     private final JLabel frameLabel = new JLabel(" ");
     private final JButton previousButton = new JButton("◀ Previous");
     private final JButton nextButton = new JButton("Next ▶");
@@ -408,12 +409,20 @@ public class StretchPanel extends JPanel {
                 getStretchAlgorithm(), stretchSlider.getValue(), stretchIterationsSlider.getValue(), isDisplayStretchEnabled()));
     }
 
-    /** Renders both previews and their histograms, on the renderer's worker thread. */
+    /** Renders both previews and their 16-bit histograms, on the renderer's worker thread. */
     private static StretchPreviewRenderer.Previews render(StretchPreviewRenderer.Request request) throws Exception {
-        BufferedImage[] images = new GeneratePreviewsTask(request.renderer, request.filePath, request.strength,
-                request.iterations, request.algorithm, request.stretchEnabled).call();
-        return new StretchPreviewRenderer.Previews(request, images[0], images[1],
-                HistogramView.luminanceHistogram(images[0]), HistogramView.luminanceHistogram(images[1]));
+        GeneratePreviewsTask.Result result = new GeneratePreviewsTask(request.renderer, request.filePath, request.strength,
+                request.iterations, request.algorithm, request.stretchEnabled).renderWithHistogram();
+        int[] originalHist = result.originalHistogram();
+        short[] stretchedVals = originalHist == null ? null : (request.stretchEnabled
+                ? DisplayStretch.stretchedValues(originalHist, request.algorithm, request.strength, request.iterations)
+                : null);
+        byte[] table = originalHist == null ? null : (request.stretchEnabled
+                ? DisplayStretch.lookupTable(originalHist, request.algorithm, request.strength, request.iterations)
+                : DisplayStretch.linearLookupTable());
+        int[] stretchedHist = originalHist == null ? null : StretchHistogram.mapHistogram(originalHist, stretchedVals);
+        return new StretchPreviewRenderer.Previews(request, result.images()[0], result.images()[1],
+                originalHist, stretchedHist, stretchedVals, table);
     }
 
     /** Shows the previews of the newest request; the renderer drops any other. */
@@ -423,8 +432,8 @@ public class StretchPanel extends JPanel {
         if (!previews.isRendered()) {
             stretchedView.setPlaceholder("The preview could not be rendered");
         }
-        originalHistogramView.setHistogram(previews.originalHistogram);
-        histogramView.setHistogram(previews.stretchedHistogram);
+        originalHistogramView.setOriginalData(previews.originalHistogram);
+        histogramView.setStretchedData(previews.originalHistogram, previews.stretchedValues, previews.stretchTable);
         rendering = false;
         updateFrameLabel();
     }
@@ -437,8 +446,8 @@ public class StretchPanel extends JPanel {
         stretchedView.showPicture(null);
         originalView.setPlaceholder(placeholder);
         stretchedView.setPlaceholder(placeholder);
-        originalHistogramView.setHistogram(null);
-        histogramView.setHistogram(null);
+        originalHistogramView.setOriginalData(null);
+        histogramView.setStretchedData(null, null, null);
         updateFrameLabel();
     }
 
@@ -567,70 +576,6 @@ public class StretchPanel extends JPanel {
             return Preferences.userNodeForPackage(StretchPanel.class);
         } catch (Exception e) {
             return null;
-        }
-    }
-
-    /** Histogram of the stretched preview (log counts), with the share of pixels clipped to black and to white. */
-    static final class HistogramView extends JComponent {
-        private int[] histogram;
-
-        HistogramView() {
-            setPreferredSize(new Dimension(300, 74));
-            setToolTipText("Brightness histogram of the stretched preview (logarithmic counts). "
-                    + "A tall bar at either end means pixels are clipped to pure black or white.");
-        }
-
-        void setHistogram(int[] histogram) {
-            this.histogram = histogram;
-            repaint();
-        }
-
-        /** 256-bin histogram of the mean of red, green and blue. */
-        static int[] luminanceHistogram(BufferedImage image) {
-            if (image == null) {
-                return null;
-            }
-            int[] bins = new int[256];
-            int width = image.getWidth();
-            int[] row = new int[width];
-            for (int y = 0; y < image.getHeight(); y++) {
-                image.getRGB(0, y, width, 1, row, 0, width);
-                for (int rgb : row) {
-                    bins[(((rgb >> 16) & 0xff) + ((rgb >> 8) & 0xff) + (rgb & 0xff)) / 3]++;
-                }
-            }
-            return bins;
-        }
-
-        @Override
-        protected void paintComponent(Graphics g) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setFont(UiStyle.bodyFont());
-            int textHeight = g2.getFontMetrics().getHeight() + UiStyle.space(4);
-            int plotHeight = getHeight() - textHeight - 2;
-            g2.setColor(new Color(0x14121f));
-            g2.fillRect(0, 0, getWidth(), plotHeight);
-            if (histogram != null) {
-                long total = 0;
-                int max = 1;
-                for (int count : histogram) {
-                    total += count;
-                    max = Math.max(max, count);
-                }
-                double logMax = Math.log1p(max);
-                g2.setColor(new Color(0x8fb4e8));
-                for (int bin = 0; bin < 256; bin++) {
-                    int x0 = bin * getWidth() / 256;
-                    int x1 = (bin + 1) * getWidth() / 256;
-                    int barHeight = (int) Math.round(Math.log1p(histogram[bin]) / logMax * (plotHeight - 2));
-                    g2.fillRect(x0, plotHeight - barHeight, Math.max(1, x1 - x0), barHeight);
-                }
-                double black = total == 0 ? 0 : 100.0 * histogram[0] / total;
-                double white = total == 0 ? 0 : 100.0 * histogram[255] / total;
-                g2.setColor(UiStyle.helpColor());
-                g2.drawString(String.format(Locale.US, "Clipped: %.1f %% black · %.1f %% white", black, white), 2, getHeight() - 4);
-            }
-            g2.dispose();
         }
     }
 }

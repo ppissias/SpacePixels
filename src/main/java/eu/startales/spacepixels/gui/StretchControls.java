@@ -37,7 +37,8 @@ final class StretchControls {
     private final JCheckBox displayStretchCheckbox = SidePanelIcons.onOff("Stretch display");
     private final JButton resetButton = new JButton("Reset display");
     private final JLabel functionLabel = new JLabel("Function");
-    private final StretchHistogram histogram = new StretchHistogram();
+    private final StretchHistogram originalHistogram = StretchHistogram.original("Original (linear)");
+    private final StretchHistogram stretchedHistogram = StretchHistogram.stretched("Stretched");
     private final JSlider primarySlider;
     private final JSlider secondarySlider;
     private final JSpinner primarySpinner;
@@ -51,8 +52,10 @@ final class StretchControls {
     private final ActionListener algorithmListener = e -> scheduleRefresh();
     private final ItemListener displayListener = e -> scheduleRefresh();
     private final Runnable onChange;
+    /** Cached per-channel lookup tables and the 16-bit stretched values of the displayed histogram channel. */
+    private record FrameStretch(byte[][] tables, short[] stretchedValues) {}
     /** Weak keys: a viewer that shows one frame at a time lets the old frames go. */
-    private final Map<BlinkSequence.Frame, byte[][]> tables = new WeakHashMap<>();
+    private final Map<BlinkSequence.Frame, FrameStretch> tables = new WeakHashMap<>();
     private boolean refreshPending;
 
     /** Redraws on shared-model changes; the editor link asks for the caller's currently displayed frame on the EDT. */
@@ -110,18 +113,26 @@ final class StretchControls {
         c.fill = GridBagConstraints.HORIZONTAL;
         c.weightx = 1;
         c.insets = new Insets(0, 0, UiStyle.space(4), 0);
-        body.add(histogram, c);
-        addParameter(body, 2, primaryLabel, primarySlider, primarySpinner);
-        addParameter(body, 4, secondaryLabel, secondarySlider, secondarySpinner);
+        body.add(originalHistogram, c);
         c = new GridBagConstraints();
-        c.gridy = 6;
+        c.gridy = 2;
+        c.gridx = 0;
+        c.gridwidth = 3;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        c.weightx = 1;
+        c.insets = new Insets(0, 0, UiStyle.space(4), 0);
+        body.add(stretchedHistogram, c);
+        addParameter(body, 3, primaryLabel, primarySlider, primarySpinner);
+        addParameter(body, 5, secondaryLabel, secondarySlider, secondarySpinner);
+        c = new GridBagConstraints();
+        c.gridy = 7;
         c.gridx = 0;
         c.gridwidth = 3;
         c.anchor = GridBagConstraints.WEST;
         body.add(resetButton, c);
         JButton editor = AccessibleControls.link("Open stretch editor…", "Adjust this frame in the full Image Stretch window",
                 () -> panel.openEditor(currentFrame.get()));
-        c.gridy = 7;
+        c.gridy = 8;
         body.add(editor, c);
         section = new SidePanelSection("Display stretch", body).addHeaderControl(displayStretchCheckbox);
         ViewerSupport.prepareControls(section);
@@ -197,11 +208,13 @@ final class StretchControls {
 
     /** The stretch table of each channel of this frame, for the current stretch. */
     byte[][] tablesFor(BlinkSequence.Frame frame) {
-        byte[][] frameTables = tables.computeIfAbsent(frame, f -> snapshot().tablesFor(f));
+        FrameStretch stretch = tables.computeIfAbsent(frame, f -> snapshot().stretchFor(f));
         // The histogram follows the frame drawn: the green channel of a colour frame, else the only one.
-        int channel = frameTables.length == 3 ? 1 : 0;
-        histogram.setData(frame.getHistogram(channel), frameTables[channel]);
-        return frameTables;
+        int channel = stretch.tables.length == 3 ? 1 : 0;
+        int[] rawHistogram = frame.getHistogram(channel);
+        originalHistogram.setOriginalData(rawHistogram);
+        stretchedHistogram.setStretchedData(rawHistogram, stretch.stretchedValues, stretch.tables[channel]);
+        return stretch.tables;
     }
 
     /** Captures controls on the EDT so an export worker never consults live Swing models. */
@@ -222,6 +235,15 @@ final class StretchControls {
             }
             return channelTables;
         }
+        /** Calculates one frame's LUTs and the 16-bit stretched values of the displayed histogram channel. */
+        FrameStretch stretchFor(BlinkSequence.Frame frame) {
+            byte[][] channelTables = tablesFor(frame);
+            int histChannel = channelTables.length == 3 ? 1 : 0;
+            short[] stretchedValues = enabled
+                    ? DisplayStretch.stretchedValues(frame.getHistogram(histChannel), algorithm, primary, secondary)
+                    : null;
+            return new FrameStretch(channelTables, stretchedValues);
+        }
         /** Uses the same colour presentation as the visible viewer. */
         boolean extremeColour(BlinkSequence.Frame frame) { return enabled && algorithm == StretchAlgorithm.EXTREME && frame.getChannelCount() == 3; }
     }
@@ -233,7 +255,8 @@ final class StretchControls {
 
     void clearTables() {
         tables.clear();
-        histogram.setData(null, null);
+        originalHistogram.setOriginalData(null);
+        stretchedHistogram.setStretchedData(null, null, null);
     }
 
     /**
@@ -252,7 +275,8 @@ final class StretchControls {
         }
         algorithmCombo.setModel(new DefaultComboBoxModel<>());
         tables.clear();
-        histogram.setData(null, null);
+        originalHistogram.setOriginalData(null);
+        stretchedHistogram.setStretchedData(null, null, null);
     }
 
     /** Redraws once after a burst of changes (a slider drag, or an algorithm switch that moves the sliders). */
@@ -280,7 +304,7 @@ final class StretchControls {
         primaryLabel.setEnabled(enabled);
         secondaryLabel.setEnabled(enabled);
         resetButton.setEnabled(enabled);
-        histogram.setEnabled(enabled);
+        stretchedHistogram.setEnabled(enabled);
         StretchAlgorithm algorithm = panel.getStretchAlgorithm();
         if (algorithm == null) {
             return;
