@@ -245,7 +245,7 @@ After detection, return to **Blink Selected** to check the findings against the 
 
 ## 4. Reading the report
 
-The report starts with an overview, then the results. **Likely Artifacts** and **Diagnostics** come near the end and start collapsed; click a heading to open it. The sections follow the kinds of results:
+The report starts with an overview and any measured dither & drift diagnostics, then the results. **Likely Artifacts** and **Diagnostics** come near the end and start collapsed; click a heading to open it. The sections follow the kinds of results:
 
 | Result | What it is | Typical objects |
 |---|---|---|
@@ -305,6 +305,16 @@ In Variable Stars, **Frames excluded: spatial residuals** counts frames omitted 
 The detailed readiness diagnostics also show the **Comparison-star fit**: the frame corrections (a transparency offset and a brightness gradient across the field) are fitted to the comparison stars in repeated rounds that down-weight variable stars, until the correction changes by less than 0.00001 mag between rounds. It reads *Finished after 6 rounds*, for example. When the fit, or a fit for one of the comparison apertures, reaches the limit of 15 rounds, the line is highlighted with the last change. The fit then keeps its last result; on the reference data its last change was at most 0.0003 mag. The verdict does not change.
 
 With the sky catalogue, the Overview also gives the **Field depth**: how faint the detection reached in the median frame, as a Gaia G magnitude. In four small patches of the field, away from large galaxies and nebulae, the Gaia stars are matched with the stars found there, and the depth is the magnitude where the share found falls to half of the share among the brighter stars. It is measured with the settings of the run and estimates stationary point-source depth; it does not guarantee that a moving, trailed or variable object of that magnitude will be recovered. **Quality Control: Field Depth** in the Diagnostics shows it frame by frame: clouds, haze, a bright sky or poor focus show up as frames that go less deep. Gaia G is close to a clear or luminance filter; with other filters, compare frames rather than the number itself.
+
+### Dither & sensor drift diagnostics
+
+When sensor drift or dithering is measured across the session, the **Dither & Sensor Drift Diagnostics** panel appears immediately after the Overview (and in the **Jump to** bar as **Dither & drift**). It shows how the image frame drifted across the session:
+
+- **Drift Trajectory Map**: traces the frame translation over time (blue for the beginning of the sequence, transitioning to red at the end).
+- **4-Corners Sampled Time-Lapse**: an animated GIF sampling the image corners across representative frames.
+- **Per-frame coordinates**: the exact pixel displacement for each frame.
+
+Sensor dust and uncalibrated hot pixels stay fixed on the camera sensor, so in registered frames they appear to move along this exact drift trajectory. Checking this section first allows you to quickly recognize false moving-object patterns before reviewing candidate detections.
 
 ### A moving object
 
