@@ -93,8 +93,15 @@ final class DeepStackReportSectionWriter {
 
         List<ReportTrackReference> reportTrackReferences = buildReportTrackReferences(context);
 
+        int limit = context.settings.getMaxCategoryItems();
+        int total = context.slowMoverCandidates.size();
+        int count = (limit > 0 && total > limit) ? limit : total;
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d slow-mover candidates (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+
         report.println("<div class='flex-container'>");
-        for (int i = 0; i < context.slowMoverCandidates.size(); i++) {
+        for (int i = 0; i < count; i++) {
             DetectedObject detection = context.slowMoverCandidates.get(i);
             SlowMoverCandidateDiagnostics candidateDiagnostics = resolveCandidateDiagnostics(context, detection, i);
             List<SlowMoverTrackMatch> matchedTracks = findMatchingReportedTracks(detection, candidateDiagnostics, reportTrackReferences);

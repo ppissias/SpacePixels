@@ -37,10 +37,16 @@ final class AnomalySectionWriter {
                 + "Events associated with a confirmed streak are shown with that streak. "
                 + "An event where a moving-object track predicts its object, in a frame that track has no detection, "
                 + "is marked as likely part of that track.</p>");
-        int number = 1;
-        for (AnomalyDetection anomaly : context.anomalies) {
+        int limit = context.settings.getMaxCategoryItems();
+        int total = context.anomalies.size();
+        int count = (limit > 0 && total > limit) ? limit : total;
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d single-frame anomalies (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+        for (int i = 0; i < count; i++) {
+            AnomalyDetection anomaly = context.anomalies.get(i);
             context.progress.next();
-            writeCard(report, context, anomaly, number++);
+            writeCard(report, context, anomaly, i + 1);
         }
     }
 

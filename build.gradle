@@ -23,7 +23,7 @@ repositories {
 }
 // Add your group and version here
 group = 'eu.startales.spacepixels'
-version = '2026.11-01'
+version = '2026.11-02'
 description = 'Headless SpacePixels Java API and command-line tools for moving and transient object detection in aligned astronomical image sequences.'
 
 base {
@@ -89,11 +89,22 @@ configurations {
     testRuntimeOnly.extendsFrom desktopRuntimeOnly
 }
 
+// Annotation-only transitives. SpotBugs annotations are LGPL 2.1; none of these jars is
+// required at runtime. Exclude them on every edge so distributions and the published POM omit them.
+def excludeUnusedAnnotationJars = {
+    return {
+        exclude group: 'com.github.spotbugs'
+        exclude group: 'com.google.code.findbugs'
+        exclude group: 'jakarta.annotation'
+        exclude group: 'com.google.errorprone'
+    }
+}
+
 dependencies {
-    api 'io.github.ppissias.jtransient:jtransient:1.0.8'
-    implementation 'gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0'
-    implementation 'com.google.code.gson:gson:2.14.0'
-    implementation 'io.github.ppissias.jplatesolve:jplatesolve:1.0.2'
+    api('io.github.ppissias.jtransient:jtransient:1.0.8', excludeUnusedAnnotationJars())
+    implementation('gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0', excludeUnusedAnnotationJars())
+    implementation('com.google.code.gson:gson:2.14.0', excludeUnusedAnnotationJars())
+    implementation('io.github.ppissias.jplatesolve:jplatesolve:1.0.2', excludeUnusedAnnotationJars())
     desktopImplementation 'com.formdev:flatlaf:3.7.2'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'tokyo.northside:assertj-swing-junit:4.0.0-beta-3'
@@ -186,6 +197,7 @@ distributions {
                 }
             }
             from('LICENSE')
+            from('NOTICE.txt')
             into('lib') {
                 from(desktopJar)
                 from(configurations.desktopRuntimeClasspath - configurations.runtimeClasspath)

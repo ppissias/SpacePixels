@@ -43,8 +43,12 @@ final class TargetVisualizationSectionWriter {
                 && context.anomalies.isEmpty()) {
             report.println("<div class='panel'><p>No moving tracks, single-frame streaks or anomaly rescues were detected in this session.</p></div>");
         }
-        context.progress.expect(context.singleStreaks.size() + context.streakTracks.size()
-                + context.movingTargets.size() + context.anomalies.size());
+        int limit = context.settings.getMaxCategoryItems();
+        int singleStreakDisplay = limitCount(context.singleStreaks.size(), limit);
+        int streakTrackDisplay = limitCount(context.streakTracks.size(), limit);
+        int movingTargetDisplay = limitCount(context.movingTargets.size(), limit);
+        int anomalyDisplay = limitCount(context.anomalies.size(), limit);
+        context.progress.expect(singleStreakDisplay + streakTrackDisplay + movingTargetDisplay + anomalyDisplay);
 
         if (!context.singleStreaks.isEmpty()) {
             writeSingleStreaks(report, context);
@@ -76,11 +80,22 @@ final class TargetVisualizationSectionWriter {
                 + "<br/><center><small>Detection image &middot; hover to show the detected footprint in red (<a href='" + footprintFile + "' target='_blank'>open footprint</a>)</small></center></div>";
     }
 
+    static int limitCount(int total, int limit) {
+        return (limit > 0 && total > limit) ? limit : total;
+    }
+
     private static void writeSingleStreaks(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
         report.println("<h3 id='single-streaks' style='color: var(--sp-finding-s); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Single-Frame Streaks</h3>");
-        int counter = 1;
-        for (Track track : context.singleStreaks) {
+        int limit = context.settings.getMaxCategoryItems();
+        int total = context.singleStreaks.size();
+        int count = limitCount(total, limit);
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d single-frame streaks (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+        for (int streakIndex = 0; streakIndex < count; streakIndex++) {
+            Track track = context.singleStreaks.get(streakIndex);
+            int counter = streakIndex + 1;
             context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
             DetectedObject point = track.points.get(0);
@@ -148,8 +163,15 @@ final class TargetVisualizationSectionWriter {
     private static void writeStreakTracks(PrintWriter report,
                                           DetectionReportContext context) throws IOException {
         report.println("<h3 id='streak-tracks' style='color: var(--sp-finding-st); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Streak Tracks</h3>");
-        int counter = 1;
-        for (Track track : context.streakTracks) {
+        int limit = context.settings.getMaxCategoryItems();
+        int total = context.streakTracks.size();
+        int count = limitCount(total, limit);
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d streak tracks (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+        for (int trackIndex = 0; trackIndex < count; trackIndex++) {
+            Track track = context.streakTracks.get(trackIndex);
+            int counter = trackIndex + 1;
             context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
             List<DetectedObject> framePoints = uniqueFramePoints(track);
@@ -220,8 +242,15 @@ final class TargetVisualizationSectionWriter {
     private static void writeMovingTargets(PrintWriter report,
                                            DetectionReportContext context) throws IOException {
         report.println("<h3 id='moving-targets' style='color: var(--sp-accent); margin-top: 30px; border-bottom: 1px solid var(--sp-border); padding-bottom: 5px;'>Moving-Object Tracks</h3>");
-        int counter = 1;
-        for (Track track : context.movingTargets) {
+        int limit = context.settings.getMaxCategoryItems();
+        int total = context.movingTargets.size();
+        int count = limitCount(total, limit);
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d moving-object tracks (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+        for (int targetIndex = 0; targetIndex < count; targetIndex++) {
+            Track track = context.movingTargets.get(targetIndex);
+            int counter = targetIndex + 1;
             context.progress.next();
             TrackCropGeometry.CropBounds cropBounds = new TrackCropGeometry.CropBounds(track, context.settings.getTrackCropPadding(), context.frameDimensions());
             List<DetectedObject> framePoints = uniqueFramePoints(track);

@@ -373,3 +373,19 @@ The batch CLI reads `variableStarMaxCandidateCards` and `variableStarSortOrder` 
   "variableStarSortOrder": "SHORTEST_PERIOD"
 }
 ```
+
+### Limiting report items per category
+
+In high-density or noisy sessions with many candidate detections, exporting detailed cards, multi-frame animations and cutouts for thousands of items can result in very large reports and lengthy export times. `SpacePixelsPipelineRequest.Builder.maxCategoryItems(int)` caps the number of detailed cards and visualizations exported per finding category:
+
+```java
+.maxCategoryItems(50)
+```
+
+The default is `0` (unlimited). When a category contains more findings than the limit, only the first `maxCategoryItems` cards and visualizations are exported, along with an explanatory note in the category section. All findings remain recorded in `report-data.json`, CSV exports, overview metrics, diagnostics tables and full-field maps.
+
+The batch CLI supports this through the `--max-category-items <number>` argument:
+
+```
+batchDetect.bat "C:\astro\sequence" "config\default_detection_profile.json" --max-category-items 50
+```

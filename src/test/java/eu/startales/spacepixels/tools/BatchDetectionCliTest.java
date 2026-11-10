@@ -61,7 +61,40 @@ public class BatchDetectionCliTest {
         assertTrue(result.stderr, !result.stderr.contains("\tat "));
     }
 
-    private static ExecutionResult executeCli(Path inputDirectory, Path configFile) throws Exception {
+    @Test
+    public void executeAcceptsMaxCategoryItemsArgument() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-cli-max-items");
+        Path sequenceDirectory = SyntheticDatasetFactory.createMono16FitsSequence(tempRoot, "mono16", FRAME_COUNT);
+        Path configFile = SyntheticDatasetFactory.writeDetectionProfile(
+                tempRoot,
+                "profile.json",
+                SyntheticDatasetFactory.createSyntheticDetectionConfig());
+
+        ExecutionResult result = executeCli(sequenceDirectory, configFile, "--max-category-items", "10");
+
+        assertEquals(result.stderr, 0, result.exitCode);
+        assertTrue(result.stdout, result.stdout.startsWith("Report file:"));
+    }
+
+    @Test
+    public void executeRejectsInvalidMaxCategoryItems() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-cli-invalid-items");
+        Path sequenceDirectory = SyntheticDatasetFactory.createMono16FitsSequence(tempRoot, "mono16", FRAME_COUNT);
+        Path configFile = SyntheticDatasetFactory.writeDetectionProfile(
+                tempRoot,
+                "profile.json",
+                SyntheticDatasetFactory.createSyntheticDetectionConfig());
+
+        ExecutionResult result = executeCli(sequenceDirectory, configFile, "--max-category-items", "-1");
+        assertEquals(2, result.exitCode);
+        assertTrue(result.stderr, result.stderr.contains("Argument error: Maximum category items must be non-negative"));
+
+        ExecutionResult resultAlpha = executeCli(sequenceDirectory, configFile, "--max-category-items=abc");
+        assertEquals(2, resultAlpha.exitCode);
+        assertTrue(resultAlpha.stderr, resultAlpha.stderr.contains("Argument error: Invalid maximum category items 'abc'"));
+    }
+
+    private static ExecutionResult executeCli(Path inputDirectory, Path configFile, String... extraArgs) throws Exception {
         ByteArrayOutputStream stdoutBytes = new ByteArrayOutputStream();
         ByteArrayOutputStream stderrBytes = new ByteArrayOutputStream();
         PrintStream stdout = new PrintStream(stdoutBytes, true, StandardCharsets.UTF_8.name());
@@ -76,8 +109,14 @@ public class BatchDetectionCliTest {
             // Everything the run prints, the engine included, counts as the command's output.
             System.setOut(stdout);
             System.setErr(stderr);
+            java.util.List<String> argsList = new java.util.ArrayList<>();
+            argsList.add(inputDirectory.toString());
+            argsList.add(configFile.toString());
+            if (extraArgs != null) {
+                argsList.addAll(java.util.Arrays.asList(extraArgs));
+            }
             int exitCode = BatchDetectionCli.execute(
-                    new String[]{inputDirectory.toString(), configFile.toString()},
+                    argsList.toArray(new String[0]),
                     stdout,
                     stderr);
             return new ExecutionResult(

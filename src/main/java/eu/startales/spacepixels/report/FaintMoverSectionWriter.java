@@ -58,6 +58,12 @@ final class FaintMoverSectionWriter {
             out.println("<p><strong>Saved prediction fetch was incomplete:</strong> " + escape(String.join("; ", objects.problems)) + ".</p>");
         }
         out.println("<p><a href='faint_movers/faint_movers.csv'>Download candidate and fitted-position CSV</a></p>");
+        int limit = c.settings.getMaxCategoryItems();
+        int total = c.faintMoverPresentation.size();
+        int cardCount = (limit > 0 && total > limit) ? limit : total;
+        if (cardCount < total) {
+            out.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d faint-mover candidate cards (limited by report configuration). All %d are recorded in the CSV and data.</p>%n", cardCount, total, total);
+        }
         try (var csv = new PrintWriter(c.file("faint_movers/faint_movers.csv"), java.nio.charset.StandardCharsets.UTF_8)) {
             csv.println("id,reference_time_utc,x,y,vx_px_min,vy_px_min,score,first_half_score,second_half_score,stationary_score,camera_score,ra_deg,dec_deg,speed_arcsec_min,position_angle_deg,possible_catalogue_matches,frame,midpoint_utc,fitted_x,fitted_y,fitted_ra_deg,fitted_dec_deg,scoring_sample_x,scoring_sample_y,centre_unmasked,processed_residual_signal");
             c.progress.expect(c.faintMoverPresentation.size());
@@ -66,31 +72,33 @@ final class FaintMoverSectionWriter {
                 CancellationScope.check();
                 var entry = c.faintMoverPresentation.get(i);
                 var candidate = c.faintMoverCandidates.get(i);
-                String anchor = c.findingAnchor(FindingCategory.FAINT_MOVER, i + 1);
-                out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:var(--sp-finding-fm)'>");
-                out.println("<div class='detection-title'>Faint mover " + entry.id() + " · Unverified</div>");
-                KnownSolarSystemReport.writeFaintMoverIdentification(out, c, entry);
-                writeSummary(out, c, entry);
                 String comparisons = entry.catalogueComparisons().stream().map(FaintMoverPresentation.Match::name).collect(java.util.stream.Collectors.joining("; "));
-                if (entry.catalogueComparisons().isEmpty()) out.println("<p>Possible catalogue matches: " + (!entry.catalogueComparisonAvailable()
-                        ? "unavailable for this field or reference time" : comparisons.isEmpty()
-                        ? "none within the comparison tolerances" : escape(comparisons)) + ".</p>");
-                if (!entry.catalogueComparisons().isEmpty()) {
-                    out.println("<details><summary>Catalogue position and motion comparisons</summary><table><thead><tr><th>Possible match</th><th>Path RMS (px)</th><th>Motion residual (px/min)</th><th>Predicted magnitude</th></tr></thead><tbody>");
-                    for (var match : entry.catalogueComparisons()) out.printf(Locale.ROOT,
-                            "<tr><td>%s</td><td>%.3f</td><td>%.4f</td><td>%s</td></tr>%n",
-                            escape(match.name()), match.rmsPixels(), match.motionResidualPixelsPerMinute(), number(match.predictedMagnitude()));
-                    out.println("</tbody></table>");
-                    for (var match : entry.catalogueComparisons()) {
-                        out.println("<p>" + escape(match.name()) + "</p>");
-                        KnownSolarSystemReport.writeFaintComparisonDetails(out, match);
+                if (i < cardCount) {
+                    String anchor = c.findingAnchor(FindingCategory.FAINT_MOVER, i + 1);
+                    out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:var(--sp-finding-fm)'>");
+                    out.println("<div class='detection-title'>Faint mover " + entry.id() + " · Unverified</div>");
+                    KnownSolarSystemReport.writeFaintMoverIdentification(out, c, entry);
+                    writeSummary(out, c, entry);
+                    if (entry.catalogueComparisons().isEmpty()) out.println("<p>Possible catalogue matches: " + (!entry.catalogueComparisonAvailable()
+                            ? "unavailable for this field or reference time" : comparisons.isEmpty()
+                            ? "none within the comparison tolerances" : escape(comparisons)) + ".</p>");
+                    if (!entry.catalogueComparisons().isEmpty()) {
+                        out.println("<details><summary>Catalogue position and motion comparisons</summary><table><thead><tr><th>Possible match</th><th>Path RMS (px)</th><th>Motion residual (px/min)</th><th>Predicted magnitude</th></tr></thead><tbody>");
+                        for (var match : entry.catalogueComparisons()) out.printf(Locale.ROOT,
+                                "<tr><td>%s</td><td>%.3f</td><td>%.4f</td><td>%s</td></tr>%n",
+                                escape(match.name()), match.rmsPixels(), match.motionResidualPixelsPerMinute(), number(match.predictedMagnitude()));
+                        out.println("</tbody></table>");
+                        for (var match : entry.catalogueComparisons()) {
+                            out.println("<p>" + escape(match.name()) + "</p>");
+                            KnownSolarSystemReport.writeFaintComparisonDetails(out, match);
+                        }
+                        out.println("</details>");
                     }
-                    out.println("</details>");
+                    if (entry.blink() != null) writeBlink(c, entry);
+                    FaintMoverReviewWriter.write(out, c, entry, candidate);
+                    out.print(DetectionReportAstrometry.buildFaintMoverIdentificationHtml(c.astrometryContext, entry));
+                    out.println("</div>");
                 }
-                if (entry.blink() != null) writeBlink(c, entry);
-                FaintMoverReviewWriter.write(out, c, entry, candidate);
-                out.print(DetectionReportAstrometry.buildFaintMoverIdentificationHtml(c.astrometryContext, entry));
-                out.println("</div>");
                 var positions = entry.fittedPositions().isEmpty() ? java.util.Collections.<FaintMoverPresentation.Position>singletonList(null) : entry.fittedPositions();
                 for (var p : positions) {
                     var sample = p == null ? null : entry.review().pathSamples().stream().filter(s -> s.frameNumber() == p.frameNumber()).findFirst().orElse(null);

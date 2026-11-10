@@ -259,6 +259,50 @@ public class TargetVisualizationSectionWriterTest {
                 context.animations.contains("moving_track_1_clean_wide.gif"));
     }
 
+    @Test
+    public void maxCategoryItemsLimitsDetailedCardsAndAddsNote() throws Exception {
+        int width = 400;
+        int height = 400;
+        List<short[][]> rawFrames = new ArrayList<>();
+        FitsFileInformation[] files = new FitsFileInformation[3];
+        for (int i = 0; i < 3; i++) {
+            short[][] pixels = new short[height][width];
+            rawFrames.add(pixels);
+            files[i] = new FitsFileInformation("f" + i + ".fit", "f" + i + ".fit", true, width, height,
+                    Map.of("DATE-OBS", "2026-10-01T00:0" + i + ":00", "EXPTIME", "60"));
+        }
+        Track track1 = new Track();
+        Track track2 = new Track();
+        for (int i = 0; i < 3; i++) {
+            DetectedObject p1 = new DetectedObject(50 + i * 10, 50 + i * 10, 500, 5);
+            p1.sourceFrameIndex = i;
+            track1.addPoint(p1);
+
+            DetectedObject p2 = new DetectedObject(150 + i * 10, 150 + i * 10, 500, 5);
+            p2.sourceFrameIndex = i;
+            track2.addPoint(p2);
+        }
+        var telemetry = new PipelineTelemetry();
+        telemetry.totalFramesLoaded = telemetry.totalFramesKept = 3;
+        var result = PipelineResult.builder().tracks(List.of(track1, track2)).telemetry(telemetry)
+                .masterStackData(rawFrames.get(0)).masterStars(List.of()).slowMoverCandidates(List.of())
+                .anomalies(List.of()).allTransients(List.of()).unclassifiedTransients(List.of())
+                .driftPoints(List.of()).maximumStackData(rawFrames.get(0)).build();
+
+        File exportDir = temporary.newFolder();
+        VisualizationSettings settings = VisualizationSettings.defaults().withMaxCategoryItems(1);
+        DetectionReportContext context = ReportContextFixtures.create(settings, exportDir, rawFrames,
+                files, new DetectionConfig(), result);
+
+        StringWriter out = new StringWriter();
+        TargetVisualizationSectionWriter.writeSection(new PrintWriter(out), context);
+        String html = out.toString();
+
+        assertTrue(html.contains("Showing the first 1 of 2 moving-object tracks (limited by report configuration). All 2 are recorded in the data."));
+        assertTrue(new File(exportDir, "moving_targets/moving_track_1_shape.png").exists());
+        assertFalse(new File(exportDir, "moving_targets/moving_track_2_shape.png").exists());
+    }
+
     /** Decodes the written GIF so coverage checks exercise the downloadable artifact itself. */
     private static List<BufferedImage> readGifFrames(File gifFile) throws Exception {
         List<BufferedImage> frames = new ArrayList<>();

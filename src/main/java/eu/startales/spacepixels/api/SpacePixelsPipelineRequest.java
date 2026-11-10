@@ -35,6 +35,7 @@ public final class SpacePixelsPipelineRequest {
     private final eu.startales.spacepixels.fits.ImageScaling.OutlierHandling outlierHandling;
     private final boolean generateReport;
     private final boolean failIfUncalibratedOrMisaligned;
+    private final int maxCategoryItems;
     private final VariableStarReportOptions variableStarReportOptions;
     private final SpacePixelsProgressListener progressListener;
 
@@ -50,10 +51,14 @@ public final class SpacePixelsPipelineRequest {
         this.outlierHandling = builder.outlierHandling;
         this.generateReport = builder.generateReport;
         this.failIfUncalibratedOrMisaligned = builder.failIfUncalibratedOrMisaligned;
+        this.maxCategoryItems = builder.maxCategoryItems;
         this.variableStarReportOptions = builder.variableStarReportOptions;
         this.progressListener = builder.progressListener;
         this.runOptions = builder.runOptions.withAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames)
-                .withVariableStarReportOptions(variableStarReportOptions);
+                .withVariableStarReportOptions(variableStarReportOptions)
+                .withVisualization(builder.runOptions.visualization()
+                        .withVariableStarReportOptions(variableStarReportOptions)
+                        .withMaxCategoryItems(maxCategoryItems));
     }
 
     /**
@@ -147,6 +152,15 @@ public final class SpacePixelsPipelineRequest {
     /** Presentation-only choices for variable-star cards; never applied to the engine. */
     public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
 
+    /**
+     * Returns the maximum number of items per finding category to export in the report, or 0 when unlimited.
+     *
+     * @return maximum items per category
+     */
+    public int getMaxCategoryItems() {
+        return maxCategoryItems;
+    }
+
     /** Whether detection should fail fast if the sequence appears uncalibrated or misaligned. */
     public boolean isFailIfUncalibratedOrMisaligned() { return failIfUncalibratedOrMisaligned; }
 
@@ -183,6 +197,7 @@ public final class SpacePixelsPipelineRequest {
         private NegativeValueHandling negativeValueHandling = NegativeValueHandling.ADD_OFFSET;
         private boolean generateReport = true;
         private boolean failIfUncalibratedOrMisaligned = false;
+        private int maxCategoryItems = 0;
         private VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
         private SpacePixelsProgressListener progressListener;
 
@@ -194,7 +209,20 @@ public final class SpacePixelsPipelineRequest {
         public Builder runOptions(DetectionRunOptions options) {
             this.runOptions = Objects.requireNonNull(options, "options");
             this.autoTuneMaxCandidateFrames = options.autoTuneMaxCandidateFrames();
+            this.maxCategoryItems = options.visualization().getMaxCategoryItems();
             this.variableStarReportOptions = options.visualization().getVariableStarReportOptions();
+            return this;
+        }
+
+        /**
+         * Sets the maximum number of items (detailed cards and visualizations) to export per finding category
+         * in the generated report. Values &lt;= 0 mean unlimited.
+         *
+         * @param max maximum items per category
+         * @return this builder
+         */
+        public Builder maxCategoryItems(int max) {
+            this.maxCategoryItems = Math.max(0, max);
             return this;
         }
 

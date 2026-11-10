@@ -34,6 +34,7 @@ public final class VisualizationSettings {
     private final int pointSourceMinBoxRadius;
     private final int dynamicBoxPadding;
     private final int maxAnimatedMarkers;
+    private final int maxCategoryItems;
     private final boolean enhancedStack;
     private final VariableStarReportOptions variableStarReportOptions;
     /** A path on this computer; kept out of the JSON written into report folders. */
@@ -52,6 +53,7 @@ public final class VisualizationSettings {
         pointSourceMinBoxRadius = values.pointSourceMinBoxRadius;
         dynamicBoxPadding = values.dynamicBoxPadding;
         maxAnimatedMarkers = values.maxAnimatedMarkers;
+        maxCategoryItems = values.maxCategoryItems;
         enhancedStack = values.enhancedStack;
         variableStarReportOptions = Objects.requireNonNull(values.variableStarReportOptions, "variableStarReportOptions");
         reportStyleFile = Objects.requireNonNull(values.reportStyleFile, "reportStyleFile");
@@ -123,6 +125,14 @@ public final class VisualizationSettings {
      */
     public int getMaxAnimatedMarkers() {
         return maxAnimatedMarkers;
+    }
+
+    /**
+     * The maximum number of detailed cards and visualizations exported per finding category in the report;
+     * 0 or less means unlimited.
+     */
+    public int getMaxCategoryItems() {
+        return maxCategoryItems;
     }
 
     /**
@@ -207,6 +217,11 @@ public final class VisualizationSettings {
         return with(values -> values.maxAnimatedMarkers = markers);
     }
 
+    /** A copy with this maximum number of detailed cards and visualizations exported per finding category. */
+    public VisualizationSettings withMaxCategoryItems(int maxCategoryItems) {
+        return with(values -> values.maxCategoryItems = Math.max(0, maxCategoryItems));
+    }
+
     /** A copy that builds the enhanced stack, or not ({@link #isEnhancedStack()}). */
     public VisualizationSettings withEnhancedStack(boolean enabled) {
         return with(values -> values.enhancedStack = enabled);
@@ -254,6 +269,7 @@ public final class VisualizationSettings {
                 && pointSourceMinBoxRadius == that.pointSourceMinBoxRadius
                 && dynamicBoxPadding == that.dynamicBoxPadding
                 && maxAnimatedMarkers == that.maxAnimatedMarkers
+                && maxCategoryItems == that.maxCategoryItems
                 && enhancedStack == that.enhancedStack
                 && variableStarReportOptions.equals(that.variableStarReportOptions)
                 && reportStyleFile.equals(that.reportStyleFile);
@@ -263,8 +279,8 @@ public final class VisualizationSettings {
     public int hashCode() {
         return Objects.hash(autoStretchBlackSigma, autoStretchWhiteSigma, gifBlinkSpeedMs, trackCropPadding,
                 trackObjectCentricCropSize, targetCircleRadius, targetCircleStrokeWidth, streakLineScaleFactor,
-                streakCentroidBoxRadius, pointSourceMinBoxRadius, dynamicBoxPadding, maxAnimatedMarkers, enhancedStack,
-                variableStarReportOptions, reportStyleFile);
+                streakCentroidBoxRadius, pointSourceMinBoxRadius, dynamicBoxPadding, maxAnimatedMarkers, maxCategoryItems,
+                enhancedStack, variableStarReportOptions, reportStyleFile);
     }
 
     @Override
@@ -281,6 +297,7 @@ public final class VisualizationSettings {
                 + ", pointSourceMinBoxRadius=" + pointSourceMinBoxRadius
                 + ", dynamicBoxPadding=" + dynamicBoxPadding
                 + ", maxAnimatedMarkers=" + maxAnimatedMarkers
+                + ", maxCategoryItems=" + maxCategoryItems
                 + ", enhancedStack=" + enhancedStack
                 + ", variableStarReportOptions=" + variableStarReportOptions
                 + ", reportStyleFile=" + reportStyleFile + "]";
@@ -300,6 +317,7 @@ public final class VisualizationSettings {
         int pointSourceMinBoxRadius = 10;
         int dynamicBoxPadding = 5;
         int maxAnimatedMarkers = 500;
+        int maxCategoryItems = 0;
         boolean enhancedStack = true;
         VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
         String reportStyleFile = "";
@@ -322,6 +340,7 @@ public final class VisualizationSettings {
             pointSourceMinBoxRadius = settings.pointSourceMinBoxRadius;
             dynamicBoxPadding = settings.dynamicBoxPadding;
             maxAnimatedMarkers = settings.maxAnimatedMarkers;
+            maxCategoryItems = settings.maxCategoryItems;
             enhancedStack = settings.enhancedStack;
             variableStarReportOptions = settings.variableStarReportOptions;
             reportStyleFile = settings.reportStyleFile;

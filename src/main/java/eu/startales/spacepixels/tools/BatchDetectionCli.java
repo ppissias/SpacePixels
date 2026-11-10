@@ -41,15 +41,18 @@ public class BatchDetectionCli {
         private final File inputDir;
         private final File configFile;
         private final AutoTuneProfile autoTuneProfile;
+        private final int maxCategoryItems;
         private final boolean showHelp;
 
         private CliArguments(File inputDir,
                              File configFile,
                              AutoTuneProfile autoTuneProfile,
+                             int maxCategoryItems,
                              boolean showHelp) {
             this.inputDir = inputDir;
             this.configFile = configFile;
             this.autoTuneProfile = autoTuneProfile;
+            this.maxCategoryItems = maxCategoryItems;
             this.showHelp = showHelp;
         }
     }
@@ -111,6 +114,7 @@ public class BatchDetectionCli {
                 .autoTuneProfile(cliArguments.autoTuneProfile)
                 .autoTuneMaxCandidateFrames(detectionProfile.getAutoTuneMaxCandidateFrames())
                 .variableStarReportOptions(detectionProfile.getVariableStarReportOptions())
+                .maxCategoryItems(cliArguments.maxCategoryItems)
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                 .generateReport(true)
                 .progressListener(DebugOutput.isEnabled() ? createConsoleProgressListener("Pipeline", out) : null)
@@ -152,16 +156,17 @@ public class BatchDetectionCli {
 
     private static CliArguments parseArguments(String[] args) {
         if (args.length == 0) {
-            return new CliArguments(null, null, null, true);
+            return new CliArguments(null, null, null, 0, true);
         }
 
         List<String> positionalArgs = new ArrayList<>();
         AutoTuneProfile autoTuneProfile = null;
+        int maxCategoryItems = 0;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
-                return new CliArguments(null, null, null, true);
+                return new CliArguments(null, null, null, 0, true);
             }
 
             if (arg.startsWith("--auto-tune=")) {
@@ -177,6 +182,19 @@ public class BatchDetectionCli {
                 continue;
             }
 
+            if (arg.startsWith("--max-category-items=")) {
+                maxCategoryItems = parseMaxCategoryItems(arg.substring("--max-category-items=".length()));
+                continue;
+            }
+
+            if ("--max-category-items".equalsIgnoreCase(arg)) {
+                if (i + 1 >= args.length) {
+                    throw new IllegalArgumentException("Missing number after " + arg + ".");
+                }
+                maxCategoryItems = parseMaxCategoryItems(args[++i]);
+                continue;
+            }
+
             positionalArgs.add(arg);
         }
 
@@ -188,7 +206,20 @@ public class BatchDetectionCli {
                 new File(positionalArgs.get(0)),
                 new File(positionalArgs.get(1)),
                 autoTuneProfile,
+                maxCategoryItems,
                 false);
+    }
+
+    private static int parseMaxCategoryItems(String value) {
+        try {
+            int max = Integer.parseInt(value.trim());
+            if (max < 0) {
+                throw new IllegalArgumentException("Maximum category items must be non-negative: " + value);
+            }
+            return max;
+        } catch (NumberFormatException e) {
+            throw new IllegalArgumentException("Invalid maximum category items '" + value + "'. Expected an integer.");
+        }
     }
 
     private static AutoTuneProfile parseAutoTuneProfile(String value) {
@@ -221,13 +252,14 @@ public class BatchDetectionCli {
         out.println("  SpacePixels - Batch Detection CLI");
         out.println("==================================================================");
         out.println("Usage:");
-        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>]");
+        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--max-category-items <number>]");
         out.println();
         out.println("Notes:");
         out.println("  - The input directory must contain only uncompressed unsigned 16-bit (BZERO 32768) monochrome FITS files with identical dimensions.");
         out.println("  - The configuration JSON should be a SpacePixels detection profile (flat DetectionConfig fields, autoTuneMaxCandidateFrames and variable-star report presentation).");
         out.println("  - Packaged distributions include config/default_detection_profile.json as a starting point.");
         out.println("  - When Auto-Tune is enabled, the tuned configuration is used for the pipeline run and exported with the report.");
+        out.println("  - When --max-category-items is specified (> 0), each finding category exports at most that many detailed cards and visualizations in the report.");
         out.println("  - Only the report path and problems are printed; add -D" + DebugOutput.PROPERTY + "=true to the JVM options for progress and diagnostics.");
         out.println();
         out.println("Packaged launcher example:");

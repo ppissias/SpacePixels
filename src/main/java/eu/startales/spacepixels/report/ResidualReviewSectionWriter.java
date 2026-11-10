@@ -63,10 +63,15 @@ final class ResidualReviewSectionWriter {
             report.println("<h2 id='local-rescue'>Local Rescue Candidates</h2>");
             report.println("<p class='section-lede'>A second look at the detections the tracker left unexplained. These candidates are faint local motions of just a few pixels, sparse but consistent drifts over a handful of frames, or short repeats at the same spot. They are worth a manual look; none is a confirmed object.</p>");
 
-            int counter = 1;
-            for (ResidualTransientAnalysis.LocalRescueCandidate candidate : context.localRescueCandidates) {
-                exportLocalRescueCandidateCard(report, context, background, candidate, counter);
-                counter++;
+            int limit = context.settings.getMaxCategoryItems();
+            int total = context.localRescueCandidates.size();
+            int count = (limit > 0 && total > limit) ? limit : total;
+            if (count < total) {
+                report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d local rescue candidates (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+            }
+            for (int i = 0; i < count; i++) {
+                ResidualTransientAnalysis.LocalRescueCandidate candidate = context.localRescueCandidates.get(i);
+                exportLocalRescueCandidateCard(report, context, background, candidate, i + 1);
             }
         }
 
@@ -77,10 +82,15 @@ final class ResidualReviewSectionWriter {
             report.println("<h2 id='activity-clusters'>Local Activity Clusters</h2>");
             report.println("<p class='section-lede'>Groups of leftover detections that keep appearing in the same area, after the local rescue candidates took their points. They are places to review, not confirmed objects.</p>");
 
-            int counter = 1;
-            for (ResidualTransientAnalysis.LocalActivityCluster cluster : context.localActivityClusters) {
-                exportLocalActivityClusterCard(report, context, background, cluster, counter);
-                counter++;
+            int limit = context.settings.getMaxCategoryItems();
+            int total = context.localActivityClusters.size();
+            int count = (limit > 0 && total > limit) ? limit : total;
+            if (count < total) {
+                report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d local activity clusters (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+            }
+            for (int i = 0; i < count; i++) {
+                ResidualTransientAnalysis.LocalActivityCluster cluster = context.localActivityClusters.get(i);
+                exportLocalActivityClusterCard(report, context, background, cluster, i + 1);
             }
         }
     }
@@ -105,7 +115,10 @@ final class ResidualReviewSectionWriter {
         if (commonMotion > 0) {
             counts.add(commonMotion + " common-motion group" + (commonMotion == 1 ? "" : "s") + " (likely noise)");
         }
-        context.progress.expect(cameraFixed + commonMotion);
+        int limit = context.settings.getMaxCategoryItems();
+        int displayCameraFixed = (limit > 0 && cameraFixed > limit) ? limit : cameraFixed;
+        int displayCommonMotion = (limit > 0 && commonMotion > limit) ? limit : commonMotion;
+        context.progress.expect(displayCameraFixed + displayCommonMotion);
         report.println("<details class='report-group' id='likely-artifacts'>");
         report.println("<summary>Likely Artifacts<span class='summary-note'>" + String.join(" and ", counts)
                 + ". The pipeline set them aside; open this to check them by eye.</span></summary>");
@@ -130,11 +143,16 @@ final class ResidualReviewSectionWriter {
         short[][] background = context.masterStackData != null
                 ? context.masterStackData
                 : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
-        int groupNumber = 1;
-        for (CameraFixedRejector.Group group : groups) {
+        int limit = context.settings.getMaxCategoryItems();
+        int total = groups.size();
+        int count = (limit > 0 && total > limit) ? limit : total;
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d camera-fixed groups (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+        for (int i = 0; i < count; i++) {
+            CameraFixedRejector.Group group = groups.get(i);
             context.progress.next();
-            writeCameraFixedCard(report, context, background, group, groupNumber);
-            groupNumber++;
+            writeCameraFixedCard(report, context, background, group, i + 1);
         }
     }
 
@@ -199,11 +217,16 @@ final class ResidualReviewSectionWriter {
                 : (!context.rawFrames.isEmpty() ? context.rawFrames.get(0) : null);
         writeCommonMotionField(report, context, background, groups);
 
-        int groupNumber = 1;
-        for (ResidualTransientAnalysis.CommonMotionGroup group : groups) {
+        int limit = context.settings.getMaxCategoryItems();
+        int total = groups.size();
+        int count = (limit > 0 && total > limit) ? limit : total;
+        if (count < total) {
+            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d common-motion groups (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+        }
+        for (int i = 0; i < count; i++) {
+            ResidualTransientAnalysis.CommonMotionGroup group = groups.get(i);
             context.progress.next();
-            writeCommonMotionCard(report, context, background, group, groupNumber);
-            groupNumber++;
+            writeCommonMotionCard(report, context, background, group, i + 1);
         }
     }
 

@@ -46,7 +46,11 @@ final class VariableStarPresentation {
         display.sort(Comparator.<StarLightCurve>comparingInt(s -> s.tier == VariabilityTier.HIGH_CONFIDENCE ? 0 : 1)
                 .thenComparing(withinTier).thenComparing(significance).thenComparingInt(this::number));
         ordered = List.copyOf(display);
-        cards = List.copyOf(ordered.subList(0, Math.min(options.maxCandidateCards(), ordered.size())));
+        int cardLimit = options.maxCandidateCards();
+        if (context.settings.getMaxCategoryItems() > 0) {
+            cardLimit = Math.min(cardLimit, context.settings.getMaxCategoryItems());
+        }
+        cards = List.copyOf(ordered.subList(0, Math.min(cardLimit, ordered.size())));
         for (var star : cards) cardIds.add(star.id);
     }
 
