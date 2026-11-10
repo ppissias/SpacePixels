@@ -64,6 +64,22 @@ public class AnomalySectionWriterTest {
         assertTrue(html.contains("anomaly_1_satchecker_results.json"));
     }
 
+    @Test public void interactiveSkyViewerLinksIncludeStellariumWebAndLocal() throws Exception {
+        var context = context(3, 1, AnomalyType.PEAK_SIGMA);
+        String html = render(context);
+        assertTrue(html.contains("Interactive sky viewers:"));
+        assertTrue(html.contains("Stellarium Web (Alt/Az)"));
+        assertTrue(html.contains("Stellarium Web (RA/Dec)"));
+        assertTrue(html.contains("Stellarium Local"));
+        assertTrue(html.contains("Stellarium Local Wide"));
+        assertTrue(html.contains("Reference epoch for anomaly lookup"));
+        assertTrue(html.contains("class='id-link stellarium-local-link'"));
+        int skyViewers = html.indexOf("Interactive sky viewers:");
+        int details = html.indexOf("<details class='foldable-streak-details anomaly-details'>");
+        assertTrue(skyViewers > html.indexOf("Check satellites"));
+        assertTrue(details > skyViewers);
+    }
+
     @Test public void missingSatelliteMetadataExplainsWhatIsNeededWithoutInventingATimeWindow() throws Exception {
         var context = context(1, 0, AnomalyType.PEAK_SIGMA);
         var point = context.anomalies.get(0).object;

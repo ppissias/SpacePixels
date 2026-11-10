@@ -99,6 +99,8 @@ final class AnomalySectionWriter {
 
         report.print(AstrometryIdentificationHtmlBuilder.buildAnomalySatCheckerHtml(context.astrometryContext, point,
                 "anomaly-" + number + "-satchecker", prefix + "_satchecker_results.json"));
+        report.print(DetectionReportAstrometry.buildSingleFrameSkyViewerHtml(context.astrometryContext, point,
+                "Reference epoch for anomaly lookup"));
         writeDetails(report, context, anomaly, bounds, prefix);
         report.println("</div>");
     }
