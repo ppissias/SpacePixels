@@ -54,7 +54,7 @@ SpacePixels' part covers GUI/CLI output, `DebugOutput`, library diagnostic bridg
   - missing timestamps and registration problems.
 - **Keep the cases the archive batch exposed:**
   - dense false tracks around a galaxy and along a gradient ([PT-10](../JTransient/FEATURE-REQUESTS.md#pt-10-minimum-fill-for-timed-point-tracks), [XC-3](../JTransient/FEATURE-REQUESTS.md#xc-3-local-background-and-noise-for-frame-extraction));
-  - 12-24 minutes of track linking in large DSLR sequences ([JT-06](../JTransient/DESIGN-IMPROVEMENTS.md#jt-06-look-up-third-points-by-position-in-the-time-based-linker));
+  - 12-24 minutes of track linking in large DSLR sequences (accelerated by JT-06);
   - sequences where the auto-tuner returned no configuration;
   - star tails in a run of frames ([SM-F8](../JTransient/FEATURE-REQUESTS.md#sm-f8-frame-check-for-runs-of-leaky-frames)).
 - **Arrange them in tiers:**
