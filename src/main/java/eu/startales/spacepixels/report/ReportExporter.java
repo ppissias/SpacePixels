@@ -4,6 +4,7 @@ import eu.startales.spacepixels.util.DebugOutput;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.detection.OutputFolders;
 import io.github.ppissias.jtransient.engine.PipelineResult;
+import io.github.ppissias.jtransient.model.Pixel;
 import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import java.io.File;
 import java.io.IOException;
@@ -72,7 +73,7 @@ public final class ReportExporter {
             PipelineDiagnosticsSectionWriter.writeSessionHeader(report, reportContext, reportContext.pipelineTelemetry);
             report.println("<div class='report-toolbar'>");
             PipelineDiagnosticsSectionWriter.writeNavigation(report, buildNavigation(
-                    reportContext, reportContext.pipelineTelemetry, reportContext.summary, reportContext.commonMotionGroups.size(), inclusion));
+                    reportContext, reportContext.pipelineTelemetry, reportContext.summary, reportContext.commonMotionGroups.size(), inclusion, result.driftPoints));
             ReportPresentation.controls(report, reportContext);
             report.println("</div>");
 
@@ -86,6 +87,8 @@ public final class ReportExporter {
             progress.step(16, 20, "overview");
             PipelineDiagnosticsSectionWriter.writeOverview(report, reportContext, reportContext.pipelineTelemetry, reportContext.summary, reportContext.localRescueTracks, fieldDepth, nightEquipment,
                     reportContext.commonMotionGroups.size(), inclusion);
+            PipelineDiagnosticsSectionWriter.writeDriftDiagnostics(report, reportContext, result.driftPoints,
+                    reportContext.pipelineTelemetry != null ? reportContext.pipelineTelemetry.driftExcludedFrames : null);
             KnownSolarSystemReport.write(report, reportContext, fieldDepth);
 
             progress.step(20, 26, "moving objects and streaks");
@@ -148,7 +151,6 @@ public final class ReportExporter {
                     reportContext.pipelineTelemetry,
                     reportContext.pipelineTelemetry != null ? reportContext.pipelineTelemetry.trackerTelemetry : null,
                     reportContext.summary,
-                    result.driftPoints,
                     fieldDepth);
 
             ReportClientScriptWriter.appendLiveReportData(report);
@@ -168,9 +170,13 @@ public final class ReportExporter {
                                                                                  PipelineTelemetry pipelineTelemetry,
                                                                                  DetectionReportSummary summary,
                                                                                  int commonMotionGroupCount,
-                                                                                 ReportInclusion inclusion) {
+                                                                                 ReportInclusion inclusion,
+                                                                                 List<Pixel> driftPoints) {
         List<PipelineDiagnosticsSectionWriter.NavItem> items = new ArrayList<>();
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
+        if (PipelineDiagnosticsSectionWriter.hasDrift(context, driftPoints)) {
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("dither-drift", "Dither & drift", null, false));
+        }
         if (context.knownSolarSystem != null) items.add(new PipelineDiagnosticsSectionWriter.NavItem(
                 "known-solar-system", "Known asteroids & comets", Integer.toString(KnownSolarSystemReport.inFieldBodies(context.knownSolarSystem).size()), false));
         if (FindingCategory.FAINT_MOVER.included(inclusion) && pipelineTelemetry != null && pipelineTelemetry.faintMoverSearchTelemetry != null) {

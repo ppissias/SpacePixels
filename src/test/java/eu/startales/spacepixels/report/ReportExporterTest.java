@@ -5,6 +5,8 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
 import io.github.ppissias.jtransient.config.DetectionConfig;
 import io.github.ppissias.jtransient.engine.PipelineResult;
 import io.github.ppissias.jtransient.engine.TransientEngineProgressListener;
+import io.github.ppissias.jtransient.model.Pixel;
+import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -96,6 +98,58 @@ public class ReportExporterTest {
                 ReportRunContext.capture(DetectionRunOptions.defaults(), null), null, null);
         assertNull(ReportExporter.export(request));
         assertFalse(output.exists());
+    }
+
+    /** Drift diagnostics is rendered immediately after overview and linked in navigation when drift is measured. */
+    @Test public void driftDiagnosticsPlacedImmediatelyAfterOverviewWhenDriftPresent() throws Exception {
+        File dir = temporary.newFolder();
+        FitsFileInformation[] files = files(dir);
+        List<Pixel> drift = List.of(new Pixel(0, 0, 0), new Pixel(2, 3, 1), new Pixel(4, 5, 2));
+        var telemetry = new PipelineTelemetry();
+        telemetry.totalFramesLoaded = 3;
+        telemetry.totalFramesKept = 3;
+        var result = PipelineResult.builder().driftPoints(drift).telemetry(telemetry).build();
+        var request = new ReportRequest(result,
+                List.of(new short[24][24], new short[24][24], new short[24][24]), files, dir,
+                new DetectionConfig(), ReportRunContext.capture(DetectionRunOptions.defaults(), files), null, null);
+        File report = ReportExporter.export(request);
+        assertNotNull(report);
+        String html = Files.readString(report.toPath());
+
+        assertTrue(html.contains("<a href='#dither-drift'>Dither &amp; drift</a>"));
+        int overviewIdx = html.indexOf("id='overview'");
+        int driftIdx = html.indexOf("id='dither-drift'");
+        int movingIdx = html.indexOf("id='moving-objects'");
+        int diagIdx = html.indexOf("id='diagnostics'");
+
+        assertTrue(overviewIdx >= 0);
+        assertTrue(driftIdx >= 0);
+        assertTrue(movingIdx >= 0);
+        assertTrue(diagIdx >= 0);
+        assertTrue("Dither & drift section must be placed after overview", driftIdx > overviewIdx);
+        assertTrue("Dither & drift section must be placed before moving objects", driftIdx < movingIdx);
+        assertTrue("Dither & drift section must not be inside diagnostics", driftIdx < diagIdx);
+    }
+
+    /** No drift diagnostics section or navigation link is emitted when drift points are empty or zero. */
+    @Test public void noDriftDiagnosticsEmittedWhenDriftAbsent() throws Exception {
+        File dir = temporary.newFolder();
+        FitsFileInformation[] files = files(dir);
+        List<Pixel> zeroDrift = List.of(new Pixel(0, 0, 0), new Pixel(0, 0, 1), new Pixel(0, 0, 2));
+        var telemetry = new PipelineTelemetry();
+        telemetry.totalFramesLoaded = 3;
+        telemetry.totalFramesKept = 3;
+        var result = PipelineResult.builder().driftPoints(zeroDrift).telemetry(telemetry).build();
+        var request = new ReportRequest(result,
+                List.of(new short[24][24], new short[24][24], new short[24][24]), files, dir,
+                new DetectionConfig(), ReportRunContext.capture(DetectionRunOptions.defaults(), files), null, null);
+        File report = ReportExporter.export(request);
+        assertNotNull(report);
+        String html = Files.readString(report.toPath());
+
+        assertFalse(html.contains("id='dither-drift'"));
+        assertFalse(html.contains("#dither-drift"));
+        assertFalse(html.contains("Dither & Sensor Drift Diagnostics"));
     }
 
     /** Creates a small non-WCS run without reading any FITS buffers from disk. */

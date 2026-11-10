@@ -311,7 +311,6 @@ final class PipelineDiagnosticsSectionWriter {
                                  PipelineTelemetry pipelineTelemetry,
                                  TrackerTelemetry linkerTelemetry,
                                  DetectionReportSummary summary,
-                                 List<Pixel> driftPoints,
                                  FieldDepth fieldDepth) throws IOException {
         report.println("<details class='report-group' id='diagnostics'>");
         report.println("<summary>Diagnostics<span class='summary-note'>Stage timings, astrometry, frame quality control, configuration, star mask, extraction and track linking.</span></summary>");
@@ -323,7 +322,6 @@ final class PipelineDiagnosticsSectionWriter {
             writeRejectedFrames(report, pipelineTelemetry);
             writePipelineConfiguration(report, reportContext);
             writeMasterShieldDiagnostics(report, reportContext, summary);
-            writeDriftDiagnostics(report, reportContext, driftPoints, pipelineTelemetry.driftExcludedFrames);
             writeExtractionStatistics(report, pipelineTelemetry);
             writeStationaryStarPurification(report, pipelineTelemetry, linkerTelemetry);
         }
@@ -718,28 +716,29 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("</div>");
     }
 
-    private static void writeDriftDiagnostics(PrintWriter report,
-                                              DetectionReportContext reportContext,
-                                              List<Pixel> driftPoints,
-                                              List<Integer> excludedFrames) throws IOException {
-        if (reportContext.rawFrames.isEmpty() || driftPoints == null || driftPoints.isEmpty()) {
+    static boolean hasDrift(DetectionReportContext reportContext, List<Pixel> driftPoints) {
+        if (reportContext == null || reportContext.rawFrames == null || reportContext.rawFrames.isEmpty()
+                || driftPoints == null || driftPoints.isEmpty()) {
+            return false;
+        }
+        Pixel firstPoint = driftPoints.get(0);
+        for (Pixel point : driftPoints) {
+            if (point.x != firstPoint.x || point.y != firstPoint.y) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    static void writeDriftDiagnostics(PrintWriter report,
+                                      DetectionReportContext reportContext,
+                                      List<Pixel> driftPoints,
+                                      List<Integer> excludedFrames) throws IOException {
+        if (!hasDrift(reportContext, driftPoints)) {
             return;
         }
 
         List<BufferedImage> cornerFrames = new ArrayList<>();
-        boolean hasDrift = false;
-        Pixel firstPoint = driftPoints.get(0);
-        for (Pixel point : driftPoints) {
-            if (point.x != firstPoint.x || point.y != firstPoint.y) {
-                hasDrift = true;
-                break;
-            }
-        }
-
-        if (!hasDrift) {
-            return;
-        }
-
         List<Integer> sampledCornerIndices = DetectionReportGenerator.getRepresentativeSequence(
                 reportContext.rawFrames.size(),
                 new HashSet<>(),
@@ -754,9 +753,9 @@ final class PipelineDiagnosticsSectionWriter {
 
         GifSequenceWriter.saveAnimatedGif(cornerFrames, reportContext.file(CORNERS), reportContext.settings.getGifBlinkSpeedMs(), reportContext.animations);
 
-        report.println("<div class='panel'>");
+        report.println("<section class='panel' id='dither-drift'>");
         report.println("<h2>Dither & Sensor Drift Diagnostics</h2>");
-        report.println("<p style='color: var(--sp-text-muted); font-size: 0.875rem; margin-top: -10px; margin-bottom: 15px;'>");
+        report.println("<p class='section-lede'>");
         report.println("Shows how the image frame drifted across the session. Sensor dust or hot pixels move exactly along this trajectory, potentially creating false moving targets.</p>");
         if (!reportContext.dataAreaText.isEmpty()) {
             report.println("<div class='astro-note'>" + ReportFormat.escapeHtml(reportContext.dataAreaText)
@@ -781,7 +780,7 @@ final class PipelineDiagnosticsSectionWriter {
         }
         report.println("</div></div></div>");
         report.println("</div>");
-        report.println("</div>");
+        report.println("</section>");
     }
 
     private static void writeExtractionStatistics(PrintWriter report, PipelineTelemetry pipelineTelemetry) {
