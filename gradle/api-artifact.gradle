@@ -49,6 +49,15 @@ tasks.register('verifyApiPublication') {
                 throw new GradleException("Missing runtime dependency: ${runtimeModule}")
             }
         }
+        def annotationExclusions = ['com.github.spotbugs', 'com.google.code.findbugs', 'jakarta.annotation',
+                'com.google.errorprone'] as Set
+        for (String module : ['jtransient', 'nom-tam-fits', 'gson', 'jplatesolve']) {
+            def dependency = dependencies.find { it.artifactId.text() == module }
+            def excluded = dependency == null ? [] : dependency.exclusions.exclusion.collect { it.groupId.text() }
+            if (dependency == null || !excluded.containsAll(annotationExclusions)) {
+                throw new GradleException("Missing annotation-jar exclusions on ${module}: ${excluded}")
+            }
+        }
         def metadata = new groovy.json.JsonSlurper().parse(layout.buildDirectory.file('publications/mavenJava/module.json').get().asFile)
         if (metadata.component.module != 'spacepixels' ||
                 metadata.variants.any { it.name.toLowerCase(java.util.Locale.ROOT).contains('desktop') } ||

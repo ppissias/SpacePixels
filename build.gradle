@@ -441,7 +441,91 @@ apply from: 'gradle/api-consumer.gradle'
 apply from: 'gradle/windows-installer.gradle'
 apply from: 'gradle/release-check.gradle'
 
+tasks.register('verifyApplicationDistribution') {
+    group = 'verification'
+    description = 'Checks that application archives ship NOTICE.txt and only the required runtime jars.'
+    dependsOn tasks.named('installDist'), tasks.named('distZip'), tasks.named('distTar'), tasks.named('prepareWindowsInput')
+    def installDir = tasks.named('installDist').map { it.destinationDir }
+    def zipFile = tasks.named('distZip').flatMap { it.archiveFile }
+    def tarFile = tasks.named('distTar').flatMap { it.archiveFile }
+    def windowsInput = layout.buildDirectory.dir('windows/input')
+    def licenseFile = layout.projectDirectory.file('LICENSE')
+    def noticeFile = layout.projectDirectory.file('NOTICE.txt')
+    inputs.files(licenseFile, noticeFile)
+    doLast {
+        def normalize = { String text -> text.replace('\r\n', '\n').replace('\r', '\n') }
+        def expectedLicense = normalize(licenseFile.asFile.getText('UTF-8'))
+        def expectedNotice = normalize(noticeFile.asFile.getText('UTF-8'))
+        def jarAllowed = { String name ->
+            name ==~ /(?i)(spacepixels|jtransient|jplatesolve|nom-tam-fits|gson|flatlaf)-.+\.jar/
+        }
+        def forbidden = { String name ->
+            def lower = name.toLowerCase(java.util.Locale.ROOT)
+            lower.contains('spotbugs') || lower.contains('jakarta') || lower.contains('jsr305')
+                    || lower.contains('error_prone') || lower.contains('commons-compress')
+        }
+        def assertJars = { Collection<String> names, String where ->
+            def jars = names.findAll { it.toLowerCase(java.util.Locale.ROOT).endsWith('.jar') }
+            def bad = jars.findAll { forbidden(it) || !jarAllowed(it) }
+            def missing = ['spacepixels', 'jtransient', 'jplatesolve', 'nom-tam-fits', 'gson', 'flatlaf'].findAll { stem ->
+                jars.every { !it.toLowerCase(java.util.Locale.ROOT).startsWith(stem + '-') }
+            }
+            if (bad || missing) {
+                throw new GradleException("${where} jars are ${jars}; unexpected ${bad}; missing ${missing}")
+            }
+        }
+        def assertTexts = { String licenseText, String noticeText, String where ->
+            if (normalize(licenseText) != expectedLicense) {
+                throw new GradleException("${where} LICENSE does not match the SpacePixels license.")
+            }
+            if (normalize(noticeText) != expectedNotice) {
+                throw new GradleException("${where} NOTICE.txt does not match the repository notice.")
+            }
+        }
+        def archivePaths = { File archive, boolean tar ->
+            def paths = []
+            (tar ? project.tarTree(archive) : project.zipTree(archive)).visit { details ->
+                paths << details.relativePath.pathString.replace('\\', '/')
+            }
+            paths
+        }
+        def archiveText = { File archive, String suffix, boolean tar ->
+            String match = null
+            (tar ? project.tarTree(archive) : project.zipTree(archive)).visit { details ->
+                def path = details.relativePath.pathString.replace('\\', '/')
+                if (path == suffix || path.endsWith('/' + suffix)) {
+                    if (match != null) throw new GradleException("${archive.name} contains more than one ${suffix}")
+                    match = details.file.getText('UTF-8')
+                }
+            }
+            if (match == null) throw new GradleException("${archive.name} is missing ${suffix}")
+            match
+        }
+
+        File installed = installDir.get()
+        assertJars(new File(installed, 'lib').listFiles().collect { it.name }, 'installDist')
+        assertTexts(new File(installed, 'LICENSE').getText('UTF-8'),
+                new File(installed, 'NOTICE.txt').getText('UTF-8'), 'installDist')
+
+        [[zipFile.get().asFile, false], [tarFile.get().asFile, true]].each { pair ->
+            File archive = pair[0] as File
+            boolean tar = pair[1]
+            def jars = archivePaths(archive, tar).findAll { path ->
+                int lib = path.lastIndexOf('/lib/')
+                lib >= 0 && !path.substring(lib + 5).contains('/') && path.toLowerCase(java.util.Locale.ROOT).endsWith('.jar')
+            }.collect { it.substring(it.lastIndexOf('/') + 1) }
+            assertJars(jars, archive.name)
+            assertTexts(archiveText(archive, 'LICENSE', tar), archiveText(archive, 'NOTICE.txt', tar), archive.name)
+        }
+
+        File input = windowsInput.get().asFile
+        assertJars(input.listFiles().findAll { it.isFile() && it.name.endsWith('.jar') }.collect { it.name }, 'windows input')
+        assertTexts(new File(input, 'LICENSE').getText('UTF-8'), new File(input, 'NOTICE.txt').getText('UTF-8'), 'windows input')
+    }
+}
+
 // The isolated API consumer build runs when the Central bundle is prepared (bundleCentralPortal), not on every check.
 tasks.named('check') {
-    dependsOn tasks.named('verifyApiPublication'), tasks.named('verifyDesktopArchive')
+    dependsOn tasks.named('verifyApiPublication'), tasks.named('verifyDesktopArchive'),
+            tasks.named('verifyApplicationDistribution')
 }

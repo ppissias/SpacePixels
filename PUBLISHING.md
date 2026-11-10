@@ -29,7 +29,7 @@ Run `releaseCheck` before packaging. From the repository root:
 .\gradlew.bat distZip distTar
 ```
 
-The application archives are written to `build/distributions/`. They include launchers, application and dependency JARs, configuration examples and the license, but no Java runtime. Users need Java 21 or newer. GitHub's automatically generated **Source code** downloads are not these application archives.
+The application archives are written to `build/distributions/`. They include launchers, application and dependency JARs, configuration examples, the license and `NOTICE.txt`, but no Java runtime. Users need Java 21 or newer. GitHub's automatically generated **Source code** downloads are not these application archives.
 
 Before publishing a release, upload the intended application archives and, for a Windows installer release, the separately built EXE. Check their actual names under GitHub **Assets**, keep the installation guidance in README/MANUAL and the website consistent with the published packages, and verify that the website links to the correct branch or release tag. A successful local package build does not publish a release or establish installer lifecycle acceptance.
 
@@ -44,7 +44,7 @@ Build on Windows x64 with a 64-bit JDK 21 selected by `JAVA_HOME`. The JDK suppl
 
 `windowsAppImage` creates `build/windows/image/SpacePixels/`. `windowsInstaller` creates the image if needed, then writes `build/installers/SpacePixels-<installer-version>.exe`. WiX can instead be configured with `wixHome` in git-ignored `gradle.properties`, `WIX_HOME`, `WIX`, or PATH. Ordinary builds and archive distributions do not require Windows or WiX.
 
-The image contains the desktop and headless JARs, their dependencies, all shared files from the Java distribution and a private Java 21 runtime with its legal notices. The default detection profile, appearance example and application license are included unchanged under `app/`; future distribution configuration files and examples are copied too. Native launchers replace the archive's launcher scripts:
+The image contains the desktop and headless JARs, their dependencies, all shared files from the Java distribution and a private Java 21 runtime with its legal notices. The default detection profile, appearance example, application license and `NOTICE.txt` are included unchanged under `app/`; future distribution configuration files and examples are copied too. Native launchers replace the archive's launcher scripts:
 
 - `SpacePixels.exe` opens the desktop without a console.
 - `spacepixels-batch.exe` runs the batch CLI in a console. For example, from the installation folder: `.\spacepixels-batch.exe "<sequence folder>" "app\config\default_detection_profile.json"`.

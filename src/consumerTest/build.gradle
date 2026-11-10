@@ -82,6 +82,12 @@ tasks.register('verifyRuntime') {
                 !modules.any { it.group == 'io.github.ppissias.jplatesolve' }) {
             throw new GradleException('JTransient must be exposed at compile time; JPlateSolve must remain runtime-transitive only.')
         }
+        def annotationGroups = ['com.github.spotbugs', 'com.google.code.findbugs', 'jakarta.annotation',
+                'com.google.errorprone'] as Set
+        def annotationJars = modules.findAll { it.group in annotationGroups }
+        if (annotationJars) {
+            throw new GradleException("Consumer resolved unused annotation jars: ${annotationJars}")
+        }
         if (configurations.testRuntimeClasspath.files.any { !it.name.endsWith('.jar') }) {
             throw new GradleException('The consumer dependency classpath must contain packaged JARs only.')
         }
