@@ -177,6 +177,11 @@ public class SkyCatalogueClientTest {
                 + "<INFO name=\"QUERY_STATUS\" value=\"ERROR\">Incorrect ADQL query: 5 unresolved identifiers</INFO></RESOURCE></VOTABLE>";
         assertEquals("answered with an error: Incorrect ADQL query: 5 unresolved identifiers", SkyCatalogueClient.errorText(400, body));
         assertEquals("answered with HTTP 503.", SkyCatalogueClient.errorText(503, "Service Unavailable"));
+        String queue = "<html><body><ul><li><b>Message: </b>Server overloaded: synchronous job rejected "
+                + "due to maximum number of synchronous queued jobs (150) reached. Please, try again later.</li></ul></body></html>";
+        assertEquals("answered with HTTP 503: Server overloaded: synchronous job rejected "
+                + "due to maximum number of synchronous queued jobs (150) reached. Please, try again later.",
+                SkyCatalogueClient.errorText(503, queue));
     }
 
     @Test

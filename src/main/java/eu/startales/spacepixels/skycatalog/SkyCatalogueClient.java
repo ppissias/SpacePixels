@@ -18,20 +18,29 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import eu.startales.spacepixels.util.DebugOutput;
+
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamReader;
 
 /**
  * Fetches the catalogue of a field from the online TAP services: deep-sky objects from SIMBAD, variable stars from
- * AAVSO VSX and stars from Gaia DR3, all at CDS (Strasbourg), with ESA's Gaia archive as the fallback for the stars.
- * Each source that fails is noted in {@link SkyCatalogue#problems}; the others are still kept. The four SIMBAD
- * queries are asked separately, so a later failure keeps the objects already parsed. A VizieR failure is kept as
- * its own step when the ESA archive then answers. Faint depth patches that answer are kept when another patch
+ * AAVSO VSX and stars from Gaia DR3. SIMBAD is asked at Strasbourg, then Harvard, then IDIA. The stars and the
+ * faint field-depth patches are asked of VizieR at CDS, then ESA's Gaia archive, then ARI Heidelberg. Variable stars
+ * are asked of VizieR at CDS, then the Harvard and IDIA copies of VSX. Each source that
+ * fails is noted in {@link SkyCatalogue#problems}; the others are still kept. The four
+ * SIMBAD queries are asked separately, so a later failure keeps the objects already parsed. A Gaia service that
+ * fails is kept as its own step when a later one answers. Faint depth patches that answer are kept when another patch
  * fails. Every question is also recorded on {@link SkyCatalogue#fetchSteps}. Interrupting the fetching thread
  * cancels the request in progress and marks the questions not yet sent.
  */
@@ -62,9 +71,27 @@ public final class SkyCatalogueClient {
         CsvTable query(String service, String adql, int maxRecords, Duration timeout) throws IOException, InterruptedException;
     }
 
+    /** One cone-search GET. Tests supply a recorded page; the desktop client fetches it. */
+    interface ConeSearch {
+        /** The response body of one cone search. */
+        String get(String url, Duration timeout) throws IOException, InterruptedException;
+    }
+
     static final String VIZIER_TAP = "https://tapvizier.cds.unistra.fr/TAPVizieR/tap/sync";
+    /** VSX table query at the CfA Harvard VizieR mirror. */
+    static final String VSX_HARVARD = "https://vizier.cfa.harvard.edu/viz-bin/votable";
+    /** VSX table query at the IDIA VizieR mirror. */
+    static final String VSX_IDIA = "https://vizier.idia.ac.za/viz-bin/votable";
+    /** Shown when a copy is left unasked because it already failed to answer in this fetch. */
+    private static final String SKIPPED = "Not sent, because this copy did not answer earlier.";
     static final String ESA_GAIA_TAP = "https://gea.esac.esa.int/tap-server/tap/sync";
+    /** Gaia DR3 at the Astronomisches Rechen-Institut, asked when VizieR and the ESA archive do not answer. */
+    static final String ARI_GAIA_TAP = "https://gaia.ari.uni-heidelberg.de/tap/sync";
     static final String SIMBAD_TAP = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync";
+    /** SIMBAD TAP at the CfA Harvard mirror, asked when Strasbourg does not answer. */
+    static final String SIMBAD_HARVARD = "https://simbad.cfa.harvard.edu/simbad/sim-tap/sync";
+    /** SIMBAD TAP at the IDIA mirror, asked when Strasbourg and Harvard do not answer. */
+    static final String SIMBAD_IDIA = "https://simbad.idia.ac.za/simbad/sim-tap/sync";
     /** More stars than this would take minutes; the depth should be lowered instead. */
     static final int MAX_STARS = 300_000;
     /** Variable stars are kept to this much fainter than the star depth, at their brightest. */
@@ -75,6 +102,9 @@ public final class SkyCatalogueClient {
     private static final Duration QUICK_TIMEOUT = Duration.ofSeconds(60);
     private static final Pattern QUERY_ERROR = Pattern.compile(
             "<INFO[^>]*name=\"QUERY_STATUS\"[^>]*value=\"ERROR\"[^>]*>(.*?)</INFO>", Pattern.DOTALL);
+    /** The message on a TAP error page, such as ESA's full synchronous queue. */
+    private static final Pattern SERVICE_MESSAGE = Pattern.compile(
+            "<b>\\s*Message:\\s*</b>\\s*(.*?)</li>", Pattern.DOTALL | Pattern.CASE_INSENSITIVE);
 
     /**
      * Catalogue names SIMBAD knows the classic deep-sky objects by, in the order a label prefers them, with the
@@ -91,6 +121,7 @@ public final class SkyCatalogueClient {
     static final double NAMED_STAR_MAGNITUDE = 5.0;
 
     private final QueryTransport transport;
+    private final ConeSearch cones;
     /** Stars kept from one answer before the depth is reported as only partly fetched. Production uses {@link #MAX_STARS}. */
     private final int starCap;
 
@@ -100,6 +131,7 @@ public final class SkyCatalogueClient {
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
         this.transport = (service, adql, maxRecords, timeout) -> httpQuery(http, service, adql, maxRecords, timeout);
+        this.cones = (url, timeout) -> httpGet(http, url, timeout);
         this.starCap = MAX_STARS;
     }
 
@@ -112,7 +144,15 @@ public final class SkyCatalogueClient {
      * A client with a test limit on how many stars one answer may keep. The desktop uses {@link #MAX_STARS}.
      */
     SkyCatalogueClient(QueryTransport transport, int starCap) {
+        this(transport, (url, timeout) -> {
+            throw new IOException("answered with HTTP 503.");
+        }, starCap);
+    }
+
+    /** A client whose TAP queries and VSX cone searches are both supplied by the test. */
+    SkyCatalogueClient(QueryTransport transport, ConeSearch cones, int starCap) {
         this.transport = transport;
+        this.cones = cones;
         this.starCap = starCap;
     }
 
@@ -141,29 +181,28 @@ public final class SkyCatalogueClient {
         Progress progress = attempt.progress;
 
         progress.stage(1, 3, "deep-sky objects (SIMBAD)");
-        CsvTable named = ask(attempt, "SIMBAD", "Deep-sky catalogue names", "Deep-sky catalogue names (SIMBAD)",
-                SIMBAD_TAP, namedDeepSkyQuery(field), 20_000, QUICK_TIMEOUT);
-        CsvTable galaxies = ask(attempt, "SIMBAD", "Large galaxies", "Large galaxies (SIMBAD)",
-                SIMBAD_TAP, galaxyQuery(field), 20_000, QUICK_TIMEOUT);
+        CsvTable named = askSimbad(attempt, progress, "Deep-sky catalogue names", "Deep-sky catalogue names (SIMBAD)",
+                namedDeepSkyQuery(field), 20_000);
+        CsvTable galaxies = askSimbad(attempt, progress, "Large galaxies", "Large galaxies (SIMBAD)",
+                galaxyQuery(field), 20_000);
         catalogue.deepSky = parseDeepSky(named, galaxies);
-        CsvTable commonNames = ask(attempt, "SIMBAD", "Common names", "Common names (SIMBAD)",
-                SIMBAD_TAP, namedObjectQuery(field), 20_000, QUICK_TIMEOUT);
+        CsvTable commonNames = askSimbad(attempt, progress, "Common names", "Common names (SIMBAD)",
+                namedObjectQuery(field), 20_000);
         addNamedObjects(catalogue.deepSky, commonNames);
-        CsvTable brightStars = ask(attempt, "SIMBAD", "Named bright stars", "Named bright stars (SIMBAD)",
-                SIMBAD_TAP, namedStarQuery(field), 5_000, QUICK_TIMEOUT);
+        CsvTable brightStars = askSimbad(attempt, progress, "Named bright stars", "Named bright stars (SIMBAD)",
+                namedStarQuery(field), 5_000);
         catalogue.namedStars = parseNamedStars(brightStars);
 
         progress.stage(2, 3, "variable stars (AAVSO VSX)");
-        CsvTable variables = ask(attempt, "AAVSO VSX", "Variable stars", "Variable stars (AAVSO VSX)",
-                VIZIER_TAP, variableQuery(field, magnitudeLimit), 200_000, QUICK_TIMEOUT);
-        catalogue.variables = parseVariables(variables);
+        catalogue.variables = parseVariables(fetchVariables(attempt, field, magnitudeLimit, progress));
 
         String depth = String.format(Locale.US, "stars to magnitude %.1f (Gaia)", magnitudeLimit);
         progress.stage(3, 3, depth);
         try {
             String[] source = new String[1];
             catalogue.stars = fetchStars(field, magnitudeLimit, source,
-                    () -> progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ESA archive)")), attempt);
+                    () -> progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ESA archive)")),
+                    () -> progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ARI Heidelberg)")), attempt);
             catalogue.starSource = source[0];
         } catch (IOException problem) {
             // Each Gaia service already has its own step and problem sentence.
@@ -176,27 +215,316 @@ public final class SkyCatalogueClient {
             attempt.fail("Gaia", "Star depth limit", "Only part of the stars were fetched", message, null, null);
         }
         if (catalogue.stars.isEmpty()) {
-            attempt.notAsked("Gaia", "Field depth", "", "The star query produced no stars.");
+            attempt.notAsked("Gaia via VizieR", "Field depth", "", "The star query produced no stars.");
         } else {
             fetchDepth(attempt);
         }
     }
 
     /**
-     * One TAP query. A failure records the step, adds the problem sentence and returns an empty table, so a later
-     * query still runs and objects already parsed stay. Interruption is left to the caller.
+     * One SIMBAD question, asked of Strasbourg, then Harvard, then IDIA. A failure stays recorded when a later copy
+     * answers. An empty table is returned when every copy fails, so objects already parsed stay.
      */
-    private CsvTable ask(Attempt attempt, String service, String question, String problemPrefix, String endpoint,
-            String adql, int maxRecords, Duration timeout) throws InterruptedException {
-        try {
-            CsvTable table = query(endpoint, adql, maxRecords, timeout);
-            attempt.succeed(service, question, count(table.size(), "row"), "", endpoint, adql);
-            return table;
-        } catch (IOException problem) {
-            attempt.fail(service, question, "", problem.getMessage(), endpoint, adql);
-            attempt.catalogue.problems.add(problemPrefix + ": " + problem.getMessage());
-            return CsvTable.parse("");
+    private CsvTable askSimbad(Attempt attempt, Progress progress, String question, String problemStem, String adql,
+            int maxRecords) throws InterruptedException {
+        String[] endpoints = {SIMBAD_TAP, SIMBAD_HARVARD, SIMBAD_IDIA};
+        String[] services = {"SIMBAD", "SIMBAD via Harvard", "SIMBAD via IDIA"};
+        String[] places = {"", "Harvard", "IDIA"};
+        IOException last = null;
+        for (int i = 0; i < endpoints.length; i++) {
+            if (i > 0) {
+                progress.stage(1, 3, question + " (SIMBAD, " + places[i] + ")");
+                attempt.expectNext(new Planned(services[i], question));
+            }
+            if (attempt.alreadyDown(endpoints[i])) {
+                attempt.notAsked(services[i], question, "", SKIPPED);
+                continue;
+            }
+            try {
+                CsvTable table = query(endpoints[i], adql, maxRecords, QUICK_TIMEOUT);
+                attempt.succeed(services[i], question, count(table.size(), "row"), "", endpoints[i], adql);
+                return table;
+            } catch (IOException problem) {
+                last = problem;
+                attempt.remember(endpoints[i], problem);
+                attempt.fail(services[i], question, "", problem.getMessage(), endpoints[i], adql);
+            }
         }
+        attempt.catalogue.problems.add(problemStem + ": " + (last == null ? "did not answer earlier." : last.getMessage()));
+        return CsvTable.parse("");
+    }
+
+    /**
+     * Variable stars from VizieR, then the Harvard mirror, then the IDIA mirror. A failure stays recorded when a
+     * later copy answers. The mirror search is a circle covering the frame; stars outside the frame, constants and
+     * stars fainter than the depth are left out.
+     */
+    private CsvTable fetchVariables(Attempt attempt, SkyField field, double magnitudeLimit, Progress progress)
+            throws InterruptedException {
+        String adql = variableQuery(field, magnitudeLimit);
+        IOException last = null;
+        if (attempt.alreadyDown(VIZIER_TAP)) {
+            attempt.notAsked("AAVSO VSX via VizieR", "Variable stars", "", SKIPPED);
+        } else {
+            try {
+                CsvTable table = query(VIZIER_TAP, adql, 200_000, QUICK_TIMEOUT);
+                attempt.succeed("AAVSO VSX via VizieR", "Variable stars", count(table.size(), "row"), "", VIZIER_TAP, adql);
+                attempt.catalogue.variableSource = "AAVSO VSX via VizieR";
+                return table;
+            } catch (IOException vizierProblem) {
+                last = vizierProblem;
+                noteVariableFailure(attempt, "AAVSO VSX via VizieR", vizierProblem, VIZIER_TAP, adql);
+            }
+        }
+        progress.stage(2, 3, "variable stars (AAVSO VSX, Harvard)");
+        attempt.expectNext(new Planned("AAVSO VSX via Harvard", "Variable stars"));
+        if (attempt.alreadyDown(VSX_HARVARD)) {
+            attempt.notAsked("AAVSO VSX via Harvard", "Variable stars", "", SKIPPED);
+        } else {
+            try {
+                return variablesFromCone(attempt, "AAVSO VSX via Harvard", "Variable stars (AAVSO VSX, Harvard)",
+                        VSX_HARVARD, field, magnitudeLimit);
+            } catch (IOException harvardProblem) {
+                last = harvardProblem;
+                noteVariableFailure(attempt, "AAVSO VSX via Harvard", harvardProblem, VSX_HARVARD, null);
+            }
+        }
+        progress.stage(2, 3, "variable stars (AAVSO VSX, IDIA)");
+        attempt.expectNext(new Planned("AAVSO VSX via IDIA", "Variable stars"));
+        if (attempt.alreadyDown(VSX_IDIA)) {
+            attempt.notAsked("AAVSO VSX via IDIA", "Variable stars", "", SKIPPED);
+        } else {
+            try {
+                return variablesFromCone(attempt, "AAVSO VSX via IDIA", "Variable stars (AAVSO VSX, IDIA)",
+                        VSX_IDIA, field, magnitudeLimit);
+            } catch (IOException idiaProblem) {
+                last = idiaProblem;
+                noteVariableFailure(attempt, "AAVSO VSX via IDIA", idiaProblem, VSX_IDIA, null);
+            }
+        }
+        attempt.catalogue.problems.add("Variable stars (AAVSO VSX): "
+                + (last == null ? "did not answer earlier." : last.getMessage()));
+        return CsvTable.parse("");
+    }
+
+    /** One mirror cone search, kept when the circle covers the frame and the answer can be read. */
+    private CsvTable variablesFromCone(Attempt attempt, String service, String problemLabel, String endpoint,
+            SkyField field, double magnitudeLimit) throws IOException, InterruptedException {
+        String url = coneUrl(endpoint, field);
+        boolean truncated = false;
+        CsvTable received;
+        try {
+            received = parseVotable(cones.get(url, QUICK_TIMEOUT));
+        } catch (TruncatedAnswer cut) {
+            received = cut.table;
+            truncated = true;
+        }
+        CsvTable kept = variablesInside(received, field, magnitudeLimit);
+        String outcome = count(kept.size(), "row") + (truncated ? " (truncated)" : "");
+        if (truncated) {
+            attempt.fail(service, "Variable stars", outcome, "The answer was cut off.", url, null);
+            attempt.catalogue.problems.add(problemLabel + ": the answer was cut off.");
+        } else {
+            attempt.succeed(service, "Variable stars", outcome, "", url, null);
+        }
+        attempt.catalogue.variableSource = service;
+        return kept;
+    }
+
+    /** Records a failed variable-star copy. The warning is added only when every copy has failed. */
+    private void noteVariableFailure(Attempt attempt, String service, IOException problem, String endpoint, String query) {
+        attempt.remember(endpoint, problem);
+        String address = query == null ? coneUrl(endpoint, attempt.catalogue.field) : endpoint;
+        attempt.fail(service, "Variable stars", "", problem.getMessage(), address, query);
+    }
+
+    /**
+     * The VizieR table address for this field. The mirror selects variable and suspected stars, and the columns the
+     * catalogue keeps, including bibliography. The magnitude limit stays on the client, because an empty brightest
+     * magnitude must be kept.
+     */
+    static String coneUrl(String endpoint, SkyField field) {
+        String columns = "OID,Name,V,RAJ2000,DEJ2000,Type,max,n_max,f_min,min,n_min,l_max,u_max,l_min,u_min,"
+                + "Period,l_Period,u_Period,n_OID";
+        String target = String.format(Locale.US, "%.6f %+.6f", field.centerRa, field.centerDec);
+        return endpoint + "?-source=B/vsx/vsx&-c=" + URLEncoder.encode(target, StandardCharsets.UTF_8)
+                + "&-c.rd=" + String.format(Locale.US, "%.6f", field.coveringRadiusDeg())
+                + "&V=" + URLEncoder.encode("<2", StandardCharsets.UTF_8)
+                + "&-out.max=200000&-out=" + columns;
+    }
+
+    /**
+     * Rows of a cone-search answer that lie inside the frame, are variable or suspected ({@code V} below 2), and are
+     * no fainter than the depth. The brightest magnitude may be absent.
+     */
+    static CsvTable variablesInside(CsvTable table, SkyField field, double magnitudeLimit) throws IOException {
+        if (table.size() > 0 && (!table.hasColumn("Name") || !table.hasColumn("RAJ2000") || !table.hasColumn("DEJ2000"))) {
+            throw new IOException("answered without the expected columns.");
+        }
+        double faintest = magnitudeLimit + VARIABLE_MAGNITUDE_MARGIN;
+        String[] columns = {"OID", "Name", "V", "RAJ2000", "DEJ2000", "Type", "max", "n_max", "f_min", "min", "n_min",
+                "l_max", "u_max", "l_min", "u_min", "Period", "l_Period", "u_Period", "n_OID"};
+        StringBuilder csv = new StringBuilder();
+        for (String column : columns) {
+            if (table.hasColumn(column)) {
+                csv.append(csv.length() == 0 ? "" : ",").append(column);
+            }
+        }
+        csv.append('\n');
+        for (int row = 0; row < table.size(); row++) {
+            Double ra = table.number(row, "RAJ2000");
+            Double dec = table.number(row, "DEJ2000");
+            Double flag = table.number(row, "V");
+            Double brightest = table.number(row, "max");
+            if (ra == null || dec == null || flag == null || flag >= 2 || !field.containsSky(ra, dec)) {
+                continue;
+            }
+            if (brightest != null && brightest > faintest) {
+                continue;
+            }
+            boolean first = true;
+            for (String column : columns) {
+                if (!table.hasColumn(column)) {
+                    continue;
+                }
+                csv.append(first ? "" : ",");
+                first = false;
+                csv.append(csvField(table.text(row, column)));
+            }
+            csv.append('\n');
+        }
+        return CsvTable.parse(csv.toString());
+    }
+
+    /** One CSV field, quoted when it contains a comma or a quote. */
+    private static String csvField(String value) {
+        if (value == null) {
+            return "";
+        }
+        if (value.indexOf(',') < 0 && value.indexOf('"') < 0) {
+            return value;
+        }
+        return "\"" + value.replace("\"", "\"\"") + "\"";
+    }
+
+    /** The table inside a VOTable cone-search answer. An error page or an error status is a failure. */
+    static CsvTable parseVotable(String xml) throws IOException {
+        if (xml == null || xml.isBlank()) {
+            throw new IOException("answered with an empty page.");
+        }
+        String start = xml.stripLeading().toLowerCase(Locale.US);
+        if (start.startsWith("<html") || start.startsWith("<!doctype html")) {
+            Matcher message = SERVICE_MESSAGE.matcher(xml);
+            if (message.find()) {
+                throw new IOException("answered with an error: " + shorten(message.group(1)));
+            }
+            throw new IOException("answered with a page that could not be read.");
+        }
+        try {
+            XMLInputFactory factory = XMLInputFactory.newFactory();
+            factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
+            factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
+            XMLStreamReader reader = factory.createXMLStreamReader(new java.io.StringReader(xml));
+            List<String> fields = new ArrayList<>();
+            List<String[]> rows = new ArrayList<>();
+            List<String> row = null;
+            StringBuilder text = new StringBuilder();
+            boolean tableData = false;
+            boolean error = false;
+            boolean overflow = false;
+            String errorText = "";
+            while (reader.hasNext()) {
+                int event = reader.next();
+                if (event == XMLStreamConstants.START_ELEMENT) {
+                    String name = reader.getLocalName();
+                    if ("FIELD".equals(name) && !tableData) {
+                        fields.add(attribute(reader, "name"));
+                    } else if ("INFO".equals(name) && "QUERY_STATUS".equals(attribute(reader, "name"))) {
+                        String value = attribute(reader, "value");
+                        if ("ERROR".equals(value)) {
+                            error = true;
+                            text.setLength(0);
+                        } else if ("OVERFLOW".equals(value)) {
+                            overflow = true;
+                        }
+                    } else if ("TABLEDATA".equals(name)) {
+                        tableData = true;
+                    } else if ("TR".equals(name) && tableData) {
+                        row = new ArrayList<>();
+                    } else if ("TD".equals(name) && row != null) {
+                        text.setLength(0);
+                    }
+                } else if (event == XMLStreamConstants.CHARACTERS || event == XMLStreamConstants.CDATA) {
+                    text.append(reader.getText());
+                } else if (event == XMLStreamConstants.END_ELEMENT) {
+                    String name = reader.getLocalName();
+                    if ("TD".equals(name) && row != null) {
+                        row.add(text.toString().trim());
+                        text.setLength(0);
+                    } else if ("TR".equals(name) && row != null) {
+                        rows.add(row.toArray(String[]::new));
+                        row = null;
+                    } else if ("INFO".equals(name) && error && errorText.isEmpty()) {
+                        errorText = text.toString().trim();
+                    }
+                }
+            }
+            reader.close();
+            if (error) {
+                throw new IOException("answered with an error: " + (errorText.isEmpty() ? "the service rejected the query." : errorText));
+            }
+            CsvTable table = csvTable(fields, rows);
+            if (overflow) {
+                throw new TruncatedAnswer(table);
+            }
+            return table;
+        } catch (TruncatedAnswer cut) {
+            throw cut;
+        } catch (IOException problem) {
+            throw problem;
+        } catch (Exception problem) {
+            DebugOutput.println("Could not read a catalogue page: " + problem);
+            IOException failure = new IOException("answered with a page that could not be read.");
+            failure.initCause(problem);
+            throw failure;
+        }
+    }
+
+    /** A CSV table from the VOTable fields and rows already read. */
+    private static CsvTable csvTable(List<String> fields, List<String[]> rows) {
+            StringBuilder csv = new StringBuilder();
+            for (int i = 0; i < fields.size(); i++) {
+                csv.append(i == 0 ? "" : ",").append(fields.get(i) == null ? "" : fields.get(i));
+            }
+            csv.append('\n');
+            for (String[] values : rows) {
+                for (int i = 0; i < fields.size(); i++) {
+                    csv.append(i == 0 ? "" : ",");
+                    csv.append(csvField(i < values.length ? values[i] : ""));
+                }
+                csv.append('\n');
+            }
+            return CsvTable.parse(csv.toString());
+    }
+
+    /** Rows were returned, and the service said the answer was cut off. */
+    static final class TruncatedAnswer extends IOException {
+        final CsvTable table;
+
+        TruncatedAnswer(CsvTable table) {
+            super("the answer was cut off");
+            this.table = table;
+        }
+    }
+
+    /** An attribute of the current element, or null when it is absent. */
+    private static String attribute(XMLStreamReader reader, String name) {
+        for (int i = 0; i < reader.getAttributeCount(); i++) {
+            if (name.equals(reader.getAttributeLocalName(i))) {
+                return reader.getAttributeValue(i);
+            }
+        }
+        return null;
     }
 
     /** "0 rows", "1 row" or "12 rows". */
@@ -212,65 +540,129 @@ public final class SkyCatalogueClient {
     /**
      * Gaia stars to G {@value #DEPTH_MAGNITUDE} in four square patches, halfway from the centre of the field to each
      * corner: the middle of the field often holds a large galaxy or nebula, where faint stars cannot be found.
-     * A patch that fails does not discard the patches already fetched. One step says how many answered. Interruption
-     * keeps those patches and marks the step not asked.
+     * A patch that fails on one copy is asked of the next: VizieR, then the ESA archive, then ARI Heidelberg. Each copy
+     * has its own step. Interruption keeps the patches already fetched and marks the copy in progress not asked.
      */
     private void fetchDepth(Attempt attempt) throws InterruptedException {
         SkyField field = attempt.catalogue.field;
         attempt.progress.stage(3, 3, String.format(Locale.US,
                 "faint stars of four small patches (Gaia, to %.1f, for the field depth)", DEPTH_MAGNITUDE));
-        List<SkyCatalogue.DepthSample> samples = new ArrayList<>();
-        StringBuilder queries = new StringBuilder();
-        IOException last = null;
-        int failed = 0;
         double side = Math.min(DEPTH_PATCH_DEG, Math.min(field.widthDeg, field.heightDeg) / 4.0);
-        int patches = field.cornerRa.length;
+        List<double[]> remaining = new ArrayList<>();
+        for (int i = 0; i < field.cornerRa.length; i++) {
+            double deltaRa = ((field.cornerRa[i] - field.centerRa + 540) % 360) - 180;
+            remaining.add(new double[] {(field.centerRa + deltaRa / 2 + 360) % 360,
+                    (field.centerDec + field.cornerDec[i]) / 2, side});
+        }
+        int patches = remaining.size();
+        List<SkyCatalogue.DepthSample> samples = new ArrayList<>();
+        String current = "Gaia via VizieR";
         try {
-            for (int i = 0; i < patches; i++) {
-                double deltaRa = ((field.cornerRa[i] - field.centerRa + 540) % 360) - 180;
-                double ra = (field.centerRa + deltaRa / 2 + 360) % 360;
-                double dec = (field.centerDec + field.cornerDec[i]) / 2;
-                String adql = depthQuery(ra, dec, side);
-                if (queries.length() > 0) {
-                    queries.append("\n\n");
-                }
-                queries.append(adql);
-                try {
-                    samples.add(fetchDepthSample(ra, dec, side));
-                } catch (IOException problem) {
-                    last = problem;
-                    failed++;
-                }
+            samples.addAll(depthFrom(attempt, current, "VizieR", VIZIER_TAP, true, remaining, patches));
+            if (!remaining.isEmpty()) {
+                current = "Gaia via the ESA archive";
+                attempt.progress.stage(3, 3, "faint stars of the remaining patches (Gaia, ESA archive)");
+                attempt.expectNext(new Planned(current, "Field depth"));
+                samples.addAll(depthFrom(attempt, current, "ESA archive", ESA_GAIA_TAP, false, remaining, patches));
+            }
+            if (!remaining.isEmpty()) {
+                current = "Gaia via ARI Heidelberg";
+                attempt.progress.stage(3, 3, "faint stars of the remaining patches (Gaia, ARI Heidelberg)");
+                attempt.expectNext(new Planned(current, "Field depth"));
+                samples.addAll(depthFrom(attempt, current, "ARI Heidelberg", ARI_GAIA_TAP, false, remaining, patches));
             }
         } catch (InterruptedException interrupted) {
             attempt.catalogue.depthSamples = samples;
-            if (!samples.isEmpty() || failed > 0) {
-                attempt.notAsked("Gaia", "Field depth", samples.size() + " of " + patches + " patches answered",
-                        "The fetch was cancelled.");
-            }
+            attempt.notAsked(current, "Field depth", samples.size() + " of " + patches + " patches answered",
+                    "The fetch was cancelled.");
             throw interrupted;
         }
         attempt.catalogue.depthSamples = samples;
-        String outcome = samples.size() + " of " + patches + " patches";
-        if (last == null) {
-            attempt.succeed("Gaia", "Field depth", outcome,
-                    String.format(Locale.US, "To magnitude %.1f.", DEPTH_MAGNITUDE), VIZIER_TAP, queries.toString());
-        } else {
-            attempt.fail("Gaia", "Field depth", outcome, last.getMessage(), VIZIER_TAP, queries.toString());
-            attempt.catalogue.problems.add(samples.isEmpty()
-                    ? "Faint stars for the field depth (Gaia): " + last.getMessage()
-                    : "Faint stars for the field depth (Gaia): " + outcome + " answered; " + last.getMessage());
+        if (!remaining.isEmpty()) {
+            attempt.catalogue.problems.add("Faint stars for the field depth (Gaia): " + samples.size() + " of "
+                    + patches + " patches answered.");
         }
     }
 
-    private SkyCatalogue.DepthSample fetchDepthSample(double centerRa, double centerDec, double sideDeg) throws IOException, InterruptedException {
+    /**
+     * Asks one Gaia copy for the patches still missing. Patches that answer are removed from {@code remaining}.
+     * One step records how many of the patches asked of this copy came back.
+     */
+    private List<SkyCatalogue.DepthSample> depthFrom(Attempt attempt, String service, String place, String endpoint,
+            boolean vizier, List<double[]> remaining, int patches) throws InterruptedException {
+        if (attempt.alreadyDown(endpoint)) {
+            attempt.notAsked(service, "Field depth", "", SKIPPED);
+            return List.of();
+        }
+        List<SkyCatalogue.DepthSample> answered = new ArrayList<>();
+        StringBuilder queries = new StringBuilder();
+        IOException last = null;
+        boolean truncated = false;
+        boolean stop = false;
+        int asked = remaining.size();
+        List<double[]> still = new ArrayList<>();
+        for (int i = 0; i < remaining.size(); i++) {
+            double[] patch = remaining.get(i);
+            if (stop) {
+                still.add(patch);
+                continue;
+            }
+            String adql = vizier ? depthQuery(patch[0], patch[1], patch[2]) : depthArchiveQuery(patch[0], patch[1], patch[2]);
+            if (queries.length() > 0) {
+                queries.append("\n\n");
+            }
+            queries.append(adql);
+            try {
+                TapPage page = tapPage(endpoint, adql, MAX_STARS, STAR_TIMEOUT);
+                answered.add(depthSample(patch[0], patch[1], patch[2], page.table, vizier));
+                truncated = truncated || page.truncated;
+            } catch (IOException problem) {
+                last = problem;
+                still.add(patch);
+                if (attempt.remember(endpoint, problem)) {
+                    stop = true;
+                }
+            }
+        }
+        remaining.clear();
+        remaining.addAll(still);
+        String outcome = (asked - still.size()) + " of " + (vizier ? patches : asked) + " patches";
+        if (last == null && !truncated) {
+            attempt.succeed(service, "Field depth", outcome,
+                    String.format(Locale.US, "To magnitude %.1f.", DEPTH_MAGNITUDE), endpoint, queries.toString());
+        } else if (truncated && last == null) {
+            attempt.fail(service, "Field depth", outcome + " (truncated)", "The answer was cut off.", endpoint, queries.toString());
+            attempt.catalogue.problems.add("Faint stars for the field depth (Gaia, " + place + "): the answer was cut off.");
+        } else {
+            attempt.fail(service, "Field depth", outcome, last.getMessage(), endpoint, queries.toString());
+        }
+        return answered;
+    }
+
+    /** One TAP answer, including a table the service said was cut off. */
+    private TapPage tapPage(String endpoint, String adql, int maxRecords, Duration timeout)
+            throws IOException, InterruptedException {
+        try {
+            return new TapPage(query(endpoint, adql, maxRecords, timeout), false);
+        } catch (TruncatedAnswer cut) {
+            return new TapPage(cut.table, true);
+        }
+    }
+
+    private record TapPage(CsvTable table, boolean truncated) {
+    }
+
+    /** One faint patch from a table already fetched. */
+    private static SkyCatalogue.DepthSample depthSample(double centerRa, double centerDec, double sideDeg, CsvTable table,
+            boolean vizier) throws IOException {
         SkyCatalogue.DepthSample sample = new SkyCatalogue.DepthSample();
         sample.centerRa = centerRa;
         sample.centerDec = centerDec;
         sample.sideDeg = sideDeg;
         sample.magnitudeLimit = DEPTH_MAGNITUDE;
-        sample.stars = parseStars(query(VIZIER_TAP, depthQuery(centerRa, centerDec, sideDeg), MAX_STARS, STAR_TIMEOUT),
-                "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
+        sample.stars = vizier
+                ? parseStars(table, "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP")
+                : parseStars(table, "ra", "dec", "pmra", "pmdec", "phot_g_mean_mag", "bp_rp");
         return sample;
     }
 
@@ -286,50 +678,116 @@ public final class SkyCatalogueClient {
                 + String.format(Locale.US, "AND Gmag <= %.2f", DEPTH_MAGNITUDE);
     }
 
-    /** The Gaia DR3 stars of the field to this G magnitude, from VizieR or else from the ESA archive. */
+    /** The same faint patch, in the column names used by the ESA archive and ARI Heidelberg. */
+    private static String depthArchiveQuery(double centerRa, double centerDec, double sideDeg) {
+        double halfDec = sideDeg / 2;
+        double halfRa = halfDec / Math.max(0.05, Math.cos(Math.toRadians(centerDec)));
+        String box = String.format(Locale.US, "POLYGON('ICRS', %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f)",
+                centerRa - halfRa, centerDec - halfDec, centerRa + halfRa, centerDec - halfDec,
+                centerRa + halfRa, centerDec + halfDec, centerRa - halfRa, centerDec + halfDec);
+        return "SELECT ra, dec, pmra, pmdec, phot_g_mean_mag, bp_rp FROM gaiadr3.gaia_source "
+                + "WHERE 1=CONTAINS(POINT('ICRS', ra, dec), " + box + ") "
+                + String.format(Locale.US, "AND phot_g_mean_mag <= %.2f", DEPTH_MAGNITUDE);
+    }
+
+    /** The Gaia DR3 stars of the field to this G magnitude, from VizieR, then the ESA archive, then ARI Heidelberg. */
     public List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit) throws IOException, InterruptedException {
-        return fetchStars(field, magnitudeLimit, new String[1], () -> { }, null);
+        return fetchStars(field, magnitudeLimit, new String[1], () -> { }, () -> { }, null);
     }
 
     /**
-     * The stars, recording a failed VizieR step before the ESA archive is asked. {@code attempt} is null for the
+     * The stars. A service that fails is recorded before the next one is asked. {@code attempt} is null for the
      * plate-solution fit, which only needs the stars.
      */
-    private List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit, String[] source, Runnable fallingBack,
-            Attempt attempt) throws IOException, InterruptedException {
+    private List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit, String[] source,
+            Runnable fallingBackToEsa, Runnable fallingBackToHeidelberg, Attempt attempt)
+            throws IOException, InterruptedException {
         String vizierQuery = vizierStarQuery(field, magnitudeLimit);
-        try {
-            List<SkyCatalogue.Star> stars = parseStars(query(VIZIER_TAP, vizierQuery, starCap, STAR_TIMEOUT),
-                    "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
-            if (attempt != null) {
-                attempt.succeed("Gaia via VizieR", "Stars", count(stars.size(), "star"), "", VIZIER_TAP, vizierQuery);
-            }
-            source[0] = "Gaia DR3 via VizieR (CDS)";
-            return stars;
-        } catch (IOException vizierProblem) {
-            if (attempt != null) {
-                attempt.fail("Gaia via VizieR", "Stars", "", vizierProblem.getMessage(), VIZIER_TAP, vizierQuery);
-                attempt.catalogue.problems.add("Stars (Gaia, VizieR): " + vizierProblem.getMessage());
-                attempt.expectBefore(new Planned("Gaia via the ESA archive", "Stars"), new Planned("Gaia", "Field depth"));
-            }
-            fallingBack.run();
-            String esaQuery = esaStarQuery(field, magnitudeLimit);
-            try {
-                List<SkyCatalogue.Star> stars = parseStars(query(ESA_GAIA_TAP, esaQuery, starCap, STAR_TIMEOUT),
-                        "ra", "dec", "pmra", "pmdec", "phot_g_mean_mag", "bp_rp");
-                if (attempt != null) {
-                    attempt.succeed("Gaia via the ESA archive", "Stars", count(stars.size(), "star"), "", ESA_GAIA_TAP, esaQuery);
-                }
-                source[0] = "Gaia DR3 via the ESA Gaia archive";
-                return stars;
-            } catch (IOException esaProblem) {
-                if (attempt != null) {
-                    attempt.fail("Gaia via the ESA archive", "Stars", "", esaProblem.getMessage(), ESA_GAIA_TAP, esaQuery);
-                    attempt.catalogue.problems.add("Stars (Gaia, ESA archive): " + esaProblem.getMessage());
-                }
-                throw new IOException("VizieR " + vizierProblem.getMessage() + "; ESA archive " + esaProblem.getMessage());
-            }
+        String vizierMessage = skippedOrFailedStars(attempt, "Gaia via VizieR", "Gaia DR3 via VizieR (CDS)",
+                VIZIER_TAP, vizierQuery, true, source);
+        if (vizierMessage == null && source[0] != null) {
+            return lastStars;
         }
+        if (attempt != null) {
+            attempt.expectNext(new Planned("Gaia via the ESA archive", "Stars"));
+        }
+        fallingBackToEsa.run();
+        String gaiaQuery = esaStarQuery(field, magnitudeLimit);
+        String esaMessage = skippedOrFailedStars(attempt, "Gaia via the ESA archive", "Gaia DR3 via the ESA Gaia archive",
+                ESA_GAIA_TAP, gaiaQuery, false, source);
+        if (esaMessage == null && source[0] != null) {
+            return lastStars;
+        }
+        if (attempt != null) {
+            attempt.expectNext(new Planned("Gaia via ARI Heidelberg", "Stars"));
+        }
+        fallingBackToHeidelberg.run();
+        String heidelbergMessage = skippedOrFailedStars(attempt, "Gaia via ARI Heidelberg", "Gaia DR3 via ARI Heidelberg",
+                ARI_GAIA_TAP, gaiaQuery, false, source);
+        if (heidelbergMessage == null && source[0] != null) {
+            return lastStars;
+        }
+        if (attempt != null) {
+            attempt.catalogue.problems.add("Stars (Gaia): " + (heidelbergMessage != null ? heidelbergMessage
+                    : esaMessage != null ? esaMessage : vizierMessage != null ? vizierMessage : "did not answer earlier."));
+        }
+        throw new IOException("VizieR " + mentioned(vizierMessage)
+                + "; ESA archive " + mentioned(esaMessage)
+                + "; ARI Heidelberg " + mentioned(heidelbergMessage));
+    }
+
+    /** The stars returned by the copy that answered, including a cut-off answer. */
+    private List<SkyCatalogue.Star> lastStars = List.of();
+
+    /**
+     * Asks one star copy. Returns null when it answered, and the failure message when it did not. A skipped copy
+     * returns the skip sentence. {@code source[0]} is set when the copy answered.
+     */
+    private String skippedOrFailedStars(Attempt attempt, String service, String sourceName, String endpoint, String query,
+            boolean vizier, String[] source) throws InterruptedException {
+        if (attempt != null && attempt.alreadyDown(endpoint)) {
+            attempt.notAsked(service, "Stars", "", SKIPPED);
+            return SKIPPED;
+        }
+        try {
+            TapPage page = tapPage(endpoint, query, starCap, STAR_TIMEOUT);
+            List<SkyCatalogue.Star> stars = vizier
+                    ? parseStars(page.table, "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP")
+                    : parseStars(page.table, "ra", "dec", "pmra", "pmdec", "phot_g_mean_mag", "bp_rp");
+            lastStars = stars;
+            source[0] = sourceName;
+            if (attempt == null) {
+                return null;
+            }
+            if (page.truncated) {
+                attempt.fail(service, "Stars", count(stars.size(), "star") + " (truncated)", "The answer was cut off.",
+                        endpoint, query);
+                attempt.catalogue.problems.add("Stars (" + service + "): the answer was cut off.");
+            } else {
+                attempt.succeed(service, "Stars", count(stars.size(), "star"), "", endpoint, query);
+            }
+            return null;
+        } catch (IOException problem) {
+            if (attempt != null) {
+                attempt.remember(endpoint, problem);
+                attempt.fail(service, "Stars", "", problem.getMessage(), endpoint, query);
+            }
+            return problem.getMessage();
+        }
+    }
+
+    /** A failure message for the combined exception, including a copy that was not asked. */
+    private static String mentioned(String message) {
+        return message == null ? "did not answer earlier." : message;
+    }
+
+    /** A timeout, a connection failure, or HTTP 404. A query error, including a full queue, is asked again. */
+    static boolean gaveUp(IOException problem) {
+        String message = problem.getMessage() == null ? "" : problem.getMessage();
+        return message.startsWith("did not answer within")
+                || message.startsWith("cannot be reached")
+                || message.startsWith("timed out (HTTP")
+                || message.contains("HTTP 404");
     }
 
     // ==========================================
@@ -383,6 +841,7 @@ public final class SkyCatalogueClient {
                 + String.format(Locale.US, "AND Gmag <= %.2f", magnitudeLimit);
     }
 
+    /** The {@code gaiadr3.gaia_source} query sent to the ESA archive and, if that fails, to ARI Heidelberg. */
     static String esaStarQuery(SkyField field, double magnitudeLimit) {
         return "SELECT source_id, ra, dec, pmra, pmdec, phot_g_mean_mag, bp_rp FROM gaiadr3.gaia_source "
                 + "WHERE 1=CONTAINS(POINT('ICRS', ra, dec), " + field.adqlPolygon() + ") "
@@ -426,20 +885,66 @@ public final class SkyCatalogueClient {
         if (response.statusCode() == 408 || response.statusCode() == 504) {
             throw new IOException("timed out (HTTP " + response.statusCode() + ").");
         }
-        if (response.statusCode() != 200 || text.trim().startsWith("<")) {
+        if (response.statusCode() != 200) {
             throw new IOException(errorText(response.statusCode(), text));
+        }
+        if (text.trim().startsWith("<")) {
+            return parseVotable(text);
+        }
+        if (reportsOverflow(text)) {
+            throw new TruncatedAnswer(CsvTable.parse(text));
         }
         return CsvTable.parse(text);
     }
 
-    /** The service's own error message from its VOTable answer, or the HTTP status. */
+    /** Whether this answer says the service cut it off, rather than merely returning fewer rows than requested. */
+    private static boolean reportsOverflow(String text) {
+        return text != null && text.contains("QUERY_STATUS") && text.contains("OVERFLOW");
+    }
+
+    /** Fetches one cone-search page. A VOTable starts with {@code <} and is returned as it arrived. */
+    static String httpGet(HttpClient http, String url, Duration timeout) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .timeout(timeout)
+                .header("User-Agent", "SpacePixels")
+                .GET()
+                .build();
+        HttpResponse<String> response;
+        try {
+            response = http.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        } catch (java.net.http.HttpTimeoutException e) {
+            throw new IOException("did not answer within " + timeout.getSeconds() + " s.");
+        } catch (java.net.ConnectException e) {
+            throw new IOException("cannot be reached (no internet connection?).");
+        }
+        String text = response.body() == null ? "" : response.body();
+        if (response.statusCode() == 408 || response.statusCode() == 504) {
+            throw new IOException("timed out (HTTP " + response.statusCode() + ").");
+        }
+        if (response.statusCode() != 200 || text.isBlank()) {
+            throw new IOException(errorText(response.statusCode(), text));
+        }
+        return text;
+    }
+
+    /** The service's own error message from its VOTable answer or its error page, or the HTTP status. */
     static String errorText(int status, String body) {
-        Matcher matcher = QUERY_ERROR.matcher(body == null ? "" : body);
+        String text = body == null ? "" : body;
+        Matcher matcher = QUERY_ERROR.matcher(text);
         if (matcher.find()) {
-            String message = matcher.group(1).replaceAll("\\s+", " ").trim();
-            return "answered with an error: " + (message.length() > 200 ? message.substring(0, 200) + "…" : message);
+            return "answered with an error: " + shorten(matcher.group(1));
+        }
+        Matcher message = SERVICE_MESSAGE.matcher(text);
+        if (message.find()) {
+            return "answered with HTTP " + status + ": " + shorten(message.group(1));
         }
         return "answered with HTTP " + status + ".";
+    }
+
+    /** One line, at most 200 characters, from a service's own error text. */
+    private static String shorten(String message) {
+        String cleaned = message.replaceAll("\\s+", " ").trim();
+        return cleaned.length() > 200 ? cleaned.substring(0, 200) + "…" : cleaned;
     }
 
     // ==========================================
@@ -705,16 +1210,31 @@ public final class SkyCatalogueClient {
             pending.add(new Planned("SIMBAD", "Large galaxies"));
             pending.add(new Planned("SIMBAD", "Common names"));
             pending.add(new Planned("SIMBAD", "Named bright stars"));
-            pending.add(new Planned("AAVSO VSX", "Variable stars"));
+            pending.add(new Planned("AAVSO VSX via VizieR", "Variable stars"));
             pending.add(new Planned("Gaia via VizieR", "Stars"));
-            pending.add(new Planned("Gaia", "Field depth"));
+            pending.add(new Planned("Gaia via VizieR", "Field depth"));
         }
 
-        /** Inserts a question that is asked only after an earlier one fails, ahead of {@code before} when that remains. */
-        void expectBefore(Planned planned, Planned before) {
-            int index = pending.indexOf(before);
-            pending.add(index < 0 ? pending.size() : index, planned);
+        /** Inserts a fallback at the front of the questions still to record, so a cancel names it next. */
+        void expectNext(Planned planned) {
+            pending.add(0, planned);
         }
+
+        /** Whether this copy already timed out, could not be reached, or answered HTTP 404 in this fetch. */
+        boolean alreadyDown(String endpoint) {
+            return unavailable.contains(endpoint);
+        }
+
+        /** Remembers a copy that should not be asked again. Returns whether this failure is one of those. */
+        boolean remember(String endpoint, IOException problem) {
+            if (!gaveUp(problem)) {
+                return false;
+            }
+            unavailable.add(endpoint);
+            return true;
+        }
+
+        private final Set<String> unavailable = new HashSet<>();
 
         /** Records a service that answered. */
         void succeed(String service, String question, String outcome, String detail, String url, String query) {

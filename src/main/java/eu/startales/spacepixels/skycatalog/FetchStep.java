@@ -9,17 +9,15 @@
  */
 package eu.startales.spacepixels.skycatalog;
 
-import java.net.URLDecoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * One question asked of an online service while fetching a sky catalogue or the known asteroids and comets.
  * The clients fill it, and the fetch summary reads it. Gson writes the public fields; a missing list in an older
- * file is null until the store replaces it. {@link #url} saved in the session folder never contains the observing
- * site: those parameters stay on {@link #liveUrl}, which lasts only until SpacePixels closes.
+ * file is null until the store replaces it. {@link #url} is the request that was sent. A JPL address includes the
+ * observing site. {@link #liveUrl} repeats that request for this visit and is not written; after a reload
+ * {@link #openUrl()} uses the saved address.
  */
 public final class FetchStep {
 
@@ -44,17 +42,17 @@ public final class FetchStep {
     public String detail;
     /**
      * Address saved with the fetch. For a TAP query this is the endpoint, not a page that runs the query.
-     * Observing-site parameters are left out.
+     * A JPL address includes the observing site.
      */
     public String url;
-    /** The request address including the observing site. Not saved; null after the file is loaded again. */
+    /** The request address for this visit. Not saved; null after the file is loaded again. */
     public transient String liveUrl;
     /** ADQL of a TAP query. Null for a GET that is already a complete address. */
     public String query;
 
     /**
-     * A finished or skipped step. The caller owns the returned object. A JPL address that contains the observing
-     * site keeps that full address on {@link #liveUrl} and stores {@link #url} without it.
+     * A finished or skipped step. The caller owns the returned object. {@code url} is stored as given, including
+     * an observing site on a JPL address.
      */
     public static FetchStep of(String service, String question, Status status, String outcome, String detail,
             String url, String query) {
@@ -63,14 +61,10 @@ public final class FetchStep {
         step.question = question;
         step.status = status;
         step.outcome = outcome;
-        step.liveUrl = url;
-        step.url = withoutSite(url);
-        step.query = query;
         step.detail = detail;
-        if (url != null && step.url != null && !url.equals(step.url)) {
-            String note = "The saved address leaves out the observing site.";
-            step.detail = detail == null || detail.isBlank() ? note : detail + " " + note;
-        }
+        step.liveUrl = url;
+        step.url = url;
+        step.query = query;
         return step;
     }
 
@@ -108,42 +102,5 @@ public final class FetchStep {
             }
         }
         return rows;
-    }
-
-    /** The same address with the observing-site parameters removed. Other parameters stay. */
-    static String withoutSite(String url) {
-        if (url == null || !url.contains("?")) {
-            return url;
-        }
-        int split = url.indexOf('?');
-        StringBuilder kept = new StringBuilder(url.substring(0, split));
-        boolean any = false;
-        boolean removed = false;
-        for (String part : url.substring(split + 1).split("&")) {
-            String name = part;
-            int equals = part.indexOf('=');
-            if (equals >= 0) {
-                name = part.substring(0, equals);
-            }
-            if (isSiteParameter(name)) {
-                removed = true;
-                continue;
-            }
-            kept.append(any ? '&' : '?').append(part);
-            any = true;
-        }
-        return removed ? kept.toString() : url;
-    }
-
-    /** Whether this query parameter is the observer's latitude, longitude, altitude or Horizons site coordinate. */
-    private static boolean isSiteParameter(String name) {
-        String decoded;
-        try {
-            decoded = URLDecoder.decode(name, StandardCharsets.UTF_8);
-        } catch (IllegalArgumentException ignored) {
-            decoded = name;
-        }
-        decoded = decoded.toLowerCase(Locale.US);
-        return decoded.equals("lat") || decoded.equals("lon") || decoded.equals("alt") || decoded.equals("site_coord");
     }
 }

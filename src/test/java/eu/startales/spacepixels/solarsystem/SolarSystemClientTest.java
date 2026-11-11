@@ -228,8 +228,8 @@ public class SolarSystemClientTest {
         assertEquals(FetchStep.Status.FAILED, apophisStep.status);
         assertEquals("Kept with the field search's straight-line motion, without an uncertainty.", apophisStep.outcome);
         assertTrue(apophisStep.liveUrl, apophisStep.liveUrl.contains("SITE_COORD"));
-        assertFalse(apophisStep.url, apophisStep.url.contains("SITE_COORD") || apophisStep.url.contains("37.9"));
-        assertTrue(apophisStep.detail, apophisStep.detail.contains("leaves out the observing site"));
+        assertTrue(apophisStep.url, apophisStep.url.contains("SITE_COORD") && apophisStep.url.contains("37.9"));
+        assertFalse(apophisStep.detail, apophisStep.detail.contains("leaves out the observing site"));
         // The straight-line Apophis is on the frame during the span.
         SolarSystemObjects.Position apophis = SolarSystemObjects.positionAt(bodies.get("99942 Apophis (2004 MN4)"), START + 48 * 60_000L);
         double[] pixel = TRANSFORMER.skyToPixel(apophis.ra(), apophis.dec());
@@ -267,8 +267,8 @@ public class SolarSystemClientTest {
         assertEquals(FetchStep.Status.FAILED, step(result.fetchSteps, "JPL SB-Ident", "Field search").status);
         assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Field search").liveUrl.contains("sb_ident.api"));
         assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Field search").liveUrl.contains("lat="));
-        assertFalse(step(result.fetchSteps, "JPL SB-Ident", "Field search").url.contains("lat="));
-        assertFalse(step(result.fetchSteps, "JPL SB-Ident", "Field search").url.contains("37.9"));
+        assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Field search").url.contains("lat="));
+        assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Field search").url.contains("37.9"));
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").status);
         assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").detail.contains("field search failed"));
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
@@ -287,7 +287,7 @@ public class SolarSystemClientTest {
         FetchStep field = step(result.fetchSteps, "JPL SB-Ident", "Field search");
         assertEquals(FetchStep.Status.FAILED, field.status);
         assertTrue(field.liveUrl, field.liveUrl.contains("sb_ident.api") && field.liveUrl.contains("lat=37.900000"));
-        assertFalse(field.url, field.url.contains("37.9"));
+        assertTrue(field.url, field.url.contains("lat=37.900000"));
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").status);
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
     }
@@ -312,7 +312,7 @@ public class SolarSystemClientTest {
         FetchStep neo = step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects");
         assertEquals(FetchStep.Status.FAILED, neo.status);
         assertTrue(neo.liveUrl, neo.liveUrl.contains("sb-group=neo") && neo.liveUrl.contains("lat="));
-        assertFalse(neo.url.contains("lat="));
+        assertTrue(neo.url.contains("lat="));
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
         assertTrue(step(result.fetchSteps, "JPL Horizons", "Positions").detail.contains("No object crosses"));
     }

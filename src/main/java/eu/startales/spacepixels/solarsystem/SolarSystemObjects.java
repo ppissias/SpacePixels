@@ -49,7 +49,7 @@ public final class SolarSystemObjects {
     /**
      * Every service question from the fetch, including those that succeeded or were not sent.
      * Gson leaves this null in a file written before it existed; {@link SolarSystemStore#load} replaces null
-     * with an empty list. The problem sentences stay beside it. Saved addresses leave out the observing site.
+     * with an empty list. The problem sentences stay beside it. A saved JPL address includes the observing site.
      */
     public List<FetchStep> fetchSteps = new ArrayList<>();
 

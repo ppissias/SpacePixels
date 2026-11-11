@@ -56,6 +56,70 @@ public final class SkyField {
         return field;
     }
 
+    /** The radius, in degrees, of a circle around the centre that covers every corner. */
+    double coveringRadiusDeg() {
+        double radius = 0;
+        if (cornerRa != null) {
+            for (int i = 0; i < cornerRa.length; i++) {
+                radius = Math.max(radius, SkyMath.separationDegrees(centerRa, centerDec, cornerRa[i], cornerDec[i]));
+            }
+        }
+        return radius + 0.001;
+    }
+
+    /**
+     * True when this sky position lies inside the field outline. The outline is the great-circle polygon of the
+     * corners, tested on the tangent plane at the field centre, where those edges are straight lines.
+     */
+    boolean containsSky(double ra, double dec) {
+        if (cornerRa == null || cornerRa.length < 3) {
+            return false;
+        }
+        double[] point = project(ra, dec);
+        if (point == null) {
+            return false;
+        }
+        double[][] corners = new double[cornerRa.length][];
+        for (int i = 0; i < cornerRa.length; i++) {
+            corners[i] = project(cornerRa[i], cornerDec[i]);
+            if (corners[i] == null) {
+                return false;
+            }
+        }
+        boolean inside = false;
+        for (int i = 0, previous = corners.length - 1; i < corners.length; previous = i++) {
+            double x1 = corners[i][0];
+            double y1 = corners[i][1];
+            double x2 = corners[previous][0];
+            double y2 = corners[previous][1];
+            boolean crosses = (y1 > point[1]) != (y2 > point[1]);
+            if (crosses && point[0] < (x2 - x1) * (point[1] - y1) / (y2 - y1) + x1) {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
+    /**
+     * Gnomonic projection of this sky position onto the tangent plane at the field centre, as {xi, eta} in radians.
+     * Null when the position is on the far side of the sky from the centre.
+     */
+    private double[] project(double ra, double dec) {
+        double ra0 = Math.toRadians(centerRa);
+        double dec0 = Math.toRadians(centerDec);
+        double raRad = Math.toRadians(ra);
+        double decRad = Math.toRadians(dec);
+        double cosc = Math.sin(dec0) * Math.sin(decRad)
+                + Math.cos(dec0) * Math.cos(decRad) * Math.cos(raRad - ra0);
+        if (cosc <= 1e-8) {
+            return null;
+        }
+        double xi = Math.cos(decRad) * Math.sin(raRad - ra0) / cosc;
+        double eta = (Math.cos(dec0) * Math.sin(decRad)
+                - Math.sin(dec0) * Math.cos(decRad) * Math.cos(raRad - ra0)) / cosc;
+        return new double[] {xi, eta};
+    }
+
     /** The field as an ADQL polygon. */
     String adqlPolygon() {
         StringBuilder polygon = new StringBuilder("POLYGON('ICRS'");

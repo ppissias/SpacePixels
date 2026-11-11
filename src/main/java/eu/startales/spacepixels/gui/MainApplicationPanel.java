@@ -1727,7 +1727,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (fetchSummary == null || !fetchSummary.isDisplayable()) {
             fetchSummary = new FetchSummaryDialog(owner);
         }
-        refreshOpenFetchSummary();
+        // Fill before the window is shown. A new dialog is not displayable yet, so the refresh below would skip it.
+        fillFetchSummary();
         fetchSummary.setVisible(true);
         fetchSummary.toFront();
     }
@@ -1737,6 +1738,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (fetchSummary == null || !fetchSummary.isDisplayable()) {
             return;
         }
+        fillFetchSummary();
+    }
+
+    /** Paints the current catalogue and asteroid steps into the summary window. */
+    private void fillFetchSummary() {
         fetchSummary.present(datasetName(), catalogueSummarySteps(),
                 skyController != null && skyController.fetchInProgress(),
                 solarSummarySteps(), solarController != null && solarController.isRunning());

@@ -84,7 +84,7 @@ public class CatalogueComparisonWriterTest {
         old.band = "G";
         old.max = 12.0;
         old.min = 12.07;
-        JsonObject result = CatalogueComparisonWriter.match(old, 0.4, "2026-10-15");
+        JsonObject result = CatalogueComparisonWriter.match(old, 0.4, "2026-10-15", null);
         assertEquals("G", result.get("maxBand").getAsString());
         assertEquals("G", result.get("minBand").getAsString());
         assertTrue(result.get("legacySharedBand").getAsBoolean());
@@ -92,7 +92,7 @@ public class CatalogueComparisonWriterTest {
         assertEquals(12.07, old.min, 0);
         old.maxBand = "G";
         old.minBand = "g";
-        assertEquals("g", CatalogueComparisonWriter.match(old, 0.4, null).get("minBand").getAsString());
+        assertEquals("g", CatalogueComparisonWriter.match(old, 0.4, null, null).get("minBand").getAsString());
     }
 
     private static StarLightCurve star(int frames) throws Exception {

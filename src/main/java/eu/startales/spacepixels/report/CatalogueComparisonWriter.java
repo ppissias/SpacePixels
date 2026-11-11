@@ -51,7 +51,8 @@ final class CatalogueComparisonWriter {
             PhotometryReportSectionWriter.SkyTarget target = PhotometryReportSectionWriter.skyTarget(context, star.x, star.y);
             if (target != null) {
                 for (SessionCatalogue.VariableMatch match : catalogue.variablesNear(target.raDegrees, target.decDegrees, target.radiusArcsec)) {
-                    matches.add(match(match.star, match.separationArcsec, catalogue.catalogue.fetchedAtUtc));
+                    matches.add(match(match.star, match.separationArcsec, catalogue.catalogue.fetchedAtUtc,
+                            catalogue.catalogue.variableSource));
                 }
             }
             entry.add("matches", matches);
@@ -97,7 +98,8 @@ final class CatalogueComparisonWriter {
         return data;
     }
 
-    static JsonObject match(SkyCatalogue.VariableStar star, double separation, String fetchedAt) {
+    /** {@code source} names the copy that answered. Null keeps the older "via VizieR" label. */
+    static JsonObject match(SkyCatalogue.VariableStar star, double separation, String fetchedAt, String source) {
         JsonObject data = new JsonObject();
         data.addProperty("oid", star.oid);
         data.addProperty("name", star.name);
@@ -119,7 +121,7 @@ final class CatalogueComparisonWriter {
         data.addProperty("bibliographyAvailable", star.bibliographyAvailable);
         nullableFinite(data, "periodDays", star.periodDays);
         finite(data, "separationArcsec", separation);
-        data.addProperty("source", "AAVSO VSX via VizieR");
+        data.addProperty("source", source == null || source.isBlank() ? "AAVSO VSX via VizieR" : source);
         data.addProperty("fetchedAtUtc", fetchedAt);
         return data;
     }

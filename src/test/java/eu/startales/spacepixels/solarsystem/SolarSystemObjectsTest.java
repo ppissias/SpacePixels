@@ -98,7 +98,8 @@ public class SolarSystemObjectsTest {
         SolarSystemStore.save(session, objects);
 
         String text = Files.readString(SolarSystemStore.fileIn(session).toPath(), StandardCharsets.UTF_8);
-        assertFalse("the file names where the site came from, never the site", text.contains("37.9"));
+        assertTrue("the observer field names where the site came from", text.contains("site from the FITS header"));
+        assertTrue("the saved request keeps the observing site", text.contains("lat=37.900000"));
         SolarSystemObjects loaded = SolarSystemStore.load(session);
         assertEquals(1, loaded.bodies.size());
         assertTrue(loaded.bodies.get(0).comet);
@@ -106,9 +107,10 @@ public class SolarSystemObjectsTest {
         assertEquals("JPL#20", loaded.bodies.get(0).orbitSolution);
         assertEquals(2, loaded.fetchSteps.size());
         assertTrue(loaded.fetchSteps.get(0).url, loaded.fetchSteps.get(0).url.contains("vmag-lim=19.0"));
-        assertFalse(loaded.fetchSteps.get(0).url, loaded.fetchSteps.get(0).url.contains("lat=") || loaded.fetchSteps.get(0).url.contains("37.9"));
+        assertTrue(loaded.fetchSteps.get(0).url, loaded.fetchSteps.get(0).url.contains("lat=37.900000"));
         assertNull(loaded.fetchSteps.get(0).liveUrl);
-        assertFalse(loaded.fetchSteps.get(1).url, loaded.fetchSteps.get(1).url.contains("SITE_COORD") || loaded.fetchSteps.get(1).url.contains("37.9"));
+        assertEquals(loaded.fetchSteps.get(0).url, loaded.fetchSteps.get(0).openUrl());
+        assertTrue(loaded.fetchSteps.get(1).url, loaded.fetchSteps.get(1).url.contains("SITE_COORD"));
         assertTrue(loaded.fetchSteps.get(1).url, loaded.fetchSteps.get(1).url.contains("STEP_SIZE"));
 
         SkyField field = SkyField.of(SolarSystemClientTest.TRANSFORMER, 2000, 1600);

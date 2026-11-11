@@ -59,15 +59,17 @@ public class SkyCatalogueFetchStepTest {
         assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "SIMBAD", "Large galaxies").status);
         assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "SIMBAD", "Common names").status);
         assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "SIMBAD", "Named bright stars").status);
-        FetchStep vsx = step(catalogue, "AAVSO VSX", "Variable stars");
+        FetchStep vsx = step(catalogue, "AAVSO VSX via VizieR", "Variable stars");
         assertEquals(FetchStep.Status.FAILED, vsx.status);
         assertEquals(SkyCatalogueClient.VIZIER_TAP, vsx.url);
         assertTrue(vsx.query, vsx.query.contains("B/vsx"));
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "AAVSO VSX via Harvard", "Variable stars").status);
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "AAVSO VSX via IDIA", "Variable stars").status);
         assertEquals("0 stars", step(catalogue, "Gaia via VizieR", "Stars").outcome);
-        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "Gaia", "Field depth").status);
-        assertTrue(step(catalogue, "Gaia", "Field depth").detail.contains("no stars"));
+        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "Gaia via VizieR", "Field depth").status);
+        assertTrue(step(catalogue, "Gaia via VizieR", "Field depth").detail.contains("no stars"));
         assertTrue("the 503 is published before Gaia is asked", published.stream().anyMatch(list ->
-                list.stream().anyMatch(row -> "AAVSO VSX".equals(row.service) && row.status == FetchStep.Status.FAILED)
+                list.stream().anyMatch(row -> "AAVSO VSX via VizieR".equals(row.service) && row.status == FetchStep.Status.FAILED)
                         && list.stream().noneMatch(row -> "Stars".equals(row.question))));
     }
 
@@ -91,11 +93,11 @@ public class SkyCatalogueFetchStepTest {
         assertTrue(catalogue.namedStars.isEmpty());
         String problems = String.join("\n", catalogue.problems);
         assertTrue(problems, problems.contains("Large galaxies (SIMBAD): answered with HTTP 404."));
-        assertTrue(problems, problems.contains("Named bright stars (SIMBAD): answered with HTTP 503."));
+        assertTrue(problems, problems.contains("Named bright stars (SIMBAD): did not answer earlier."));
         assertFalse(problems, problems.contains("Deep-sky objects (SIMBAD)"));
         assertEquals("1 row", step(catalogue, "SIMBAD", "Deep-sky catalogue names").outcome);
         assertEquals(FetchStep.Status.FAILED, step(catalogue, "SIMBAD", "Large galaxies").status);
-        assertEquals(FetchStep.Status.FAILED, step(catalogue, "SIMBAD", "Named bright stars").status);
+        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "SIMBAD", "Named bright stars").status);
     }
 
     /** VizieR stays a failed row when the ESA archive then returns the stars. */
@@ -109,14 +111,13 @@ public class SkyCatalogueFetchStepTest {
                 return CsvTable.parse("");
             }
             if (adql.contains("I/355/gaiadr3")) {
-                throw new IOException("did not answer within 150 s.");
+                throw new IOException("answered with HTTP 503.");
             }
             return CsvTable.parse("");
         });
         assertEquals(1, catalogue.stars.size());
         assertEquals("Gaia DR3 via the ESA Gaia archive", catalogue.starSource);
-        assertEquals(1, catalogue.problems.size());
-        assertTrue(catalogue.problems.get(0), catalogue.problems.get(0).startsWith("Stars (Gaia, VizieR):"));
+        assertTrue(catalogue.problems.isEmpty());
         FetchStep vizier = step(catalogue, "Gaia via VizieR", "Stars");
         FetchStep esa = step(catalogue, "Gaia via the ESA archive", "Stars");
         assertEquals(FetchStep.Status.FAILED, vizier.status);
@@ -125,27 +126,29 @@ public class SkyCatalogueFetchStepTest {
         assertEquals(SkyCatalogueClient.ESA_GAIA_TAP, esa.url);
         assertTrue(esa.query, esa.query.contains("phot_g_mean_mag"));
         assertTrue(catalogue.fetchSteps.indexOf(vizier) < catalogue.fetchSteps.indexOf(esa));
-        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "Gaia", "Field depth").status);
-        assertEquals("4 of 4 patches", step(catalogue, "Gaia", "Field depth").outcome);
+        assertTrue(catalogue.fetchSteps.stream().noneMatch(row -> "Gaia via ARI Heidelberg".equals(row.service)));
+        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "Gaia via VizieR", "Field depth").status);
+        assertEquals("4 of 4 patches", step(catalogue, "Gaia via VizieR", "Field depth").outcome);
     }
 
-    /** Both Gaia services time out: each is a failed row, and the field depth is not asked. */
+    /** Every Gaia service times out: each is a failed row, and the field depth is not asked. */
     @Test
-    public void bothGaiaServicesFailingLeavesTheFieldDepthUnasked() throws Exception {
+    public void everyGaiaServiceFailingLeavesTheFieldDepthUnasked() throws Exception {
         SkyCatalogue catalogue = fetch((service, adql) -> {
-            if (SkyCatalogueClient.ESA_GAIA_TAP.equals(service) || adql.contains("I/355/gaiadr3")) {
+            if (SkyCatalogueClient.ESA_GAIA_TAP.equals(service) || SkyCatalogueClient.ARI_GAIA_TAP.equals(service)
+                    || adql.contains("I/355/gaiadr3")) {
                 throw new IOException("did not answer within 150 s.");
             }
             return CsvTable.parse("");
         });
         assertTrue(catalogue.stars.isEmpty());
         String problems = String.join("\n", catalogue.problems);
-        assertTrue(problems, problems.contains("Stars (Gaia, VizieR):"));
-        assertTrue(problems, problems.contains("Stars (Gaia, ESA archive):"));
+        assertTrue(problems, problems.contains("Stars (Gaia):"));
         assertEquals(FetchStep.Status.FAILED, step(catalogue, "Gaia via VizieR", "Stars").status);
         assertEquals(FetchStep.Status.FAILED, step(catalogue, "Gaia via the ESA archive", "Stars").status);
-        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "Gaia", "Field depth").status);
-        assertTrue(step(catalogue, "Gaia", "Field depth").detail.contains("no stars"));
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "Gaia via ARI Heidelberg", "Stars").status);
+        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "Gaia via VizieR", "Field depth").status);
+        assertTrue(step(catalogue, "Gaia via VizieR", "Field depth").detail.contains("no stars"));
     }
 
     /** The third faint patch fails; the three that answered stay, under one row. */
@@ -153,6 +156,9 @@ public class SkyCatalogueFetchStepTest {
     public void aFailedDepthPatchKeepsThePatchesAlreadyFetched() throws Exception {
         int[] depth = {0};
         SkyCatalogue catalogue = fetch((service, adql) -> {
+            if (adql.contains("phot_g_mean_mag <= 20.50")) {
+                throw new IOException("answered with HTTP 503.");
+            }
             if (adql.contains("Gmag <= 20.50")) {
                 if (++depth[0] == 3) {
                     throw new IOException("answered with HTTP 503.");
@@ -166,10 +172,12 @@ public class SkyCatalogueFetchStepTest {
         });
         assertEquals(1, catalogue.stars.size());
         assertEquals(3, catalogue.depthSamples.size());
-        FetchStep patches = step(catalogue, "Gaia", "Field depth");
+        FetchStep patches = step(catalogue, "Gaia via VizieR", "Field depth");
         assertEquals(FetchStep.Status.FAILED, patches.status);
         assertEquals("3 of 4 patches", patches.outcome);
         assertTrue(patches.detail, patches.detail.contains("HTTP 503"));
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "Gaia via the ESA archive", "Field depth").status);
+        assertEquals("0 of 1 patches", step(catalogue, "Gaia via ARI Heidelberg", "Field depth").outcome);
         assertEquals(1, catalogue.problems.stream().filter(line -> line.startsWith("Faint stars for the field depth (Gaia):")).count());
         assertTrue(catalogue.problems.toString(), catalogue.problems.stream().anyMatch(line -> line.contains("3 of 4 patches answered")));
     }
@@ -190,7 +198,7 @@ public class SkyCatalogueFetchStepTest {
         assertEquals("Only part of the stars were fetched", limit.outcome);
         assertTrue(limit.detail, limit.detail.contains("more than 1"));
         assertTrue(catalogue.problems.toString(), catalogue.problems.stream().anyMatch(line -> line.contains("more than 1")));
-        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "Gaia", "Field depth").status);
+        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "Gaia via VizieR", "Field depth").status);
     }
 
     /** Cancelling during VSX keeps the SIMBAD rows and marks the rest not asked. */
@@ -220,44 +228,252 @@ public class SkyCatalogueFetchStepTest {
         } catch (InterruptedException expected) {
             assertEquals(FetchStep.Status.SUCCEEDED, step(shown, "SIMBAD", "Deep-sky catalogue names").status);
             assertEquals("1 row", step(shown, "SIMBAD", "Deep-sky catalogue names").outcome);
-            assertEquals(FetchStep.Status.NOT_ASKED, step(shown, "AAVSO VSX", "Variable stars").status);
-            assertTrue(step(shown, "AAVSO VSX", "Variable stars").detail.contains("cancelled"));
+            assertEquals(FetchStep.Status.NOT_ASKED, step(shown, "AAVSO VSX via VizieR", "Variable stars").status);
+            assertTrue(step(shown, "AAVSO VSX via VizieR", "Variable stars").detail.contains("cancelled"));
             assertEquals("Not sent.", step(shown, "Gaia via VizieR", "Stars").detail);
-            assertEquals(FetchStep.Status.NOT_ASKED, step(shown, "Gaia", "Field depth").status);
+            assertEquals(FetchStep.Status.NOT_ASKED, step(shown, "Gaia via VizieR", "Field depth").status);
             assertTrue(shown.stream().noneMatch(row -> "Gaia via the ESA archive".equals(row.service)));
+            assertTrue(shown.stream().noneMatch(row -> "Gaia via ARI Heidelberg".equals(row.service)));
         }
     }
 
-    /** The plate-solution fit asks only for the stars and still reports both services when both fail. */
+    /** Strasbourg fails the galaxy query and Harvard returns the galaxy. IDIA is not asked. */
     @Test
-    public void fetchStarsStillReportsBothFailures() throws Exception {
+    public void harvardKeepsTheGalaxyWhenStrasbourgFails() throws Exception {
+        SkyCatalogue catalogue = fetch((service, adql) -> {
+            if (adql.contains("otype='G..'") && SkyCatalogueClient.SIMBAD_TAP.equals(service)) {
+                throw new IOException("answered with HTTP 503.");
+            }
+            if (adql.contains("otype='G..'") && SkyCatalogueClient.SIMBAD_HARVARD.equals(service)) {
+                return CsvTable.parse("main_id,ra,dec,otype,galdim_majaxis,galdim_minaxis,galdim_angle\n"
+                        + "\"NGC  2236\",98.856,7.321,\"OpC\",8.4,8.4,0\n");
+            }
+            if (SkyCatalogueClient.SIMBAD_IDIA.equals(service)) {
+                throw new IOException("IDIA was asked");
+            }
+            return CsvTable.parse("");
+        });
+        assertEquals(1, catalogue.deepSky.size());
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "SIMBAD", "Large galaxies").status);
+        FetchStep harvard = step(catalogue, "SIMBAD via Harvard", "Large galaxies");
+        assertEquals(FetchStep.Status.SUCCEEDED, harvard.status);
+        assertEquals(SkyCatalogueClient.SIMBAD_HARVARD, harvard.url);
+        assertTrue(catalogue.fetchSteps.stream().noneMatch(row -> "SIMBAD via IDIA".equals(row.service)
+                && "Large galaxies".equals(row.question)));
+    }
+
+    /** VizieR fails every faint patch and the ESA archive then returns them. Heidelberg is not asked. */
+    @Test
+    public void theEsaArchiveKeepsTheDepthPatchesWhenVizieRFails() throws Exception {
+        SkyCatalogue catalogue = fetch((service, adql) -> {
+            if (adql.contains("Gmag <= 20.50")) {
+                throw new IOException("did not answer within 150 s.");
+            }
+            if (SkyCatalogueClient.ESA_GAIA_TAP.equals(service) && adql.contains("phot_g_mean_mag <= 20.50")) {
+                return CsvTable.parse("ra,dec,pmra,pmdec,phot_g_mean_mag,bp_rp\n98.8,7.3,1,1,19.5,0.4\n");
+            }
+            if (SkyCatalogueClient.ARI_GAIA_TAP.equals(service) && adql.contains("phot_g_mean_mag <= 20.50")) {
+                throw new IOException("Heidelberg was asked for the field depth");
+            }
+            if (adql.contains("I/355/gaiadr3") && adql.contains("Gmag <= 15.00")) {
+                return CsvTable.parse(STAR);
+            }
+            return CsvTable.parse("");
+        });
+        assertEquals(4, catalogue.depthSamples.size());
+        assertEquals(1, catalogue.depthSamples.get(0).stars.size());
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "Gaia via VizieR", "Field depth").status);
+        assertEquals("0 of 4 patches", step(catalogue, "Gaia via VizieR", "Field depth").outcome);
+        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "Gaia via the ESA archive", "Field depth").status);
+        assertEquals("4 of 4 patches", step(catalogue, "Gaia via the ESA archive", "Field depth").outcome);
+        assertTrue(catalogue.fetchSteps.stream().noneMatch(row -> "Gaia via ARI Heidelberg".equals(row.service)
+                && "Field depth".equals(row.question)));
+    }
+
+    /** VizieR's VSX query fails and the Harvard copy returns the one star that lies in the frame. IDIA is not asked. */
+    @Test
+    public void harvardKeepsTheVariableInsideTheFrame() throws Exception {
+        String page = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE><TABLE>"
+                + "<FIELD name=\"OID\"/><FIELD name=\"Name\"/><FIELD name=\"V\"/><FIELD name=\"RAJ2000\"/>"
+                + "<FIELD name=\"DEJ2000\"/><FIELD name=\"Type\"/><FIELD name=\"max\"/><FIELD name=\"Period\"/>"
+                + "<DATA><TABLEDATA>"
+                + "<TR><TD>1</TD><TD>Inside Star</TD><TD>0</TD><TD>98.856</TD><TD>7.321</TD><TD>EA</TD><TD>12.5</TD><TD>1.2</TD></TR>"
+                + "<TR><TD>2</TD><TD>Far Away</TD><TD>0</TD><TD>10</TD><TD>80</TD><TD>EB</TD><TD>11</TD><TD>2</TD></TR>"
+                + "<TR><TD>3</TD><TD>Constant</TD><TD>2</TD><TD>98.856</TD><TD>7.321</TD><TD>CST</TD><TD>10</TD><TD></TD></TR>"
+                + "<TR><TD>4</TD><TD>Too Faint</TD><TD>0</TD><TD>98.856</TD><TD>7.330</TD><TD>EA</TD><TD>20</TD><TD>3</TD></TR>"
+                + "</TABLEDATA></DATA></TABLE></RESOURCE></VOTABLE>";
+        List<String> asked = new ArrayList<>();
+        SkyCatalogueClient client = new SkyCatalogueClient((service, adql, maxRecords, timeout) -> {
+            if (adql.contains("B/vsx")) {
+                throw new IOException("did not answer within 60 s.");
+            }
+            return CsvTable.parse("");
+        }, (url, timeout) -> {
+            asked.add(url);
+            if (url.startsWith(SkyCatalogueClient.VSX_HARVARD)) {
+                return page;
+            }
+            throw new IOException("IDIA was asked");
+        }, SkyCatalogueClient.MAX_STARS);
+        SkyCatalogue catalogue = client.fetch(field(), 15, (number, total, text) -> { });
+        assertEquals(1, catalogue.variables.size());
+        assertEquals("Inside Star", catalogue.variables.get(0).name);
+        assertEquals("EA", catalogue.variables.get(0).type);
+        assertEquals(1.2, catalogue.variables.get(0).periodDays, 0);
+        assertEquals(1, asked.size());
+        assertTrue(asked.get(0), asked.get(0).startsWith(SkyCatalogueClient.VSX_HARVARD));
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "AAVSO VSX via VizieR", "Variable stars").status);
+        FetchStep harvard = step(catalogue, "AAVSO VSX via Harvard", "Variable stars");
+        assertEquals(FetchStep.Status.SUCCEEDED, harvard.status);
+        assertEquals("1 row", harvard.outcome);
+        assertEquals("AAVSO VSX via Harvard", catalogue.variableSource);
+        assertEquals(asked.get(0), harvard.url);
+        assertNull(harvard.query);
+        assertTrue(catalogue.fetchSteps.stream().noneMatch(row -> "AAVSO VSX via IDIA".equals(row.service)));
+    }
+
+    /** Harvard fails and IDIA then returns the star. The Harvard failure stays. */
+    @Test
+    public void idiaKeepsTheVariableWhenHarvardFails() throws Exception {
+        String page = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE><TABLE>"
+                + "<FIELD name=\"Name\"/><FIELD name=\"V\"/><FIELD name=\"RAJ2000\"/><FIELD name=\"DEJ2000\"/><FIELD name=\"Type\"/>"
+                + "<DATA><TABLEDATA><TR><TD>From IDIA</TD><TD>1</TD><TD>98.856</TD><TD>7.321</TD><TD>EW</TD></TR>"
+                + "</TABLEDATA></DATA></TABLE></RESOURCE></VOTABLE>";
+        SkyCatalogueClient client = new SkyCatalogueClient((service, adql, maxRecords, timeout) -> {
+            if (adql.contains("B/vsx")) {
+                throw new IOException("answered with HTTP 503.");
+            }
+            return CsvTable.parse("");
+        }, (url, timeout) -> {
+            if (url.startsWith(SkyCatalogueClient.VSX_HARVARD)) {
+                throw new IOException("answered with HTTP 503.");
+            }
+            return page;
+        }, SkyCatalogueClient.MAX_STARS);
+        SkyCatalogue catalogue = client.fetch(field(), 15, (number, total, text) -> { });
+        assertEquals(1, catalogue.variables.size());
+        assertEquals("From IDIA", catalogue.variables.get(0).name);
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "AAVSO VSX via Harvard", "Variable stars").status);
+        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "AAVSO VSX via IDIA", "Variable stars").status);
+        assertTrue(step(catalogue, "AAVSO VSX via IDIA", "Variable stars").url.startsWith(SkyCatalogueClient.VSX_IDIA));
+    }
+
+    /** VizieR and the ESA archive fail, and ARI Heidelberg then returns the stars. Both failures stay. */
+    @Test
+    public void heidelbergKeepsTheStarsWhenTheEarlierServicesFail() throws Exception {
+        SkyCatalogue catalogue = fetch((service, adql) -> {
+            if (SkyCatalogueClient.ARI_GAIA_TAP.equals(service)) {
+                return CsvTable.parse(ESA_STAR);
+            }
+            if (adql.contains("Gmag <= 20.50")) {
+                return CsvTable.parse("");
+            }
+            if (adql.contains("I/355/gaiadr3") || SkyCatalogueClient.ESA_GAIA_TAP.equals(service)) {
+                throw new IOException("answered with HTTP 503.");
+            }
+            return CsvTable.parse("");
+        });
+        assertEquals(1, catalogue.stars.size());
+        assertEquals("Gaia DR3 via ARI Heidelberg", catalogue.starSource);
+        String problems = String.join("\n", catalogue.problems);
+        assertFalse(problems, problems.contains("Stars (Gaia"));
+        FetchStep heidelberg = step(catalogue, "Gaia via ARI Heidelberg", "Stars");
+        assertEquals(FetchStep.Status.SUCCEEDED, heidelberg.status);
+        assertEquals("1 star", heidelberg.outcome);
+        assertEquals(SkyCatalogueClient.ARI_GAIA_TAP, heidelberg.url);
+        assertTrue(heidelberg.query, heidelberg.query.contains("gaiadr3.gaia_source"));
+        assertTrue(catalogue.fetchSteps.indexOf(step(catalogue, "Gaia via the ESA archive", "Stars"))
+                < catalogue.fetchSteps.indexOf(heidelberg));
+    }
+
+    /** The plate-solution fit asks only for the stars and still names every service when all three fail. */
+    @Test
+    public void fetchStarsStillReportsEveryFailure() throws Exception {
         SkyCatalogueClient client = client((service, adql) -> {
             throw new IOException(SkyCatalogueClient.ESA_GAIA_TAP.equals(service) ? "did not answer within 150 s." : "answered with HTTP 503.");
         }, SkyCatalogueClient.MAX_STARS);
         try {
             client.fetchStars(field(), 15);
-            fail("both services failed");
+            fail("every service failed");
         } catch (IOException expected) {
-            assertTrue(expected.getMessage(), expected.getMessage().contains("VizieR") && expected.getMessage().contains("ESA archive"));
+            assertTrue(expected.getMessage(), expected.getMessage().contains("VizieR")
+                    && expected.getMessage().contains("ESA archive")
+                    && expected.getMessage().contains("ARI Heidelberg"));
         }
     }
 
-    /** A JPL address keeps the request for this visit and stores one without the observing site. */
+    /** A saved JPL address is the request that was sent, including the observing site. */
     @Test
-    public void aSavedAddressLeavesOutTheObservingSite() {
+    public void aSavedAddressKeepsTheRequest() {
         String sent = "https://ssd-api.jpl.nasa.gov/sb_ident.api?lat=37.900000&lon=23.700000&alt=0.1200&vmag-lim=19.0"
                 + "&SITE_COORD=23.700000%2C37.900000%2C0.1200";
         FetchStep step = FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.SUCCEEDED, "0 objects", "", sent, null);
+        assertEquals(sent, step.url);
         assertEquals(sent, step.openUrl());
-        assertTrue(step.url, step.url.contains("vmag-lim=19.0"));
-        assertFalse(step.url, step.url.contains("lat=") || step.url.contains("SITE_COORD") || step.url.contains("37.9"));
-        assertTrue(step.detail, step.detail.contains("leaves out the observing site"));
-        assertEquals("http://example.test/tap?lat%ZZ=1&vmag-lim=19", FetchStep.withoutSite("http://example.test/tap?lat%ZZ=1&vmag-lim=19"));
+        assertEquals("", step.detail);
         List<FetchStep> legacy = FetchStep.rowsFor(List.of(), List.of("Variable stars (AAVSO VSX): answered with HTTP 503."));
         assertEquals(FetchStep.Status.FAILED, legacy.get(0).status);
         assertNull(legacy.get(0).url);
         assertEquals("Failed", legacy.get(0).resultWord());
-        assertEquals("Not asked", FetchStep.of("Gaia", "Field depth", FetchStep.Status.NOT_ASKED, "", "", null, null).resultWord());
+        assertEquals("Not asked", FetchStep.of("Gaia via VizieR", "Field depth", FetchStep.Status.NOT_ASKED, "", "", null, null).resultWord());
+    }
+
+    /** A cone-search page that says OVERFLOW keeps the rows and says the answer was cut off. */
+    @Test
+    public void anOverflowConeSearchStaysPartial() throws Exception {
+        String page = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE>"
+                + "<INFO name=\"QUERY_STATUS\" value=\"OVERFLOW\"/>"
+                + "<TABLE><FIELD name=\"Name\"/><FIELD name=\"V\"/><FIELD name=\"RAJ2000\"/><FIELD name=\"DEJ2000\"/>"
+                + "<FIELD name=\"max\"/><DATA><TABLEDATA>"
+                + "<TR><TD>Kept</TD><TD>0</TD><TD>98.856</TD><TD>7.321</TD><TD>12</TD></TR>"
+                + "</TABLEDATA></DATA></TABLE></RESOURCE></VOTABLE>";
+        SkyCatalogueClient client = new SkyCatalogueClient((service, adql, maxRecords, timeout) -> {
+            if (adql.contains("B/vsx")) {
+                throw new IOException("answered with HTTP 503.");
+            }
+            return CsvTable.parse("");
+        }, (url, timeout) -> page, SkyCatalogueClient.MAX_STARS);
+        SkyCatalogue catalogue = client.fetch(field(), 15, (number, total, text) -> { });
+        assertEquals(1, catalogue.variables.size());
+        assertEquals("Kept", catalogue.variables.get(0).name);
+        FetchStep harvard = step(catalogue, "AAVSO VSX via Harvard", "Variable stars");
+        assertEquals(FetchStep.Status.FAILED, harvard.status);
+        assertTrue(harvard.outcome, harvard.outcome.contains("(truncated)"));
+        assertTrue(catalogue.problems.toString(), catalogue.problems.stream().anyMatch(line -> line.contains("cut off")));
+        assertTrue(catalogue.fetchSteps.stream().noneMatch(row -> "AAVSO VSX via IDIA".equals(row.service)));
+    }
+
+    /** Strasbourg timing out on the first SIMBAD question is not asked again for the later ones. */
+    @Test
+    public void aCopyThatTimedOutIsNotAskedAgain() throws Exception {
+        int[] strasbourg = {0};
+        SkyCatalogue catalogue = fetch((service, adql) -> {
+            if (SkyCatalogueClient.SIMBAD_TAP.equals(service)) {
+                strasbourg[0]++;
+                throw new IOException("did not answer within 60 s.");
+            }
+            return CsvTable.parse("");
+        });
+        assertEquals(1, strasbourg[0]);
+        assertEquals(FetchStep.Status.FAILED, step(catalogue, "SIMBAD", "Deep-sky catalogue names").status);
+        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "SIMBAD", "Large galaxies").status);
+        assertTrue(step(catalogue, "SIMBAD", "Large galaxies").detail.contains("did not answer earlier"));
+        assertEquals(FetchStep.Status.NOT_ASKED, step(catalogue, "SIMBAD", "Named bright stars").status);
+        assertEquals(FetchStep.Status.SUCCEEDED, step(catalogue, "SIMBAD via Harvard", "Large galaxies").status);
+    }
+
+    /** A full queue is not a reason to skip the copy. HTTP 503 is asked again. */
+    @Test
+    public void aFullQueueIsAskedAgain() throws Exception {
+        int[] strasbourg = {0};
+        fetch((service, adql) -> {
+            if (SkyCatalogueClient.SIMBAD_TAP.equals(service)) {
+                strasbourg[0]++;
+                throw new IOException("answered with HTTP 503.");
+            }
+            return CsvTable.parse("");
+        });
+        assertEquals(4, strasbourg[0]);
     }
 
     /** Fetches the standard test field to magnitude 15. */

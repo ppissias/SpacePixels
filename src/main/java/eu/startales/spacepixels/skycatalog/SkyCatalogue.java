@@ -32,6 +32,11 @@ public final class SkyCatalogue {
     public double starMagnitudeLimit;
     /** Where the stars came from, for example "VizieR (CDS)". */
     public String starSource;
+    /**
+     * Where the variable stars came from, for example "AAVSO VSX via VizieR". Null in a file written before the
+     * Harvard and IDIA copies were asked.
+     */
+    public String variableSource;
     public List<Star> stars = new ArrayList<>();
     public List<DeepSkyObject> deepSky = new ArrayList<>();
     public List<VariableStar> variables = new ArrayList<>();

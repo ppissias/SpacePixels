@@ -176,7 +176,7 @@ final class AcknowledgementsDialog extends JDialog {
                 + logoCard("esa.png", 72, 28,
                         "<b>European Space Agency (ESA)</b>:"
                         + "<ul>"
-                        + "  <li><a href='https://www.cosmos.esa.int/web/gaia'>Gaia DR3</a>: Star positions, proper motions, <i>G</i> magnitudes and <i>BP&minus;RP</i> colours support sky overlays, plate-solution correction, field-depth and observing-condition diagnostics. Queried through VizieR TAP, with the ESA Gaia Archive as fallback for the main star catalogue.</li>"
+                        + "  <li><a href='https://www.cosmos.esa.int/web/gaia'>Gaia DR3</a>: Star positions, proper motions, <i>G</i> magnitudes and <i>BP&minus;RP</i> colours support sky overlays, plate-solution correction, field-depth and observing-condition diagnostics. Queried through VizieR TAP, then the ESA Gaia Archive, then <a href='https://gaia.ari.uni-heidelberg.de/'>ARI Heidelberg</a>, for the main star catalogue and for the faint field-depth patches.</li>"
                         + "</ul>"
                         + "<p class='muted'>Credit: ESA/Gaia/DPAC. Gaia data are processed by the "
                         + "<a href='https://www.cosmos.esa.int/web/gaia/dpac/consortium'>Data Processing and Analysis Consortium</a>; "
@@ -185,7 +185,7 @@ final class AcknowledgementsDialog extends JDialog {
                 + logoCard("cds.png", 67, 40,
                         "<b>CDS (Centre de Donn&eacute;es astronomiques de Strasbourg)</b>:"
                         + "<ul>"
-                        + "  <li><a href='https://simbad.cds.unistra.fr/simbad/'>SIMBAD</a>: Supplies deep-sky objects and named bright stars for sky annotations; reports also link to object searches. <a href='https://doi.org/10.1051/aas:2000332'>Wenger et al. (2000)</a>.</li>"
+                        + "  <li><a href='https://simbad.cds.unistra.fr/simbad/'>SIMBAD</a>: Supplies deep-sky objects and named bright stars for sky annotations, from Strasbourg, then the <a href='https://simbad.cfa.harvard.edu/simbad/'>Harvard</a> and <a href='https://simbad.idia.ac.za/'>IDIA</a> mirrors when Strasbourg does not answer. Reports also link to object searches. <a href='https://doi.org/10.1051/aas:2000332'>Wenger et al. (2000)</a>.</li>"
                         + "  <li><a href='https://vizier.cds.unistra.fr/'>VizieR</a>: TAP access to Gaia DR3 (<i>I/355/gaiadr3</i>) and AAVSO VSX (<i>B/vsx/vsx</i>), including faint Gaia samples for field-depth estimates. <a href='https://doi.org/10.1051/aas:2000169'>Ochsenbein, Bauer &amp; Marcout (2000)</a>; <a href='https://doi.org/10.26093/cds/vizier'>service DOI</a>.</li>"
                         + "</ul>")
                 + logoCard("astrometry.png", 72, 22,
@@ -194,7 +194,7 @@ final class AcknowledgementsDialog extends JDialog {
                         + "  <li><a href='https://nova.astrometry.net/'>Nova Astrometry.net</a>: Optional online blind plate solving through JPlateSolve, using the user's configured account. <a href='https://doi.org/10.1088/0004-6256/139/5/1782'>Lang et al. (2010)</a>.</li>"
                         + "</ul>")
                 + "<ul>"
-                + "  <li><b>AAVSO (American Association of Variable Star Observers)</b> &mdash; <a href='https://vsx.aavso.org/'>International Variable Star Index (VSX)</a>: Variable-star positions, classifications, periods and brightness ranges, fetched via CDS VizieR for annotations and report cross-checks. Details open on AAVSO's site. <a href='https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx'>Watson et al. (2006&ndash;), catalogue B/vsx</a>.</li>"
+                + "  <li><b>AAVSO (American Association of Variable Star Observers)</b> &mdash; <a href='https://vsx.aavso.org/'>International Variable Star Index (VSX)</a>: Variable-star positions, classifications, periods and brightness ranges, fetched for annotations from VizieR at CDS, then the <a href='https://vizier.cfa.harvard.edu/'>Harvard</a> and <a href='https://vizier.idia.ac.za/'>IDIA</a> copies when Strasbourg does not answer. Report cross-checks still ask the Strasbourg service. Details open on AAVSO's site. <a href='https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx'>Watson et al. (2006&ndash;), catalogue B/vsx</a>.</li>"
                 + "  <li><b>IAU CPS (Centre for the Protection of the Dark and Quiet Sky from Satellite Constellation Interference)</b> &mdash; <a href='https://satchecker.cps.iau.org/'>SatChecker</a>: On-demand satellite-pass and ephemeris queries for report lookups and measured streak speed/direction comparisons. <a href='https://satchecker.readthedocs.io/en/latest/'>API documentation</a>.</li>"
                 + "</ul>"
                 + "<h3>External Report Links</h3>"

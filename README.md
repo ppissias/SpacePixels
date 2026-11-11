@@ -309,13 +309,13 @@ These services supply catalogue data, predictions and optional plate solutions f
 
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/esa.png" alt="ESA logo" width="72" height="28" /> European Space Agency (ESA)
 
-- [Gaia DR3](https://www.cosmos.esa.int/web/gaia): Star positions, proper motions, *G* magnitudes and *BP−RP* colours support sky overlays, plate-solution correction, field-depth and observing-condition diagnostics. Queried through VizieR TAP, with the ESA Gaia Archive as fallback for the main star catalogue.
+- [Gaia DR3](https://www.cosmos.esa.int/web/gaia): Star positions, proper motions, *G* magnitudes and *BP−RP* colours support sky overlays, plate-solution correction, field-depth and observing-condition diagnostics. Queried through VizieR TAP, then the ESA Gaia Archive, then [ARI Heidelberg](https://gaia.ari.uni-heidelberg.de/), for the main star catalogue and for the faint field-depth patches.
 
 Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and Analysis Consortium](https://www.cosmos.esa.int/web/gaia/dpac/consortium); national institutions support DPAC through the Gaia Multilateral Agreement. Requested references: [Gaia Collaboration (2016), mission paper](https://doi.org/10.1051/0004-6361/201629272), and [Gaia Collaboration (2023), DR3 release paper](https://doi.org/10.1051/0004-6361/202243940). [Gaia citation guidance](https://gea.esac.esa.int/archive/documentation/GDR3/Miscellaneous/sec_credit_and_citation_instructions/).
 
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/cds.png" alt="CDS logo" width="67" height="40" /> CDS (Centre de Données astronomiques de Strasbourg)
 
-- [SIMBAD](https://simbad.cds.unistra.fr/simbad/): Supplies deep-sky objects and named bright stars for sky annotations; reports also link to object searches. [Wenger et al. (2000)](https://doi.org/10.1051/aas:2000332).
+- [SIMBAD](https://simbad.cds.unistra.fr/simbad/): Supplies deep-sky objects and named bright stars for sky annotations, from Strasbourg, then the [Harvard](https://simbad.cfa.harvard.edu/simbad/) and [IDIA](https://simbad.idia.ac.za/) mirrors when Strasbourg does not answer. Reports also link to object searches. [Wenger et al. (2000)](https://doi.org/10.1051/aas:2000332).
 - [VizieR](https://vizier.cds.unistra.fr/): TAP access to Gaia DR3 (*I/355/gaiadr3*) and AAVSO VSX (*B/vsx/vsx*), including faint Gaia samples for field-depth estimates. [Ochsenbein, Bauer & Marcout (2000)](https://doi.org/10.1051/aas:2000169); [service DOI](https://doi.org/10.26093/cds/vizier).
 
 #### <img src="src/main/resources/eu/startales/spacepixels/gui/logos/astrometry.png" alt="Astrometry.net logo" width="72" height="22" /> Astrometry.net
@@ -324,7 +324,7 @@ Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and A
 
 #### Other Services & Data Providers
 
-- **AAVSO (American Association of Variable Star Observers)** — [International Variable Star Index (VSX)](https://vsx.aavso.org/): Variable-star positions, classifications, periods and brightness ranges, fetched via CDS VizieR for annotations and report cross-checks. Details open on AAVSO's site. [Watson et al. (2006–), catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
+- **AAVSO (American Association of Variable Star Observers)** — [International Variable Star Index (VSX)](https://vsx.aavso.org/): Variable-star positions, classifications, periods and brightness ranges, fetched for annotations from VizieR at CDS, then the [Harvard](https://vizier.cfa.harvard.edu/) and [IDIA](https://vizier.idia.ac.za/) copies when Strasbourg does not answer. Report cross-checks still ask the Strasbourg service. Details open on AAVSO's site. [Watson et al. (2006–), catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
 - **IAU CPS (Centre for the Protection of the Dark and Quiet Sky from Satellite Constellation Interference)** — [SatChecker](https://satchecker.cps.iau.org/): On-demand satellite-pass and ephemeris queries for report lookups and measured streak speed/direction comparisons. [API documentation](https://satchecker.readthedocs.io/en/latest/).
 
 #### External Report Links
