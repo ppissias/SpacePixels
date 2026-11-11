@@ -526,7 +526,7 @@ Optional localhost helper for live report enrichment.
 Responsibilities:
 
 - listen on loopback port `47831`
-- proxy trusted JPL, SatChecker and AAVSO VSX (through the CDS VizieR TAP service) lookup requests for static HTML reports
+- proxy trusted JPL, SatChecker and AAVSO VSX lookup requests for static HTML reports. VSX is asked of the CDS VizieR TAP service, then the Harvard and IDIA VizieR copies when that service does not answer
 - normalize and cache JSON lookup responses
 - persist lookup responses back into report-side cache data
 

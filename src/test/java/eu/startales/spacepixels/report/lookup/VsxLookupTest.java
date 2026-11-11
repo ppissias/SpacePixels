@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import org.junit.Test;
 
+import java.io.IOException;
 import java.net.URI;
 
 import static org.junit.Assert.assertEquals;
@@ -23,6 +24,57 @@ public class VsxLookupTest {
             } catch (IllegalArgumentException expected) { }
         }
         ReportLookupUpstreamClient.validatePayload("vsx", JsonParser.parseString("{\"metadata\":[{\"name\":\"Name\"}],\"data\":[]}"));
+    }
+
+    @Test
+    public void aMirrorPageBecomesTheSameMatchShape() {
+        String tap = PhotometryReportSectionWriter.vsxTapUrl(new PhotometryReportSectionWriter.SkyTarget(97.5225, 6.2234, 15.0));
+        VsxMirrorLookup.Circle circle = VsxMirrorLookup.circle(tap);
+        assertEquals(97.5225, circle.ra(), 1e-6);
+        assertEquals(6.2234, circle.dec(), 1e-6);
+        assertEquals(0.004167, circle.radiusDeg(), 1e-9);
+        String page = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE><TABLE>"
+                + "<FIELD name=\"OID\"/><FIELD name=\"Name\"/><FIELD name=\"Type\"/>"
+                + "<FIELD name=\"RAJ2000\"/><FIELD name=\"DEJ2000\"/><FIELD name=\"max\"/><FIELD name=\"Period\"/>"
+                + "<DATA><TABLEDATA>"
+                + "<TR><TD>2</TD><TD>Far</TD><TD>EB</TD><TD>97.60</TD><TD>6.30</TD><TD>11</TD><TD>1</TD></TR>"
+                + "<TR><TD>684845</TD><TD>CoRoT 221707281</TD><TD>EA</TD><TD>97.5225</TD><TD>6.2234</TD><TD>13.2</TD><TD>2.18</TD></TR>"
+                + "</TABLEDATA></DATA></TABLE></RESOURCE></VOTABLE>";
+        java.util.concurrent.atomic.AtomicReference<String> asked = new java.util.concurrent.atomic.AtomicReference<>();
+        JsonObject response = VsxMirrorLookup.lookup(tap, (url, host) -> {
+            asked.set(url + " " + host);
+            if (url.startsWith(VsxMirrorLookup.HARVARD)) {
+                return new VsxMirrorLookup.Fetched(200, page);
+            }
+            throw new IOException("IDIA was asked");
+        });
+        assertTrue(asked.get(), asked.get().startsWith(VsxMirrorLookup.HARVARD));
+        assertTrue(asked.get(), asked.get().contains("vizier.cfa.harvard.edu"));
+        assertTrue(asked.get(), asked.get().contains("-source=B%2Fvsx%2Fvsx") || asked.get().contains("-source=B/vsx/vsx"));
+        assertTrue(response.get("ok").getAsBoolean());
+        JsonObject first = response.getAsJsonObject("normalized").getAsJsonArray("matches").get(0).getAsJsonObject();
+        assertEquals("CoRoT 221707281", first.get("name").getAsString());
+        assertEquals("AAVSO VSX via Harvard", first.get("source").getAsString());
+        assertEquals(0.0, first.get("separationArcsec").getAsDouble(), 0.01);
+        assertEquals(2, response.getAsJsonObject("normalized").get("matchCount").getAsInt());
+    }
+
+    @Test
+    public void harvardIsSkippedWhenItsPageIsNotATable() {
+        String tap = PhotometryReportSectionWriter.vsxTapUrl(new PhotometryReportSectionWriter.SkyTarget(10, 20, 10));
+        String page = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE><TABLE>"
+                + "<FIELD name=\"OID\"/><FIELD name=\"Name\"/><FIELD name=\"RAJ2000\"/><FIELD name=\"DEJ2000\"/>"
+                + "<DATA><TABLEDATA><TR><TD>1</TD><TD>From IDIA</TD><TD>10</TD><TD>20</TD></TR></TABLEDATA></DATA></TABLE></RESOURCE></VOTABLE>";
+        JsonObject response = VsxMirrorLookup.lookup(tap, (url, host) -> {
+            if (url.startsWith(VsxMirrorLookup.HARVARD)) {
+                return new VsxMirrorLookup.Fetched(200, "<html><body>down</body></html>");
+            }
+            return new VsxMirrorLookup.Fetched(200, page);
+        });
+        JsonObject match = response.getAsJsonObject("normalized").getAsJsonArray("matches").get(0).getAsJsonObject();
+        assertEquals("From IDIA", match.get("name").getAsString());
+        assertEquals("AAVSO VSX via IDIA", match.get("source").getAsString());
+        assertTrue(response.get("sourceUrl").getAsString().startsWith(VsxMirrorLookup.IDIA));
     }
 
     @Test

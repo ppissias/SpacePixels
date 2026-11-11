@@ -324,7 +324,7 @@ Credit: **ESA/Gaia/DPAC**. Gaia data are processed by the [Data Processing and A
 
 #### Other Services & Data Providers
 
-- **AAVSO (American Association of Variable Star Observers)** — [International Variable Star Index (VSX)](https://vsx.aavso.org/): Variable-star positions, classifications, periods and brightness ranges, fetched for annotations from VizieR at CDS, then the [Harvard](https://vizier.cfa.harvard.edu/) and [IDIA](https://vizier.idia.ac.za/) copies when Strasbourg does not answer. Report cross-checks still ask the Strasbourg service. Details open on AAVSO's site. [Watson et al. (2006–), catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
+- **AAVSO (American Association of Variable Star Observers)** — [International Variable Star Index (VSX)](https://vsx.aavso.org/): Variable-star positions, classifications, periods and brightness ranges, fetched for annotations from VizieR at CDS, then the [Harvard](https://vizier.cfa.harvard.edu/) and [IDIA](https://vizier.idia.ac.za/) copies when Strasbourg does not answer. Report cross-checks ask Strasbourg first, then the same Harvard and IDIA copies when Strasbourg does not answer. Details open on AAVSO's site. [Watson et al. (2006–), catalogue B/vsx](https://cdsarc.cds.unistra.fr/viz-bin/cat/B/vsx).
 - **IAU CPS (Centre for the Protection of the Dark and Quiet Sky from Satellite Constellation Interference)** — [SatChecker](https://satchecker.cps.iau.org/): On-demand satellite-pass and ephemeris queries for report lookups and measured streak speed/direction comparisons. [API documentation](https://satchecker.readthedocs.io/en/latest/).
 
 #### External Report Links

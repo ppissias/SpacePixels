@@ -82,7 +82,7 @@ public final class ReportLookupUpstreamClient {
                 response.addProperty("message", "Upstream service returned HTTP " + upstreamStatus + "." + detail);
                 response.add("payload", payload);
             }
-            return response;
+            return vsxOrMirror(provider, targetUrl, control, response);
         } catch (Exception e) {
             JsonObject error = new JsonObject();
             error.addProperty("ok", false);
@@ -90,9 +90,56 @@ public final class ReportLookupUpstreamClient {
             error.addProperty("sourceUrl", targetUrl);
             error.addProperty("cacheSource", "live");
             error.addProperty("message", "Report lookup failed: " + e.getMessage());
-            return error;
+            return vsxOrMirror(provider, targetUrl, control, error);
         } finally {
             if (control != null) control.release(connection);
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+
+    /**
+     * A failed VSX lookup is asked of Harvard, then IDIA. A successful Strasbourg answer, including an empty circle,
+     * is kept. The mirror address is built here from the circle in the already checked Strasbourg query.
+     */
+    private static JsonObject vsxOrMirror(String provider, String targetUrl, SatCheckerTrackLookup.Control control,
+            JsonObject response) {
+        if (!"vsx".equals(provider) || response.has("ok") && response.get("ok").getAsBoolean()) {
+            return response;
+        }
+        JsonObject mirror = VsxMirrorLookup.lookup(targetUrl, (url, expectedHost) -> open(url, expectedHost, control));
+        return mirror != null ? mirror : response;
+    }
+
+    /** Fetches one HTTPS page and refuses a redirect onto a different host. */
+    private static VsxMirrorLookup.Fetched open(String url, String expectedHost, SatCheckerTrackLookup.Control control)
+            throws Exception {
+        HttpURLConnection connection = null;
+        try {
+            connection = (HttpURLConnection) new URL(url).openConnection();
+            connection.setInstanceFollowRedirects(true);
+            if (control != null) {
+                control.bind(connection);
+            }
+            connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
+            connection.setReadTimeout(SATCHECKER_READ_TIMEOUT_MS);
+            connection.setRequestMethod("GET");
+            connection.setRequestProperty("User-Agent", "SpacePixels-ReportLookupProxy/1.0");
+            int status = connection.getResponseCode();
+            if (connection.getURL() == null || !expectedHost.equalsIgnoreCase(connection.getURL().getHost())) {
+                throw new IOException("The mirror redirected away from " + expectedHost + ".");
+            }
+            InputStream stream = status >= 400 ? connection.getErrorStream() : connection.getInputStream();
+            String body = stream != null ? readLimitedUtf8(stream, MAX_RESPONSE_BYTES) : "";
+            if (status < 200 || status >= 300) {
+                throw new IOException("Upstream service returned HTTP " + status + ".");
+            }
+            return new VsxMirrorLookup.Fetched(status, body);
+        } finally {
+            if (control != null) {
+                control.release(connection);
+            }
             if (connection != null) {
                 connection.disconnect();
             }
