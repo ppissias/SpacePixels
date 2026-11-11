@@ -12,6 +12,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
 | [F29](#f29-preview-frame-and-blink-redesign) | Preview Frame and Blink redesign | Agreed 2026-11-06; implementation in progress |
+| [F30](#f30-fetch-summary-for-the-sky-catalogue-and-asteroids) | Fetch summary for the sky catalogue and asteroids | Reviewed 2026-11-11; ready for implementation |
 
 The other investigations from 2026-11-02 are owned by JTransient: [remaining deferred photometry work](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [readiness policy](../JTransient/FEATURE-REQUESTS.md#vs-9-selected-stars-and-the-linearity-check-minimum), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -241,3 +242,59 @@ What the decision settles, where the spec differed from the application:
 11. Blink's transport bar is built as specified. While paused, ↑ and ↓ step frames; while playing, they change the speed.
 
 The application theme stays a setting; the spec's dark palette is not hard-coded. The finding detail card and the stretch histogram are optional and come last.
+
+## F30. Fetch summary for the sky catalogue and asteroids
+
+**Request (2026-11-11).** When **Fetch Sky Catalogue** or **Fetch Asteroids and Comets** hits a 503, a 404, a timeout or another service failure, the only account is a tooltip on the **2 Astrometry** status. It disappears when the pointer moves. Show a small window, opened by clicking that status, with every step that was tried, whether it succeeded, and why it failed.
+
+**What happens now.** Each fetch keeps whatever arrived and writes a plain problem sentence for the rest. The status line stays short (`⚠ 12,400 stars · ⚠ 8 asteroids`). The tooltip under it is the only place those sentences appear, and only for a fetch done in this visit: a catalogue saved with problems shows the warning mark after the folder is imported again, but the tooltip does not repeat the saved sentences. Nothing in that tooltip is a link.
+
+The sky-catalogue steps, in order, are SIMBAD (deep-sky names, large galaxies, common names, named bright stars, currently one problem line for all four), AAVSO VSX, Gaia stars through VizieR with the ESA archive as fallback, and four faint patches for the field depth. A VizieR failure that the ESA archive then answers is not recorded. Asteroids and comets ask JPL SB-Ident for the field, then for near-Earth objects, then JPL Horizons for up to 300 objects. If the field search fails, nothing else is asked. Horizons failures are one sentence ("could not give positions for N of M"), and the objects still get a straight-line path.
+
+**Proposal.** Keep the short status line. Make it clickable once either fetch has been attempted or a saved result is loaded, and open one small window titled with the dataset. Two sections, **Sky catalogue** and **Asteroids and comets**, each a table:
+
+| Step | Result | What came back | Detail |
+|---|---|---|---|
+| the service and the question | Succeeded, Failed, or Not asked | a count, or "straight-line path" | the reason, and a link or the query when there is one |
+
+Mild colour only, with the word always present: ordinary text for Succeeded, the existing warning colour for Failed, and the quiet help colour for Not asked. A step that failed and was then answered by a fallback stays Failed on its own row; the fallback is the next Succeeded row. A service that answered with nothing in the field is Succeeded, with a count of zero. Cancelling leaves the finished rows and marks the rest Not asked.
+
+**Sky catalogue rows.** One row for each SIMBAD query, one for VSX, one for Gaia through VizieR, one for the ESA archive when it was tried, and one for the faint field-depth patches. The depth row is Not asked when the star query produced no stars. The "more than 300,000 stars" limit stays a Failed or partial row with the existing advice to lower the star depth. These calls are TAP form posts, so the row links to the service and offers **Copy query** for the ADQL. It does not pretend the query is a page address.
+
+**Asteroid and comet rows.** One row for the JPL field search and one for the near-Earth search. Each is a real `https://ssd-api.jpl.nasa.gov/sb_ident.api` address and opens in the browser. Horizons does not list all 300 objects: one Succeeded row gives the count that received positions, and each object that failed is its own row, with its name, the reason, and its Horizons address. Objects past the 300 limit are one Not asked row, with the existing note to lower the magnitude limit. When the field search fails, the later rows are Not asked and say they were not sent.
+
+**Remembered with the fetch.** Save the rows in `sky_catalogue.json` and `solar_system.json`, beside the problem sentences those files already have. Reopening the folder shows the same window. An older file has only the sentences: the window lists those sentences and has no links. A save failure stays a row too ("kept until SpacePixels closes"). Plate-solution checking is local and stays on the status line; this window is only the online fetches.
+
+The tooltip can shrink to the one-line summary and "Click for the fetch summary." What arrived is still kept, and detection is unchanged.
+
+**Acceptance.** A VSX 503 with SIMBAD and Gaia succeeding; Gaia failing at VizieR and succeeding at ESA; both Gaia services timing out; a JPL field-search 404 that asks nothing further; a near-Earth 503 with a successful field search; two Horizons failures among successful objects; a cancelled fetch; a saved catalogue reopened with its rows intact; an older catalogue that only has problem sentences. Links open the JPL requests that were sent, and **Copy query** copies the ADQL. The status line still fits one row.
+
+**Review (2026-11-11).** The proposal is well-scoped, architecturally sound, and directly solves the problem of ephemeral, vanishing error tooltips when online astronomical services (CDS, VizieR, ESA, JPL) fail. Recommendations for implementation:
+
+1. **Data model & backward compatibility:**
+   - Define a lightweight immutable model record, e.g. `FetchStep(String service, String question, FetchStatus status, String outcome, String detail, String url, String query)` where `FetchStatus` is an enum (`SUCCEEDED`, `FAILED`, `NOT_ASKED`).
+   - Add `public List<FetchStep> fetchSteps = new ArrayList<>();` to both `SkyCatalogue` and `SolarSystemObjects`.
+   - GSON automatically handles absent fields in older `sky_catalogue.json` and `solar_system.json` files. When `fetchSteps` is empty or null but legacy `problems` strings exist, synthesize backward-compatible fallback rows with status `FAILED` and no links, as specified.
+   - For TAP POST queries, keep `url` pointing to the service documentation/endpoint and `query` containing the raw ADQL text; this cleanly decouples copying the query text from opening web links.
+
+2. **Client query granularity & fallback tracking:**
+   - In `SkyCatalogueClient`:
+     - Disaggregate the four SIMBAD queries (`named`, `galaxies`, `namedObjects`, `namedStars`) into distinct query executions so that a failure in one (e.g. named stars) does not abort the others or lump them into a single failure row.
+     - In `fetchStars(...)`, explicitly record the VizieR attempt as a `FAILED` step before invoking the ESA Gaia fallback. When ESA succeeds, record it as a separate `SUCCEEDED` step immediately following the failed VizieR row.
+     - For field depth samples, record a single aggregated step ("Field depth Gaia samples") noting the patch count and depth limit (or individual patch failures if partial).
+   - In `SolarSystemClient`:
+     - For JPL SB-Ident (main field search and NEO search), record the full REST GET URLs in `url`.
+     - For JPL Horizons, emit one aggregate `SUCCEEDED` row for bodies that returned trajectory positions, and separate `FAILED` rows for each individual object that failed (including its Horizons URL), plus a `NOT_ASKED` row if the 300-object limit was reached.
+
+3. **GUI presentation & accessibility:**
+   - Update `astrometryStatus` in `MainApplicationPanel`:
+     - When either fetch has been attempted or loaded from disk, set `setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR))`.
+     - Provide a subtle visual indicator (e.g. a link-styled label or small "ⓘ" / "↗" icon) alongside the tooltip note ("Click for the fetch summary.") so discoverability does not rely solely on hovering.
+     - Keep the click disabled while a fetch is actively in progress (`isRunning()`), or display a snapshot of completed steps.
+   - Implement `FetchSummaryDialog` as a modeless `JDialog` (`ModalityType.MODELESS`) owned by the main window, with Esc closing the dialog, standard `UiStyle` theme support, and two clean tables or tabbed sections for **Sky catalogue** and **Asteroids and comets**.
+   - Use `Desktop.getDesktop().browse(URI)` for external URLs and `Toolkit.getDefaultToolkit().getSystemClipboard().setContents(...)` for "Copy query".
+
+4. **Verification & acceptance:**
+   - Unit test client step recording and fallback tracking using mock HTTP fixtures (503, 404, timeouts, ESA fallback).
+   - Test JSON round-trip serialization/deserialization for both modern files with `fetchSteps` and legacy files with only `problems`.
+   - Test headless UI mechanics (status label click action and dialog population) in `WindowMechanicsTest` or `GuiMechanicsTest`.
