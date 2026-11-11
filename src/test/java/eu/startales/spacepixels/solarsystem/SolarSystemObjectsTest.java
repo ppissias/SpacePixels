@@ -2,6 +2,7 @@ package eu.startales.spacepixels.solarsystem;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyField;
 import org.junit.Rule;
 import org.junit.Test;
@@ -88,6 +89,12 @@ public class SolarSystemObjectsTest {
         comet.orbitSolution = "JPL#20";
         comet.samples.add(sample(T0, 150, 20, 11.6, 0.2));
         objects.bodies.add(comet);
+        objects.fetchSteps.add(FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.SUCCEEDED, "1 object", "",
+                "https://ssd-api.jpl.nasa.gov/sb_ident.api?lat=37.900000&lon=23.700000&alt=0.1200&vmag-lim=19.0", null));
+        objects.fetchSteps.add(FetchStep.of("JPL Horizons", "194 Prokne (A879 FA)", FetchStep.Status.FAILED,
+                "Kept with the field search's straight-line motion, without an uncertainty.", "JPL answered HTTP 503.",
+                "https://ssd.jpl.nasa.gov/api/horizons.api?format=json&SITE_COORD='23.700000%2C37.900000%2C0.1200'&STEP_SIZE='10+m'",
+                null));
         SolarSystemStore.save(session, objects);
 
         String text = Files.readString(SolarSystemStore.fileIn(session).toPath(), StandardCharsets.UTF_8);
@@ -97,6 +104,12 @@ public class SolarSystemObjectsTest {
         assertTrue(loaded.bodies.get(0).comet);
         assertEquals(11.6, loaded.bodies.get(0).samples.get(0).magnitude, 0);
         assertEquals("JPL#20", loaded.bodies.get(0).orbitSolution);
+        assertEquals(2, loaded.fetchSteps.size());
+        assertTrue(loaded.fetchSteps.get(0).url, loaded.fetchSteps.get(0).url.contains("vmag-lim=19.0"));
+        assertFalse(loaded.fetchSteps.get(0).url, loaded.fetchSteps.get(0).url.contains("lat=") || loaded.fetchSteps.get(0).url.contains("37.9"));
+        assertNull(loaded.fetchSteps.get(0).liveUrl);
+        assertFalse(loaded.fetchSteps.get(1).url, loaded.fetchSteps.get(1).url.contains("SITE_COORD") || loaded.fetchSteps.get(1).url.contains("37.9"));
+        assertTrue(loaded.fetchSteps.get(1).url, loaded.fetchSteps.get(1).url.contains("STEP_SIZE"));
 
         SkyField field = SkyField.of(SolarSystemClientTest.TRANSFORMER, 2000, 1600);
         assertTrue(SolarSystemStore.matches(loaded, field, new long[]{T0, T0 + HOUR}));
@@ -108,6 +121,16 @@ public class SolarSystemObjectsTest {
 
         Files.writeString(SolarSystemStore.fileIn(session).toPath(), "{not json", StandardCharsets.UTF_8);
         assertNull(SolarSystemStore.load(session));
+
+        Files.writeString(SolarSystemStore.fileIn(session).toPath(),
+                "{\"version\":1,\"field\":{\"centerRa\":150.0,\"centerDec\":20.0},"
+                        + "\"problems\":[\"Field search (JPL SB-Ident): JPL did not answer.\"]}",
+                StandardCharsets.UTF_8);
+        SolarSystemObjects legacy = SolarSystemStore.load(session);
+        assertTrue(legacy.fetchSteps.isEmpty());
+        assertEquals(1, legacy.problems.size());
+        assertEquals(1, FetchStep.rowsFor(legacy.fetchSteps, legacy.problems).size());
+        assertNull(FetchStep.rowsFor(legacy.fetchSteps, legacy.problems).get(0).url);
     }
 
     @Test

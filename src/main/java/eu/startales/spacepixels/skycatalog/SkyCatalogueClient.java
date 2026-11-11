@@ -29,14 +29,37 @@ import java.util.regex.Pattern;
 /**
  * Fetches the catalogue of a field from the online TAP services: deep-sky objects from SIMBAD, variable stars from
  * AAVSO VSX and stars from Gaia DR3, all at CDS (Strasbourg), with ESA's Gaia archive as the fallback for the stars.
- * Each source that fails is noted in {@link SkyCatalogue#problems}; the others are still kept. Interrupting the
- * fetching thread cancels the request in progress.
+ * Each source that fails is noted in {@link SkyCatalogue#problems}; the others are still kept. The four SIMBAD
+ * queries are asked separately, so a later failure keeps the objects already parsed. A VizieR failure is kept as
+ * its own step when the ESA archive then answers. Faint depth patches that answer are kept when another patch
+ * fails. Every question is also recorded on {@link SkyCatalogue#fetchSteps}. Interrupting the fetching thread
+ * cancels the request in progress and marks the questions not yet sent.
  */
 public final class SkyCatalogueClient {
 
-    /** Receives which of the three sources is being fetched. */
+    /**
+     * Receives which source is being fetched, and the steps finished so far. {@link #stage} is the only method a
+     * caller must implement.
+     */
     public interface Progress {
+        /** Which of the three sources is being fetched. Called on the fetching thread. */
         void stage(int number, int total, String text);
+
+        /**
+         * The steps recorded so far. The list is immutable. The default ignores it, so a progress report that only
+         * names the current source keeps working. Called on the fetching thread.
+         */
+        default void steps(List<FetchStep> steps) {
+        }
+    }
+
+    /**
+     * One TAP query. Tests supply recorded answers; the desktop client sends the query over HTTP.
+     * The fetching thread calls it, and interruption cancels the query.
+     */
+    interface QueryTransport {
+        /** The CSV table of one ADQL query. */
+        CsvTable query(String service, String adql, int maxRecords, Duration timeout) throws IOException, InterruptedException;
     }
 
     static final String VIZIER_TAP = "https://tapvizier.cds.unistra.fr/TAPVizieR/tap/sync";
@@ -67,13 +90,30 @@ public final class SkyCatalogueClient {
     /** Stars with a proper name are kept to this V magnitude: the bright stars people know. */
     static final double NAMED_STAR_MAGNITUDE = 5.0;
 
-    private final HttpClient http;
+    private final QueryTransport transport;
+    /** Stars kept from one answer before the depth is reported as only partly fetched. Production uses {@link #MAX_STARS}. */
+    private final int starCap;
 
     public SkyCatalogueClient() {
-        http = HttpClient.newBuilder()
+        HttpClient http = HttpClient.newBuilder()
                 .connectTimeout(CONNECT_TIMEOUT)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .build();
+        this.transport = (service, adql, maxRecords, timeout) -> httpQuery(http, service, adql, maxRecords, timeout);
+        this.starCap = MAX_STARS;
+    }
+
+    /** A client whose TAP queries are answered by {@code transport}. The desktop uses {@link #SkyCatalogueClient()}. */
+    SkyCatalogueClient(QueryTransport transport) {
+        this(transport, MAX_STARS);
+    }
+
+    /**
+     * A client with a test limit on how many stars one answer may keep. The desktop uses {@link #MAX_STARS}.
+     */
+    SkyCatalogueClient(QueryTransport transport, int starCap) {
+        this.transport = transport;
+        this.starCap = starCap;
     }
 
     /**
@@ -83,53 +123,85 @@ public final class SkyCatalogueClient {
      * @throws InterruptedException when the thread is interrupted, which cancels the fetch
      */
     public SkyCatalogue fetch(SkyField field, double magnitudeLimit, Progress progress) throws InterruptedException {
-        SkyCatalogue catalogue = new SkyCatalogue();
-        catalogue.field = field;
-        catalogue.starMagnitudeLimit = magnitudeLimit;
-        catalogue.fetchedAtUtc = Instant.now().toString();
+        Attempt attempt = new Attempt(field, magnitudeLimit, progress);
+        try {
+            fetchInto(attempt);
+            return attempt.catalogue;
+        } catch (InterruptedException interrupted) {
+            attempt.cancel();
+            throw interrupted;
+        }
+    }
+
+    /** Asks each catalogue service and records the step, keeping whatever has already been parsed. */
+    private void fetchInto(Attempt attempt) throws InterruptedException {
+        SkyCatalogue catalogue = attempt.catalogue;
+        SkyField field = catalogue.field;
+        double magnitudeLimit = catalogue.starMagnitudeLimit;
+        Progress progress = attempt.progress;
 
         progress.stage(1, 3, "deep-sky objects (SIMBAD)");
-        try {
-            CsvTable named = query(SIMBAD_TAP, namedDeepSkyQuery(field), 20_000, QUICK_TIMEOUT);
-            CsvTable galaxies = query(SIMBAD_TAP, galaxyQuery(field), 20_000, QUICK_TIMEOUT);
-            catalogue.deepSky = parseDeepSky(named, galaxies);
-            addNamedObjects(catalogue.deepSky, query(SIMBAD_TAP, namedObjectQuery(field), 20_000, QUICK_TIMEOUT));
-            catalogue.namedStars = parseNamedStars(query(SIMBAD_TAP, namedStarQuery(field), 5_000, QUICK_TIMEOUT));
-        } catch (IOException e) {
-            catalogue.problems.add("Deep-sky objects (SIMBAD): " + e.getMessage());
-        }
+        CsvTable named = ask(attempt, "SIMBAD", "Deep-sky catalogue names", "Deep-sky catalogue names (SIMBAD)",
+                SIMBAD_TAP, namedDeepSkyQuery(field), 20_000, QUICK_TIMEOUT);
+        CsvTable galaxies = ask(attempt, "SIMBAD", "Large galaxies", "Large galaxies (SIMBAD)",
+                SIMBAD_TAP, galaxyQuery(field), 20_000, QUICK_TIMEOUT);
+        catalogue.deepSky = parseDeepSky(named, galaxies);
+        CsvTable commonNames = ask(attempt, "SIMBAD", "Common names", "Common names (SIMBAD)",
+                SIMBAD_TAP, namedObjectQuery(field), 20_000, QUICK_TIMEOUT);
+        addNamedObjects(catalogue.deepSky, commonNames);
+        CsvTable brightStars = ask(attempt, "SIMBAD", "Named bright stars", "Named bright stars (SIMBAD)",
+                SIMBAD_TAP, namedStarQuery(field), 5_000, QUICK_TIMEOUT);
+        catalogue.namedStars = parseNamedStars(brightStars);
 
         progress.stage(2, 3, "variable stars (AAVSO VSX)");
-        try {
-            catalogue.variables = parseVariables(query(VIZIER_TAP, variableQuery(field, magnitudeLimit), 200_000, QUICK_TIMEOUT));
-        } catch (IOException e) {
-            catalogue.problems.add("Variable stars (AAVSO VSX): " + e.getMessage());
-        }
+        CsvTable variables = ask(attempt, "AAVSO VSX", "Variable stars", "Variable stars (AAVSO VSX)",
+                VIZIER_TAP, variableQuery(field, magnitudeLimit), 200_000, QUICK_TIMEOUT);
+        catalogue.variables = parseVariables(variables);
 
         String depth = String.format(Locale.US, "stars to magnitude %.1f (Gaia)", magnitudeLimit);
         progress.stage(3, 3, depth);
         try {
             String[] source = new String[1];
             catalogue.stars = fetchStars(field, magnitudeLimit, source,
-                    () -> progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ESA archive)")));
+                    () -> progress.stage(3, 3, depth.replace("(Gaia)", "(Gaia, ESA archive)")), attempt);
             catalogue.starSource = source[0];
         } catch (IOException problem) {
-            catalogue.problems.add("Stars (Gaia): " + problem.getMessage());
+            // Each Gaia service already has its own step and problem sentence.
         }
-        if (!catalogue.stars.isEmpty()) {
-            progress.stage(3, 3, String.format(Locale.US, "faint stars of four small patches (Gaia, to %.1f, for the field depth)", DEPTH_MAGNITUDE));
-            try {
-                catalogue.depthSamples = fetchDepthSamples(field);
-            } catch (IOException e) {
-                catalogue.problems.add("Faint stars for the field depth (Gaia): " + e.getMessage());
-            }
-        }
-        if (catalogue.stars.size() >= MAX_STARS) {
-            catalogue.problems.add(String.format(Locale.US,
+        if (catalogue.stars.size() >= starCap) {
+            String message = String.format(Locale.US,
                     "Stars (Gaia): the field has more than %,d stars to this depth, so only part of them were fetched. "
-                            + "Lower the star depth in the Astrometry Config tab.", MAX_STARS));
+                            + "Lower the star depth in the Astrometry Config tab.", starCap);
+            catalogue.problems.add(message);
+            attempt.fail("Gaia", "Star depth limit", "Only part of the stars were fetched", message, null, null);
         }
-        return catalogue;
+        if (catalogue.stars.isEmpty()) {
+            attempt.notAsked("Gaia", "Field depth", "", "The star query produced no stars.");
+        } else {
+            fetchDepth(attempt);
+        }
+    }
+
+    /**
+     * One TAP query. A failure records the step, adds the problem sentence and returns an empty table, so a later
+     * query still runs and objects already parsed stay. Interruption is left to the caller.
+     */
+    private CsvTable ask(Attempt attempt, String service, String question, String problemPrefix, String endpoint,
+            String adql, int maxRecords, Duration timeout) throws InterruptedException {
+        try {
+            CsvTable table = query(endpoint, adql, maxRecords, timeout);
+            attempt.succeed(service, question, count(table.size(), "row"), "", endpoint, adql);
+            return table;
+        } catch (IOException problem) {
+            attempt.fail(service, question, "", problem.getMessage(), endpoint, adql);
+            attempt.catalogue.problems.add(problemPrefix + ": " + problem.getMessage());
+            return CsvTable.parse("");
+        }
+    }
+
+    /** "0 rows", "1 row" or "12 rows". */
+    private static String count(int amount, String noun) {
+        return String.format(Locale.US, "%,d %s%s", amount, noun, amount == 1 ? "" : "s");
     }
 
     /** The faintest stars fetched for the field depth: deeper than amateur frames usually go. */
@@ -140,17 +212,55 @@ public final class SkyCatalogueClient {
     /**
      * Gaia stars to G {@value #DEPTH_MAGNITUDE} in four square patches, halfway from the centre of the field to each
      * corner: the middle of the field often holds a large galaxy or nebula, where faint stars cannot be found.
+     * A patch that fails does not discard the patches already fetched. One step says how many answered. Interruption
+     * keeps those patches and marks the step not asked.
      */
-    List<SkyCatalogue.DepthSample> fetchDepthSamples(SkyField field) throws IOException, InterruptedException {
+    private void fetchDepth(Attempt attempt) throws InterruptedException {
+        SkyField field = attempt.catalogue.field;
+        attempt.progress.stage(3, 3, String.format(Locale.US,
+                "faint stars of four small patches (Gaia, to %.1f, for the field depth)", DEPTH_MAGNITUDE));
         List<SkyCatalogue.DepthSample> samples = new ArrayList<>();
+        StringBuilder queries = new StringBuilder();
+        IOException last = null;
+        int failed = 0;
         double side = Math.min(DEPTH_PATCH_DEG, Math.min(field.widthDeg, field.heightDeg) / 4.0);
-        for (int i = 0; i < field.cornerRa.length; i++) {
-            double deltaRa = ((field.cornerRa[i] - field.centerRa + 540) % 360) - 180;
-            double ra = (field.centerRa + deltaRa / 2 + 360) % 360;
-            double dec = (field.centerDec + field.cornerDec[i]) / 2;
-            samples.add(fetchDepthSample(ra, dec, side));
+        int patches = field.cornerRa.length;
+        try {
+            for (int i = 0; i < patches; i++) {
+                double deltaRa = ((field.cornerRa[i] - field.centerRa + 540) % 360) - 180;
+                double ra = (field.centerRa + deltaRa / 2 + 360) % 360;
+                double dec = (field.centerDec + field.cornerDec[i]) / 2;
+                String adql = depthQuery(ra, dec, side);
+                if (queries.length() > 0) {
+                    queries.append("\n\n");
+                }
+                queries.append(adql);
+                try {
+                    samples.add(fetchDepthSample(ra, dec, side));
+                } catch (IOException problem) {
+                    last = problem;
+                    failed++;
+                }
+            }
+        } catch (InterruptedException interrupted) {
+            attempt.catalogue.depthSamples = samples;
+            if (!samples.isEmpty() || failed > 0) {
+                attempt.notAsked("Gaia", "Field depth", samples.size() + " of " + patches + " patches answered",
+                        "The fetch was cancelled.");
+            }
+            throw interrupted;
         }
-        return samples;
+        attempt.catalogue.depthSamples = samples;
+        String outcome = samples.size() + " of " + patches + " patches";
+        if (last == null) {
+            attempt.succeed("Gaia", "Field depth", outcome,
+                    String.format(Locale.US, "To magnitude %.1f.", DEPTH_MAGNITUDE), VIZIER_TAP, queries.toString());
+        } else {
+            attempt.fail("Gaia", "Field depth", outcome, last.getMessage(), VIZIER_TAP, queries.toString());
+            attempt.catalogue.problems.add(samples.isEmpty()
+                    ? "Faint stars for the field depth (Gaia): " + last.getMessage()
+                    : "Faint stars for the field depth (Gaia): " + outcome + " answered; " + last.getMessage());
+        }
     }
 
     private SkyCatalogue.DepthSample fetchDepthSample(double centerRa, double centerDec, double sideDeg) throws IOException, InterruptedException {
@@ -159,38 +269,64 @@ public final class SkyCatalogueClient {
         sample.centerDec = centerDec;
         sample.sideDeg = sideDeg;
         sample.magnitudeLimit = DEPTH_MAGNITUDE;
-        double halfDec = sample.sideDeg / 2;
+        sample.stars = parseStars(query(VIZIER_TAP, depthQuery(centerRa, centerDec, sideDeg), MAX_STARS, STAR_TIMEOUT),
+                "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
+        return sample;
+    }
+
+    /** The Gaia query for one faint patch, down to {@link #DEPTH_MAGNITUDE}. */
+    private static String depthQuery(double centerRa, double centerDec, double sideDeg) {
+        double halfDec = sideDeg / 2;
         double halfRa = halfDec / Math.max(0.05, Math.cos(Math.toRadians(centerDec)));
         String box = String.format(Locale.US, "POLYGON('ICRS', %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f, %.6f)",
                 centerRa - halfRa, centerDec - halfDec, centerRa + halfRa, centerDec - halfDec,
                 centerRa + halfRa, centerDec + halfDec, centerRa - halfRa, centerDec + halfDec);
-        String query = "SELECT RA_ICRS, DE_ICRS, pmRA, pmDE, Gmag, \"BP-RP\" FROM \"I/355/gaiadr3\" "
+        return "SELECT RA_ICRS, DE_ICRS, pmRA, pmDE, Gmag, \"BP-RP\" FROM \"I/355/gaiadr3\" "
                 + "WHERE 1=CONTAINS(POINT('ICRS', RA_ICRS, DE_ICRS), " + box + ") "
                 + String.format(Locale.US, "AND Gmag <= %.2f", DEPTH_MAGNITUDE);
-        sample.stars = parseStars(query(VIZIER_TAP, query, MAX_STARS, STAR_TIMEOUT), "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
-        return sample;
     }
 
     /** The Gaia DR3 stars of the field to this G magnitude, from VizieR or else from the ESA archive. */
     public List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit) throws IOException, InterruptedException {
-        return fetchStars(field, magnitudeLimit, new String[1], () -> { });
+        return fetchStars(field, magnitudeLimit, new String[1], () -> { }, null);
     }
 
-    private List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit, String[] source, Runnable fallingBack)
-            throws IOException, InterruptedException {
+    /**
+     * The stars, recording a failed VizieR step before the ESA archive is asked. {@code attempt} is null for the
+     * plate-solution fit, which only needs the stars.
+     */
+    private List<SkyCatalogue.Star> fetchStars(SkyField field, double magnitudeLimit, String[] source, Runnable fallingBack,
+            Attempt attempt) throws IOException, InterruptedException {
+        String vizierQuery = vizierStarQuery(field, magnitudeLimit);
         try {
-            List<SkyCatalogue.Star> stars = parseStars(query(VIZIER_TAP, vizierStarQuery(field, magnitudeLimit), MAX_STARS, STAR_TIMEOUT),
+            List<SkyCatalogue.Star> stars = parseStars(query(VIZIER_TAP, vizierQuery, starCap, STAR_TIMEOUT),
                     "RA_ICRS", "DE_ICRS", "pmRA", "pmDE", "Gmag", "BP-RP");
+            if (attempt != null) {
+                attempt.succeed("Gaia via VizieR", "Stars", count(stars.size(), "star"), "", VIZIER_TAP, vizierQuery);
+            }
             source[0] = "Gaia DR3 via VizieR (CDS)";
             return stars;
         } catch (IOException vizierProblem) {
+            if (attempt != null) {
+                attempt.fail("Gaia via VizieR", "Stars", "", vizierProblem.getMessage(), VIZIER_TAP, vizierQuery);
+                attempt.catalogue.problems.add("Stars (Gaia, VizieR): " + vizierProblem.getMessage());
+                attempt.expectBefore(new Planned("Gaia via the ESA archive", "Stars"), new Planned("Gaia", "Field depth"));
+            }
             fallingBack.run();
+            String esaQuery = esaStarQuery(field, magnitudeLimit);
             try {
-                List<SkyCatalogue.Star> stars = parseStars(query(ESA_GAIA_TAP, esaStarQuery(field, magnitudeLimit), MAX_STARS, STAR_TIMEOUT),
+                List<SkyCatalogue.Star> stars = parseStars(query(ESA_GAIA_TAP, esaQuery, starCap, STAR_TIMEOUT),
                         "ra", "dec", "pmra", "pmdec", "phot_g_mean_mag", "bp_rp");
+                if (attempt != null) {
+                    attempt.succeed("Gaia via the ESA archive", "Stars", count(stars.size(), "star"), "", ESA_GAIA_TAP, esaQuery);
+                }
                 source[0] = "Gaia DR3 via the ESA Gaia archive";
                 return stars;
             } catch (IOException esaProblem) {
+                if (attempt != null) {
+                    attempt.fail("Gaia via the ESA archive", "Stars", "", esaProblem.getMessage(), ESA_GAIA_TAP, esaQuery);
+                    attempt.catalogue.problems.add("Stars (Gaia, ESA archive): " + esaProblem.getMessage());
+                }
                 throw new IOException("VizieR " + vizierProblem.getMessage() + "; ESA archive " + esaProblem.getMessage());
             }
         }
@@ -255,6 +391,12 @@ public final class SkyCatalogueClient {
 
     /** Runs an ADQL query on a TAP service and returns its CSV answer. */
     private CsvTable query(String service, String adql, int maxRecords, Duration timeout) throws IOException, InterruptedException {
+        return transport.query(service, adql, maxRecords, timeout);
+    }
+
+    /** Sends one TAP form post and returns its CSV answer. */
+    private static CsvTable httpQuery(HttpClient http, String service, String adql, int maxRecords, Duration timeout)
+            throws IOException, InterruptedException {
         Map<String, String> form = new LinkedHashMap<>();
         form.put("REQUEST", "doQuery");
         form.put("LANG", "ADQL");
@@ -538,5 +680,73 @@ public final class SkyCatalogueClient {
             variables.add(variable);
         }
         return variables;
+    }
+
+    /** One service question that has not been recorded yet. */
+    private record Planned(String service, String question) {
+    }
+
+    /**
+     * The catalogue being fetched and the questions still to record. Steps are published as they finish, on the
+     * fetching thread. The catalogue owns the step list.
+     */
+    private final class Attempt {
+        final SkyCatalogue catalogue = new SkyCatalogue();
+        final Progress progress;
+        final List<Planned> pending = new ArrayList<>();
+
+        /** Starts a catalogue for this field and the questions a complete fetch asks. */
+        Attempt(SkyField field, double magnitudeLimit, Progress progress) {
+            catalogue.field = field;
+            catalogue.starMagnitudeLimit = magnitudeLimit;
+            catalogue.fetchedAtUtc = Instant.now().toString();
+            this.progress = progress;
+            pending.add(new Planned("SIMBAD", "Deep-sky catalogue names"));
+            pending.add(new Planned("SIMBAD", "Large galaxies"));
+            pending.add(new Planned("SIMBAD", "Common names"));
+            pending.add(new Planned("SIMBAD", "Named bright stars"));
+            pending.add(new Planned("AAVSO VSX", "Variable stars"));
+            pending.add(new Planned("Gaia via VizieR", "Stars"));
+            pending.add(new Planned("Gaia", "Field depth"));
+        }
+
+        /** Inserts a question that is asked only after an earlier one fails, ahead of {@code before} when that remains. */
+        void expectBefore(Planned planned, Planned before) {
+            int index = pending.indexOf(before);
+            pending.add(index < 0 ? pending.size() : index, planned);
+        }
+
+        /** Records a service that answered. */
+        void succeed(String service, String question, String outcome, String detail, String url, String query) {
+            record(FetchStep.Status.SUCCEEDED, service, question, outcome, detail, url, query);
+        }
+
+        /** Records a service that was asked and did not answer. */
+        void fail(String service, String question, String outcome, String detail, String url, String query) {
+            record(FetchStep.Status.FAILED, service, question, outcome, detail, url, query);
+        }
+
+        /** Records a question that was not sent. */
+        void notAsked(String service, String question, String outcome, String detail) {
+            record(FetchStep.Status.NOT_ASKED, service, question, outcome, detail, null, null);
+        }
+
+        /** Marks every question not yet recorded as not asked, then publishes the list. */
+        void cancel() {
+            boolean first = true;
+            List<Planned> remaining = new ArrayList<>(pending);
+            for (Planned planned : remaining) {
+                notAsked(planned.service(), planned.question(), "", first ? "The fetch was cancelled." : "Not sent.");
+                first = false;
+            }
+        }
+
+        /** Appends one step, drops it from the questions still pending, and publishes the list. */
+        private void record(FetchStep.Status status, String service, String question, String outcome, String detail,
+                String url, String query) {
+            pending.remove(new Planned(service, question));
+            catalogue.fetchSteps.add(FetchStep.of(service, question, status, outcome, detail, url, query));
+            progress.steps(List.copyOf(catalogue.fetchSteps));
+        }
     }
 }

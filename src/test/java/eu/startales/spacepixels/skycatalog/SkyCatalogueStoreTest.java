@@ -7,6 +7,7 @@ import org.junit.rules.TemporaryFolder;
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.List;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -39,6 +40,8 @@ public class SkyCatalogueStoreTest {
         cluster.type = "OpC";
         catalogue.deepSky.add(cluster);
         catalogue.problems.add("Variable stars (AAVSO VSX): answered with HTTP 503.");
+        catalogue.fetchSteps.add(FetchStep.of("AAVSO VSX", "Variable stars", FetchStep.Status.FAILED, "",
+                "answered with HTTP 503.", SkyCatalogueClient.VIZIER_TAP, "SELECT Name FROM \"B/vsx/vsx\""));
 
         File session = folder.newFolder("session");
         SkyCatalogueStore.save(session, catalogue);
@@ -54,6 +57,29 @@ public class SkyCatalogueStoreTest {
         assertEquals(1, loaded.problems.size());
         assertEquals(96.8, loaded.field.cornerRa[0], 1e-12);
         assertEquals("1 stars · 1 deep-sky · 0 variables", loaded.summary());
+        assertEquals(1, loaded.fetchSteps.size());
+        assertEquals(FetchStep.Status.FAILED, loaded.fetchSteps.get(0).status);
+        assertEquals(SkyCatalogueClient.VIZIER_TAP, loaded.fetchSteps.get(0).url);
+        assertEquals("SELECT Name FROM \"B/vsx/vsx\"", loaded.fetchSteps.get(0).query);
+        assertNull(loaded.fetchSteps.get(0).liveUrl);
+    }
+
+    /** A file written before the step list existed loads its problem sentences and an empty list. */
+    @Test
+    public void anOlderFileHasSentencesAndNoSteps() throws Exception {
+        File session = folder.newFolder("legacy");
+        Files.writeString(SkyCatalogueStore.fileIn(session).toPath(),
+                "{\"version\":1,\"field\":{\"centerRa\":98.856,\"centerDec\":7.321},"
+                        + "\"problems\":[\"Variable stars (AAVSO VSX): answered with HTTP 503.\"]}",
+                StandardCharsets.UTF_8);
+        SkyCatalogue loaded = SkyCatalogueStore.load(session);
+        assertTrue(loaded.fetchSteps.isEmpty());
+        assertEquals(1, loaded.problems.size());
+        List<FetchStep> rows = FetchStep.rowsFor(loaded.fetchSteps, loaded.problems);
+        assertEquals(1, rows.size());
+        assertEquals(FetchStep.Status.FAILED, rows.get(0).status);
+        assertNull(rows.get(0).url);
+        assertTrue(rows.get(0).service, rows.get(0).service.contains("AAVSO VSX"));
     }
 
     @Test

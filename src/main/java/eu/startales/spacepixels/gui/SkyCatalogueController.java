@@ -5,10 +5,13 @@ import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.fits.WcsSolutionResolver;
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.PlateCorrectionFitter;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.skycatalog.SkyCatalogueClient;
 import eu.startales.spacepixels.skycatalog.SkyField;
+import java.util.ArrayList;
+import java.util.List;
 import java.awt.EventQueue;
 import java.io.IOException;
 import java.util.Locale;
@@ -74,6 +77,8 @@ final class SkyCatalogueController implements AutoCloseable {
         final SkyCatalogue existing;
         FutureTask<Void> future;
         volatile boolean fitting;
+        /** Steps published by the fetch in progress. The worker writes it; the EDT reads it. */
+        volatile List<FetchStep> steps = List.of();
 
         /** Captures the session's detached frame array and the values admitted on the EDT. */
         Request(FitsFileInformation[] files, SkyField field, double depth, SkyCatalogue existing) {
@@ -102,6 +107,8 @@ final class SkyCatalogueController implements AutoCloseable {
     private boolean cancelling;
     private String catalogueProblem;
     private String correctionProblem;
+    /** Steps of a fetch that was cancelled or could not be installed. Empty once a catalogue is installed. */
+    private List<FetchStep> retainedSteps = List.of();
 
     /** Creates the desktop workflow on the EDT and gives its shutdown to the session. */
     SkyCatalogueController(ProcessingSession session, BooleanSupplier currentSession, Listener listener) {
@@ -184,6 +191,7 @@ final class SkyCatalogueController implements AutoCloseable {
         active = request;
         cancelling = false;
         stage = "";
+        retainedSteps = List.of();
         showStage(request, existing == null ? "Sky catalogue: starting" : "Checking the plate solution: starting");
         timer.start();
         executor.execute(request.future);
@@ -196,8 +204,18 @@ final class SkyCatalogueController implements AutoCloseable {
         if (catalogue == null) {
             SkyCatalogue result;
             try {
-                result = operations.fetch(request.field, request.depth, (number, total, text) ->
-                        post(request, () -> showStage(request, "Sky catalogue " + number + "/" + total + ": " + text)));
+                result = operations.fetch(request.field, request.depth, new SkyCatalogueClient.Progress() {
+                    /** Shows the current source on the EDT. */
+                    @Override public void stage(int number, int total, String text) {
+                        post(request, () -> showStage(request, "Sky catalogue " + number + "/" + total + ": " + text));
+                    }
+
+                    /** Keeps the steps on this request before any later cancel can run. */
+                    @Override public void steps(List<FetchStep> steps) {
+                        request.steps = steps == null ? List.of() : List.copyOf(steps);
+                        post(request, SkyCatalogueController.this::changed);
+                    }
+                });
             } catch (InterruptedException interrupted) {
                 post(request, () -> cancelled(request));
                 return;
@@ -248,25 +266,31 @@ final class SkyCatalogueController implements AutoCloseable {
 
     /** Installs a completed catalogue and queues its save before the later fit result; EDT only. */
     private void catalogueFinished(Request request, SkyCatalogue result, String failure, boolean fitFollows) {
-        if (!fitFollows) stop();
         if (failure != null || result == null) {
+            retainedSteps = request.steps;
             catalogueProblem = "The fetch failed: " + failure;
             listener.message("Sky catalogue: the fetch failed");
         } else if (result.isEmpty()) {
+            retainedSteps = result.fetchSteps == null ? request.steps : List.copyOf(result.fetchSteps);
             catalogueProblem = result.problems.isEmpty() ? "The services found nothing in this field." : String.join("\n", result.problems);
             listener.message("Sky catalogue: nothing could be fetched");
         } else {
+            retainedSteps = List.of();
             catalogueProblem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
             session.saveCatalogue(result, problem -> {
                 if (problem != null && !closed.get() && currentSession.getAsBoolean() && session.getSkyCatalogue().get() == result) {
                     LOGGER.log(Level.WARNING, "Cannot save the sky catalogue", problem);
                     catalogueProblem = "The catalogue could not be saved (" + problem.getMessage() + "); it lasts until SpacePixels closes.";
+                    if (result.fetchSteps == null) result.fetchSteps = new ArrayList<>();
+                    result.fetchSteps.add(FetchStep.of("Save", "Sky catalogue file", FetchStep.Status.FAILED,
+                            "Kept until SpacePixels closes", problem.getMessage(), null, null));
                     changed();
                 }
             });
             session.getSkyCatalogue().set(result);
             listener.message("Sky catalogue: " + result.summary() + (result.problems.isEmpty() ? "" : " (incomplete)"));
         }
+        if (!fitFollows) stop();
         changed();
     }
 
@@ -296,6 +320,7 @@ final class SkyCatalogueController implements AutoCloseable {
 
     /** Ends a cancelled request even when its scientific operation ignores interruption and returns late. */
     private void cancelled(Request request) {
+        if (!request.fitting) retainedSteps = request.steps;
         stop();
         listener.message(request.fitting ? "Plate solution check: cancelled" : "Sky catalogue: cancelled");
         changed();
@@ -323,6 +348,21 @@ final class SkyCatalogueController implements AutoCloseable {
 
     /** Whether a request still owns the controller, for command availability and the progress indicator. */
     boolean isRunning() { return active != null; }
+
+    /** Whether the current request is still asking the catalogue services, rather than fitting the plate solution. */
+    boolean fetchInProgress() {
+        return active != null && active.existing == null && !active.fitting;
+    }
+
+    /** Steps of the catalogue fetch in progress. Empty while a plate-solution fit runs, or when nothing is running. */
+    List<FetchStep> liveSteps() {
+        return fetchInProgress() ? active.steps : List.of();
+    }
+
+    /** Steps kept after a cancel or a fetch that was not installed. Empty once a catalogue is in use. */
+    List<FetchStep> retainedSteps() {
+        return retainedSteps;
+    }
     /** The current phase description, for the view's short astrometry status. */
     String stage() { return stage; }
     /** Last fetch/service/save problem, independent of whether useful catalogue results remain in use. */

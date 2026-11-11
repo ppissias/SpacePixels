@@ -73,6 +73,9 @@ public final class SkyCatalogueStore {
             if (catalogue.problems == null) {
                 catalogue.problems = new ArrayList<>();
             }
+            if (catalogue.fetchSteps == null) {
+                catalogue.fetchSteps = new ArrayList<>();
+            }
             return catalogue;
         } catch (IOException | JsonParseException e) {
             return null;

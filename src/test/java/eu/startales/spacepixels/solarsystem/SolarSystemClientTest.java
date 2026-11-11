@@ -2,6 +2,7 @@ package eu.startales.spacepixels.solarsystem;
 
 import eu.startales.spacepixels.fits.ObservingSite;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyField;
 import org.junit.Test;
 
@@ -18,6 +19,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * The JPL client against recorded answers: names to Horizons commands, the field search and Horizons parsing, the
@@ -219,6 +221,15 @@ public class SolarSystemClientTest {
         assertTrue(asked.get(0), asked.get(0).contains("vmag-lim=19.0") && asked.get(0).contains("obs-time=2026-03-10_02:30:00"));
         assertTrue("the far object was not asked of Horizons", asked.stream().noneMatch(url -> url.contains("QV125;")));
         assertTrue(stages.toString(), stages.contains("asteroids and comets in the field (JPL)"));
+        FetchStep positions = step(result.fetchSteps, "JPL Horizons", "Positions");
+        assertEquals(FetchStep.Status.SUCCEEDED, positions.status);
+        assertEquals("2 of 3 objects received positions", positions.outcome);
+        FetchStep apophisStep = step(result.fetchSteps, "JPL Horizons", "99942 Apophis (2004 MN4)");
+        assertEquals(FetchStep.Status.FAILED, apophisStep.status);
+        assertEquals("Kept with the field search's straight-line motion, without an uncertainty.", apophisStep.outcome);
+        assertTrue(apophisStep.liveUrl, apophisStep.liveUrl.contains("SITE_COORD"));
+        assertFalse(apophisStep.url, apophisStep.url.contains("SITE_COORD") || apophisStep.url.contains("37.9"));
+        assertTrue(apophisStep.detail, apophisStep.detail.contains("leaves out the observing site"));
         // The straight-line Apophis is on the frame during the span.
         SolarSystemObjects.Position apophis = SolarSystemObjects.positionAt(bodies.get("99942 Apophis (2004 MN4)"), START + 48 * 60_000L);
         double[] pixel = TRANSFORMER.skyToPixel(apophis.ra(), apophis.dec());
@@ -253,6 +264,194 @@ public class SolarSystemClientTest {
         assertEquals("nothing else is asked", 1, result.problems.size());
         assertTrue(result.problems.get(0), result.problems.get(0).startsWith("Field search (JPL SB-Ident): JPL did not answer"));
         assertEquals("", result.source);
+        assertEquals(FetchStep.Status.FAILED, step(result.fetchSteps, "JPL SB-Ident", "Field search").status);
+        assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Field search").liveUrl.contains("sb_ident.api"));
+        assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Field search").liveUrl.contains("lat="));
+        assertFalse(step(result.fetchSteps, "JPL SB-Ident", "Field search").url.contains("lat="));
+        assertFalse(step(result.fetchSteps, "JPL SB-Ident", "Field search").url.contains("37.9"));
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").status);
+        assertTrue(step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").detail.contains("field search failed"));
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
+    }
+
+    /** A field-search HTTP 404 records the address that was sent and asks nothing further. */
+    @Test
+    public void aFieldSearch404AsksNothingFurther() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            throw new IOException("JPL answered HTTP 404.");
+        }).fetch(query(), text -> { });
+        assertTrue(result.bodies.isEmpty());
+        assertEquals("", result.source);
+        assertEquals(1, result.problems.size());
+        assertTrue(result.problems.get(0), result.problems.get(0).contains("HTTP 404"));
+        FetchStep field = step(result.fetchSteps, "JPL SB-Ident", "Field search");
+        assertEquals(FetchStep.Status.FAILED, field.status);
+        assertTrue(field.liveUrl, field.liveUrl.contains("sb_ident.api") && field.liveUrl.contains("lat=37.900000"));
+        assertFalse(field.url, field.url.contains("37.9"));
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").status);
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
+    }
+
+    /** A near-Earth 503 keeps the field search and does not pretend Horizons was asked. */
+    @Test
+    public void aNearEarth503KeepsTheFieldSearch() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb-group=neo")) {
+                throw new IOException("JPL answered HTTP 503.");
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(List.of());
+            }
+            throw new AssertionError(url);
+        }).fetch(query(), text -> { });
+        assertEquals("JPL SB-Ident API 1.1", result.source);
+        assertEquals(1, result.problems.size());
+        assertTrue(result.problems.get(0), result.problems.get(0).startsWith("Near-Earth object search (JPL SB-Ident):"));
+        assertEquals("0 objects", step(result.fetchSteps, "JPL SB-Ident", "Field search").outcome);
+        FetchStep neo = step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects");
+        assertEquals(FetchStep.Status.FAILED, neo.status);
+        assertTrue(neo.liveUrl, neo.liveUrl.contains("sb-group=neo") && neo.liveUrl.contains("lat="));
+        assertFalse(neo.url.contains("lat="));
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
+        assertTrue(step(result.fetchSteps, "JPL Horizons", "Positions").detail.contains("No object crosses"));
+    }
+
+    /** Two Horizons failures among objects that succeeded: the summary succeeded, and each failure stays. */
+    @Test
+    public void twoHorizonsFailuresStayBesideASuccessfulSummary() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb-group=neo")) {
+                return fieldAnswer(List.of());
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(List.of(
+                        row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0"),
+                        row("C/2018 Y1 (Iwamoto)", "10:00:10.00", "+20 05'00.0\"", "11.6T", "0", "0"),
+                        row("99942 Apophis (2004 MN4)", "10:00:05.00", "+20 02'00.0\"", "18.0", "0", "0")));
+            }
+            if (url.contains("COMMAND='194;'")) {
+                return horizonsAnswer("194 Prokne (A879 FA)", "JPL#172", "APmag", List.of(
+                        new double[]{0, 150, 20, 14.1, 0.01, 0.01}, new double[]{60, 150.001, 20, 14.1, 0.01, 0.01}));
+            }
+            throw new IOException("JPL answered HTTP 503.");
+        }).fetch(query(), text -> { });
+        assertEquals(FetchStep.Status.SUCCEEDED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
+        assertEquals("1 of 3 objects received positions", step(result.fetchSteps, "JPL Horizons", "Positions").outcome);
+        assertEquals("Kept with the field search's straight-line motion, without an uncertainty.",
+                step(result.fetchSteps, "JPL Horizons", "C/2018 Y1 (Iwamoto)").outcome);
+        assertEquals("Kept with the field search's straight-line motion, without an uncertainty.",
+                step(result.fetchSteps, "JPL Horizons", "99942 Apophis (2004 MN4)").outcome);
+        assertEquals(1, result.problems.size());
+        assertTrue(result.problems.get(0), result.problems.get(0).contains("2 of 3 objects"));
+        assertEquals("JPL#172", result.bodies.stream().filter(body -> body.name.contains("Prokne")).findFirst().orElseThrow().orbitSolution);
+        assertNull(result.bodies.stream().filter(body -> body.name.contains("Apophis")).findFirst().orElseThrow().orbitSolution);
+    }
+
+    /** Every asked object failed: the Horizons summary is failed, and the objects are kept. */
+    @Test
+    public void everyHorizonsFailureFailsTheSummary() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of()
+                        : List.of(row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            }
+            throw new IOException("JPL answered HTTP 503.");
+        }).fetch(query(), text -> { });
+        FetchStep positions = step(result.fetchSteps, "JPL Horizons", "Positions");
+        assertEquals(FetchStep.Status.FAILED, positions.status);
+        assertEquals("0 of 1 objects received positions", positions.outcome);
+        assertTrue(positions.detail, positions.detail.contains("Every asked object failed"));
+        assertEquals("Kept with the field search's straight-line motion, without an uncertainty.",
+                step(result.fetchSteps, "JPL Horizons", "194 Prokne (A879 FA)").outcome);
+        assertEquals(1, result.problems.size());
+        assertTrue(result.problems.get(0), result.problems.get(0).contains("1 of 1 objects"));
+        assertNull(result.bodies.get(0).orbitSolution);
+        assertEquals("JPL SB-Ident API 1.1", result.source);
+    }
+
+    /** Cancelling inside the first Horizons request marks that object as not yet asked. */
+    @Test
+    public void cancellingDuringHorizonsMarksTheRestNotAsked() throws Exception {
+        List<FetchStep> shown = new ArrayList<>();
+        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of()
+                        : List.of(row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            }
+            throw new InterruptedException();
+        });
+        try {
+            client.fetch(query(), new SolarSystemClient.Progress() {
+                /** @param text ignored; the published steps are the account of a cancel */
+                @Override public void stage(String text) { }
+                /** @param steps the list published on the fetching thread */
+                @Override public void steps(List<FetchStep> steps) {
+                    shown.clear();
+                    shown.addAll(steps);
+                }
+            });
+            fail("the fetch was cancelled");
+        } catch (InterruptedException expected) {
+            assertEquals(FetchStep.Status.SUCCEEDED, step(shown, "JPL SB-Ident", "Field search").status);
+            assertEquals(FetchStep.Status.SUCCEEDED, step(shown, "JPL SB-Ident", "Near-Earth objects").status);
+            assertEquals(FetchStep.Status.NOT_ASKED, step(shown, "JPL Horizons", "Positions").status);
+            assertTrue(step(shown, "JPL Horizons", "Positions").detail.contains("cancelled"));
+            assertEquals(FetchStep.Status.NOT_ASKED, step(shown, "JPL Horizons", "Remaining objects").status);
+            assertEquals("1 object", step(shown, "JPL Horizons", "Remaining objects").outcome);
+        }
+    }
+
+    /** One object past the test limit is a single not-asked row, with the existing magnitude advice. */
+    @Test
+    public void objectsPastTheLimitAreOneNotAskedRow() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of() : List.of(
+                        row("C/2018 Y1 (Iwamoto)", "10:00:10.00", "+20 05'00.0\"", "11.6T", "0", "0"),
+                        row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            }
+            if (url.contains("COMMAND='DES=C/2018 Y1;")) {
+                return horizonsAnswer("Iwamoto (C/2018 Y1)", "JPL#20", "T-mag", List.of(
+                        new double[]{0, 150.04, 20.083, 11.6, 0.2, 0.2}, new double[]{60, 150.05, 20.083, 11.6, 0.2, 0.2}));
+            }
+            throw new AssertionError(url);
+        }, 1).fetch(query(), text -> { });
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Fainter objects").status);
+        assertTrue(result.problems.toString(), result.problems.stream().anyMatch(line -> line.startsWith("Only the 1 brightest of 2")));
+        assertTrue(step(result.fetchSteps, "JPL Horizons", "Fainter objects").detail.contains("Only the 1 brightest of 2"));
+        assertEquals("JPL#20", result.bodies.stream().filter(body -> body.comet).findFirst().orElseThrow().orbitSolution);
+        assertNull(result.bodies.stream().filter(body -> body.name.contains("Prokne")).findFirst().orElseThrow().orbitSolution);
+    }
+
+    /** An empty field is a successful count of zero, and Horizons is not asked. */
+    @Test
+    public void anEmptyFieldSucceedsAndDoesNotAskHorizons() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(List.of());
+            }
+            throw new AssertionError(url);
+        }).fetch(query(), text -> { });
+        assertTrue(result.problems.isEmpty());
+        assertTrue(result.bodies.isEmpty());
+        assertEquals("0 objects", step(result.fetchSteps, "JPL SB-Ident", "Field search").outcome);
+        assertEquals("0 objects", step(result.fetchSteps, "JPL SB-Ident", "Near-Earth objects").outcome);
+        assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
+        assertTrue(step(result.fetchSteps, "JPL Horizons", "Positions").detail.contains("No object crosses"));
+    }
+
+    /** The recorded step for this service and question. */
+    private static FetchStep step(List<FetchStep> steps, String service, String question) {
+        return steps.stream()
+                .filter(row -> service.equals(row.service) && question.equals(row.question))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError(steps.stream().map(row -> row.service + " / " + row.question).toList()));
     }
 
     // ==========================================

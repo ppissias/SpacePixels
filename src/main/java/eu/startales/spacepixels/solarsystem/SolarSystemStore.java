@@ -65,6 +65,9 @@ public final class SolarSystemStore {
             if (objects.problems == null) {
                 objects.problems = new ArrayList<>();
             }
+            if (objects.fetchSteps == null) {
+                objects.fetchSteps = new ArrayList<>();
+            }
             return objects;
         } catch (IOException | JsonParseException e) {
             return null;

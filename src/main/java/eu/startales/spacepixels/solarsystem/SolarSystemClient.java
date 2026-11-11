@@ -14,6 +14,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import eu.startales.spacepixels.fits.ObservingSite;
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyField;
 
 import java.io.IOException;
@@ -47,16 +48,30 @@ import java.util.regex.Pattern;
  * simple two-body orbits, which for a near-Earth object with a close approach in between can be degrees off (Apophis
  * on 2021-03-06: 4.4°, more than the search's own error estimate), and an object it does not pick is never computed
  * precisely. The near-Earth population is small, so the wide search stays quick. JPL Horizons then
-     * gives each object that passes over the frame its positions, predicted magnitude and 3-sigma uncertainty every few
-     * minutes over the span plus fourteen hours on each side for clock review. Both services integrate current orbits numerically, so the predictions also hold for frames
- * taken years ago. When Horizons cannot answer for an object, its position and rate from the field search are kept as
- * straight-line motion. Interrupting the fetching thread cancels the request in progress.
+ * gives each object that passes over the frame its positions, predicted magnitude and 3-sigma uncertainty every few
+ * minutes over the span plus fourteen hours on each side for clock review. Both services integrate current orbits
+ * numerically, so the predictions also hold for frames taken years ago. When Horizons cannot answer for an object, its position and rate from the field search are kept as
+ * straight-line motion. Every question is recorded on {@link SolarSystemObjects#fetchSteps}. The Horizons summary
+ * succeeded only when at least one asked object received positions; an object that failed is kept, and its step says
+ * it uses the field search's straight-line motion. Interrupting the fetching thread cancels the request in progress
+ * and marks the questions not yet sent.
  */
 public final class SolarSystemClient {
 
-    /** Receives what is being fetched. */
+    /**
+     * Receives what is being fetched, and the steps finished so far. {@link #stage} is the only method a caller
+     * must implement.
+     */
     public interface Progress {
+        /** The question in progress. Called on the fetching thread. */
         void stage(String text);
+
+        /**
+         * The steps recorded so far. The list is immutable. The default ignores it, so a progress report that only
+         * names the current question keeps working. Called on the fetching thread.
+         */
+        default void steps(List<FetchStep> steps) {
+        }
     }
 
     /** One HTTP GET that returns the body of a successful answer; tests replace it with recorded answers. */
@@ -96,13 +111,24 @@ public final class SolarSystemClient {
             .toFormatter(Locale.US);
 
     private final Http http;
+    /** How many crossing objects are asked of Horizons. Production uses {@link #MAX_REFINED}. */
+    private final int maxRefined;
 
     public SolarSystemClient() {
-        this(defaultHttp());
+        this(defaultHttp(), MAX_REFINED);
     }
 
+    /** A client whose HTTP GET is answered by {@code http}. The desktop uses {@link #SolarSystemClient()}. */
     SolarSystemClient(Http http) {
+        this(http, MAX_REFINED);
+    }
+
+    /**
+     * A client with a test limit on how many objects Horizons is asked for. The desktop uses {@link #MAX_REFINED}.
+     */
+    SolarSystemClient(Http http, int maxRefined) {
         this.http = http;
+        this.maxRefined = maxRefined;
     }
 
     /** An object found by the field search: its position at {@code epochMillis} and its rates on the sky. */
@@ -130,94 +156,203 @@ public final class SolarSystemClient {
         result.magnitudeLimit = query.magnitudeLimit();
         result.observer = query.observer().description();
 
-        long middle = query.startMillis() + (query.endMillis() - query.startMillis()) / 2;
-        double halfSpanDays = ((query.endMillis() - query.startMillis()) / 2.0 + PAD_MILLIS) / 86_400_000.0;
-        Map<String, Candidate> found = new LinkedHashMap<>();
-        String fieldVersion = null;
-        progress.stage("asteroids and comets in the field (JPL)");
-        try {
-            Search search = searchField(query, result.field, middle,
-                    Math.max(MIN_MARGIN_DEG, GENERAL_RATE_DEG_PER_DAY * halfSpanDays), null);
-            search.candidates().forEach(candidate -> found.putIfAbsent(candidate.name(), candidate));
-            fieldVersion = search.version();
-        } catch (IOException problem) {
-            // Without the main search the result would be incomplete: it is a failure, with no source.
-            result.problems.add("Field search (JPL SB-Ident): " + problem.getMessage());
-            result.source = "";
-            return result;
-        }
-        progress.stage("fast near-Earth objects that may cross the field (JPL)");
-        try {
-            Search search = searchField(query, result.field, middle, NEO_MARGIN_DEG, "neo");
-            search.candidates().forEach(candidate -> found.putIfAbsent(candidate.name(), candidate));
-            fieldVersion = fieldVersion == null ? search.version() : fieldVersion;
-        } catch (IOException problem) {
-            result.problems.add("Near-Earth object search (JPL SB-Ident): " + problem.getMessage());
-        }
-
+        boolean fieldDone = false;
+        boolean neoDone = false;
+        boolean horizonsDone = false;
         List<Candidate> crossing = new ArrayList<>();
-        for (Candidate candidate : found.values()) {
-            if (crossesFrame(query, straightLine(candidate, query).samples)) {
-                crossing.add(candidate);
+        int refined = 0;
+        int nextHorizons = 0;
+        int horizonsOk = 0;
+        List<FetchStep> objectFailures = new ArrayList<>();
+        try {
+            long middle = query.startMillis() + (query.endMillis() - query.startMillis()) / 2;
+            double halfSpanDays = ((query.endMillis() - query.startMillis()) / 2.0 + PAD_MILLIS) / 86_400_000.0;
+            Map<String, Candidate> found = new LinkedHashMap<>();
+            String fieldVersion = null;
+            progress.stage("asteroids and comets in the field (JPL)");
+            String fieldUrl = fieldSearchUrl(query, result.field, middle,
+                    Math.max(MIN_MARGIN_DEG, GENERAL_RATE_DEG_PER_DAY * halfSpanDays), null);
+            try {
+                Search search = loadField(fieldUrl, middle);
+                search.candidates().forEach(candidate -> found.putIfAbsent(candidate.name(), candidate));
+                fieldVersion = search.version();
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.SUCCEEDED,
+                        count(search.candidates().size(), "object"), "", fieldUrl, null));
+            } catch (IOException problem) {
+                // Without the main search the result would be incomplete: it is a failure, with no source.
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.FAILED,
+                        "", problem.getMessage(), fieldUrl, null));
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent, because the field search failed.", null, null));
+                addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent, because the field search failed.", null, null));
+                result.problems.add("Field search (JPL SB-Ident): " + problem.getMessage());
+                result.source = "";
+                return result;
             }
-        }
-        crossing.sort(Comparator.comparingDouble(candidate -> candidate.magnitude() == null ? Double.MAX_VALUE : candidate.magnitude()));
-        int refined = Math.min(MAX_REFINED, crossing.size());
-        int failed = 0;
-        String horizonsVersion = null;
-        for (int i = 0; i < crossing.size(); i++) {
-            if (Thread.interrupted()) {
-                throw new InterruptedException();
+            fieldDone = true;
+            progress.stage("fast near-Earth objects that may cross the field (JPL)");
+            String neoUrl = fieldSearchUrl(query, result.field, middle, NEO_MARGIN_DEG, "neo");
+            try {
+                Search search = loadField(neoUrl, middle);
+                search.candidates().forEach(candidate -> found.putIfAbsent(candidate.name(), candidate));
+                fieldVersion = fieldVersion == null ? search.version() : fieldVersion;
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.SUCCEEDED,
+                        count(search.candidates().size(), "object"), "", neoUrl, null));
+            } catch (IOException problem) {
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.FAILED,
+                        "", problem.getMessage(), neoUrl, null));
+                result.problems.add("Near-Earth object search (JPL SB-Ident): " + problem.getMessage());
             }
-            Candidate candidate = crossing.get(i);
-            SolarSystemObjects.Body body = null;
-            if (i < refined) {
-                progress.stage(String.format(Locale.US, "positions of object %d of %d (JPL Horizons): %s", i + 1, refined, candidate.name()));
-                try {
-                    String answer = http.get(horizonsUri(query, candidate), HORIZONS_TIMEOUT);
-                    body = parseHorizons(answer, candidate);
-                    horizonsVersion = version(answer);
-                } catch (IOException problem) {
-                    failed++;
+            neoDone = true;
+
+            for (Candidate candidate : found.values()) {
+                if (crossesFrame(query, straightLine(candidate, query).samples)) {
+                    crossing.add(candidate);
                 }
             }
-            if (body == null) {
-                body = straightLine(candidate, query);
+            crossing.sort(Comparator.comparingDouble(candidate -> candidate.magnitude() == null ? Double.MAX_VALUE : candidate.magnitude()));
+            refined = Math.min(maxRefined, crossing.size());
+            String horizonsVersion = null;
+            for (int i = 0; i < crossing.size(); i++) {
+                if (Thread.interrupted()) {
+                    throw new InterruptedException();
+                }
+                Candidate candidate = crossing.get(i);
+                SolarSystemObjects.Body body = null;
+                if (i < refined) {
+                    progress.stage(String.format(Locale.US, "positions of object %d of %d (JPL Horizons): %s", i + 1, refined, candidate.name()));
+                    String url = horizonsUri(query, candidate).toString();
+                    try {
+                        String answer = http.get(URI.create(url), HORIZONS_TIMEOUT);
+                        body = parseHorizons(answer, candidate);
+                        horizonsVersion = version(answer);
+                        horizonsOk++;
+                    } catch (IOException problem) {
+                        objectFailures.add(FetchStep.of("JPL Horizons", candidate.name(), FetchStep.Status.FAILED,
+                                "Kept with the field search's straight-line motion, without an uncertainty.",
+                                problem.getMessage(), url, null));
+                        publish(result, progress, objectFailures);
+                    }
+                    nextHorizons = i + 1;
+                }
+                if (body == null) {
+                    body = straightLine(candidate, query);
+                }
+                if (crossesFrame(query, body.samples.stream().filter(sample -> sample.timeMillis >= query.startMillis() - PAD_MILLIS
+                        && sample.timeMillis <= query.endMillis() + PAD_MILLIS).toList())) {
+                    result.bodies.add(body);
+                }
             }
-            if (crossesFrame(query, body.samples.stream().filter(sample -> sample.timeMillis >= query.startMillis() - PAD_MILLIS
-                    && sample.timeMillis <= query.endMillis() + PAD_MILLIS).toList())) {
-                result.bodies.add(body);
+            result.fetchSteps.add(horizonsSummary(horizonsOk, refined, false));
+            result.fetchSteps.addAll(objectFailures);
+            if (!objectFailures.isEmpty()) {
+                result.problems.add(String.format(Locale.US, "JPL Horizons could not give positions for %d of %d objects; "
+                        + "they use the field search's position and rate as straight-line motion, without an uncertainty.",
+                        objectFailures.size(), refined));
             }
+            if (crossing.size() > refined) {
+                result.problems.add(fainterThanLimit(refined, crossing.size()));
+                result.fetchSteps.add(FetchStep.of("JPL Horizons", "Fainter objects", FetchStep.Status.NOT_ASKED,
+                        count(crossing.size() - refined, "object") + " not asked",
+                        fainterThanLimit(refined, crossing.size()), null, null));
+            }
+            horizonsDone = true;
+            progress.steps(List.copyOf(result.fetchSteps));
+            List<String> sources = new ArrayList<>();
+            if (fieldVersion != null) sources.add("JPL SB-Ident API " + fieldVersion);
+            if (horizonsVersion != null) sources.add("JPL Horizons API " + horizonsVersion);
+            result.source = String.join(", ", sources);
+            return result;
+        } catch (InterruptedException interrupted) {
+            if (!fieldDone) {
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.NOT_ASKED,
+                        "", "The fetch was cancelled.", null, null));
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent.", null, null));
+                addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent.", null, null));
+            } else if (!neoDone) {
+                addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.NOT_ASKED,
+                        "", "The fetch was cancelled.", null, null));
+                addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent.", null, null));
+            } else if (!horizonsDone) {
+                result.fetchSteps.add(horizonsSummary(horizonsOk, nextHorizons, true));
+                result.fetchSteps.addAll(objectFailures);
+                int remaining = refined - nextHorizons;
+                if (remaining > 0) {
+                    result.fetchSteps.add(FetchStep.of("JPL Horizons", "Remaining objects", FetchStep.Status.NOT_ASKED,
+                            count(remaining, "object"), "The fetch was cancelled before these were asked.", null, null));
+                }
+                if (crossing.size() > refined) {
+                    result.fetchSteps.add(FetchStep.of("JPL Horizons", "Fainter objects", FetchStep.Status.NOT_ASKED,
+                            count(crossing.size() - refined, "object") + " not asked",
+                            fainterThanLimit(refined, crossing.size()), null, null));
+                }
+                progress.steps(List.copyOf(result.fetchSteps));
+            }
+            throw interrupted;
         }
-        if (failed > 0) {
-            result.problems.add(String.format(Locale.US, "JPL Horizons could not give positions for %d of %d objects; "
-                    + "they use the field search's position and rate as straight-line motion, without an uncertainty.", failed, refined));
+    }
+
+    /** Appends one step and publishes the list so far. The result owns the list. */
+    private static void addStep(SolarSystemObjects result, Progress progress, FetchStep step) {
+        result.fetchSteps.add(step);
+        progress.steps(List.copyOf(result.fetchSteps));
+    }
+
+    /** Publishes the recorded steps plus object failures that are not on the result yet. */
+    private static void publish(SolarSystemObjects result, Progress progress, List<FetchStep> extra) {
+        List<FetchStep> shown = new ArrayList<>(result.fetchSteps);
+        shown.addAll(extra);
+        progress.steps(List.copyOf(shown));
+    }
+
+    /** The Horizons summary. It succeeded only when at least one asked object received positions. */
+    private static FetchStep horizonsSummary(int received, int asked, boolean cancelledBeforeAny) {
+        if (asked == 0) {
+            return FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED, "",
+                    cancelledBeforeAny ? "The fetch was cancelled." : "No object crosses the frame.", null, null);
         }
-        if (crossing.size() > refined) {
-            result.problems.add(String.format(Locale.US, "Only the %d brightest of %d objects were asked of JPL Horizons; "
-                    + "the others use the field search's straight-line motion. Lower the magnitude limit for fewer objects.",
-                    refined, crossing.size()));
+        String outcome = String.format(Locale.US, "%d of %d objects received positions", received, asked);
+        if (received > 0) {
+            return FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.SUCCEEDED, outcome,
+                    received < asked ? "The objects that failed are listed below." : "", null, null);
         }
-        List<String> sources = new ArrayList<>();
-        if (fieldVersion != null) sources.add("JPL SB-Ident API " + fieldVersion);
-        if (horizonsVersion != null) sources.add("JPL Horizons API " + horizonsVersion);
-        result.source = String.join(", ", sources);
-        return result;
+        return FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.FAILED, outcome,
+                "Every asked object failed.", null, null);
+    }
+
+    /** The existing note that objects past the Horizons limit keep the field search's straight-line motion. */
+    private static String fainterThanLimit(int asked, int found) {
+        return String.format(Locale.US, "Only the %d brightest of %d objects were asked of JPL Horizons; "
+                + "the others use the field search's straight-line motion. Lower the magnitude limit for fewer objects.",
+                asked, found);
+    }
+
+    /** "0 objects", "1 object" or "2 objects". */
+    private static String count(int amount, String noun) {
+        return String.format(Locale.US, "%,d %s%s", amount, noun, amount == 1 ? "" : "s");
     }
 
     // ==========================================
     // FIELD SEARCH (SB-IDENT)
     // ==========================================
 
-    private Search searchField(SolarSystemQuery query, SkyField field, long epochMillis, double marginDeg, String group)
-            throws IOException, InterruptedException {
+    /** The SB-Ident address for this search, or null when the field, time or observer cannot form one. */
+    private static String fieldSearchUrl(SolarSystemQuery query, SkyField field, long epochMillis, double marginDeg, String group) {
         double[] box = searchBox(field, marginDeg);
         SolarSystemQuery.Observer observer = query.observer();
         ObservingSite site = observer.site();
-        String url = JplSbIdentUrlBuilder.buildField(observer.observatoryCode(),
+        return JplSbIdentUrlBuilder.buildField(observer.observatoryCode(),
                 site == null ? null : site.latitudeDeg(), site == null ? null : site.longitudeDeg(),
                 site == null ? null : site.altitudeMeters(), epochMillis, box[0], box[1], box[2], box[3],
                 query.magnitudeLimit(), group);
+    }
+
+    /** The objects of one SB-Ident request. A missing address is the same failure as a search that cannot be formed. */
+    private Search loadField(String url, long epochMillis) throws IOException, InterruptedException {
         if (url == null) {
             throw new IOException("the search could not be formed from the field, time and observer.");
         }

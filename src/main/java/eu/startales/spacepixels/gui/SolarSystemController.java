@@ -3,11 +3,14 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.jobs.JobFailures;
 import eu.startales.spacepixels.session.ProcessingSession;
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.solarsystem.SolarSystemClient;
 import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.solarsystem.SolarSystemQuery;
 
 import java.awt.EventQueue;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -47,6 +50,8 @@ final class SolarSystemController implements AutoCloseable {
     private static final class Request {
         final SolarSystemQuery query;
         FutureTask<Void> future;
+        /** Steps published by the fetch in progress. The worker writes it; the EDT reads it. */
+        volatile List<FetchStep> steps = List.of();
 
         Request(SolarSystemQuery query) {
             this.query = query;
@@ -69,6 +74,8 @@ final class SolarSystemController implements AutoCloseable {
     private long stageStarted;
     private boolean cancelling;
     private String problem;
+    /** Steps of a fetch that was cancelled or whose field search failed. Empty once predictions are installed. */
+    private List<FetchStep> retainedSteps = List.of();
 
     /** Creates the desktop workflow on the EDT and gives its shutdown to the session. */
     SolarSystemController(ProcessingSession session, BooleanSupplier currentSession, Listener listener) {
@@ -136,6 +143,7 @@ final class SolarSystemController implements AutoCloseable {
         active = request;
         cancelling = false;
         stage = "";
+        retainedSteps = List.of();
         showStage(request, "Asteroids and comets: starting");
         timer.start();
         executor.execute(request.future);
@@ -145,7 +153,18 @@ final class SolarSystemController implements AutoCloseable {
     private void run(Request request) {
         SolarSystemObjects result;
         try {
-            result = work.get().fetch(request.query, text -> post(request, () -> showStage(request, "Asteroids and comets: " + text)));
+            result = work.get().fetch(request.query, new SolarSystemClient.Progress() {
+                /** Shows the current question on the EDT. */
+                @Override public void stage(String text) {
+                    post(request, () -> showStage(request, "Asteroids and comets: " + text));
+                }
+
+                /** Keeps the steps on this request before any later cancel can run. */
+                @Override public void steps(List<FetchStep> steps) {
+                    request.steps = steps == null ? List.of() : List.copyOf(steps);
+                    post(request, SolarSystemController.this::changed);
+                }
+            });
         } catch (InterruptedException interrupted) {
             post(request, () -> cancelled(request));
             return;
@@ -180,23 +199,28 @@ final class SolarSystemController implements AutoCloseable {
      * previous ones when nothing could be fetched. EDT only.
      */
     private void finished(Request request, SolarSystemObjects result, String failure) {
-        stop();
         if (failure != null || result == null) {
+            retainedSteps = request.steps;
             problem = "The fetch failed: " + failure;
             listener.message("Asteroids and comets: JPL request failed"
                     + (failure == null || failure.isBlank() ? "" : " — " + failure));
         } else if (result.source == null || result.source.isEmpty()) {
+            retainedSteps = result.fetchSteps == null ? request.steps : List.copyOf(result.fetchSteps);
             problem = result.problems.isEmpty() ? "JPL did not answer." : String.join("\n", result.problems);
             String detail = result.problems.isEmpty() ? "JPL did not answer."
                     : result.problems.get(0).replaceFirst("^Field search \\(JPL SB-Ident\\):\\s*", "");
             listener.message("Asteroids and comets: " + detail);
         } else {
+            retainedSteps = List.of();
             problem = result.problems.isEmpty() ? null : String.join("\n", result.problems);
             session.saveSolarSystem(result, saveProblem -> {
                 if (saveProblem != null && !closed.get() && currentSession.getAsBoolean()
                         && session.getSkyCatalogue().getSolarSystem() == result) {
                     LOGGER.log(Level.WARNING, "Cannot save the asteroid and comet predictions", saveProblem);
                     problem = "The predictions could not be saved (" + saveProblem.getMessage() + "); they last until SpacePixels closes.";
+                    if (result.fetchSteps == null) result.fetchSteps = new ArrayList<>();
+                    result.fetchSteps.add(FetchStep.of("Save", "Asteroid and comet file", FetchStep.Status.FAILED,
+                            "Kept until SpacePixels closes", saveProblem.getMessage(), null, null));
                     changed();
                 }
             });
@@ -204,11 +228,13 @@ final class SolarSystemController implements AutoCloseable {
             listener.message("Asteroids and comets: " + result.summary() + " in the field"
                     + (result.problems.isEmpty() ? "" : " (incomplete)") + (result.bodies.isEmpty() ? "" : " · A in a viewer shows them"));
         }
+        stop();
         changed();
     }
 
     /** Ends a cancelled request even when the fetch ignores interruption and returns late. */
     private void cancelled(Request request) {
+        retainedSteps = request.steps;
         stop();
         listener.message("Asteroids and comets: cancelled");
         changed();
@@ -230,6 +256,16 @@ final class SolarSystemController implements AutoCloseable {
 
     /** Whether a request still owns the controller, for command availability and the progress indicator. */
     boolean isRunning() { return active != null; }
+
+    /** Steps of the fetch in progress. Empty when nothing is running. */
+    List<FetchStep> liveSteps() {
+        return active == null ? List.of() : active.steps;
+    }
+
+    /** Steps kept after a cancel or a field search that was not installed. Empty once predictions are in use. */
+    List<FetchStep> retainedSteps() {
+        return retainedSteps;
+    }
     /** Last fetch or save problem, independent of whether predictions remain in use. */
     String problem() { return problem; }
 

@@ -26,6 +26,7 @@ import eu.startales.spacepixels.fits.StretchAlgorithm;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.report.SessionReports;
 import eu.startales.spacepixels.fits.WcsSolutionResolver;
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import io.github.ppissias.jplatesolve.PlateSolveResult;
 import io.github.ppissias.jtransient.config.DetectionConfig;
@@ -202,6 +203,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             + "Blink and stretch in colour; convert to mono<br>for Preview, Auto-Tune and detection.</html>",
             UIManager.getIcon("OptionPane.informationIcon"), SwingConstants.LEFT);
     private final JLabel astrometryStatus = new JLabel();
+    /** Opens the fetch summary. The status line itself stays text: it also reports the plate solution. */
+    private final JButton fetchSummaryButton = fetchSummaryButton();
+    private FetchSummaryDialog fetchSummary;
     private final JCheckBox applyCorrection = new JCheckBox("Apply");
     private final JLabel inspectStatus = new JLabel();
     private final JLabel detectStatus = new JLabel();
@@ -1076,8 +1080,18 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         row.add(astrometryStatus, layout);
         layout.weightx = 0;
         layout.insets = new Insets(0, 4, 0, 0);
+        row.add(fetchSummaryButton, layout);
         row.add(applyCorrection, layout);
         return row;
+    }
+
+    /** The small hand-cursor control beside the Astrometry status. The click belongs here, not on the status line. */
+    private JButton fetchSummaryButton() {
+        JButton button = AccessibleControls.link("ⓘ", "Fetch summary", this::openFetchSummary);
+        button.setToolTipText("Click for the fetch summary.");
+        button.setMargin(new Insets(0, 2, 0, 2));
+        button.setVisible(false);
+        return button;
     }
 
     private static JPanel buttonRow(JComponent... components) {
@@ -1131,6 +1145,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         applyCorrection.setVisible(usefulCorrection);
         applyCorrection.setSelected(usefulCorrection && correction.enabled);
         applyCorrection.setEnabled(usefulCorrection && !uiLocked && (skyController == null || !skyController.isRunning()));
+        fetchSummaryButton.setVisible(frames > 0 && fetchSummaryAvailable());
+        refreshOpenFetchSummary();
         updateAutoTuneTooltip();
         refreshAnalysisScope();
         refreshCommands();
@@ -1545,12 +1561,14 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             text.append("<br><br>").append(FETCH_SOLAR_SYSTEM).append(" asks JPL which known asteroids and comets cross the field,<br>"
                     + "and where they are at each frame's time, for the Annotate switch (A) of the viewers.");
         }
-        String problem = solarController == null ? null : solarController.problem();
-        if (problem != null) {
-            text.append("<br><br><b>").append(objects == null ? "Not fetched:" : "Incomplete:").append("</b> ")
-                    .append(escapeHtml(problem).replace("\n", "<br>"));
-        } else if (objects != null && !objects.problems.isEmpty()) {
-            text.append("<br><br><b>Incomplete:</b> ").append(escapeHtml(String.join("\n", objects.problems)).replace("\n", "<br>"));
+        if (!fetchSummaryAvailable()) {
+            String problem = solarController == null ? null : solarController.problem();
+            if (problem != null) {
+                text.append("<br><br><b>").append(objects == null ? "Not fetched:" : "Incomplete:").append("</b> ")
+                        .append(escapeHtml(problem).replace("\n", "<br>"));
+            } else if (objects != null && !objects.problems.isEmpty()) {
+                text.append("<br><br><b>Incomplete:</b> ").append(escapeHtml(String.join("\n", objects.problems)).replace("\n", "<br>"));
+            }
         }
         return text.toString();
     }
@@ -1620,7 +1638,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             text.append("<br><br>").append(FETCH_SKY_CATALOGUE).append(" downloads the stars, deep-sky objects and variables of the field<br>"
                     + "for the Annotate switch (A) of the viewers.");
         }
-        if (skyCatalogueProblem() != null) {
+        if (fetchSummaryAvailable()) {
+            text.append("<br><br>Click the fetch summary (ⓘ) for what each service returned.");
+        } else if (skyCatalogueProblem() != null) {
             text.append("<br><br><b>").append(catalogue == null ? "Not fetched:" : "Incomplete:").append("</b> ")
                     .append(escapeHtml(skyCatalogueProblem()).replace("\n", "<br>"));
         }
@@ -1651,6 +1671,93 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             text.append("<br><br><b>Plate solution not checked:</b> ").append(escapeHtml(correctionProblem()));
         }
         return text.append(solarSystemTooltip()).append("</html>").toString();
+    }
+
+    /**
+     * Whether the fetch summary has something to show: a fetch in progress, a cancelled attempt, or a saved
+     * catalogue or prediction with steps or problem sentences.
+     */
+    private boolean fetchSummaryAvailable() {
+        if (skyController != null && (skyController.fetchInProgress() || !skyController.retainedSteps().isEmpty())) {
+            return true;
+        }
+        if (solarController != null && (solarController.isRunning() || !solarController.retainedSteps().isEmpty())) {
+            return true;
+        }
+        SkyCatalogue catalogue = skyCatalogue().get();
+        if (catalogue != null && hasFetchAccount(catalogue.fetchSteps, catalogue.problems)) {
+            return true;
+        }
+        SolarSystemObjects objects = skyCatalogue().getSolarSystem();
+        return objects != null && hasFetchAccount(objects.fetchSteps, objects.problems);
+    }
+
+    /** Whether a saved result has steps, or only the older problem sentences. */
+    private static boolean hasFetchAccount(List<FetchStep> steps, List<String> problems) {
+        return (steps != null && !steps.isEmpty()) || (problems != null && !problems.isEmpty());
+    }
+
+    /** Steps to show for the catalogue: the fetch in progress, a kept attempt, or the saved file. */
+    private List<FetchStep> catalogueSummarySteps() {
+        if (skyController != null && skyController.fetchInProgress()) {
+            return skyController.liveSteps();
+        }
+        if (skyController != null && !skyController.retainedSteps().isEmpty()) {
+            return skyController.retainedSteps();
+        }
+        SkyCatalogue catalogue = skyCatalogue().get();
+        return catalogue == null ? List.of() : FetchStep.rowsFor(catalogue.fetchSteps, catalogue.problems);
+    }
+
+    /** Steps to show for the asteroids and comets, in the same order of preference as the catalogue. */
+    private List<FetchStep> solarSummarySteps() {
+        if (solarController != null && solarController.isRunning()) {
+            return solarController.liveSteps();
+        }
+        if (solarController != null && !solarController.retainedSteps().isEmpty()) {
+            return solarController.retainedSteps();
+        }
+        SolarSystemObjects objects = skyCatalogue().getSolarSystem();
+        return objects == null ? List.of() : FetchStep.rowsFor(objects.fetchSteps, objects.problems);
+    }
+
+    /** Opens the one summary window, or brings it forward, for the current dataset. */
+    private void openFetchSummary() {
+        Window owner = SwingUtilities.getWindowAncestor(this);
+        if (fetchSummary == null || !fetchSummary.isDisplayable()) {
+            fetchSummary = new FetchSummaryDialog(owner);
+        }
+        refreshOpenFetchSummary();
+        fetchSummary.setVisible(true);
+        fetchSummary.toFront();
+    }
+
+    /** Fills the open summary from the fetches finished so far. Does nothing when the window is closed. */
+    private void refreshOpenFetchSummary() {
+        if (fetchSummary == null || !fetchSummary.isDisplayable()) {
+            return;
+        }
+        fetchSummary.present(datasetName(), catalogueSummarySteps(),
+                skyController != null && skyController.fetchInProgress(),
+                solarSummarySteps(), solarController != null && solarController.isRunning());
+    }
+
+    /** The imported folder's name, used as the summary window's title. */
+    private String datasetName() {
+        ProcessingSession session = sessions.current();
+        if (session == null || session.getFiles().length == 0) {
+            return "";
+        }
+        File folder = new File(session.getFiles()[0].getFilePath()).getParentFile();
+        return folder == null ? "" : folder.getName();
+    }
+
+    /** Closes the summary so it cannot keep showing the previous dataset. */
+    private void disposeFetchSummary() {
+        if (fetchSummary != null) {
+            fetchSummary.dispose();
+            fetchSummary = null;
+        }
     }
 
     /** "2026-10-10 14:03 UTC" from an ISO instant. */
@@ -1886,6 +1993,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
     /** A new session, or none: the status line says how many frames it has. */
     void sessionChanged(FitsFileInformation[] files) {
+        disposeFetchSummary();
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.closeForSessionChange();
             detectionSequenceFrame = null;
@@ -1898,6 +2006,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     }
 
     void closeSessionViews() {
+        disposeFetchSummary();
         if (skyController != null) skyController.close();
         skyController = null;
         if (solarController != null) solarController.close();

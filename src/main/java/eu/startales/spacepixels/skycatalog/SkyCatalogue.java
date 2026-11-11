@@ -39,8 +39,14 @@ public final class SkyCatalogue {
     public List<NamedStar> namedStars = new ArrayList<>();
     /** Faint Gaia stars of four small patches, one in each quarter of the field, to measure how deep the frames go. */
     public List<DepthSample> depthSamples = new ArrayList<>();
-    /** One line per source that could not be fetched; empty when all answered. */
+    /** One line per source that could not be fetched; empty when all answered. The status warning still reads this. */
     public List<String> problems = new ArrayList<>();
+    /**
+     * Every service question from the fetch, including those that succeeded or were not sent.
+     * Gson leaves this null in a file written before it existed; {@link SkyCatalogueStore#load} replaces null
+     * with an empty list. The problem sentences stay beside it.
+     */
+    public List<FetchStep> fetchSteps = new ArrayList<>();
 
     /** Older saved catalogues have positions and magnitudes but no Gaia source identifiers. */
     public boolean hasStarIdentifiers() {

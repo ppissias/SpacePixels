@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.solarsystem;
 
+import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyField;
 
 import java.util.ArrayList;
@@ -43,8 +44,14 @@ public final class SolarSystemObjects {
     /** The services and their API versions, for example "JPL SB-Ident API 1.1, JPL Horizons API 1.2". */
     public String source;
     public List<Body> bodies = new ArrayList<>();
-    /** One line per part that could not be fetched; empty when everything answered. */
+    /** One line per part that could not be fetched; empty when everything answered. The status warning still reads this. */
     public List<String> problems = new ArrayList<>();
+    /**
+     * Every service question from the fetch, including those that succeeded or were not sent.
+     * Gson leaves this null in a file written before it existed; {@link SolarSystemStore#load} replaces null
+     * with an empty list. The problem sentences stay beside it. Saved addresses leave out the observing site.
+     */
+    public List<FetchStep> fetchSteps = new ArrayList<>();
 
     /** An asteroid or comet with its predicted positions. */
     public static final class Body {
