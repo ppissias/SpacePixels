@@ -130,16 +130,20 @@ final class VsxMirrorLookup {
             List<String[]> rows = new ArrayList<>();
             List<String> row = null;
             StringBuilder text = new StringBuilder();
+            boolean table = false;
             boolean tableData = false;
             boolean error = false;
             while (reader.hasNext()) {
                 int event = reader.next();
                 if (event == XMLStreamConstants.START_ELEMENT) {
                     String name = reader.getLocalName();
-                    if ("FIELD".equals(name) && !tableData) {
+                    if ("TABLE".equals(name)) {
+                        table = true;
+                    } else if ("FIELD".equals(name) && !tableData) {
                         fields.add(attribute(reader, "name"));
-                    } else if ("INFO".equals(name) && "ERROR".equals(attribute(reader, "value"))
-                            && "QUERY_STATUS".equals(attribute(reader, "name"))) {
+                    } else if ("INFO".equals(name) && ("ERROR".equals(attribute(reader, "value"))
+                            || "Error".equalsIgnoreCase(attribute(reader, "name"))
+                            || "Error".equalsIgnoreCase(attribute(reader, "ID")))) {
                         error = true;
                     } else if ("TABLEDATA".equals(name)) {
                         tableData = true;
@@ -162,7 +166,7 @@ final class VsxMirrorLookup {
                 }
             }
             reader.close();
-            if (error || !tableData || !fields.contains("RAJ2000") || !fields.contains("DEJ2000") || !fields.contains("Name")) {
+            if (error || !table || !fields.contains("RAJ2000") || !fields.contains("DEJ2000") || !fields.contains("Name")) {
                 return null;
             }
             int raIndex = fields.indexOf("RAJ2000");

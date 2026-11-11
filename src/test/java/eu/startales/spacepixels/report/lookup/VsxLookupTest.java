@@ -10,6 +10,7 @@ import java.net.URI;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import eu.startales.spacepixels.report.PhotometryReportSectionWriter;
@@ -75,6 +76,45 @@ public class VsxLookupTest {
         assertEquals("From IDIA", match.get("name").getAsString());
         assertEquals("AAVSO VSX via IDIA", match.get("source").getAsString());
         assertTrue(response.get("sourceUrl").getAsString().startsWith(VsxMirrorLookup.IDIA));
+    }
+
+    @Test
+    public void anEmptyMirrorPageBecomesAnEmptyMatchList() {
+        String tap = PhotometryReportSectionWriter.vsxTapUrl(new PhotometryReportSectionWriter.SkyTarget(249.533173, 35.981440, 10.0));
+        String emptyPage = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><VOTABLE><RESOURCE><TABLE ID=\"B_vsx_vsx\" name=\"B/vsx/vsx\">"
+                + "<FIELD name=\"OID\"/><FIELD name=\"Name\"/><FIELD name=\"Type\"/>"
+                + "<FIELD name=\"RAJ2000\"/><FIELD name=\"DEJ2000\"/><FIELD name=\"max\"/><FIELD name=\"Period\"/>"
+                + "<!--  EMPTY result, no DATA part  -->"
+                + "</TABLE></RESOURCE></VOTABLE>";
+        JsonObject response = VsxMirrorLookup.lookup(tap, (url, host) -> new VsxMirrorLookup.Fetched(200, emptyPage));
+        assertNotNull(response);
+        assertTrue(response.get("ok").getAsBoolean());
+        JsonObject normalized = response.getAsJsonObject("normalized");
+        assertEquals(0, normalized.getAsJsonArray("matches").size());
+        assertEquals(0, response.getAsJsonObject("payload").getAsJsonArray("data").size());
+    }
+
+    @Test
+    public void harvardDatabaseErrorFallsThroughToIdia() {
+        String tap = PhotometryReportSectionWriter.vsxTapUrl(new PhotometryReportSectionWriter.SkyTarget(10, 20, 10));
+        String errorPage = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><VOTABLE>"
+                + "<INFO ID=\"Error\" name=\"Error\" value=\"The database is not currently reachable.\"/>"
+                + "<INFO name=\"QUERY_STATUS\" value=\"ERROR\">Postgres connect error</INFO>"
+                + "</VOTABLE>";
+        String matchPage = "<?xml version=\"1.0\"?><VOTABLE><RESOURCE><TABLE>"
+                + "<FIELD name=\"OID\"/><FIELD name=\"Name\"/><FIELD name=\"RAJ2000\"/><FIELD name=\"DEJ2000\"/>"
+                + "<DATA><TABLEDATA><TR><TD>1</TD><TD>Recovered From IDIA</TD><TD>10</TD><TD>20</TD></TR></TABLEDATA></DATA></TABLE></RESOURCE></VOTABLE>";
+        JsonObject response = VsxMirrorLookup.lookup(tap, (url, host) -> {
+            if (url.startsWith(VsxMirrorLookup.HARVARD)) {
+                return new VsxMirrorLookup.Fetched(200, errorPage);
+            }
+            return new VsxMirrorLookup.Fetched(200, matchPage);
+        });
+        assertNotNull(response);
+        assertTrue(response.get("ok").getAsBoolean());
+        JsonObject match = response.getAsJsonObject("normalized").getAsJsonArray("matches").get(0).getAsJsonObject();
+        assertEquals("Recovered From IDIA", match.get("name").getAsString());
+        assertEquals("AAVSO VSX via IDIA", match.get("source").getAsString());
     }
 
     @Test
