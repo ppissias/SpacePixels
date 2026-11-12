@@ -8,20 +8,22 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 |---|---|---|
 | [F04](#f04-mcp-agent-services) | MCP agent services over HTTP | Agreed: HTTP. The services table awaits agreement. |
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
-| [F15](#f15-report-themes-and-custom-css) | Report themes and custom CSS | Done 2026-11-06 |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
-| [F29](#f29-preview-frame-and-blink-redesign) | Preview Frame and Blink redesign | Agreed 2026-11-06; implementation in progress |
 
-The other investigations from 2026-11-02 are owned by JTransient: [remaining deferred photometry work](../JTransient/FEATURE-REQUESTS.md#vs-11-photometry-strictness-defaults-and-recovery-review), [readiness policy](../JTransient/FEATURE-REQUESTS.md#vs-9-selected-stars-and-the-linearity-check-minimum), and [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
+Registration quality is owned by JTransient: [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
 <a id="f01-slow-mover-and-per-frame-tuning-relation"></a>
 
 **Slow and faint movers.** Digital tracking (JTransient SM-F2 / SpacePixels F25) and the agreed review/report controls are delivered; see the [manual](MANUAL.md#faint-movers-experimental) and [engine algorithm](../JTransient/ALGORITHM.md#faint-mover-search). Maximum-stack position/time review and track correspondences are also implemented. The investigation round is closed with current scientific filters and defaults retained. F01's separate tuning experiment is retired: stack and single-frame noise thresholds remain distinct, and Auto-Tune does not tune maximum-stack thresholds.
 
-Only the engine's deferred [SM-F7 extension item](../JTransient/FEATURE-REQUESTS.md#sm-f7-slow-and-faint-mover-extensions) remains for concrete missed-source or coverage needs; it schedules no further experiment or integration. Any agreed engine extension must update application settings, result provenance and review together. The [existing research collection](docs/research/README.md) preserves the completed evidence and delivery history.
+The faint and slow-mover investigation round is closed; no further experiment or integration is scheduled. Any future engine extension must update application settings, result provenance and review together. The [existing research collection](docs/research/README.md) preserves the completed evidence and delivery history.
 
 The engine's [XC-3 background proposal](../JTransient/FEATURE-REQUESTS.md#xc-3-local-background-and-noise-for-frame-extraction) remains open and parked at the maintainer's request. Its current decision and proposed local-sky-only next step are kept there; the verified restart bundle is recorded in the ignored machine environment notes. No extraction change is selected.
+
+<!-- Stable targets for retired/implemented request IDs in historical documents. -->
+<a id="f15-report-themes-and-custom-css"></a>
+<a id="f29-preview-frame-and-blink-redesign"></a>
 
 ## F04. MCP agent services
 
@@ -73,40 +75,6 @@ Basic iterative detection is implemented: independent runs over growing subsets 
 **Next step.** Propose the matching and evidence-selection policy for agreement before implementing.
 
 **Acceptance.** One finding seen in several passes, distinct nearby objects, split tracks, conflicting measurements, changed or missing inputs, different fields with matching file names, missing WCS and older summary-only reports. Chosen measurements stay traceable, ambiguous associations stay visible, unique counts are justified, and the individual reports are unchanged.
-
-## F15. Report themes and custom CSS
-
-Offer a light report theme alongside the current dark appearance, and make report colours easier to customize through CSS.
-
-**Decision (made, 2026-10-29):** "I will do it on the next release". Deferred from the current release; implementation has not started.
-
-**Proposed scope:**
-
-- Built-in **Dark** and **Light** palettes, with Dark as the default and a selector in the report toolbar. Switching changes the open report immediately, without rerunning detection, and is independent of the desktop application's theme.
-- A shared **`report.css`** with named CSS variables for backgrounds, text, borders and accents, replacing hardcoded presentation colours. An optional **`report-custom.css`** provides advanced overrides; editing it only requires refreshing the browser. Stylesheets travel with the report folder and work offline.
-- Apply the same themes to ordinary reports and iterative summary/index pages. Review controls, tables, status messages, legends and inline SVG charts for contrast and consistent category meanings in both themes.
-- Preserve astronomical image/GIF pixels and their dark viewing areas. Review colours already drawn into diagnostic images separately; changing page CSS does not update those image assets.
-
-A graphical colour editor is outside this proposal.
-
-**Decision (made, 2026-11-06):** "Agreed with everything. A+B and dark as a default", after the review below, with "We can remember the choice on a best effort basis. If the memory isn't available it's OK" and agreement to four text-size steps.
-
-What the decision settles:
-
-1. **Steps.** First a restructuring with no visible change: the embedded CSS moves into a shared `report.css` in the report folder, every hardcoded colour becomes a named CSS variable (backgrounds, text, borders, accents and the finding-category colours), and pixel font sizes become relative to one base size. It is checked on the 18 reference datasets: data, CSVs and images identical, and before/after screenshots of the reports matching. Then the themes and text size, then custom CSS.
-2. **Theme.** Dark (default for every new report) and Light, chosen in the report toolbar and applied at once. Light gets a contrast review, with darker variants of finding colours where needed that keep their category meaning. Charts follow the theme; colours drawn into images do not change.
-3. **Text size.** Four steps in the toolbar (Small, Normal, Large, Extra large), scaling text and controls but not the astronomical images.
-4. **Remembering.** The browser remembers the theme and text size where it can (best effort); reports work normally where it cannot.
-5. **Custom CSS (A + B).** A report applies a `report-custom.css` in its own folder after the built-in styles (A). A setting on the Report Visualization page selects a CSS file once, and each new report gets a copy of it as its `report-custom.css` (B), so reports stay self-contained and offline. Reports never link to a shared file elsewhere. A commented example lists every variable.
-6. The same styles apply to ordinary reports, iterative summary and index pages, and the faint-mover review pages.
-
-**Progress (2026-11-06).** Step 1 is done with one refinement and one agreed change. The stylesheets are resources; they were first written into each page and later, at the maintainer's request, moved with the scripts to `report.css` and `report.js` beside it. The maintainer chose to consolidate the about 200 near-identical colours into 56 named roles in `report-theme.css`; text sizes are in `rem`. Five reference reports (klangwolke-2, Eagle-noisy, Apophis, helix, M81 Kumar) kept their data, CSVs and pictures, differ in their HTML only in styles, and look the same in before/after screenshots at equal page heights. Still to move to the roles with the themes: the inline SVG charts and their status colours, colours set by the report scripts, the finding-type colours drawn from the application's category colours, and the iterative index page, which has no dark styling yet. Finding cards and the legend use different colours for some types (for example slow-mover cards are magenta while DS is green elsewhere); unifying them is a decision for the theme step.
-
-Step 2 is done. The toolbar's Theme and Text selectors switch the page at once; the browser remembers them where it can (a script in the page head applies them before drawing). The light palette covers every role; charts on the page follow it through light-theme rules keyed to their colours, while plots of the sky and marks over images keep theirs. The maintainer agreed to give each finding type one colour: the roles are made from the application's category colours, so anomaly, slow-mover and local-activity cards now match the legend and maps; on the light page each is a darker shade of the same hue with at least WCAG AA contrast against white. The iterative summary pages are dark by default like the reports.
-
-Step 3 is done, which completes F15. Every report page links `report-custom.css` in its own folder after the built-in styles (A). The expert setting **Report Style File** on the Report Visualization page is saved with the visualization preferences, so the batch CLI uses it too; each new report folder, and the iterative summary's folder, gets a copy of the chosen file (B). Without a chosen file the folder gets a `report-custom.css` holding only a comment on how to use it, so the link always resolves and the file is easy to find; a file already there is kept. The path stays out of the JSON written into report folders. `config/report-custom-example.css` lists every role of both themes with its built-in value, commented out; a unit test keeps it in step with the theme. A run of klangwolke-1 with a chosen file showed its colours and font in both themes.
-
-**Acceptance.** Check both themes on representative complete reports and iterative indexes, including charts, warnings, filters and lookup results. Verify custom overrides and offline use after copying the report folder. Theme changes must not change measurements, detection results or exported scientific data.
 
 ## F23. Fixed-camera and all-sky sequence analysis
 
@@ -220,24 +188,3 @@ The saved Gaia star model contains source identity when available, position, pro
 
 **Scientific references used in the review.** [Gaia DR3 photometric relationships](https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html) describe the validity ranges and limitations of passband transformations. [AAVSO's guide to using its data](https://archive.aavso.org/index.php/quickstart-guide-using-aavso-data) distinguishes filtered and unfiltered observations and calibration limitations.
 
-## F29. Preview Frame and Blink redesign
-
-**Request (2026-11-06).** The maintainer's redesign of the two overlay viewers: a side panel with the same sections in both windows (Raw detections, Report findings, Catalog annotations, Display stretch), legend rows with per-layer label and visibility switches, a single-row toolbar, a Blink frame list with gap rows, a transport bar with a timeline by capture time, an Export GIF mode, and a one-line status bar with a shortcuts window. The full design, with the mock-up screenshots, is in [docs/features/viewer-redesign.md](docs/features/viewer-redesign.md).
-
-**Decision (made, 2026-11-06):** "I agree with everything, let's start" — accepting the review's recommendations below — and "on the blink window, please use the arrow keys up and down to move frames manually when the blink animation is paused."
-
-What the decision settles, where the spec differed from the application:
-
-1. Faint movers keep their dashed fitted path beside the midpoint ring.
-2. Variable-star candidates keep solid (high confidence) and dashed (possible) rings.
-3. Catalog annotations keep the faintest-star and faintest-variable limits, in a settings menu on the section header.
-4. Catalog annotations gain a fourth row, Known asteroids & comets.
-5. Other findings use the real report types: S and A, DS, LR and LC, FC and CM. ST stays under Tracks.
-6. "Align markers to corrected plate solution" (key C) belongs to Catalog annotations: it moves the catalogue marks and the cursor RA/Dec, not the findings.
-7. Findings keep the report's finding-type colours; catalogue objects are drawn white.
-8. Side-panel sections are collapsible, so Display stretch stays reachable.
-9. Blink speed runs from 0.5 to 30 frames per second.
-10. Full Size and Manual Transient Inspection get the same side panel, since they share Preview Frame's viewer.
-11. Blink's transport bar is built as specified. While paused, ↑ and ↓ step frames; while playing, they change the speed.
-
-The application theme stays a setting; the spec's dark palette is not hard-coded. The finding detail card and the stretch histogram are optional and come last.
