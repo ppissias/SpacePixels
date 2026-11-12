@@ -286,32 +286,6 @@ tasks.register('guiMechanicsTest', Test) {
     }
 }
 
-tasks.register('realDataTest', JavaExec) {
-    group = 'verification'
-    description = 'Run opt-in real-data integration tests against local datasets outside the repository.'
-    dependsOn tasks.named('testClasses')
-    mainClass = 'eu.startales.spacepixels.tools.SpacePixelsRealDataMain'
-    classpath = sourceSets.test.runtimeClasspath
-    jvmArgs = batchDetectJvmArgs
-    def realDataRoot = providers.gradleProperty('realDataRoot')
-    def projectDirectory = layout.projectDirectory.asFile
-    doFirst {
-        def root = realDataRoot.orNull?.trim()
-        if (!root) {
-            throw new GradleException('realDataTest requires -PrealDataRoot=<folder> or realDataRoot in the git-ignored gradle.properties.')
-        }
-        def directory = new File(root)
-        if (!directory.isAbsolute()) {
-            directory = new File(projectDirectory, root)
-        }
-        if (!directory.isDirectory()) {
-            throw new GradleException('realDataRoot must name an existing directory.')
-        }
-        systemProperty 'spacepixels.testdata.root', directory.absolutePath
-    }
-    shouldRunAfter tasks.named('test')
-}
-
 def artifactName = centralArtifactId
 def stagingRepository = rootProject.layout.buildDirectory.dir('repos/central-staging')
 def inMemorySigningKey = providers.gradleProperty('signingKey').map { it.replace('\\n', '\n') }.orNull

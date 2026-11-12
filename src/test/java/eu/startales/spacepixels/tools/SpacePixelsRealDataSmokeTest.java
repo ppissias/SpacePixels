@@ -24,27 +24,47 @@ import java.util.Locale;
 import static org.junit.Assert.*;
 
 /**
- * Bounded, offline release checks on scratch copies of three optional reference sequences.
- * Reference outcomes use the distributed detection profile, enabling photometry only for M5.
+ * Release smoke for Tier 1 of the local reference inventory, on scratch copies.
+ * Outcomes use the distributed detection profile. Photometry is enabled only for m5-reg.
+ * Klangwolke-2 is the golden reference and is outside this task.
  */
 public class SpacePixelsRealDataSmokeTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
     /** The short asteroid sequence exercises tracking and complete report export. */
     @Test public void apophisTrackingAndReport() throws Exception {
-        var result = checkDataset("Apophis", 15, 14, false);
+        var result = checkDataset("Apophis", 15, 14, false, false);
         assertMovingTarget(result, 14, 619.71, 400.35, 604.34, 368.48);
     }
 
-    /** The comet sequence exercises a second moving target with larger frames. */
-    @Test public void africanoTrackingAndReport() throws Exception {
-        var result = checkDataset("Africano", 18, 12, false);
-        assertMovingTarget(result, 11, 1380.12, 872.29, 1676.15, 662.61);
+    /** The compact spacecraft sequence keeps two streak tracks on the default profile. */
+    @Test public void integralStreakAndReport() throws Exception {
+        var result = checkDataset("Integral-spacecraft-challenge", 35, 35, false, false);
+        assertEquals("Integral streak tracks", 2L,
+                result.getPipelineResult().tracks.stream().filter(track -> track.isStreakTrack).count());
+        assertEquals("Integral anomalies", 0, result.getPipelineResult().anomalies.size());
+    }
+
+    /**
+     * The six-frame session warns about uncalibrated hot pixels and, on the default profile,
+     * keeps one anomaly and no track. The auto-tuned baseline is a separate, heavier result.
+     */
+    @Test public void iTelescopeHotPixelsAndReport() throws Exception {
+        var result = checkDataset("iTelescope-slow-mover-hot-pixels", 6, 6, false, false);
+        assertTrue("iTelescope tracks", result.getPipelineResult().tracks.isEmpty());
+        assertEquals("iTelescope anomalies", 1, result.getPipelineResult().anomalies.size());
+    }
+
+    /** The small Filter3 session is the empty-result control. */
+    @Test public void m31bEmptyResultAndReport() throws Exception {
+        var result = checkDataset("m31-b-reg", 38, 32, false, true);
+        assertTrue("m31-b tracks", result.getPipelineResult().tracks.isEmpty());
+        assertTrue("m31-b anomalies", result.getPipelineResult().anomalies.isEmpty());
     }
 
     /** The crowded stellar field exercises photometry and its CSV exports. */
     @Test public void m5PhotometryAndReport() throws Exception {
-        var result = checkDataset("m5-reg", 36, 32, true);
+        var result = checkDataset("m5-reg", 36, 32, true, false);
         var variables = result.getPipelineResult().variableStarAnalysis;
         assertEquals(PhotometricReadiness.Verdict.LIMITED, variables.readiness.verdict);
         assertEquals("Measured stars in the reference field", 418, variables.stars.size());
@@ -52,7 +72,8 @@ public class SpacePixelsRealDataSmokeTest {
     }
 
     /** Copies only source images, isolates settings, and runs preparation, detection and reporting synchronously. */
-    private SpacePixelsPipelineResult checkDataset(String name, int expectedFrames, int expectedKept, boolean photometry) throws Exception {
+    private SpacePixelsPipelineResult checkDataset(String name, int expectedFrames, int expectedKept,
+                                                   boolean photometry, boolean allowEmptyFindings) throws Exception {
         Path source = dataset(name);
         Path copy = temporary.newFolder("input").toPath();
         var images = FitsInput.list(source.toFile());
@@ -82,7 +103,7 @@ public class SpacePixelsRealDataSmokeTest {
                     name, pipeline.telemetry.totalFramesKept, pipeline.tracks.size(), pipeline.anomalies.size(),
                     pipeline.variableStarAnalysis.readiness.verdict, pipeline.variableStarAnalysis.stars.size(),
                     pipeline.variableStarAnalysis.candidates.size());
-            verifyReport(result, expectedFrames, photometry);
+            verifyReport(result, expectedFrames, photometry, allowEmptyFindings);
             return result;
         } finally {
             if (previousHome == null) System.clearProperty("user.home");
@@ -127,7 +148,8 @@ public class SpacePixelsRealDataSmokeTest {
     }
 
     /** Validates structured output and readable rendered assets, plus photometry exports when enabled. */
-    private static void verifyReport(SpacePixelsPipelineResult result, int expectedFrames, boolean photometry) throws Exception {
+    private static void verifyReport(SpacePixelsPipelineResult result, int expectedFrames,
+                                     boolean photometry, boolean allowEmptyFindings) throws Exception {
         assertTrue("HTML report", result.getReportFile().isFile());
         assertTrue(Files.readString(result.getReportFile().toPath()).contains("<html"));
         Path output = result.getExportDirectory().toPath();
@@ -136,7 +158,11 @@ public class SpacePixelsRealDataSmokeTest {
         assertEquals(expectedFrames, data.get("frameCount").getAsInt());
         assertEquals(expectedFrames - result.getPipelineResult().telemetry.totalFramesKept,
                 data.getAsJsonArray("rejectedFrames").size());
-        assertFalse("Report findings", data.getAsJsonArray("findings").isEmpty());
+        if (allowEmptyFindings) {
+            assertTrue("Empty-result control still reports findings", data.getAsJsonArray("findings").isEmpty());
+        } else {
+            assertFalse("Report findings", data.getAsJsonArray("findings").isEmpty());
+        }
         assertTrue(Files.size(output.resolve("detection_config.json")) > 0);
         List<Path> images;
         try (var paths = Files.walk(output)) {

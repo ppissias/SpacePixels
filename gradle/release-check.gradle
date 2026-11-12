@@ -13,7 +13,7 @@ def reportJavascriptTest = tasks.register('reportJavascriptTest', Exec) {
 
 def realDataSmokeTest = tasks.register('realDataSmokeTest', Test) {
     group = 'verification'
-    description = 'Checks selected small reference datasets when available, using isolated scratch copies.'
+    description = 'Runs the Tier 1 reference sessions when installed, on scratch copies of the default profile.'
     dependsOn tasks.named('testClasses')
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath

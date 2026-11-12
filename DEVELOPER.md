@@ -354,8 +354,7 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 - **Preparation parity:** `FitsPreparationParityTest` compares GUI and API preparation across formats.
 - **Iterative detection:** `IterativeDetectionPlanTest` and `IterativeDetectionRunTest`, which compares passes with ordinary runs on the same subsets.
 - **GUI mechanics** (`guiMechanicsTest`): drive the real window by the visible text of its controls, with a scratch `user.home` and restored preferences. Viewer navigation tests must send real `KeyEvent`s to the focus owner; invoking actions directly misses controls that consume Space or the arrow keys.
-- **Release real-data smoke tests** (`realDataSmokeTest`): check a bounded selection of small reference datasets, sequentially on scratch copies, including scientific outcomes and report exports. Configure `realDataRoot` in git-ignored `gradle.properties` (see [gradle.properties.example](gradle.properties.example)), or override it with `-PrealDataRoot=<folder>`. Missing datasets are skipped; processing failures fail the build. These checks supplement the full scientific regression below.
-- **Real-data harness:** `.\gradlew.bat realDataTest -PrealDataRoot=<folder>` runs preparation, API and CLI checks on every dataset directory under the supplied root; supply scratch copies for this broader opt-in task. An existing data directory is required only when this task runs; there is no machine-specific default. Alternatively, set `realDataRoot` in git-ignored `gradle.properties`; explicit `-P` wins. Relative paths are resolved against the project directory and passed to the test JVM as absolute paths.
+- **Release real-data smoke tests** (`realDataSmokeTest`): run Tier 1 from the local reference inventory, sequentially on scratch copies of the default profile, including scientific outcomes and report exports. The Tier 1 sessions are Apophis, Integral-spacecraft-challenge, iTelescope-slow-mover-hot-pixels, m31-b-reg and m5-reg. Configure `realDataRoot` in git-ignored `gradle.properties` (see [gradle.properties.example](gradle.properties.example)), or override it with `-PrealDataRoot=<folder>`. Explicit `-P` wins. A relative path is resolved against the project directory. Missing datasets are skipped; processing failures fail the build. These checks supplement the full scientific regression below. Klangwolke-2 is not in this task.
 
 `-PtestMaxHeap=6g` raises the heap of the test tasks.
 
@@ -363,22 +362,18 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 
 ### Real-data regression
 
-Any change that can affect detection, preparation, reports or numeric diagnostics is checked on the reference datasets. Dataset locations, tier assignments, baseline findings and diagnostic notes are kept locally on each machine (see `LOCAL-ENVIRONMENT.txt`, which locates the reference data folder and its `REFERENCE-DATASETS.md` inventory and `reference-datasets.txt`). Ignore older date-named folders there unless asked.
+Any change that can affect detection, preparation, reports or numeric diagnostics is checked on the reference datasets. Names, tier assignments, baseline findings and diagnostic notes are kept locally on each machine. `LOCAL-ENVIRONMENT.txt` locates the reference folder and its `REFERENCE-DATASETS.md` inventory. The reference for a session is the report folder named there: `detection_config.json` is the pipeline configuration, and `report-data.json` in the same folder is the result. Ignore older date-named folders unless asked.
 
-The testing methodology organizes reference datasets into three operational tiers:
+The inventory organises the sessions into three tiers:
 
-- **Tier 1: Fast smoke test (routine commits and quick checks):** A small, diverse set of compact sessions covering the primary finding categories (moving targets, satellite streaks, faint streaks, hot-pixel margins, and clean negative controls). Designed for fast developer feedback (~3–4 minutes).
-- **Tier 2: Full regression (comprehensive release verification):** Tier 1 plus representative deep-sky astrophotography sequences (monochrome and Bayer color conversions, comets, asteroid field crossings, and multi-night sequences). Run before releases or after significant algorithm changes (~15–20 minutes).
-- **Tier 3: Specialized domain and stress benchmarks (targeted algorithm validation):** Challenge sessions evaluated when developing specific engine components:
-  - *Variable stars:* Multi-candidate sessions and rich catalog fields for recovery and false-candidate verification (VS-13);
-  - *Galaxy cores and severe gradients:* Sessions stressing local background estimation and track fill (XC-3, PT-10);
-  - *Faint movers and dither artifacts:* Dense fields and dithered sequences for evaluating hot-pixel discrimination and motion vetoes (SM-F8, SM-F9, RV-1.1);
-  - *Extended cadence stress:* Deep, high-frame-count sessions checking frame throughput and resource scaling.
+- **Tier 1, release smoke:** Apophis, Integral-spacecraft-challenge, iTelescope-slow-mover-hot-pixels, m31-b-reg and m5-reg. Routine check and `realDataSmokeTest`. A few minutes, on the default profile.
+- **Tier 2, with Tier 1, is the full regression:** those five, plus the deep-sky, comet, asteroid and multi-night sessions named in the inventory, including Klangwolke-2. Run the full list before a release. Klangwolke-2 is the golden reference. It is in Tier 2 because a 61-megapixel session does not fit the smoke budget, and every engine change runs it anyway.
+- **Tier 3:** variable-star, galaxy-core and gradient, faint-mover, and long-cadence sessions. Run the group the change can affect, together with Klangwolke-2. The inventory names the group for each investigation.
 
 To check a change:
 
-1. Run every relevant dataset with `batchDetect` on the base commit and on the change, with the same profile and a scratch `user.home`.
-2. Compare the rejected frames, the tracks and anomalies, the variable-star verdicts and candidates star by star, and the timings. For a pure refactoring, `report-data.json` (apart from its generation time), `detection_config.json` and the CSVs must be identical. When comparing full report folders, normalize only explicitly listed volatile fields, including the HTML's measured engine and stage durations; compare deterministic content and rendered assets exactly. Measure performance separately rather than requiring identical elapsed times.
+1. Run Tier 1. For an engine change, also run Klangwolke-2 and the Tier 3 group the change can affect. Run the rest of Tier 2 before a release, and sooner when those first results are not enough to judge the change. Use `batchDetect` on the base commit and on the change, with the same profile and a scratch `user.home`. A comparison against a saved baseline reuses the `detection_config.json` in the report folder named in the inventory. The smoke test's pins are default-profile outcomes and are separate from the auto-tuned baselines.
+2. Compare the rejected frames, the tracks and anomalies, the variable-star verdicts and candidates star by star, and the timings. On Klangwolke-2, compare the moving targets, the streak tracks and the faint movers, and keep the catalogue-matched faint movers. For a pure refactoring, `report-data.json` (apart from its generation time), `detection_config.json` and the CSVs must be identical. When comparing full report folders, normalize only explicitly listed volatile fields, including the HTML's measured engine and stage durations; compare deterministic content and rendered assets exactly. Measure performance separately rather than requiring identical elapsed times.
 3. Report the differences to the maintainer before committing.
 
 Run large datasets one at a time; the memory available per JVM is in `LOCAL-ENVIRONMENT.txt`.

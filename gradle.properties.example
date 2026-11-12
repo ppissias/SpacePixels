@@ -1,7 +1,7 @@
 useLocalJTransientBuild=false
 useLocalJPlateSolveBuild=false
 
-# Optional reference data for release smoke tests and the full opt-in realDataTest.
+# Optional reference data for the release smoke tests (realDataSmokeTest).
 # Use forward slashes on Windows; keep the actual path in git-ignored gradle.properties.
 # realDataRoot=<reference dataset folder>
 
