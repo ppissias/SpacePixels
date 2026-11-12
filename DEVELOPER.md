@@ -363,14 +363,37 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 
 ### Real-data regression
 
-Any change that can affect detection, preparation, reports or numeric diagnostics is checked on the reference datasets. Their location is in `LOCAL-ENVIRONMENT.txt`. Ignore older date-named folders there unless asked.
+Any change that can affect detection, preparation, reports or numeric diagnostics is checked on the reference datasets. Their location is in `LOCAL-ENVIRONMENT.txt` (see `reference-datasets.txt`). Ignore older date-named folders there unless asked.
 
-- **The original seven:**
-  - klangwolke-1, and klangwolke-2 (use its `_16bit_converted` folder): good data with known asteroids; klangwolke-2 is the main dataset;
-  - Iwamoto-huge, Eagle-noisy, whynot-nocalibration-wrongdrift, Apophis and Africano.
-- **The variable-star batch:**
-  - dc-reg, helix-reg, ic-5070-reg, m101-reg, m31-b-reg, m31-g-reg, m31-red-reg, m5-reg and m81-reg;
-  - M81-kumar-L-dataset-registered, and "UG 6524-kumar-L-dataset-registeed" (spelled that way on disk).
+The reference datasets are organised into three tiers:
+
+- **Tier 1: Fast smoke test (routine commits and quick checks):**
+  - `klangwolke-2` (use its `_16bit_converted` folder): the primary golden benchmark (asteroids, faint movers, variables, streaks);
+  - `Apophis`: short 15-frame moving target (asteroid) and streak tracks;
+  - `Integral-spacecraft-challenge`: faint streak target on small frames (35 frames);
+  - `m31-b-reg`: clean negative control (zero detections);
+  - `iTelescope-slow-mover-hot-pixels`: fast 6-frame dither and hot-pixel check;
+  - `m5-reg`: hot pixels without margins (single-frame anomalies and slow-mover candidates).
+
+- **Tier 2: Full regression (comprehensive release verification):**
+  - The Tier 1 datasets, plus:
+  - `Africano`: large visible comet, noisy frames;
+  - `Lagoon`: moving asteroid T1 against emission nebulosity;
+  - `Helix-asteroid` and `Helix-asteroid-before`: asteroid field crossing;
+  - `klangwolke-1`: temporal gap check (first 3 frames one month apart);
+  - `klangwolke-1-7-same-night`: 7-frame single-night baseline;
+  - `dc-large` (with `_mono`): large color DSLR frames, Bayer conversion and mono detection;
+  - `dc-light-2`: standard mono session;
+  - `Eagle-noisy` and `eagle-possible-fm-2`: noisy versus calibrated pair with faint mover;
+  - `helix-reg` and `ic-5070-reg`: moderate-noise reference fields;
+  - `m81-reg` and `m101-reg`: DSLR sequences;
+  - `Iwamoto-huge`: large moving comet.
+
+- **Tier 3: Specialized domain and stress benchmarks (run when changing affected algorithms):**
+  - **Variable stars (VS-13):** `klangwolke-2`, `Andromeda-variables-check` (19 candidates), `M81-kumar-L-dataset-registered` (18 candidates), `m13-variable-stars` (9 candidates in globular cluster), and `UG 6524-kumar-L-dataset-registeed` (unresolved galaxy negative check);
+  - **Galaxy cores and severe gradients (XC-3, PT-10):** `Andromeda-false-detections-on-galaxy` (false tracks on core), `andromeda-wide-gradient-chaos` (real track T1 amidst gradient noise), and `orion-bad-quality-gradient-false-noise-detections`;
+  - **Faint movers, dither and crowded fields (SM-F8, SM-F9):** `Flame-track-fm-hot-possible-fm` (dither-correlated track vs real mover), `austral-kiwi-tarantula-lmc` (26 MPix crowded southern field), and `australkiwi-ngc1399`;
+  - **Deep sequence stress test:** `thestarsabove` (231 frames, high-gain CMOS sequence with corner gradient).
 
 To check a change:
 
