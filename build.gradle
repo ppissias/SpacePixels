@@ -101,7 +101,7 @@ def excludeUnusedAnnotationJars = {
 }
 
 dependencies {
-    api('io.github.ppissias.jtransient:jtransient:1.0.8', excludeUnusedAnnotationJars())
+    api('io.github.ppissias.jtransient:jtransient:1.0.9', excludeUnusedAnnotationJars())
     implementation('gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0', excludeUnusedAnnotationJars())
     implementation('com.google.code.gson:gson:2.14.0', excludeUnusedAnnotationJars())
     implementation('io.github.ppissias.jplatesolve:jplatesolve:1.0.2', excludeUnusedAnnotationJars())
