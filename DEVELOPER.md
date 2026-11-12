@@ -363,37 +363,17 @@ Tests use JUnit 4.13.2. Start with the affected tests, then run the full suite.
 
 ### Real-data regression
 
-Any change that can affect detection, preparation, reports or numeric diagnostics is checked on the reference datasets. Their location is in `LOCAL-ENVIRONMENT.txt` (see `reference-datasets.txt`). Ignore older date-named folders there unless asked.
+Any change that can affect detection, preparation, reports or numeric diagnostics is checked on the reference datasets. Dataset locations, tier assignments, baseline findings and diagnostic notes are kept locally on each machine (see `LOCAL-ENVIRONMENT.txt`, which locates the reference data folder and its `REFERENCE-DATASETS.md` inventory and `reference-datasets.txt`). Ignore older date-named folders there unless asked.
 
-The reference datasets are organised into three tiers:
+The testing methodology organizes reference datasets into three operational tiers:
 
-- **Tier 1: Fast smoke test (routine commits and quick checks):**
-  - `klangwolke-2` (use its `_16bit_converted` folder): the primary golden benchmark (asteroids, faint movers, variables, streaks);
-  - `Apophis`: short 15-frame moving target (asteroid) and streak tracks;
-  - `Integral-spacecraft-challenge`: faint streak target on small frames (35 frames);
-  - `m31-b-reg`: clean negative control (zero detections);
-  - `iTelescope-slow-mover-hot-pixels`: fast 6-frame dither and hot-pixel check;
-  - `m5-reg`: hot pixels without margins (single-frame anomalies and slow-mover candidates).
-
-- **Tier 2: Full regression (comprehensive release verification):**
-  - The Tier 1 datasets, plus:
-  - `Africano`: large visible comet, noisy frames;
-  - `Lagoon`: moving asteroid T1 against emission nebulosity;
-  - `Helix-asteroid` and `Helix-asteroid-before`: asteroid field crossing;
-  - `klangwolke-1`: temporal gap check (first 3 frames one month apart);
-  - `klangwolke-1-7-same-night`: 7-frame single-night baseline;
-  - `dc-large` (with `_mono`): large color DSLR frames, Bayer conversion and mono detection;
-  - `dc-light-2`: standard mono session;
-  - `Eagle-noisy` and `eagle-possible-fm-2`: noisy versus calibrated pair with faint mover;
-  - `helix-reg` and `ic-5070-reg`: moderate-noise reference fields;
-  - `m81-reg` and `m101-reg`: DSLR sequences;
-  - `Iwamoto-huge`: large moving comet.
-
-- **Tier 3: Specialized domain and stress benchmarks (run when changing affected algorithms):**
-  - **Variable stars (VS-13):** `klangwolke-2`, `Andromeda-variables-check` (19 candidates), `M81-kumar-L-dataset-registered` (18 candidates), `m13-variable-stars` (9 candidates in globular cluster), and `UG 6524-kumar-L-dataset-registeed` (unresolved galaxy negative check);
-  - **Galaxy cores and severe gradients (XC-3, PT-10):** `Andromeda-false-detections-on-galaxy` (false tracks on core), `andromeda-wide-gradient-chaos` (real track T1 amidst gradient noise), and `orion-bad-quality-gradient-false-noise-detections`;
-  - **Faint movers, dither and crowded fields (SM-F8, SM-F9):** `Flame-track-fm-hot-possible-fm` (dither-correlated track vs real mover), `austral-kiwi-tarantula-lmc` (26 MPix crowded southern field), and `australkiwi-ngc1399`;
-  - **Deep sequence stress test:** `thestarsabove` (231 frames, high-gain CMOS sequence with corner gradient).
+- **Tier 1: Fast smoke test (routine commits and quick checks):** A small, diverse set of compact sessions covering the primary finding categories (moving targets, satellite streaks, faint streaks, hot-pixel margins, and clean negative controls). Designed for fast developer feedback (~3–4 minutes).
+- **Tier 2: Full regression (comprehensive release verification):** Tier 1 plus representative deep-sky astrophotography sequences (monochrome and Bayer color conversions, comets, asteroid field crossings, and multi-night sequences). Run before releases or after significant algorithm changes (~15–20 minutes).
+- **Tier 3: Specialized domain and stress benchmarks (targeted algorithm validation):** Challenge sessions evaluated when developing specific engine components:
+  - *Variable stars:* Multi-candidate sessions and rich catalog fields for recovery and false-candidate verification (VS-13);
+  - *Galaxy cores and severe gradients:* Sessions stressing local background estimation and track fill (XC-3, PT-10);
+  - *Faint movers and dither artifacts:* Dense fields and dithered sequences for evaluating hot-pixel discrimination and motion vetoes (SM-F8, SM-F9, RV-1.1);
+  - *Extended cadence stress:* Deep, high-frame-count sessions checking frame throughput and resource scaling.
 
 To check a change:
 
