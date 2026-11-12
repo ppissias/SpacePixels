@@ -16,6 +16,7 @@ import eu.startales.spacepixels.fits.WcsSolutionResolver;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.skycatalog.SkyProjection;
 import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
+import eu.startales.spacepixels.solarsystem.SolarSystemQuery;
 
 import javax.swing.*;
 import java.awt.*;
@@ -278,6 +279,22 @@ final class SkyAnnotations {
                     : layer == ViewerLayer.SOLAR_SYSTEM ? "Fetch Asteroids and Comets in the main window (2 Astrometry) first."
                     : "Fetch Sky Catalogue in the main window (2 Astrometry) first.");
         }
+        int orange = 0;
+        if (marks != null) {
+            for (SkyMark mark : marks) {
+                if (mark.periodWithinSession && preferences.includes(mark)) {
+                    orange++;
+                }
+            }
+        }
+        rows.get(ViewerLayer.KNOWN_VARIABLES).setInfo(PeriodWithinSession.note(
+                catalogue != null, marks != null, orange, sessionSpanMillis()));
+    }
+
+    /** The session's observing span, or a negative value when no frame has an observation time. */
+    private long sessionSpanMillis() {
+        long[] span = files == null ? null : SolarSystemQuery.observingSpan(files);
+        return span == null ? -1 : span[1] - span[0];
     }
 
     private static String describeRow(ViewerLayer layer) {
@@ -464,7 +481,7 @@ final class SkyAnnotations {
             marks = marksBySolution.get(key);
             if (marks == null) {
                 marks = project(catalogue, solution.getTransformer(), info.getSizeWidth(), info.getSizeHeight(),
-                        info.getObservationTimestamp());
+                        info.getObservationTimestamp(), sessionSpanMillis());
                 marksBySolution.put(key, marks);
             }
         }
@@ -486,10 +503,11 @@ final class SkyAnnotations {
 
     /**
      * The catalogue objects that fall on a frame of this size. Stars are moved from the Gaia epoch to the frame's
-     * date ({@code timestampMillis}, or not at all when it is unknown).
+     * date ({@code timestampMillis}, or not at all when it is unknown). {@code spanMillis} is the session's
+     * observing span; a non-positive value leaves every variable off-white.
      */
     static List<SkyMark> project(SkyCatalogue catalogue, WcsCoordinateTransformer transformer, int width, int height,
-                                 long timestampMillis) {
+                                 long timestampMillis, long spanMillis) {
         List<SkyMark> marks = new ArrayList<>();
         for (SkyCatalogue.DeepSkyObject object : catalogue.deepSky) {
             double[] shape = SkyProjection.deepSkyShape(transformer, object);
@@ -513,7 +531,8 @@ final class SkyAnnotations {
                 continue;
             }
             marks.add(new SkyMark(SkyMark.Kind.VARIABLE, position[0], position[1],
-                    variable.max == null ? Double.NaN : variable.max, 0, 0, 0, variable.name, variableDescription(variable)));
+                    variable.max == null ? Double.NaN : variable.max, 0, 0, 0, variable.name, variableDescription(variable),
+                    PeriodWithinSession.qualifies(variable, spanMillis)));
         }
         for (SkyCatalogue.Star star : catalogue.stars) {
             double[] position = SkyProjection.starPixel(transformer, star, timestampMillis);

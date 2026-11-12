@@ -36,14 +36,29 @@ final class SkyMark {
     final double[] path;
     /** Its motion during this frame's exposure, {x start, y start, x end, y end}; null when not known or for other kinds. */
     final double[] trail;
+    /**
+     * A known variable whose published period is at most twice the session. Drawn as the same diamond, in orange.
+     * False for every other mark.
+     */
+    final boolean periodWithinSession;
 
     SkyMark(Kind kind, double x, double y, double magnitude, double semiMajor, double semiMinor, double angle,
             String label, String description) {
-        this(kind, x, y, magnitude, semiMajor, semiMinor, angle, label, description, null, null);
+        this(kind, x, y, magnitude, semiMajor, semiMinor, angle, label, description, null, null, false);
+    }
+
+    SkyMark(Kind kind, double x, double y, double magnitude, double semiMajor, double semiMinor, double angle,
+            String label, String description, boolean periodWithinSession) {
+        this(kind, x, y, magnitude, semiMajor, semiMinor, angle, label, description, null, null, periodWithinSession);
     }
 
     SkyMark(Kind kind, double x, double y, double magnitude, double semiMajor, double semiMinor, double angle,
             String label, String description, double[] path, double[] trail) {
+        this(kind, x, y, magnitude, semiMajor, semiMinor, angle, label, description, path, trail, false);
+    }
+
+    SkyMark(Kind kind, double x, double y, double magnitude, double semiMajor, double semiMinor, double angle,
+            String label, String description, double[] path, double[] trail, boolean periodWithinSession) {
         this.kind = kind;
         this.x = x;
         this.y = y;
@@ -55,6 +70,7 @@ final class SkyMark {
         this.description = description;
         this.path = path;
         this.trail = trail;
+        this.periodWithinSession = periodWithinSession;
     }
 
     /** Whether the mark has a position on this frame (an asteroid or comet outside its predicted times has none). */

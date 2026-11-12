@@ -901,10 +901,11 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
             double x = left + (mark.x + 0.5) * scale;
             double y = top + (mark.y + 0.5) * scale;
             double size = 7;
-            g2.setColor(CATALOGUE_COLOR);
+            Color colour = mark.periodWithinSession ? OverlayStyle.PERIOD_WITHIN_SESSION : CATALOGUE_COLOR;
+            g2.setColor(colour);
             g2.draw(OverlayStyle.diamond(x, y, size));
             if (labelVariables && (labelSurveyNames || mark.label.length() <= SHORT_NAME_LENGTH)) {
-                drawLabel(g2, mark.label, x + size + 3, y - 3, CATALOGUE_COLOR);
+                drawLabel(g2, mark.label, x + size + 3, y - 3, colour);
             }
             drawn.add(mark);
         }

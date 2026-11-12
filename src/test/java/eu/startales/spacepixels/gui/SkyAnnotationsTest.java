@@ -242,7 +242,7 @@ public class SkyAnnotationsTest {
         variable.dec = 20.0 + 100 * SCALE_DEG;
         catalogue.variables.add(variable);
 
-        List<SkyMark> marks = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0);
+        List<SkyMark> marks = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0, -1);
         assertEquals(2, marks.size());
         SkyMark variableMark = marks.get(0);
         assertEquals(SkyMark.Kind.VARIABLE, variableMark.kind);
@@ -261,13 +261,13 @@ public class SkyAnnotationsTest {
         // 1″ per year north and 1″ per year east (on the sky).
         catalogue.stars.add(star(150.0, 20.0, 10, 1000.0, 1000.0));
         long tenYearsLater = Instant.parse("2026-01-01T12:00:00Z").toEpochMilli();
-        SkyMark mark = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, tenYearsLater).get(0);
+        SkyMark mark = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, tenYearsLater, -1).get(0);
         double years = (tenYearsLater - SkyCatalogue.GAIA_EPOCH_MILLIS) / (365.25 * 86_400_000.0);
         // East is towards smaller x, north towards larger y, 1.5″ per pixel.
         assertEquals(999.5 - years / 1.5, mark.x, 0.01);
         assertEquals(799.5 + years / 1.5, mark.y, 0.01);
         // An unknown date leaves the stars at the Gaia epoch.
-        mark = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0).get(0);
+        mark = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0, -1).get(0);
         assertEquals(999.5, mark.x, 1e-6);
     }
 
@@ -283,12 +283,33 @@ public class SkyAnnotationsTest {
         galaxy.minorArcmin = 5.0;
         galaxy.angleDeg = 0.0;
         catalogue.deepSky.add(galaxy);
-        SkyMark mark = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0).get(0);
+        SkyMark mark = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0, -1).get(0);
         // 5′ half axis at 1.5″ per pixel is 200 px; position angle 0 points north, which is +y here.
         assertEquals(200, mark.semiMajor, 0.5);
         assertEquals(100, mark.semiMinor, 0.5);
         assertEquals(Math.PI / 2, mark.angle, 1e-3);
         assertEquals("M 81 · Seyfert galaxy · 10 × 5′", mark.description);
+    }
+
+    @Test
+    public void marksAVariableOrangeWhenItsPeriodFitsTheSession() {
+        long threeHours = 3L * 3_600_000L;
+        SkyCatalogue catalogue = new SkyCatalogue();
+        catalogue.variables.add(variableAt("Fits", 6.0 / 24.0, null));
+        catalogue.variables.add(variableAt("Longer", 7.0 / 24.0, null));
+        catalogue.variables.add(variableAt("No period", null, null));
+        catalogue.variables.add(variableAt("Lower limit", 6.0 / 24.0, ">"));
+        SkyCatalogue.VariableStar uncertain = variableAt("Uncertain", 6.0 / 24.0, null);
+        uncertain.periodUncertainty = ":";
+        catalogue.variables.add(uncertain);
+
+        List<SkyMark> marks = SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0, threeHours);
+        assertTrue(markNamed(marks, "Fits").periodWithinSession);
+        assertFalse(markNamed(marks, "Longer").periodWithinSession);
+        assertFalse(markNamed(marks, "No period").periodWithinSession);
+        assertFalse(markNamed(marks, "Lower limit").periodWithinSession);
+        assertTrue(markNamed(marks, "Uncertain").periodWithinSession);
+        assertFalse(SkyAnnotations.project(catalogue, TRANSFORMER, 2000, 1600, 0, -1).get(0).periodWithinSession);
     }
 
     @Test
@@ -306,6 +327,21 @@ public class SkyAnnotationsTest {
         variable.periodDays = null;
         assertTrue(SkyAnnotations.variableDescription(variable).endsWith("9.86 V, amplitude 0.03"));
         assertEquals("Gaia G 14.2 · BP−RP 0.90", SkyAnnotations.starDescription(star(0, 0, 14.2, null, null, 0.9)));
+    }
+
+    private static SkyMark markNamed(List<SkyMark> marks, String name) {
+        return marks.stream().filter(mark -> name.equals(mark.label)).findFirst().orElseThrow();
+    }
+
+    /** A variable on the frame centre, with a period in days and an optional VSX lower-limit flag. */
+    private static SkyCatalogue.VariableStar variableAt(String name, Double periodDays, String periodLimit) {
+        SkyCatalogue.VariableStar variable = new SkyCatalogue.VariableStar();
+        variable.name = name;
+        variable.ra = 150.0;
+        variable.dec = 20.0;
+        variable.periodDays = periodDays;
+        variable.periodLimit = periodLimit;
+        return variable;
     }
 
     private static SkyCatalogue.Star star(double ra, double dec, double g, Double pmra, Double pmdec) {

@@ -29,6 +29,7 @@ final class LayerRow extends JPanel {
     private final OverlayStyle.Swatch swatch;
     private final JLabel name = new JLabel();
     private final JLabel count = new JLabel(" ");
+    private final JButton info = new JButton("ⓘ");
     private final JCheckBox labels;
     private final JCheckBox eye;
     private boolean available = true;
@@ -53,6 +54,12 @@ final class LayerRow extends JPanel {
         count.setHorizontalAlignment(SwingConstants.RIGHT);
         labels = SidePanelIcons.labels("Labels for " + layer.title.toLowerCase(Locale.ROOT));
         eye = SidePanelIcons.eye("Show " + layer.title.toLowerCase(Locale.ROOT));
+        info.putClientProperty("JButton.buttonType", "borderless");
+        info.setMargin(new Insets(0, 2, 0, 0));
+        info.setFocusable(false);
+        info.setVisible(false);
+        info.getAccessibleContext().setAccessibleName(PeriodWithinSession.TITLE);
+        info.addActionListener(e -> showInfo());
         labels.addActionListener(e -> state.setLabelled(layer, labels.isSelected()));
         eye.addActionListener(e -> state.setVisible(layer, eye.isSelected()));
         labels.setVisible(layer.hasLabels);
@@ -68,7 +75,12 @@ final class LayerRow extends JPanel {
         c.gridx = column++;
         c.weightx = 1;
         c.fill = GridBagConstraints.HORIZONTAL;
-        add(name, c);
+        JPanel title = new JPanel();
+        title.setOpaque(false);
+        title.setLayout(new BoxLayout(title, BoxLayout.X_AXIS));
+        title.add(name);
+        title.add(info);
+        add(title, c);
         c.gridx = column++;
         c.weightx = 0;
         c.fill = GridBagConstraints.NONE;
@@ -141,6 +153,46 @@ final class LayerRow extends JPanel {
     /** The count shown, or the reason there is none. */
     String countText() {
         return count.getText();
+    }
+
+    /**
+     * Shows a small info icon after the name. Hover and click both open {@code text}, under
+     * {@link PeriodWithinSession#TITLE}. Null or blank hides the icon.
+     */
+    void setInfo(String text) {
+        boolean show = text != null && !text.isBlank();
+        boolean wasShown = info.isVisible();
+        info.setVisible(show);
+        info.putClientProperty("periodNote", show ? text : null);
+        info.setToolTipText(show ? "<html><div style='width:260px'><b>" + PeriodWithinSession.TITLE
+                + "</b><br>" + escapeHtml(text) + "</div></html>" : null);
+        if (wasShown != show) {
+            revalidate();
+        }
+    }
+
+    /** The note the info icon shows, or null when the row has none. */
+    String infoText() {
+        Object note = info.getClientProperty("periodNote");
+        return note instanceof String text ? text : null;
+    }
+
+    /** Opens the note beside the icon. Hover uses the tooltip, which carries the same words. */
+    private void showInfo() {
+        String text = infoText();
+        if (text == null) {
+            return;
+        }
+        JPopupMenu popup = new JPopupMenu();
+        JLabel body = new JLabel("<html><div style='width:260px'><b>" + PeriodWithinSession.TITLE
+                + "</b><br>" + escapeHtml(text) + "</div></html>");
+        body.setBorder(new EmptyBorder(6, 8, 6, 8));
+        popup.add(body);
+        popup.show(info, 0, info.getHeight());
+    }
+
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /** Names the key that switches this layer in the eye's tooltip, for example "T". */

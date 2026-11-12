@@ -79,7 +79,7 @@ Each overlay layer is one row: `[swatch] Name ……… count  [Aa] [eye]`.
 - Header: title with the **A** key hint and a master switch (key **A**); a small settings menu holds the faintest-star and faintest-variable magnitude limits.
 - Hint: "Known objects in this field, from <catalogue sources>".
 - Rows: Known stars (crosshair; labels off by default; includes named stars), Known variables (diamond), Deep-sky objects (dashed ellipse), Known asteroids & comets (ring with predicted path).
-- All catalogue shapes use one off-white colour (`#F4F1E8`) and differ by shape. Rule: **colour = found by SpacePixels, white = already in a catalogue**.
+- Catalogue shapes use one off-white colour (`#F4F1E8`) and differ by shape. Rule: **colour = found by SpacePixels, white = already in a catalogue**. A known variable whose published period is at most twice the session keeps the diamond and is drawn orange (`#FF9A1F`); the ⓘ on that row explains it.
 - "Align markers to corrected plate solution" (key **C**) sits here: it moves the catalogue marks and the cursor RA/Dec, and applies to the next Detect Moving Targets report, as today.
 
 **Display stretch**

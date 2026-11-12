@@ -31,13 +31,16 @@ import java.awt.geom.RoundRectangle2D;
 /**
  * How each overlay layer is drawn: colours, strokes and shapes, used by the frame view and by the swatches of the
  * side panel, so a swatch looks like its marks. Findings take the colours of their report categories, as in the
- * HTML report; everything already in a catalogue is drawn in one off-white. A finding is vivid where it was measured in
+ * HTML report; everything already in a catalogue is drawn in one off-white, except a known variable whose
+ * published period is at most twice the session, which keeps the diamond and is drawn orange. A finding is vivid where it was measured in
  * the frame shown and faint where it was measured in another frame of the run.
  */
 final class OverlayStyle {
 
-    /** Colour of every catalogue mark: white means already known, colour means found by SpacePixels. */
+    /** Colour of a catalogue mark: white means already known, colour means found by SpacePixels. */
     static final Color CATALOGUE = new Color(0xF4F1E8);
+    /** A known variable whose published period fits the session. The same diamond as the other known variables. */
+    static final Color PERIOD_WITHIN_SESSION = new Color(0xFF9A1F);
     static final Color DETECTION_POINT = new Color(50, 255, 50);
     static final Color DETECTION_STREAK = new Color(255, 50, 50);
     /** The image well behind the swatches, so light marks show in the light theme too. */
