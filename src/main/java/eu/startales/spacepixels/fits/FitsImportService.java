@@ -155,15 +155,28 @@ public final class FitsImportService implements AutoCloseable {
     }
 
     /** Checks sample pixels on the import worker; dismissal declines import, while unreadable samples fail it. */
-    private FitsFileInformation[] checkCalibration(FitsFileInformation[] metadata) {
+    private FitsFileInformation[] checkCalibration(FitsFileInformation[] metadata) throws Exception {
         if (metadata == null || metadata.length == 0) {
             return metadata;
         }
         FrameCalibrationInspector.InspectionResult inspection = FrameCalibrationInspector.inspect(metadata);
         if (inspection.hasWarning()) {
             if (interaction != null) {
-                String[] options = {"Cancel Import (Recommended)", "Proceed Anyway"};
-                int choice = interaction.choose(inspection.warningDialogText(), "Dataset Quality Warning", options);
+                boolean alignment = inspection.isMisaligned() && metadata.length >= 3
+                        && Arrays.stream(metadata).allMatch(FitsFileInformation::isMonochrome) && interaction.canAlignFrames();
+                String[] options = alignment
+                        ? new String[]{"Cancel Import (Recommended)", "Proceed Anyway", "Align with Siril"}
+                        : new String[]{"Cancel Import (Recommended)", "Proceed Anyway"};
+                String message = inspection.warningDialogText();
+                if (alignment) message = message.replace("</body>",
+                        "<p><b>Align with Siril</b> writes aligned copies to a new folder and imports them. "
+                        + "It does not correct hot pixels or replace dark/bias calibration. Originals are kept.</p></body>");
+                int choice = interaction.choose(message, "Dataset Quality Warning", options);
+                if (alignment && choice == 2) {
+                    File aligned = interaction.alignFrames(metadata.clone());
+                    if (aligned == null) return new FitsFileInformation[0];
+                    throw new RedirectImportException(aligned);
+                }
                 if (choice != 1) {
                     LOGGER.warning("Import cancelled by user due to dataset quality warning: " + inspection.summary());
                     return new FitsFileInformation[0];

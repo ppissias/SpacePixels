@@ -57,7 +57,7 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
      * configured site. Throws with a sentence for the user when there is none.
      */
     static Observer observer(FitsFileInformation[] files, AppConfig config) {
-        ObservingSite headerSite = ObservingSite.fromHeaders(files);
+        ObservingSite headerSite = ObservingSite.fromHeaders(files, config.siteAltitude);
         if (headerSite != null) {
             return new Observer(null, headerSite, "site from the FITS header");
         }
@@ -65,7 +65,7 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
         if (JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(code)) {
             return new Observer(code, null, "IAU code " + code);
         }
-        ObservingSite site = ObservingSite.fromConfiguration(config.siteLat, config.siteLong);
+        ObservingSite site = ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
         if (site == null) {
             throw new IllegalArgumentException("No observing site: the FITS headers have none. Enter the IAU observatory "
                     + "code, or the site latitude and longitude, in the Astrometry Config tab.");

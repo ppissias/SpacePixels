@@ -46,6 +46,7 @@ public class ConfigurationPanel extends JPanel {
     /** FITS keywords the report reads for the site, in the same order (one list, owned by ObservingSite). */
     static final List<String> LATITUDE_KEYS = ObservingSite.LATITUDE_KEYS;
     static final List<String> LONGITUDE_KEYS = ObservingSite.LONGITUDE_KEYS;
+    static final List<String> ALTITUDE_KEYS = ObservingSite.ALTITUDE_KEYS;
 
     // link to main window
     private final ApplicationSettings applicationSettings;
@@ -71,9 +72,11 @@ public class ConfigurationPanel extends JPanel {
     private final JTextField observatoryCodeTextField = new JTextField();
     private final JTextField latTextField = new JTextField();
     private final JTextField longTextField = new JTextField();
+    private final JTextField altitudeTextField = new JTextField();
     private final JLabel observatoryCodeStatus = statusLabel();
     private final JLabel latStatus = statusLabel();
     private final JLabel longStatus = statusLabel();
+    private final JLabel altitudeStatus = statusLabel();
     private final JLabel footerStateLabel = new JLabel(" ");
     private final SettingsRowPanel.ControlColumn settingsControlColumn = new SettingsRowPanel.ControlColumn();
     private final JLabel footerMessageLabel = new JLabel(" ");
@@ -90,6 +93,7 @@ public class ConfigurationPanel extends JPanel {
     private String savedObservatoryCode = "";
     private String savedLat = "";
     private String savedLong = "";
+    private String savedAltitude = "";
     private String savedAstap = "";
     private boolean savedAstrometryUseOwnKey;
     private String savedAstrometryApiKey = "";
@@ -98,6 +102,12 @@ public class ConfigurationPanel extends JPanel {
     private long saveVersion;
     /** True while the fields are filled from the configuration, so the fill is not treated as an edit. */
     private boolean loading;
+    private Runnable fetchSettingsChanged = () -> { };
+
+    /** Notifies the main readout after valid in-memory edits; listener and all notifications run on the EDT. */
+    void onFetchSettingsChanged(Runnable listener) {
+        fetchSettingsChanged = java.util.Objects.requireNonNull(listener);
+    }
 
     /** Astrometry settings. {@code frames} supplies the selected frame for "fill site from the header". */
     public ConfigurationPanel(ApplicationSettings applicationSettings, SessionAccess sessions, FrameList frames,
@@ -117,6 +127,7 @@ public class ConfigurationPanel extends JPanel {
         UiStyle.numberInput(observatoryCodeTextField);
         UiStyle.numberInput(latTextField);
         UiStyle.numberInput(longTextField);
+        UiStyle.numberInput(altitudeTextField);
         astrometryKeyField.setColumns(API_KEY_COLUMNS);
 
         JPanel plateSolving = section("Plate Solving");
@@ -209,6 +220,12 @@ public class ConfigurationPanel extends JPanel {
                 "Site Longitude (E)",
                 "Observation site longitude for accurate celestial annotation. If the FITS headers hold a longitude, SpacePixels uses that value; this field is the fallback.<br><b>Format:</b> signed decimal degrees, positive for east and negative for west, e.g. <code>23.7275</code> or <code>-70.4030</code>. A hemisphere letter also works, e.g. <code>70.4030W</code>.",
                 fieldWithStatus(longTextField, longStatus)));
+        observingSite.add(createConfigRow(
+                "Site Altitude (m)",
+                "Observer height above the WGS84/GPS reference ellipsoid, in metres. A valid FITS elevation takes priority; "
+                        + "this value is the fallback when the header has none. Leave blank to assume 0 m. Negative elevations are allowed. "
+                        + "When JPL uses an IAU observatory code, its registered location is used instead.",
+                fieldWithStatus(altitudeTextField, altitudeStatus)));
         mainContent.add(observingSite);
 
         JScrollPane scrollPane = new JScrollPane(mainContent);
@@ -218,7 +235,7 @@ public class ConfigurationPanel extends JPanel {
 
         // --- FOOTER ---
         JButton fillSiteButton = new JButton("Fill Site from FITS Header");
-        fillSiteButton.setToolTipText("Copy the site latitude and longitude from the selected frame's FITS header (or the first frame) into the fallback fields.");
+        fillSiteButton.setToolTipText("Copy the site latitude, longitude and altitude from the selected frame's FITS header (or the first frame) into the fallback fields.");
         fillSiteButton.addActionListener(e -> fillSiteFromHeader());
 
         JButton revertButton = new JButton("Revert");
@@ -267,6 +284,7 @@ public class ConfigurationPanel extends JPanel {
         onEdit(observatoryCodeTextField, text -> validateObservatoryCode(text), value -> config().observatoryCode = value);
         onEdit(latTextField, text -> validateCoordinate(text, 90, "latitude"), value -> config().siteLat = value);
         onEdit(longTextField, text -> validateCoordinate(text, 180, "longitude"), value -> config().siteLong = value);
+        onEdit(altitudeTextField, ConfigurationPanel::validateAltitude, value -> config().siteAltitude = value);
     }
 
     public void refreshComponents() {
@@ -286,12 +304,14 @@ public class ConfigurationPanel extends JPanel {
             observatoryCodeTextField.setText(nullToEmpty(config.observatoryCode));
             latTextField.setText(nullToEmpty(config.siteLat));
             longTextField.setText(nullToEmpty(config.siteLong));
+            altitudeTextField.setText(nullToEmpty(config.siteAltitude));
         } finally {
             loading = false;
         }
         savedObservatoryCode = nullToEmpty(config.observatoryCode);
         savedLat = nullToEmpty(config.siteLat);
         savedLong = nullToEmpty(config.siteLong);
+        savedAltitude = nullToEmpty(config.siteAltitude);
         savedAstap = nullToEmpty(config.astapExecutablePath);
         savedAstrometryUseOwnKey = config.astrometryNetUseOwnKey;
         savedAstrometryApiKey = nullToEmpty(config.astrometryNetApiKey);
@@ -301,6 +321,7 @@ public class ConfigurationPanel extends JPanel {
         checkAstap();
         showAstrometryAccountNote();
         updateSavedState();
+        fetchSettingsChanged.run();
     }
 
     // ==========================================
@@ -329,6 +350,7 @@ public class ConfigurationPanel extends JPanel {
                 String problem = validator.apply(field.getText().trim());
                 if (!loading && problem == null && applicationSettings != null) {
                     apply.accept(field.getText().trim());
+                    fetchSettingsChanged.run();
                     footerMessageLabel.setText(" ");
                 }
                 validateAll();
@@ -342,6 +364,14 @@ public class ConfigurationPanel extends JPanel {
                 observatoryCodeNote(observatoryCodeTextField.getText().trim()));
         showStatus(latStatus, validateCoordinate(latTextField.getText().trim(), 90, "latitude"), headerNote(LATITUDE_KEYS, latTextField.getText().trim()));
         showStatus(longStatus, validateCoordinate(longTextField.getText().trim(), 180, "longitude"), headerNote(LONGITUDE_KEYS, longTextField.getText().trim()));
+        showStatus(altitudeStatus, validateAltitude(altitudeTextField.getText().trim()),
+                headerNote(ALTITUDE_KEYS, altitudeTextField.getText().trim()));
+    }
+
+    /** Accepts an optional finite height in metres, including values below the reference ellipsoid. */
+    static String validateAltitude(String text) {
+        if (text.isEmpty()) return null;
+        return ObservingSite.parseAltitude(text) == null ? "Enter a finite altitude in metres." : null;
     }
 
     /** Returns null when the code is empty or valid, otherwise the reason. */
@@ -408,6 +438,10 @@ public class ConfigurationPanel extends JPanel {
             if (sessions.current() == null) {
                 return " ";
             }
+            if (keys.equals(ALTITUDE_KEYS)) {
+                return fieldText.isEmpty() ? "Not set: assuming 0 m (no FITS elevation)."
+                        : "✓ Used for this session (no altitude in the FITS headers).";
+            }
             return fieldText.isEmpty() ? "Not set, and no site in the FITS headers." : "✓ Used for this session (no site in the FITS headers).";
         }
         return "This session's FITS header has " + header[1] + " (" + header[0] + "); that value is used.";
@@ -426,6 +460,7 @@ public class ConfigurationPanel extends JPanel {
             }
             for (String key : keys) {
                 String value = header.get(key);
+                if (keys.equals(ALTITUDE_KEYS) && ObservingSite.parseAltitude(value) == null) continue;
                 if (value != null && !value.trim().replace("'", "").isEmpty()) {
                     return new String[]{key, value.trim().replace("'", "").trim()};
                 }
@@ -439,6 +474,7 @@ public class ConfigurationPanel extends JPanel {
         FitsFileInformation[] files = selected != null ? new FitsFileInformation[]{selected} : importedFiles();
         String lat = null;
         String lon = null;
+        String altitude = null;
         if (files != null) {
             for (FitsFileInformation file : files) {
                 Map<String, String> header = file.getFitsHeader();
@@ -447,10 +483,11 @@ public class ConfigurationPanel extends JPanel {
                 }
                 lat = lat != null ? lat : firstValue(header, LATITUDE_KEYS);
                 lon = lon != null ? lon : firstValue(header, LONGITUDE_KEYS);
+                altitude = altitude != null ? altitude : firstValue(header, ALTITUDE_KEYS);
             }
         }
-        if (lat == null && lon == null) {
-            footerMessageLabel.setText("The FITS header has no site latitude or longitude.");
+        if (lat == null && lon == null && altitude == null) {
+            footerMessageLabel.setText("The FITS header has no site latitude, longitude or altitude.");
             return;
         }
         if (lat != null) {
@@ -459,12 +496,14 @@ public class ConfigurationPanel extends JPanel {
         if (lon != null) {
             longTextField.setText(lon);
         }
+        if (altitude != null) altitudeTextField.setText(altitude);
         footerMessageLabel.setText("Site filled from the FITS header.");
     }
 
     private static String firstValue(Map<String, String> header, List<String> keys) {
         for (String key : keys) {
             String value = header.get(key);
+            if (keys.equals(ALTITUDE_KEYS) && ObservingSite.parseAltitude(value) == null) continue;
             if (value != null && !value.trim().replace("'", "").isEmpty()) {
                 return value.trim().replace("'", "").trim();
             }
@@ -493,6 +532,7 @@ public class ConfigurationPanel extends JPanel {
                 savedObservatoryCode = nullToEmpty(snapshot.observatoryCode);
                 savedLat = nullToEmpty(snapshot.siteLat);
                 savedLong = nullToEmpty(snapshot.siteLong);
+                savedAltitude = nullToEmpty(snapshot.siteAltitude);
                 savedAstap = nullToEmpty(snapshot.astapExecutablePath);
                 savedAstrometryUseOwnKey = snapshot.astrometryNetUseOwnKey;
                 savedAstrometryApiKey = nullToEmpty(snapshot.astrometryNetApiKey);
@@ -521,13 +561,15 @@ public class ConfigurationPanel extends JPanel {
         observatoryCodeTextField.setText(savedObservatoryCode);
         latTextField.setText(savedLat);
         longTextField.setText(savedLong);
+        altitudeTextField.setText(savedAltitude);
         footerMessageLabel.setText("Reverted to the saved values.");
     }
 
     private void updateSavedState() {
         boolean fieldsMatchConfig = observatoryCodeTextField.getText().trim().equals(nullToEmpty(config().observatoryCode))
                 && latTextField.getText().trim().equals(nullToEmpty(config().siteLat))
-                && longTextField.getText().trim().equals(nullToEmpty(config().siteLong));
+                && longTextField.getText().trim().equals(nullToEmpty(config().siteLong))
+                && altitudeTextField.getText().trim().equals(nullToEmpty(config().siteAltitude));
         if (!fieldsMatchConfig) {
             footerStateLabel.setForeground(warningColor());
             footerStateLabel.setText("● Fix the marked field; the last valid value stays in use");
@@ -544,6 +586,7 @@ public class ConfigurationPanel extends JPanel {
         return !nullToEmpty(config().observatoryCode).equals(savedObservatoryCode)
                 || !nullToEmpty(config().siteLat).equals(savedLat)
                 || !nullToEmpty(config().siteLong).equals(savedLong)
+                || !nullToEmpty(config().siteAltitude).equals(savedAltitude)
                 || !nullToEmpty(config().astapExecutablePath).equals(savedAstap)
                 || config().astrometryNetUseOwnKey != savedAstrometryUseOwnKey
                 || !nullToEmpty(config().astrometryNetApiKey).equals(savedAstrometryApiKey)
@@ -557,6 +600,7 @@ public class ConfigurationPanel extends JPanel {
             return;
         }
         config().skyCatalogueStarMagnitude = ((Number) starDepthSpinner.getValue()).doubleValue();
+        fetchSettingsChanged.run();
         updateSavedState();
         saveDefaults(false);
     }
@@ -567,6 +611,7 @@ public class ConfigurationPanel extends JPanel {
             return;
         }
         config().solarSystemMagnitude = ((Number) solarDepthSpinner.getValue()).doubleValue();
+        fetchSettingsChanged.run();
         updateSavedState();
         saveDefaults(false);
     }

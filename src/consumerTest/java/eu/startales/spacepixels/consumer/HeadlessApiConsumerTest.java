@@ -111,11 +111,12 @@ public class HeadlessApiConsumerTest {
                         new VariableStarReportOptions(13, VariableStarReportOptions.SortOrder.SIGNIFICANCE));
         SpacePixelsPipelineRequest request = SpacePixelsPipelineRequest.builder(input.toFile())
                 .detectionConfig(SyntheticDatasetFactory.createSyntheticDetectionConfig())
-                .runOptions(DetectionRunOptions.defaults().withVisualization(visualization))
+                .runOptions(new DetectionRunOptions("", "", "", "1234.5", visualization, 30))
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                 .generateReport(true)
                 .build();
         assertEquals(visualization, request.getRunOptions().visualization());
+        assertEquals("1234.5", request.getRunOptions().siteAltitude());
         SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(request);
         String profile = Files.readString(result.getExportDirectory().toPath().resolve("detection_config.json"));
         assertTrue(profile, profile.matches("(?s).*\"variableStarMaxCandidateCards\"\\s*:\\s*13\\b.*"));

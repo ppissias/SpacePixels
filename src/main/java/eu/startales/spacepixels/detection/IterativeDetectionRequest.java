@@ -32,6 +32,6 @@ public record IterativeDetectionRequest(File directory, DetectionConfig config, 
     /** Returns the admitted application options without consulting runtime defaults during a pass. */
     public DetectionRunOptions runOptions() {
         return new DetectionRunOptions(appConfig.observatoryCode,
-                appConfig.siteLat, appConfig.siteLong, visualization, autoTuneFrames);
+                appConfig.siteLat, appConfig.siteLong, appConfig.siteAltitude, visualization, autoTuneFrames);
     }
 }

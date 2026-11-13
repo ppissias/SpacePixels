@@ -12,6 +12,7 @@ public class AppConfig {
         copy.imageDEC = imageDEC;
         copy.siteLat = siteLat;
         copy.siteLong = siteLong;
+        copy.siteAltitude = siteAltitude;
         copy.pixelSize = pixelSize;
         copy.focalLength = focalLength;
         copy.skyCatalogueStarMagnitude = skyCatalogueStarMagnitude;
@@ -31,6 +32,8 @@ public class AppConfig {
     public String imageDEC = "";
     public String siteLat = "";
     public String siteLong = "";
+    /** Optional fallback height above the WGS84 ellipsoid in metres; blank retains the 0 m assumption. */
+    public String siteAltitude = "";
     public String pixelSize = "";
     public String focalLength = "";
     /** Faintest Gaia G magnitude fetched by Fetch Sky Catalogue. */

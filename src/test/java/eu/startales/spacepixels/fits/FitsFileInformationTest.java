@@ -88,7 +88,10 @@ public class FitsFileInformationTest {
         FitsFileInformation solved = info.withFitsHeader(Map.of(
                 "DATE-OBS", "2026-10-01T00:05:00Z",
                 "CTYPE1", "RA---TAN",
-                "CRVAL1", "150.0"));
+                "CRVAL1", "150.0",
+                "CTYPE2", "DEC--TAN", "CRVAL2", "20.0",
+                "CRPIX1", "320.5", "CRPIX2", "240.5",
+                "CDELT1", "-0.0004", "CDELT2", "0.0004"));
         assertNotSame(info, solved);
         assertFalse(info.isWcsSolved());
         assertTrue(solved.isWcsSolved());

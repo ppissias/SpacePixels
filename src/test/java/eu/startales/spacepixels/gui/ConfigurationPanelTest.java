@@ -14,6 +14,16 @@ import static org.junit.Assert.assertTrue;
 
 public class ConfigurationPanelTest {
 
+    /** Heights accept decimal metres and negatives, while nonfinite or nonnumeric edits remain unapplied. */
+    @Test public void altitudeAcceptsOnlyFiniteMetres() {
+        assertNull(ConfigurationPanel.validateAltitude(""));
+        assertNull(ConfigurationPanel.validateAltitude("1234.5"));
+        assertNull(ConfigurationPanel.validateAltitude("-120,5"));
+        assertNotNull(ConfigurationPanel.validateAltitude("NaN"));
+        assertNotNull(ConfigurationPanel.validateAltitude("Infinity"));
+        assertNotNull(ConfigurationPanel.validateAltitude("high"));
+    }
+
     @Rule
     public TemporaryFolder temporaryFolder = new TemporaryFolder();
 

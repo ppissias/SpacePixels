@@ -38,9 +38,11 @@ public class IterativeDetectionRunTest {
         config.enableVariableStarDetection = true;
         AppConfig application = new AppConfig();
         application.siteLat = "37";
+        application.siteAltitude = "1234.5";
         IterativeDetectionRequest request = request(source, config, application, new IterativeDetectionPlan(5, 3, 8));
         config.enableVariableStarDetection = false;
         application.siteLat = "wrong";
+        application.siteAltitude = "9000";
         request.config().enableVariableStarDetection = false;
         request.appConfig().siteLat = "also wrong";
         List<Integer> sizes = new ArrayList<>();
@@ -50,6 +52,7 @@ public class IterativeDetectionRunTest {
                     sizes.add(files.length);
                     assertTrue(settings.enableVariableStarDetection);
                     assertEquals("37", options.siteLatitude());
+                    assertEquals("1234.5", options.siteAltitude());
                     assertEquals(files.length, Arrays.stream(files).map(FitsFileInformation::getFileName).distinct().count());
                     settings.enableVariableStarDetection = false;
                     progress.onProgressUpdate(30, "running");

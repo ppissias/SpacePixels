@@ -139,6 +139,7 @@ public class SolarSystemObjectsTest {
     public void theQueryComesFromTheFramesAndTheSettings() {
         AppConfig config = new AppConfig();
         config.solarSystemMagnitude = 18.5;
+        config.siteAltitude = "1234.5";
         FitsFileInformation first = frame("a.fit", "2026-03-10T02:00:00", "60", true);
         FitsFileInformation last = frame("b.fit", "2026-03-10T03:00:00", "60", true);
         SolarSystemQuery query = SolarSystemQuery.of(new FitsFileInformation[]{first, last}, config);
@@ -148,6 +149,7 @@ public class SolarSystemObjectsTest {
         assertEquals(2000, query.width());
         assertEquals("site from the FITS header", query.observer().description());
         assertEquals(37.9, query.observer().site().latitudeDeg(), 1e-12);
+        assertEquals(1234.5, query.observer().site().altitudeMeters(), 0);
 
         config.observatoryCode = " j95 ";
         assertEquals("the frames' own site comes before a configured code, which may be another observatory",
@@ -165,6 +167,7 @@ public class SolarSystemObjectsTest {
         expectProblem(() -> SolarSystemQuery.of(new FitsFileInformation[]{noSite}, config), "No observing site");
         config.siteLat = "37.9";
         config.siteLong = "23.7E";
+        assertEquals(1234.5, SolarSystemQuery.of(new FitsFileInformation[]{noSite}, config).observer().site().altitudeMeters(), 0);
         assertEquals("site from the Astrometry Config tab",
                 SolarSystemQuery.of(new FitsFileInformation[]{noSite}, config).observer().description());
         FitsFileInformation noTime = frame("d.fit", null, "60", true);

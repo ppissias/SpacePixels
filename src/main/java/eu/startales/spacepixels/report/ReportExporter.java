@@ -43,6 +43,14 @@ public final class ReportExporter {
             if (Cancellation.isCancellation(failure)) OutputFolders.deleteUnfinished(exportDir);
             throw failure;
         }
+        String pathWarning = ReportPathWarnings.afterDetection(new File(exportDir, REPORT_FILE_NAME));
+        try {
+            ReportPathWarnings.addCompletedReportNote(new File(exportDir, REPORT_FILE_NAME), pathWarning);
+        } catch (IOException failure) {
+            java.util.logging.Logger.getLogger(ReportExporter.class.getName()).warning(
+                    "Could not add the Windows path notice to the completed report: " + failure.getMessage());
+        }
+        if (pathWarning != null) java.util.logging.Logger.getLogger(ReportExporter.class.getName()).warning(pathWarning);
         return new File(exportDir, REPORT_FILE_NAME);
     }
 

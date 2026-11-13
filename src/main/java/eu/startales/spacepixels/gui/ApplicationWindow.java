@@ -217,6 +217,8 @@ public class ApplicationWindow {
                 }, this::setSessionTabsEnabled, viewers);
         configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
                 storage, () -> closing);
+        configurationApplicationPanel.onFetchSettingsChanged(mainApplicationPanel::refreshWorkflowStatus);
+        mainApplicationPanel.configureAstrometry(() -> tabbedPane.setSelectedComponent(configurationApplicationPanel));
         stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel.batchStretchAction(),
                 mainApplicationPanel::showInPreview, this::showStretchEditor);
         detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
@@ -431,7 +433,7 @@ public class ApplicationWindow {
     private void importFolder(File folder, java.util.function.Consumer<ProcessingSession> imported) {
         if (folder != null && folder.isDirectory()) {
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
-                    new FitsImportTask(folder, storage, new GuiFitsImportInteraction()),
+                    new FitsImportTask(folder, storage, new GuiFitsImportInteraction(applicationSettings.getConfig().sirilExecutablePath)),
                     (handle, outcome) -> importFinished(handle.session(), outcome, imported));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());

@@ -260,9 +260,9 @@ public final class FitsFileInformation {
         return getGoogleEarthUrl() != null;
     }
 
+    /** Whether the header supplies a celestial solution supported by the coordinate transformer. */
     public boolean isWcsSolved() {
-        // A FITS file is widely considered Plate Solved if it contains standard WCS coordinate mappings
-        return fitsHeader.containsKey("CRVAL1") && fitsHeader.containsKey("CTYPE1");
+        return WcsCoordinateTransformer.fromHeader(fitsHeader) != null;
     }
 
     @Override

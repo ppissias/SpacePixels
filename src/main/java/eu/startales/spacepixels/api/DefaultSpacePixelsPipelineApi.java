@@ -77,6 +77,12 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             }
 
             AutoTunerResult autoTuneResult = null;
+            if (request.isGenerateReport()) {
+                String pathWarning = eu.startales.spacepixels.report.ReportPathWarnings.beforeDetection(
+                        preparedDirectory.getPreparedInputDirectory(), false);
+                if (pathWarning != null) java.util.logging.Logger.getLogger(DefaultSpacePixelsPipelineApi.class.getName())
+                        .warning(pathWarning);
+            }
             int pipelineStartPercent = 15;
             DetectionConfig pipelineBaseConfig = baseConfig.clone();
             if (request.getAutoTuneProfile() != null) {

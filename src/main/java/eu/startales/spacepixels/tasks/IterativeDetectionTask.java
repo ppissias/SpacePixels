@@ -30,6 +30,10 @@ public class IterativeDetectionTask implements Job<File> {
     private final IterativeDetectionPipelineService pipeline = new IterativeDetectionPipelineService();
     /** Where the run's live-view pictures go; null makes none. */
     private RunPreviewSink previews;
+    private volatile String reportPathWarning;
+
+    /** Returns the completed run's worker-computed notice without filesystem access. */
+    public String reportPathWarning() { return reportPathWarning; }
     private eu.startales.spacepixels.fits.ImageScaling.Decision scalingDecision;
 
     /** Supplies the admitted worker's whole-sequence outlier decision before the task starts. */
@@ -76,6 +80,16 @@ public class IterativeDetectionTask implements Job<File> {
 
     private JobOutcome<File> runCancellable(JobContext context) throws Exception {
         File report = pipeline.run(request, reportPrompt, context::progress, preFlight, scalingDecision);
+        reportPathWarning = eu.startales.spacepixels.report.ReportPathWarnings.afterDetection(report);
+        if (reportPathWarning != null) {
+            java.util.logging.Logger.getLogger(IterativeDetectionTask.class.getName()).warning(reportPathWarning);
+            try {
+                eu.startales.spacepixels.report.ReportPathWarnings.addCompletedReportNote(report, reportPathWarning);
+            } catch (java.io.IOException failure) {
+                java.util.logging.Logger.getLogger(IterativeDetectionTask.class.getName()).warning(
+                        "Could not add the Windows path notice to the completed index: " + failure.getMessage());
+            }
+        }
         return report == null ? JobOutcome.declined("Iterative detection declined after the dataset quality warning.")
                 : JobOutcome.completed(report);
     }

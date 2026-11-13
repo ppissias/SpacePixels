@@ -14,6 +14,21 @@ import static org.junit.Assert.assertTrue;
  */
 public class SpacePixelsAppConfigIOTest {
 
+    /** Elevation survives persistence and all admitted-options copies; old callers keep their 0 m fallback. */
+    @Test public void altitudeIsSavedAndCapturedIndependently() throws Exception {
+        AppConfig config = new AppConfig();
+        config.siteAltitude = "1234.5";
+        StringWriter writer = new StringWriter();
+        SpacePixelsAppConfigIO.write(writer, config.copy());
+        assertEquals("1234.5", SpacePixelsAppConfigIO.load(new StringReader(writer.toString())).siteAltitude);
+        assertEquals("", SpacePixelsAppConfigIO.load(new StringReader("{}" )).siteAltitude);
+        var options = DetectionRunOptions.capture(config, 20);
+        config.siteAltitude = "2000";
+        assertEquals("1234.5", options.withAutoTuneMaxCandidateFrames(30)
+                .withVisualization(VisualizationSettings.defaults()).applicationConfig().siteAltitude);
+        assertEquals("", new DetectionRunOptions("", "", "", VisualizationSettings.defaults(), 20).siteAltitude());
+    }
+
     /** Preparation executable selections survive both the queued snapshot copy and JSON persistence. */
     @Test public void preparationPathsRoundTripAndOldFilesKeepThemUnset() throws Exception {
         AppConfig config = new AppConfig();

@@ -18,6 +18,36 @@ import static org.junit.Assert.*;
 public class PreparedSequenceWriterTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();
 
+    /** Registered pixels inherit source solving hints but never the obsolete source WCS. */
+    @Test public void preservesOnlyApproximateSourceWcs() throws Exception {
+        Path source = temporary.newFile("solved.fit").toPath();
+        try (Fits fits = new Fits()) {
+            var image = Fits.makeHDU(new short[][]{{1, 2}, {3, 4}});
+            var h = image.getHeader();
+            h.addValue("CTYPE1", "RA---TAN", null); h.addValue("CTYPE2", "DEC--TAN", null);
+            h.addValue("CRPIX1", 1.5, null); h.addValue("CRPIX2", 1.5, null);
+            h.addValue("CRVAL1", 120.0, null); h.addValue("CRVAL2", -20.0, null);
+            h.addValue("CD1_1", -1.0 / 3600, null); h.addValue("CD1_2", 0.0, null);
+            h.addValue("CD2_1", 0.0, null); h.addValue("CD2_2", 1.0 / 3600, null);
+            fits.addHDU(image); fits.write(source.toFile());
+        }
+        Path unsolved = temporary.newFile("unsolved.fit").toPath();
+        try (Fits fits = new Fits()) { fits.addHDU(Fits.makeHDU(new short[][]{{1, 2}, {3, 4}})); fits.write(unsolved.toFile()); }
+        var frame = new PreparedSequenceWriter.Frame(source, source, source);
+        var missing = new PreparedSequenceWriter.Frame(unsolved, unsolved, unsolved);
+        var result = PreparedSequenceWriter.write(List.of(missing, frame, missing),
+                temporary.getRoot().toPath().resolve("hints"), () -> false, ignored -> { });
+        for (Path output : result.files()) try (Fits fits = new Fits(output.toFile())) {
+            var h = FitsInput.getImageHDU(fits).getHeader();
+            assertFalse(h.containsKey("CTYPE1"));
+            assertFalse(h.containsKey("CRVAL1"));
+            var hints = eu.startales.spacepixels.fits.PlateSolveHints.read(h, 2);
+            assertNotNull(hints);
+            assertEquals(120, hints.raDegrees(), 1e-8);
+            assertEquals(-20, hints.decDegrees(), 1e-8);
+        }
+    }
+
     /** All frames share one transform, so relative flux variation survives conversion and negative values do not clip. */
     @Test public void sharesOneLinearTransformAndRestoresExactSourceMetadata() throws Exception {
         List<PreparedSequenceWriter.Frame> frames = new ArrayList<>();

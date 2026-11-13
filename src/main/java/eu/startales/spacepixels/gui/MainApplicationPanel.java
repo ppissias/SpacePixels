@@ -80,6 +80,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private StretchPanel stretch;
     private DetectionConfigurationPanel detectionSettings;
     private Runnable showDetectionSettings;
+    private Runnable showAstrometrySettings = () -> { };
 
     // --- NEW: PROGRESS DIALOG ---
     private final ProcessingProgressDialog progressDialog;
@@ -98,6 +99,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final SteadyWidthButton solveButton = new SteadyWidthButton();
     private final JButton skyCatalogueButton = new JButton(FETCH_SKY_CATALOGUE);
     private final JButton solarSystemButton = new JButton(FETCH_SOLAR_SYSTEM);
+    private final FetchSettingsPanel fetchSettings = new FetchSettingsPanel(skyCatalogueButton, solarSystemButton,
+            () -> { if (!this.uiLocked) showAstrometrySettings.run(); });
     private final SteadyWidthButton detectSingleButton = new SteadyWidthButton();
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton qualityControlButton = new JButton("Run quality control");
@@ -395,10 +398,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 buttonRow(importButton),
                 buttonRow(convertMonoButton));
         JPanel astrometryGroup = new WorkflowStep(workflowSteps, 2, "Astrometry", true, correctionStatusRow(),
+                buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio),
                 buttonRow(solveButton),
-                buttonRow(skyCatalogueButton),
-                buttonRow(solarSystemButton),
-                buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio));
+                fetchSettings);
         JPanel inspectGroup = new WorkflowStep(workflowSteps, 3, "Inspect", true, inspectStatus,
                 buttonRow(blinkButton, detectSingleButton),
                 buttonRow(manualTransientInspectionButton),
@@ -709,6 +711,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         preparationLock = java.util.Objects.requireNonNull(lock);
     }
 
+    /** Supplies tab navigation without giving the panel ownership of the application window; EDT only. */
+    void configureAstrometry(Runnable opener) {
+        showAstrometrySettings = java.util.Objects.requireNonNull(opener);
+    }
+
     /** Whether a folder can be imported now, from the button or by dropping it on the window. */
     boolean isImportEnabled() {
         return CommandAvailability.of(CommandAvailability.Command.IMPORT, commandFacts()).enabled();
@@ -758,6 +765,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
+        if (!reportPrompt.confirmReportPath(eu.startales.spacepixels.report.ReportPathWarnings.beforeDetection(
+                new File(owner.getFiles()[0].getFilePath()).getAbsoluteFile().getParentFile(), false))) return;
         DetectionTask detection = new DetectionTask(owner.getFiles(), settings,
                 DetectionRunOptions.capture(applicationSettings.getConfig(), configuration.autoTuneMaxCandidateFrames())
                         .withVisualization(configuration.visualizationSettings()),
@@ -768,7 +777,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         // The overlays first: they belong to the session whatever became of the report.
         startJob(JobKind.DETECTION, owner, detection, (handle, outcome) -> {
             showDetectionOverlays(handle.session(), detection.detectedOverlays());
-            showDetectionOutcome(handle, outcome);
+            showDetectionOutcome(handle, outcome, detection.reportPathWarning());
         });
     }
 
@@ -942,6 +951,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames(),
                 sessions.current() == null ? null : sessions.current().getSkyCatalogue().snapshot());
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
+        if (!reportPrompt.confirmReportPath(eu.startales.spacepixels.report.ReportPathWarnings.beforeDetection(
+                selected.directory(), true))) return;
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->
                 reportPrompt.confirm(summary, java.util.Arrays.stream(files).anyMatch(FitsFileInformation::isWcsSolved),
                         50, "Iterative pass: " + files.length + " frames", passSettings), reportPrompt::confirmPreFlight)
@@ -956,7 +967,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private void showIterativeOutcome(JobOutcome<File> outcome, IterativeDetectionTask task) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
             statusLabel.setText("Iterative results: " + completed.result().getParent());
-            promptUserToOpenReport(completed.result());
+            promptUserToOpenReport(completed.result(), task.reportPathWarning());
         } else {
             File index = task.getIndexFile();
             if (index != null && index.isFile()) {
@@ -1106,6 +1117,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Updates the status line of every group, and the commands with their disabled-button reasons. */
     @Override
     public void refreshWorkflowStatus() {
+        fetchSettings.showSettings(applicationSettings.getConfig());
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         colourNotice.setVisible(frames > 0 && containsColorImages);
         refreshFrameList(frames);
@@ -1915,13 +1927,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     }
 
     /** The end of Detect Moving Targets and Detect Iteratively: offers the report, or says what went wrong. */
-    private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome) {
+    private void showDetectionOutcome(JobHandle handle, JobOutcome<File> outcome, String reportPathWarning) {
         if (outcome instanceof JobOutcome.Completed<File> completed) {
             if (sessions.isCurrent(handle.session())) {
                 currentReportSettings = activeQualitySettingsKey;
                 showLastReport(completed.result());
             }
-            promptUserToOpenReport(completed.result());
+            promptUserToOpenReport(completed.result(), reportPathWarning);
         } else {
             showDetectionProblem(outcome);
         }
@@ -2328,12 +2340,15 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
     }
 
-    private void promptUserToOpenReport(File reportFile) {
-        if (reportFile != null && reportFile.exists()) {
+    /** Offers the completed HTML/index and its worker-computed notice without filesystem access on the EDT. */
+    private void promptUserToOpenReport(File reportFile, String pathWarning) {
+        if (reportFile != null) {
 
-            String message = reportFile.isDirectory()
-                    ? "Iterative pipeline completed.\n\nWould you like to open the results folder to view the separate reports?"
+            String message = reportFile.getName().equals("index.html")
+                    ? "Iterative pipeline completed.\n\nWould you like to open the results index to view the separate reports?"
                     : "Detection pipeline completed successfully.\n\nWould you like to open the generated HTML report?";
+
+            if (pathWarning != null) message = pathWarning + "\n\n" + message;
 
             int response = JOptionPane.showConfirmDialog(
                     null,

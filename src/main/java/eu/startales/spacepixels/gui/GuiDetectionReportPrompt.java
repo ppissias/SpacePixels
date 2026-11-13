@@ -34,7 +34,7 @@ public final class GuiDetectionReportPrompt {
                 JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE),
                 panel -> {
                     String[] options = {"Cancel Detection (Recommended)", "Proceed Anyway"};
-                    return JOptionPane.showOptionDialog(parent, panel, "Pre-Detection Quality Warning",
+                    return JOptionPane.showOptionDialog(parent, panel, "Pre-Detection Warning",
                             JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options, options[0]);
                 });
     }
@@ -85,9 +85,21 @@ public final class GuiDetectionReportPrompt {
     public boolean confirmPreFlight(FrameCalibrationInspector.InspectionResult inspection) {
         if (Thread.currentThread().isInterrupted()) return false;
         if (inspection == null || !inspection.hasWarning()) return true;
+        return confirmPreFlightMessage(() -> new JLabel(inspection.warningDialogText()));
+    }
+
+    /** Confirms a Windows report-path warning on the EDT; an absent warning needs no decision. */
+    public boolean confirmReportPath(String warning) {
+        if (Thread.currentThread().isInterrupted()) return false;
+        if (warning == null || warning.isBlank()) return true;
+        return confirmPreFlightMessage(() -> wrapped(warning));
+    }
+
+    /** Dispatches a pre-run decision to the EDT and declines on dismissal, interruption or failure. */
+    private boolean confirmPreFlightMessage(java.util.function.Supplier<JComponent> message) {
         FutureTask<Boolean> question = new FutureTask<>(() -> {
             JPanel panel = new JPanel(new java.awt.BorderLayout());
-            panel.add(new JLabel(inspection.warningDialogText()));
+            panel.add(message.get());
             return preFlightConfirmation.applyAsInt(panel) == 1;
         });
         if (SwingUtilities.isEventDispatchThread()) question.run(); else SwingUtilities.invokeLater(question);

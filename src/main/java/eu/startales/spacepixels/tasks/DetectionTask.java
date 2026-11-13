@@ -48,6 +48,10 @@ public class DetectionTask implements Job<File> {
     private RunPreviewSink previews;
     /** Set on the worker as soon as the detection finishes; null until then. */
     private volatile DetectionOverlays detected;
+    private volatile String reportPathWarning;
+
+    /** Returns the worker's completed-output path notice without filesystem access. */
+    public String reportPathWarning() { return reportPathWarning; }
 
     /**
      * Creates a noninteractive job with the default Auto-Tune frame limit that declines report export above 50
@@ -113,6 +117,7 @@ public class DetectionTask implements Job<File> {
         if (exportDir == null) {
             return JobOutcome.declined("Report generation aborted by user due to high track count. Try raising your thresholds.");
         }
+        reportPathWarning = eu.startales.spacepixels.report.ReportPathWarnings.afterDetection(exportDir);
         context.progress(100, "Batch detection complete!");
         return JobOutcome.completed(exportDir);
     }

@@ -24,19 +24,32 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
      */
     public static final List<String> LATITUDE_KEYS = List.of("SITELAT", "OBSGEO-B", "LAT-OBS", "OBSLAT");
     public static final List<String> LONGITUDE_KEYS = List.of("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS", "OBSLON");
-    public static final List<String> ALTITUDE_KEYS = List.of("SITEELEV", "OBSALT", "ALT-OBS", "ELEVATIO");
+    public static final List<String> ALTITUDE_KEYS = List.of("SITEELEV", "OBSGEO-H", "OBSALT", "ALT-OBS", "ELEVATIO");
 
     /**
      * The site of these frames, or null when neither a header nor the fallback holds a valid one. The fallback values
      * are text as typed, such as {@code "37.98"} or {@code "24.6272S"}; either may be null.
      */
     public static ObservingSite resolve(FitsFileInformation[] files, String fallbackLatitude, String fallbackLongitude) {
-        ObservingSite site = fromHeaders(files);
-        return site != null ? site : fromConfiguration(fallbackLatitude, fallbackLongitude);
+        return resolve(files, fallbackLatitude, fallbackLongitude, null);
+    }
+
+    /** Resolves header coordinates first; valid FITS heights override the optional metre-valued fallback. */
+    public static ObservingSite resolve(FitsFileInformation[] files, String fallbackLatitude, String fallbackLongitude,
+                                        String fallbackAltitude) {
+        ObservingSite site = fromHeaders(files, fallbackAltitude);
+        if (site != null) return site;
+        Double height = headerAltitude(files);
+        return fromConfiguration(fallbackLatitude, fallbackLongitude, height == null ? fallbackAltitude : height.toString());
     }
 
     /** The site in the first frame whose header holds a valid latitude and longitude; null when none does. */
     public static ObservingSite fromHeaders(FitsFileInformation[] files) {
+        return fromHeaders(files, null);
+    }
+
+    /** Uses the configured height only when session headers have no valid elevation; empty means 0 m. */
+    public static ObservingSite fromHeaders(FitsFileInformation[] files, String fallbackAltitude) {
         if (files == null) {
             return null;
         }
@@ -47,7 +60,9 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
             Double latitude = parseCoordinate(header(file, LATITUDE_KEYS));
             Double longitude = parseCoordinate(header(file, LONGITUDE_KEYS));
             if (latitude != null && longitude != null) {
-                Double altitude = parseNumber(header(file, ALTITUDE_KEYS));
+                Double altitude = headerAltitude(file);
+                if (altitude == null) altitude = headerAltitude(files);
+                if (altitude == null) altitude = parseAltitude(fallbackAltitude);
                 ObservingSite site = of(latitude, longitude, altitude, FROM_HEADER);
                 if (site != null) {
                     return site;
@@ -59,9 +74,39 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
 
     /** The configured fallback site, as typed (either may be null); null when it is not a valid place. */
     public static ObservingSite fromConfiguration(String latitudeText, String longitudeText) {
+        return fromConfiguration(latitudeText, longitudeText, null);
+    }
+
+    /** Uses configured coordinates and optional elevation in metres; absent or invalid height retains 0 m. */
+    public static ObservingSite fromConfiguration(String latitudeText, String longitudeText, String altitudeText) {
         Double latitude = parseCoordinate(latitudeText);
         Double longitude = parseCoordinate(longitudeText);
-        return latitude == null || longitude == null ? null : of(latitude, longitude, 0.0, FROM_CONFIGURATION);
+        return latitude == null || longitude == null ? null : of(latitude, longitude, parseAltitude(altitudeText), FROM_CONFIGURATION);
+    }
+
+    /** Parses finite metre-valued heights, allowing decimal commas and negative elevations; null when absent/invalid. */
+    public static Double parseAltitude(String text) {
+        Double value = text == null ? null : parseNumber(text.replace(',', '.'));
+        return value != null && Double.isFinite(value) ? value : null;
+    }
+
+    /** Tries supported elevation cards in precedence order, ignoring malformed or nonfinite cards. */
+    private static Double headerAltitude(FitsFileInformation file) {
+        for (String key : ALTITUDE_KEYS) {
+            Double value = parseAltitude(header(file, List.of(key)));
+            if (value != null) return value;
+        }
+        return null;
+    }
+
+    /** Finds a session-header elevation even when it is stored on a different exposure from the first site coordinates. */
+    private static Double headerAltitude(FitsFileInformation[] files) {
+        if (files != null) for (FitsFileInformation file : files) {
+            if (file == null) continue;
+            Double height = headerAltitude(file);
+            if (height != null) return height;
+        }
+        return null;
     }
 
     /** A checked site with the longitude brought into [-180, 180], or null when the values are not a place on Earth. */

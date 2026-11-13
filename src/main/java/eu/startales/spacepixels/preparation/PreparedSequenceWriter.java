@@ -83,6 +83,15 @@ public final class PreparedSequenceWriter {
         double offset = scaling.physicalOffset(floating);
         double multiplier = scaling.physicalMultiplier(floating);
         Files.createDirectory(folder);
+        // All retained frames share an overlapping registered field. One solved exposure can guide every
+        // output, including exposures that arrived without a WCS; it still does not solve their new pixels.
+        io.github.ppissias.jplatesolve.SolveHints sequenceHint = null;
+        for (Frame frame : frames) {
+            check(cancelled);
+            sequenceHint = eu.startales.spacepixels.fits.PlateSolveHints.fromSource(
+                    SirilHeaderCorrections.imageHeader(frame.metadata()));
+            if (sequenceHint != null) break;
+        }
         List<Path> written = new ArrayList<>();
         for (int i = 0; i < frames.size(); i++) {
             check(cancelled);
@@ -91,6 +100,8 @@ public final class PreparedSequenceWriter {
             short[][] pixels = FitsPixelConverter.to16BitMonochrome(image.pixels(), scaling,
                     () -> cancelled.getAsBoolean() || Thread.currentThread().isInterrupted());
             Header metadata = SirilHeaderCorrections.imageHeader(frame.metadata());
+            var solveHints = eu.startales.spacepixels.fits.PlateSolveHints.fromSource(metadata);
+            if (solveHints == null) solveHints = sequenceHint;
             Header outputHeader = image.header();
             // The source association is explicit. Restore exact timestamps when an external writer rounds them.
             for (String key : RESTORED_KEYS) {
@@ -106,6 +117,7 @@ public final class PreparedSequenceWriter {
                         "XBAYROFF", "YBAYROFF", "CHECKSUM", "DATASUM", "SPOFFSET").contains(key))) remove.add(key);
             }
             remove.forEach(outputHeader::deleteKey);
+            eu.startales.spacepixels.fits.PlateSolveHints.write(outputHeader, solveHints);
             scaling.record(outputHeader, image.pixels().floatingPoint());
             outputHeader.addValue("SPORIGIN", frame.original().getFileName().toString(), "Original exposure filename");
             outputHeader.insertHistory("SpacePixels preparation: RGB mean; common image-data scaling; zero registration fill preserved.");

@@ -14,6 +14,26 @@ import static org.junit.Assert.*;
 
 /** Tests desktop report contents and EDT handoff without requiring a visible desktop. */
 public class GuiDetectionReportPromptTest {
+    /** Path warnings use the EDT and require explicit consent; safe paths never ask. */
+    @Test(timeout = 10_000)
+    public void reportPathWarningsCanBeCancelledBeforeStarting() {
+        for (int answer : new int[]{-1, 0, 1}) {
+            AtomicBoolean asked = new AtomicBoolean();
+            GuiDetectionReportPrompt prompt = new GuiDetectionReportPrompt(panel -> {
+                throw new AssertionError("Not a report question");
+            }, panel -> {
+                assertTrue(SwingUtilities.isEventDispatchThread());
+                asked.set(true);
+                return answer;
+            });
+            assertTrue(prompt.confirmReportPath(null));
+            assertTrue(prompt.confirmReportPath(""));
+            assertFalse(asked.get());
+            assertEquals(answer == 1, prompt.confirmReportPath("Report paths may reach 260 characters."));
+            assertTrue(asked.get());
+        }
+    }
+
     /** Quality questions reach the EDT and proceed only for the explicit override, including dismissal. */
     @Test(timeout = 10_000)
     public void qualityWarningChoicesAreDispatchedAndFailClosed() {

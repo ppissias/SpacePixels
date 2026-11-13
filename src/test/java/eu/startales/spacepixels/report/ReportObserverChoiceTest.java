@@ -26,6 +26,7 @@ public class ReportObserverChoiceTest {
     public void jplUsesTheHeaderSiteAndSkybotTheConfiguredCode() {
         AppConfig config = new AppConfig();
         config.observatoryCode = "J95";
+        config.siteAltitude = "100";
         DetectionReportAstrometry.Context context = AstrometryContextFactory.buildContext(
                 new FitsFileInformation[]{frame(Map.of("OBSLAT", "33.3573", "OBSLON", "-116.8598", "OBSALT", "1668.0"))},
                 config, null);
@@ -58,6 +59,17 @@ public class ReportObserverChoiceTest {
         String jpl = DetectionReportAstrometry.buildJplSbIdentUrl(context, target, 0.1);
         assertTrue(jpl, jpl.contains("mpc-code=J95"));
         assertFalse(jpl, jpl.contains("lat="));
+    }
+
+    /** Configured metre-valued height reaches the report's JPL link in kilometres. */
+    @Test public void fallbackAltitudeReachesTopocentricLookupInKilometres() {
+        AppConfig config = new AppConfig();
+        config.siteLat = "12"; config.siteLong = "34"; config.siteAltitude = "1234.5";
+        var context = AstrometryContextFactory.buildContext(new FitsFileInformation[]{frame(Map.of())}, config, null);
+        assertEquals(1234.5, context.getObserverSite().altitudeMeters, 0);
+        var target = SolarSystemQueryTargetFactory.buildFaintMoverQueryTarget(context, 80, 60, START);
+        String jpl = DetectionReportAstrometry.buildJplSbIdentUrl(context, target, 0.1);
+        assertTrue(jpl, jpl.contains("alt=1.2345"));
     }
 
     /** One plate-solved 160x120 frame with the given site cards. */

@@ -30,10 +30,10 @@ public final class IterativeDetectionIndex {
             DetectionReportDocumentWriter.writeCustomStyle(run.visualization().getReportStyleFile(), directory);
         }
         ReportAssets.writeIterativeResultsStyle(directory);
-        StringBuilder html = new StringBuilder("<!doctype html><html lang='en'><meta charset='utf-8'>"
+        StringBuilder html = new StringBuilder("<!doctype html><html lang='en'><head><meta charset='utf-8'>"
                 + "<title>Iterative detection results</title>" + ReportAssets.STYLE_LINK
                 + DetectionReportDocumentWriter.CUSTOM_STYLE + DetectionReportDocumentWriter.REMEMBERED_APPEARANCE
-                + "<h1>Iterative detection results</h1>");
+                + "</head><body><h1>Iterative detection results</h1>");
         html.append("<p>Source: ").append(escape(run.sourceDirectory())).append("</p><p>Outcome: ")
                 .append(escape(label(run.outcome()))).append("</p><p>Settings: ")
                 .append(run.autoTuneProfile() == null ? "current Detection Settings" : "Auto-Tune once: " + escape(label(run.autoTuneProfile())))
@@ -57,7 +57,7 @@ public final class IterativeDetectionIndex {
             else html.append("Unavailable");
             html.append("</td></tr>");
         }
-        html.append("</tbody></table></html>");
+        html.append("</tbody></table></body></html>");
         publish(new File(directory, "index.html"), html.toString());
     }
 

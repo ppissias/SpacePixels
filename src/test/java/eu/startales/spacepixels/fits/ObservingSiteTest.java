@@ -11,6 +11,36 @@ import static org.junit.Assert.assertNull;
 /** The observing site: the first frame header that has one wins over the configured fallback. */
 public class ObservingSiteTest {
 
+    /** FITS elevations override the configured height; a missing elevation uses the fallback, including zero. */
+    @Test public void altitudeUsesHeaderThenConfiguredDefault() {
+        var with = frame(Map.of("SITELAT", "12", "SITELONG", "34", "SITEELEV", "2500"));
+        assertEquals(2500, ObservingSite.resolve(new FitsFileInformation[]{with}, "56", "78", "1000").altitudeMeters(), 0);
+        var without = frame(Map.of("SITELAT", "12", "SITELONG", "34"));
+        var result = ObservingSite.resolve(new FitsFileInformation[]{without}, "56", "78", "1000,5");
+        assertEquals(12, result.latitudeDeg(), 0);
+        assertEquals(1000.5, result.altitudeMeters(), 0);
+        assertEquals(0, ObservingSite.resolve(new FitsFileInformation[]{without}, "56", "78", "0").altitudeMeters(), 0);
+        assertEquals(0, ObservingSite.resolve(new FitsFileInformation[]{without}, "56", "78", "").altitudeMeters(), 0);
+        assertEquals(2500, ObservingSite.resolve(new FitsFileInformation[]{without, with}, "56", "78", "1000").altitudeMeters(), 0);
+    }
+
+    /** Standard geodetic-height aliases are read and invalid cards cannot hide a later valid value. */
+    @Test public void readsStandardHeightAndIgnoresInvalidElevations() {
+        var input = frame(Map.of("SITELAT", "12", "SITELONG", "34", "SITEELEV", "NaN", "OBSGEO-H", "-120.5"));
+        assertEquals(-120.5, ObservingSite.resolve(new FitsFileInformation[]{input}, "", "", "400").altitudeMeters(), 0);
+        assertNull(ObservingSite.parseAltitude("Infinity"));
+        assertNull(ObservingSite.parseAltitude("NaN"));
+        assertNull(ObservingSite.parseAltitude("high"));
+        assertEquals(-120.5, ObservingSite.fromConfiguration("12", "34", "-120.5").altitudeMeters(), 0);
+    }
+
+    /** An elevation-only header can supply the height of a configured location without fabricating coordinates. */
+    @Test public void altitudeOnlyHeaderStillHasPriority() {
+        var files = new FitsFileInformation[]{frame(Map.of("OBSALT", "1668"))};
+        assertEquals(1668, ObservingSite.resolve(files, "12", "34", "1000").altitudeMeters(), 0);
+        assertNull(ObservingSite.resolve(files, "", "", "1000"));
+    }
+
     @Test
     public void takesTheHeaderSiteThenTheFallback() {
         FitsFileInformation without = frame(Map.of());

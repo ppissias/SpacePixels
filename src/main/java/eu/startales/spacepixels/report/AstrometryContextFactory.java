@@ -46,7 +46,8 @@ final class AstrometryContextFactory {
     /** The site from the frames' headers, else the configured fallback; null when neither has one. */
     private static DetectionReportAstrometry.ObserverSite resolveObserverSite(FitsFileInformation[] fitsFiles, AppConfig appConfig) {
         ObservingSite site = ObservingSite.resolve(fitsFiles,
-                appConfig == null ? null : appConfig.siteLat, appConfig == null ? null : appConfig.siteLong);
+                appConfig == null ? null : appConfig.siteLat, appConfig == null ? null : appConfig.siteLong,
+                appConfig == null ? null : appConfig.siteAltitude);
         return site == null ? null : new DetectionReportAstrometry.ObserverSite(
                 site.latitudeDeg(), site.longitudeDeg(), site.altitudeMeters(), site.source());
     }

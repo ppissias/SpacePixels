@@ -97,19 +97,29 @@ public final class PlateSolveService implements AutoCloseable {
      */
     public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
                                           Consumer<PlateSolveOperation.Progress> progress) throws IOException {
+        if (!astap && !astrometry) throw new IOException("No plate solver was chosen.");
+        String executable = appConfig.astapExecutablePath;
+        if (astap && (executable == null || executable.isBlank() || !new File(executable).isFile())) {
+            throw new IOException("ASTAP executable path is not correct:" + executable);
+        }
+        io.github.ppissias.jplatesolve.SolveHints hints;
+        try (Fits fits = new Fits(new File(path))) {
+            BasicHDU<?> image = FitsInput.getImageHDU(fits);
+            hints = image == null ? null : eu.startales.spacepixels.fits.PlateSolveHints.read(
+                    image.getHeader(), image.getAxes()[image.getAxes().length - 2]);
+        } catch (FitsException failure) {
+            throw new IOException("Could not read plate-solve hints.", failure);
+        }
         if (astap) {
-            String executable = appConfig.astapExecutablePath;
-            if (executable == null || executable.isBlank() || !new File(executable).isFile()) {
-                throw new IOException("ASTAP executable path is not correct:" + executable);
-            }
-            return ASTAPInterface.startSolve(new File(executable), path, null, progress);
+            return ASTAPInterface.startSolve(new File(executable), path, null, progress, hints);
         }
         if (astrometry) {
             // Anonymous uploads share one account: send a copy without the site and the observer.
             File upload = FitsUploadCopy.create(new File(path));
             try {
-                PlateSolveOperation operation = astrometryNetClient(appConfig.astrometryNetApiKeyInUse())
-                        .startBlindSolve(upload, progress);
+                AstrometryDotNet client = astrometryNetClient(appConfig.astrometryNetApiKeyInUse());
+                PlateSolveOperation operation = hints == null ? client.startBlindSolve(upload, progress)
+                        : client.startSolve(upload, hints, progress);
                 operation.completion().whenComplete((outcome, failure) -> deleteUploadCopy(upload));
                 return operation;
             } catch (RuntimeException failure) {

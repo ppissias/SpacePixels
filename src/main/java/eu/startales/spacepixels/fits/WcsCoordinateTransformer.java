@@ -7,8 +7,9 @@ import eu.startales.spacepixels.util.SkyMath;
 
 /**
  * Minimal WCS transformer between pixels and the sky, for cursor readouts, report links and catalogue labels.
- * Supports standard celestial TAN projections with CD, PC+CDELT, or CDELT+CROTA matrices, and the SIP distortion
- * terms of TAN-SIP solutions (A/B; AP/BP are only used as a first guess when going from the sky to pixels).
+ * Supports celestial TAN, TAN-SIP and TPV projections with CD, PC+CDELT, or CDELT+CROTA matrices.
+ * SIP applies A/B pixel distortion; AP/BP only seed the iterative sky-to-pixel inverse.
+ * TPV applies its degree-seven polynomial, including radial terms, in the intermediate degree-valued plane.
  */
 public final class WcsCoordinateTransformer {
     private static final String STANDARD_CTYPE1 = "RA---TAN";
@@ -22,7 +23,10 @@ public final class WcsCoordinateTransformer {
     private final double cd12;
     private final double cd21;
     private final double cd22;
-    /** SIP distortion: coefficients [p][q] of u^p v^q, or null when the solution has none. */
+    /** TPV coefficients in convention order, or null for TAN and TAN-SIP. */
+    private double[] tpv1;
+    private double[] tpv2;
+    /** SIP coefficients [p][q] of u^p v^q, or null when absent. */
     private double[][] sipA;
     private double[][] sipB;
     private double[][] sipAp;
@@ -61,9 +65,10 @@ public final class WcsCoordinateTransformer {
 
         String upperCtype1 = ctype1.toUpperCase(Locale.US);
         String upperCtype2 = ctype2.toUpperCase(Locale.US);
-        if (!upperCtype1.contains("RA") || !upperCtype2.contains("DEC") || !upperCtype1.contains("TAN") || !upperCtype2.contains("TAN")) {
-            return null;
-        }
+        boolean tpv = upperCtype1.equals("RA---TPV") && upperCtype2.equals("DEC--TPV");
+        boolean tan = upperCtype1.equals(STANDARD_CTYPE1) && upperCtype2.equals(STANDARD_CTYPE2);
+        boolean sip = upperCtype1.equals("RA---TAN-SIP") && upperCtype2.equals("DEC--TAN-SIP");
+        if (!tpv && !tan && !sip) return null;
 
         Double crpix1 = parseDouble(header, "CRPIX1");
         Double crpix2 = parseDouble(header, "CRPIX2");
@@ -74,7 +79,8 @@ public final class WcsCoordinateTransformer {
         }
 
         double[] matrix = buildTransformationMatrix(header);
-        if (matrix == null) {
+        if (matrix == null || !Double.isFinite(matrix[0] * matrix[3] - matrix[1] * matrix[2])
+                || matrix[0] * matrix[3] - matrix[1] * matrix[2] == 0 || Math.abs(crval2) > 90) {
             return null;
         }
 
@@ -95,12 +101,17 @@ public final class WcsCoordinateTransformer {
                 }
             }
         }
+        if (tpv) {
+            transformer.tpv1 = tpvCoefficients(header, 1);
+            transformer.tpv2 = tpvCoefficients(header, 2);
+            if (transformer.tpv1 == null || transformer.tpv2 == null) return null;
+        }
         return transformer;
     }
 
-    /** Whether the solution has SIP distortion terms, which are applied. */
+    /** Whether the solution has SIP or TPV distortion terms, which are applied. */
     public boolean hasDistortion() {
-        return sipA != null;
+        return sipA != null || tpv1 != null;
     }
 
     /** Whether a correction fitted to the stars is applied. */
@@ -112,6 +123,8 @@ public final class WcsCoordinateTransformer {
     public WcsCoordinateTransformer withDisplacement(Displacement correction) {
         WcsCoordinateTransformer corrected = new WcsCoordinateTransformer(crpix1, crpix2, Math.toDegrees(crval1Rad),
                 Math.toDegrees(crval2Rad), cd11, cd12, cd21, cd22);
+        corrected.tpv1 = tpv1;
+        corrected.tpv2 = tpv2;
         corrected.sipA = sipA;
         corrected.sipB = sipB;
         corrected.sipAp = sipAp;
@@ -121,14 +134,14 @@ public final class WcsCoordinateTransformer {
     }
 
     /**
-     * The header cards of the solution as it was read: CTYPE, CRPIX, CRVAL, CD and any SIP terms, in insertion order.
+     * The header cards of the solution as it was read: CTYPE, CRPIX, CRVAL, CD and any SIP or TPV terms, in insertion order.
      * A fitted correction ({@link #isCorrected()}) has no standard card form and is not included.
      */
     public java.util.LinkedHashMap<String, Object> nominalHeaderCards() {
         java.util.LinkedHashMap<String, Object> cards = new java.util.LinkedHashMap<>();
         boolean sip = sipA != null && sipB != null;
-        cards.put("CTYPE1", sip ? "RA---TAN-SIP" : "RA---TAN");
-        cards.put("CTYPE2", sip ? "DEC--TAN-SIP" : "DEC--TAN");
+        cards.put("CTYPE1", tpv1 != null ? "RA---TPV" : sip ? "RA---TAN-SIP" : "RA---TAN");
+        cards.put("CTYPE2", tpv1 != null ? "DEC--TPV" : sip ? "DEC--TAN-SIP" : "DEC--TAN");
         cards.put("CRPIX1", crpix1);
         cards.put("CRPIX2", crpix2);
         cards.put("CRVAL1", Math.toDegrees(crval1Rad));
@@ -143,6 +156,12 @@ public final class WcsCoordinateTransformer {
             if (sipAp != null && sipBp != null) {
                 addSip(cards, "AP", sipAp);
                 addSip(cards, "BP", sipBp);
+            }
+        }
+        if (tpv1 != null) {
+            for (int i = 0; i < 40; i++) {
+                cards.put("PV1_" + i, tpv1[i]);
+                cards.put("PV2_" + i, tpv2[i]);
             }
         }
         return cards;
@@ -163,7 +182,8 @@ public final class WcsCoordinateTransformer {
     /** Identifies the header solution, so a correction is applied only to the solution it was fitted to. */
     public String solutionKey() {
         return String.format(Locale.US, "%.4f,%.4f,%.9f,%.9f,%.10e,%.10e,%.10e,%.10e,%s", crpix1, crpix2,
-                Math.toDegrees(crval1Rad), Math.toDegrees(crval2Rad), cd11, cd12, cd21, cd22, sipA != null ? "sip" : "tan");
+                Math.toDegrees(crval1Rad), Math.toDegrees(crval2Rad), cd11, cd12, cd21, cd22, sipA != null ? "sip" : tpv1 != null
+                        ? "tpv:" + java.util.Arrays.toString(tpv1) + java.util.Arrays.toString(tpv2) : "tan");
     }
 
     public SkyCoordinate pixelToSky(double pixelX, double pixelY) {
@@ -197,8 +217,10 @@ public final class WcsCoordinateTransformer {
             dy = v + polynomial(sipB, u, v);
         }
 
-        double xi = Math.toRadians((cd11 * dx) + (cd12 * dy));
-        double eta = Math.toRadians((cd21 * dx) + (cd22 * dy));
+        double planeX = cd11 * dx + cd12 * dy;
+        double planeY = cd21 * dx + cd22 * dy;
+        double xi = Math.toRadians(tpv1 == null ? planeX : tpvPolynomial(tpv1, planeX, planeY));
+        double eta = Math.toRadians(tpv2 == null ? planeY : tpvPolynomial(tpv2, planeY, planeX));
 
         double sinDec0 = Math.sin(crval2Rad);
         double cosDec0 = Math.cos(crval2Rad);
@@ -229,6 +251,13 @@ public final class WcsCoordinateTransformer {
         }
         double xi = Math.toDegrees(Math.cos(dec) * Math.sin(deltaRa) / cosDistance);
         double eta = Math.toDegrees((cosDec0 * Math.sin(dec) - sinDec0 * Math.cos(dec) * Math.cos(deltaRa)) / cosDistance);
+        if (!Double.isFinite(xi) || !Double.isFinite(eta)) return null;
+        if (tpv1 != null) {
+            double[] plane = invertTpv(xi, eta);
+            if (plane == null) return null;
+            xi = plane[0];
+            eta = plane[1];
+        }
         double determinant = cd11 * cd22 - cd12 * cd21;
         if (determinant == 0) {
             return null;
@@ -261,6 +290,57 @@ public final class WcsCoordinateTransformer {
             y += d[1];
         }
         return new double[]{x, y};
+    }
+
+    /** Read the convention's 40 coefficients, with identity defaults; reject malformed supplied terms. */
+    private static double[] tpvCoefficients(Map<String, String> header, int axis) {
+        double[] coefficients = new double[40];
+        coefficients[1] = 1;
+        for (int i = 0; i < coefficients.length; i++) {
+            String key = "PV" + axis + "_" + i;
+            if (getHeaderValue(header, key) != null) {
+                Double value = parseDouble(header, key);
+                if (value == null) return null;
+                coefficients[i] = value;
+            }
+        }
+        return coefficients;
+    }
+
+    /** Evaluate TPV in degrees; the second axis calls this with y, x. */
+    private static double tpvPolynomial(double[] c, double x, double y) {
+        double r = Math.hypot(x, y);
+        double sum = c[0] + c[1] * x + c[2] * y + c[3] * r;
+        int index = 4;
+        for (int degree = 2; degree <= 7; degree++) {
+            for (int q = 0; q <= degree; q++) {
+                sum += c[index++] * Math.pow(x, degree - q) * Math.pow(y, q);
+            }
+            if (degree % 2 == 1) sum += c[index++] * Math.pow(r, degree);
+        }
+        return sum;
+    }
+
+    /** Invert the degree-valued plane distortion by Newton iteration; return null on failure. */
+    private double[] invertTpv(double targetX, double targetY) {
+        double x = targetX;
+        double y = targetY;
+        for (int iteration = 0; iteration < 60; iteration++) {
+            double fx = tpvPolynomial(tpv1, x, y) - targetX;
+            double fy = tpvPolynomial(tpv2, y, x) - targetY;
+            if (!Double.isFinite(fx) || !Double.isFinite(fy)) return null;
+            if (Math.max(Math.abs(fx), Math.abs(fy)) < 1e-12) return new double[]{x, y};
+            double h = 1e-6 * Math.max(1, Math.max(Math.abs(x), Math.abs(y)));
+            double a = (tpvPolynomial(tpv1, x + h, y) - tpvPolynomial(tpv1, x - h, y)) / (2 * h);
+            double b = (tpvPolynomial(tpv1, x, y + h) - tpvPolynomial(tpv1, x, y - h)) / (2 * h);
+            double c = (tpvPolynomial(tpv2, y, x + h) - tpvPolynomial(tpv2, y, x - h)) / (2 * h);
+            double d = (tpvPolynomial(tpv2, y + h, x) - tpvPolynomial(tpv2, y - h, x)) / (2 * h);
+            double determinant = a * d - b * c;
+            if (!Double.isFinite(determinant) || determinant == 0) return null;
+            x -= (d * fx - b * fy) / determinant;
+            y -= (a * fy - c * fx) / determinant;
+        }
+        return null;
     }
 
     /** SIP coefficients {@code prefix_p_q} up to {@code prefix_ORDER}, or null when the order is missing. */
@@ -350,7 +430,8 @@ public final class WcsCoordinateTransformer {
         }
 
         try {
-            return Double.parseDouble(rawValue);
+            double value = Double.parseDouble(rawValue.replace('D', 'E').replace('d', 'e'));
+            return Double.isFinite(value) ? value : null;
         } catch (NumberFormatException ex) {
             return null;
         }

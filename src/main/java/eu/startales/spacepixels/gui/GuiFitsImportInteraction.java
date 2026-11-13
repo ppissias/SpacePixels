@@ -8,6 +8,43 @@ import java.util.concurrent.FutureTask;
 
 /** Synchronous decisions on the EDT, with conversion and progress production left on the import worker. */
 public final class GuiFitsImportInteraction implements FitsImportInteraction {
+    private final String sirilPath;
+    /** Only this import adapter's worker accesses the attempt flag; prevents repeated alignment prompts after redirect. */
+    private boolean alignmentAttempted;
+
+    /** Creates an adapter without an external alignment offer. */
+    public GuiFitsImportInteraction() { this(""); }
+
+    /** Captures the configured CLI path before import starts; workers never read live settings. */
+    public GuiFitsImportInteraction(String sirilPath) { this.sirilPath = sirilPath; }
+
+    /** Resolves only an explicitly configured CLI on the worker; preparation performs its own version validation. */
+    @Override public boolean canAlignFrames() {
+        if (alignmentAttempted || sirilPath == null || sirilPath.isBlank()) return false;
+        try {
+            eu.startales.spacepixels.preparation.SirilInstallation.resolve(java.nio.file.Path.of(sirilPath));
+            return true;
+        } catch (java.io.IOException | java.nio.file.InvalidPathException unavailable) { return false; }
+    }
+
+    /** Runs the existing private-copy preparation recipe under the import's cancellation scope, then redirects import. */
+    @Override public java.io.File alignFrames(eu.startales.spacepixels.fits.FitsFileInformation[] frames) throws Exception {
+        alignmentAttempted = true;
+        var source = java.nio.file.Path.of(frames[0].getFilePath()).toAbsolutePath().getParent();
+        var request = new eu.startales.spacepixels.preparation.PreparationRequest(java.nio.file.Path.of(sirilPath),
+                java.util.Map.of(eu.startales.spacepixels.preparation.PreparationInputs.Role.LIGHTS, source),
+                eu.startales.spacepixels.preparation.PreparationRequest.Sensor.MONO,
+                eu.startales.spacepixels.preparation.PreparationRequest.Bayer.METADATA,
+                eu.startales.spacepixels.preparation.PreparationRequest.RowOrder.METADATA,
+                0, 0, source, false, false);
+        try (Progress progress = progress("Aligning frames with Siril...")) {
+            var result = new eu.startales.spacepixels.preparation.FramePreparationService().prepare(request,
+                    () -> { io.github.ppissias.jtransient.execution.CancellationScope.check(); return false; },
+                    progress::onProgressUpdate, ignored -> { }, eu.startales.spacepixels.fits.ImageScaling.interactive(this));
+            return result.aligned().toFile();
+        }
+    }
+
     @Override public int confirm(String message, String title) {
         return onEdt(() -> JOptionPane.showConfirmDialog(null, message, title,
                 JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE));
