@@ -36,6 +36,15 @@ final class FaintMoverSectionWriter {
                 telemetry.searchedPixels, telemetry.frames, telemetry.sessionMinutes, telemetry.framesOutsideSession,
                 telemetry.minSpeedPixelsPerMinute, telemetry.maxSpeedPixelsPerMinute, telemetry.coarseMotions,
                 telemetry.fwhmPixels, telemetry.fwhmFromStars ? "measured" : "fallback", telemetry.elapsedMs / 1000.0);
+        String speed = eu.startales.spacepixels.detection.FaintMoverRuntimeEstimate.SPEED_NAMES[Math.max(0, Math.min(2, telemetry.searchSpeed))];
+        if (telemetry.coarseBin > 1 || telemetry.coarseFrames < telemetry.frames) out.printf(Locale.ROOT,
+                "<p>Search speed: %s. The first pass added %s%s. Every peak was refined and checked on all %d frames "
+                        + "at full resolution.</p>%n", speed,
+                telemetry.coarseBin > 1 ? telemetry.coarseBin + "×" + telemetry.coarseBin + " pixels" : "",
+                telemetry.coarseFrames < telemetry.frames ? (telemetry.coarseBin > 1 ? " and " : "")
+                        + "consecutive frames into " + telemetry.coarseFrames + " frames" : "",
+                telemetry.frames);
+        else out.printf(Locale.ROOT, "<p>Search speed: %s. The first pass used every pixel of every frame.</p>%n", speed);
         Double angularScale = FaintMoverPresentation.angularPixelScale(c);
         if (angularScale != null) out.printf(Locale.ROOT,
                 "<p>Searched angular motion range: %.5g–%.5g arcsec/min (field-centre WCS equivalent). "

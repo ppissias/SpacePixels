@@ -42,18 +42,27 @@ public class FaintMoverOverlayTest {
     /** Estimates explain missing metadata and account for cadence and the squared maximum-motion cost. */
     @Test public void runtimeEstimateUsesMetadataAndRemainsExplicitlyApproximate() {
         var config = new io.github.ppissias.jtransient.config.DetectionConfig();
-        assertTrue(FaintMoverRuntimeEstimate.describe(null, config).contains("Import frames"));
-        assertTrue(FaintMoverRuntimeEstimate.describe(new FitsFileInformation[]{file("a.fit", 100)}, config).contains("8 kept"));
+        assertTrue(FaintMoverRuntimeEstimate.describe(null, config, Double.NaN).contains("Import frames"));
+        assertTrue(FaintMoverRuntimeEstimate.describe(new FitsFileInformation[]{file("a.fit", 100)}, config, Double.NaN).contains("8 kept"));
         FitsFileInformation[] files = new FitsFileInformation[8];
         for (int i = 0; i < files.length; i++) files[i] = new FitsFileInformation("f" + i + ".fit", "f" + i + ".fit", true, 8000, 6000,
                 Map.of("DATE-OBS", "2026-10-01T00:" + String.format("%02d", i * 5) + ":00", "EXPTIME", "120"));
-        String slow = FaintMoverRuntimeEstimate.describe(files, config);
+        String slow = FaintMoverRuntimeEstimate.describe(files, config, Double.NaN);
         config.faintMoverMaxSpeedPixelsPerMinute = 3;
-        String fast = FaintMoverRuntimeEstimate.describe(files, config);
+        String fast = FaintMoverRuntimeEstimate.describe(files, config, Double.NaN);
         assertNotEquals(slow, fast);
-        assertTrue(fast.contains("assumed 2.5 px FWHM"));
+        assertTrue(fast.contains("assumed 2.5 px star size"));
         assertTrue(fast.contains("MiB per search worker"));
-        assertTrue(fast.contains("Approximate extra time"));
+        assertTrue(fast.contains("Approximate extra time: Normal "));
+        assertTrue(fast.contains(" · Fast ") && fast.contains(" · Faster "));
+        assertTrue(fast.contains("Selected: Fast"));
+        // 2.5 px stars: Faster bins 2 x 2 pixels, Fast does not; 5 min apart is too far to add frames at 3 px/min.
+        assertTrue(fast.contains("Faster ") && fast.contains("2×2 pixels in the first pass"));
+        assertFalse(fast.contains("of 8 frames"));
+        // A measured 5 px star size bins at Fast too and is named as measured.
+        String measured = FaintMoverRuntimeEstimate.describe(files, config, 5.0);
+        assertTrue(measured.contains("5.00 px the last detection run measured"));
+        assertTrue(measured.indexOf("2×2 pixels") < measured.indexOf(" · Faster "));
     }
 
     /** Returns small immutable metadata with a two-minute exposure, whose midpoint differs from its start. */

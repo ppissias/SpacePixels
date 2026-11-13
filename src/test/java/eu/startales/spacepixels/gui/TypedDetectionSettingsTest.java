@@ -44,7 +44,7 @@ public class TypedDetectionSettingsTest {
             assertEquals(setting.title(), DetectionSettingsPresentation.title(setting.id()));
             checkOwnership(setting);
         }
-        assertEquals(75, identities.size());
+        assertEquals(76, identities.size());
     }
 
     /** Controls shown in one unit and stored in another store clean values, never a tail from the conversion. */

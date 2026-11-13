@@ -34,6 +34,14 @@ public final class FaintMoversSettings {
                     + "faint in every frame; faint star tails that a run of frames shares, for example from wind or a mount "
                     + "movement, are not. On by default; switch it off only to compare.",
             true, Boolean.class, c -> c.enableFaintMoverFrameLimit, (c, v) -> c.enableFaintMoverFrameLimit = v);
+    public static final DetectionSetting<Integer> SEARCH_SPEED = new DetectionSetting<>(
+            "faintMoverSearchSpeed", "Search speed", "",
+            "How much cheaper the first pass, which tries every motion, may be. Normal adds every pixel of every frame. "
+                    + "Fast (the default) adds 2 x 2 pixels when stars are wide and consecutive frames close in time, where "
+                    + "little signal is lost; it can miss about one candidate in 50 to 100 close to the limits. Faster adds them "
+                    + "also for narrower stars and wider time steps; it can miss more candidates close to the limits. Every "
+                    + "candidate is still scored and checked on all frames at full resolution, so scores mean the same.",
+            false, Integer.class, c -> c.faintMoverSearchSpeed, (c, v) -> c.faintMoverSearchSpeed = v);
     public static final DetectionSetting<Double> TIME_LIMIT = new DetectionSetting<>(
             "faintMoverMaxSeconds", "Time limit (minutes)", "",
             "Maximum additional search time, displayed in minutes and stored in seconds. A stopped search reports its partial coverage; "
@@ -45,6 +53,6 @@ public final class FaintMoversSettings {
 
     /** Returns all bindings in display order; Auto-Tune preserves these values. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, TIME_LIMIT);
+        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, SEARCH_SPEED, TIME_LIMIT);
     }
 }

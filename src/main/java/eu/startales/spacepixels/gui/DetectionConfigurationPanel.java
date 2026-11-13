@@ -152,6 +152,8 @@ public class DetectionConfigurationPanel extends JPanel {
     static final String EXPERT_SECTION = "spacepixels.expertSection";
     /** Frame rejection presets; each sets the five session outlier limits together. */
     private static final String[] FRAME_REJECTION_PRESETS = {"Lenient", "Normal", "Strict"};
+    /** Labels of the faint-mover search speeds 0, 1 and 2. */
+    private static final String[] FAINT_MOVER_SPEEDS = FaintMoverRuntimeEstimate.SPEED_NAMES;
     private static final String FRAME_REJECTION_CUSTOM = "Custom";
 
     private AutoTuneOverviewPanel overviewPanel;
@@ -1545,6 +1547,7 @@ public class DetectionConfigurationPanel extends JPanel {
         faintMoverMaxInfo = addFaintMoverMotionInfo(spinFaintMoverMaxSpeed, "Fastest motion equivalents");
         JSpinner score = addTypedDouble(panel, FaintMoversSettings.MIN_SCORE, Double.MIN_VALUE, Double.MAX_VALUE, 0.5);
         JCheckBox frameLimit = addTypedCheckbox(panel, FaintMoversSettings.FRAME_LIMIT);
+        JComboBox<Integer> speed = addTypedChoice(panel, FaintMoversSettings.SEARCH_SPEED, FAINT_MOVER_SPEEDS);
         JSpinner time = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSeconds / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
         registerTypedBinding(FaintMoversSettings.TIME_LIMIT, time, () -> {
             double displayed = ((Number) time.getValue()).doubleValue();
@@ -1552,7 +1555,7 @@ public class DetectionConfigurationPanel extends JPanel {
             return storedFromDisplay(displayed, current, v -> v / 60, v -> v * 60);
         }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
         addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), "Time limit (minutes)", FaintMoversSettings.TIME_LIMIT.help(), false, time);
-        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, time);
+        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, speed, time);
         faintMoverEstimate = new WrappingHelpLabel("", 560);
         faintMoverEstimate.setForeground(UiStyle.helpColor());
         faintMoverEstimate.setAlignmentX(Component.LEFT_ALIGNMENT);
@@ -1613,7 +1616,9 @@ public class DetectionConfigurationPanel extends JPanel {
         var owner = sessions.current();
         var files = owner == null ? new FitsFileInformation[0] : owner.getFiles();
         var session = FaintMoverRuntimeEstimate.importedSession(files);
-        double displacementScale = session.hasSpan() ? session.spanMinutes() / FaintMoverRuntimeEstimate.ASSUMED_FWHM_PIXELS : 1;
+        double starSize = faintMoverStarSize(owner);
+        double displacementScale = session.hasSpan() ? session.spanMinutes()
+                / (Double.isFinite(starSize) ? starSize : FaintMoverRuntimeEstimate.ASSUMED_FWHM_PIXELS) : 1;
         faintMoverAngularScale = FaintMoverRuntimeEstimate.angularPixelScale(files);
         double maximumScale = Double.isFinite(faintMoverAngularScale) ? faintMoverAngularScale : 1;
         double minimumScale = session.hasSpan() ? maximumScale / displacementScale : 1;
@@ -1652,7 +1657,13 @@ public class DetectionConfigurationPanel extends JPanel {
                 + " " + faintMoverMinInfo.getText().replaceAll("<[^>]*>", " "));
         spinFaintMoverMaxSpeed.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MAX_SPEED.help()
                 + " " + faintMoverMaxInfo.getText().replaceAll("<[^>]*>", " "));
-        faintMoverEstimate.setText(faintMoverEstimateText(files));
+        faintMoverEstimate.setText(faintMoverEstimateText(files, starSize));
+    }
+
+    /** The star size the session's last detection run or restored report measured, or NaN when none is known. */
+    private static double faintMoverStarSize(ProcessingSession owner) {
+        var overlay = owner == null ? null : owner.getFaintMoverOverlay();
+        return overlay == null ? Double.NaN : overlay.starSizePixels();
     }
 
     /** Formats display-only rates without presenting unavailable timing or WCS as a numeric measurement. */
@@ -1662,11 +1673,11 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** Explains metadata estimates and display-only WCS conversion, distinct from the final measured search domain. */
-    private String faintMoverEstimateText(FitsFileInformation[] files) {
+    private String faintMoverEstimateText(FitsFileInformation[] files, double starSize) {
         String units = !Double.isFinite(faintMoverAngularScale) ? "No usable WCS: angular rates are unavailable."
                 : String.format(java.util.Locale.ROOT, "Rates use %.6f arcsec/pixel at the first usable WCS field centre.", faintMoverAngularScale);
-        return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig) + "<br>" + units
-                + " The slowest rate is estimated from imported times and an assumed seeing width; it cannot be set below 2 FWHM/session. "
+        return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig, starSize) + "<br>" + units
+                + " The slowest rate is estimated from imported times and the star size above; it cannot be set below 2 FWHM/session. "
                 + "When the fastest rate is not above the slowest, the run skips the search and the report says why. Without WCS the controls use pixel rates; without timing the minimum uses session displacement. "
                 + "The report gives the actual search range from kept frames and measured seeing (or its labelled fallback).</html>";
     }
@@ -1684,6 +1695,31 @@ public class DetectionConfigurationPanel extends JPanel {
         JSpinner input = createSpinner(doubleSpinnerModel(setting.read(jTransientConfig), min, max, step));
         addTypedBinding(parent, setting, input, () -> ((Number) input.getValue()).doubleValue(),
                 value -> setSpinnerValueClamped(input, value.doubleValue()));
+        return input;
+    }
+
+    /**
+     * Binds an integer engine field whose values are the positions of a few labelled choices; the list holds the stored
+     * values and shows their labels.
+     */
+    private JComboBox<Integer> addTypedChoice(JPanel parent, DetectionSetting<Integer> setting, String[] labels) {
+        Integer[] values = new Integer[labels.length];
+        for (int i = 0; i < labels.length; i++) {
+            values[i] = i;
+        }
+        JComboBox<Integer> input = new JComboBox<>(values);
+        input.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean selected,
+                                                          boolean focused) {
+                Object label = value instanceof Integer choice && choice >= 0 && choice < labels.length ? labels[choice] : value;
+                return super.getListCellRendererComponent(list, label, index, selected, focused);
+            }
+        });
+        UiStyle.inputWidth(input, 110);
+        java.util.function.Consumer<Integer> display = value -> input.setSelectedItem(Math.max(0, Math.min(labels.length - 1, value)));
+        display.accept(setting.read(jTransientConfig));
+        addTypedBinding(parent, setting, input, () -> (Integer) input.getSelectedItem(), display);
         return input;
     }
 

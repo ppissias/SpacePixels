@@ -36,7 +36,7 @@ public class FaintMoverRuntimeEstimateTest {
         var equal = new FitsFileInformation[]{frame(0, 0), frame(0, 0), frame(0, 0), frame(0, 0),
                 frame(0, 0), frame(0, 0), frame(0, 0), frame(0, 0)};
         assertFalse(FaintMoverRuntimeEstimate.importedSession(equal).hasSpan());
-        assertTrue(FaintMoverRuntimeEstimate.describe(equal, new DetectionConfig()).contains("Different capture times"));
+        assertTrue(FaintMoverRuntimeEstimate.describe(equal, new DetectionConfig(), Double.NaN).contains("Different capture times"));
     }
 
     /** Angular rates use a real WCS; missing metadata never invents a pixel scale. */

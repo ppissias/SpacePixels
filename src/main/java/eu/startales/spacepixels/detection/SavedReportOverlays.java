@@ -142,9 +142,20 @@ public final class SavedReportOverlays {
         }
         var paths = new HashSet<String>();for (var file : files) paths.add(new File(file.getFilePath()).getAbsolutePath());
         var overlays = new DetectionOverlays(TrackOverlay.restored(tracks), new VariableStarOverlay(variables,paths,files[0].getSizeWidth(),files[0].getSizeHeight()),
-                new FaintMoverOverlay(faint,times,files[0].getSizeWidth(),files[0].getSizeHeight()),new FindingOverlay(markers,files));
+                new FaintMoverOverlay(faint,times,files[0].getSizeWidth(),files[0].getSizeHeight(),measuredStarSize(data)),
+                new FindingOverlay(markers,files));
         return new Loaded(overlays,"Restored " + findings.size() + " findings from " + report.getParentFile().getName() + "."
                 + (legacy ? " Older report: frame identities are unavailable; " + referenceTracks + " tracks use reference markers." : ""));
+    }
+
+    /** The star size the saved run's faint-mover search measured, or NaN when it is absent, a fallback or invalid. */
+    private static double measuredStarSize(JsonObject data) {
+        if (!data.has("faintMoverSearch") || !data.get("faintMoverSearch").isJsonObject()) return Double.NaN;
+        var search = data.getAsJsonObject("faintMoverSearch");
+        if (!search.has("fwhmPixels") || !search.has("fwhmFromStars") || search.get("fwhmPixels").isJsonNull()
+                || !search.get("fwhmFromStars").getAsBoolean()) return Double.NaN;
+        double size = search.get("fwhmPixels").getAsDouble();
+        return Double.isFinite(size) && size > 0 ? size : Double.NaN;
     }
 
     /** Refuses nonfinite display coordinates or rates rather than creating a misleading visible marker. */

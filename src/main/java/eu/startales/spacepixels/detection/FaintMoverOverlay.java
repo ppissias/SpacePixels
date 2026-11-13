@@ -24,14 +24,25 @@ public final class FaintMoverOverlay {
     private final Map<String, Long> midpoints;
     private final int width;
     private final int height;
+    private final double starSizePixels;
 
-    /** Owns small immutable copies of fitted paths and searched-frame identities. */
-    FaintMoverOverlay(List<Candidate> candidates, Map<String, Long> midpoints, int width, int height) {
+    /**
+     * Owns small immutable copies of fitted paths and searched-frame identities, and the star size the search measured
+     * (NaN when unknown).
+     */
+    FaintMoverOverlay(List<Candidate> candidates, Map<String, Long> midpoints, int width, int height, double starSizePixels) {
         this.candidates = List.copyOf(candidates);
         this.midpoints = Map.copyOf(midpoints);
         this.width = width;
         this.height = height;
+        this.starSizePixels = starSizePixels;
     }
+
+    /**
+     * The star size (Gaussian FWHM, in pixels) the run's search measured from the frames, or NaN when the search did not
+     * run or used its fixed fallback; it sets which search speeds bin pixels.
+     */
+    public double starSizePixels() { return starSizePixels; }
 
     /** Returns the candidate display values, without the engine's mutable cutout buffers. */
     public List<Candidate> candidates() { return candidates; }
@@ -56,9 +67,11 @@ public final class FaintMoverOverlay {
     public static FaintMoverOverlay from(PipelineResult result, FitsFileInformation[] files) {
         var candidates = new ArrayList<Candidate>();
         var times = new LinkedHashMap<String, Long>();
+        double starSize = Double.NaN;
         if (files == null) files = new FitsFileInformation[0];
         if (result != null && result.telemetry != null && result.telemetry.faintMoverSearchTelemetry != null) {
             var telemetry = result.telemetry.faintMoverSearchTelemetry;
+            if (telemetry.fwhmFromStars && telemetry.fwhmPixels > 0) starSize = telemetry.fwhmPixels;
             if (telemetry.skippedReason == null) for (int i : telemetry.searchedFrameIndices) {
                 if (i < 0 || i >= files.length || files[i] == null || files[i].getFilePath() == null) continue;
                 var file = files[i];
@@ -72,6 +85,7 @@ public final class FaintMoverOverlay {
             }
         }
         var first = java.util.Arrays.stream(files).filter(java.util.Objects::nonNull).findFirst().orElse(null);
-        return new FaintMoverOverlay(candidates, times, first == null ? 0 : first.getSizeWidth(), first == null ? 0 : first.getSizeHeight());
+        return new FaintMoverOverlay(candidates, times, first == null ? 0 : first.getSizeWidth(),
+                first == null ? 0 : first.getSizeHeight(), starSize);
     }
 }

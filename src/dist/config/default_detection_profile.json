@@ -112,6 +112,7 @@
   "faintMoverMaxSpeedPixelsPerMinute": 1.0,
   "faintMoverMinScore": 8.0,
   "enableFaintMoverFrameLimit": true,
+  "faintMoverSearchSpeed": 1,
   "faintMoverMaxSeconds": 600.0,
   "autoTuneMaxCandidateFrames": 30,
   "variableStarMaxCandidateCards": 40,

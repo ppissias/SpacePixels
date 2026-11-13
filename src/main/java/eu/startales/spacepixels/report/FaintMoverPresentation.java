@@ -210,6 +210,7 @@ final class FaintMoverPresentation {
         data.put("coarseStepPixelsPerMinute", finite(t.coarseStepPixelsPerMinute));
         data.put("fineStepPixelsPerMinute", finite(t.fineStepPixelsPerMinute));
         data.put("coarseMotions", t.coarseMotions); data.put("tiles", t.tiles); data.put("tilesSearched", t.tilesSearched);
+        data.put("searchSpeed", t.searchSpeed); data.put("coarseBin", t.coarseBin); data.put("coarseFrames", t.coarseFrames);
         data.put("searchedPixels", t.searchedPixels); data.put("elapsedMs", t.elapsedMs);
         data.put("diagnosticsAvailable", t.diagnosticsAvailable); data.put("diagnosticBytes", t.diagnosticBytes);
         data.put("refinedPeaks", t.refinedPeaks); data.put("belowScore", t.belowScore);
