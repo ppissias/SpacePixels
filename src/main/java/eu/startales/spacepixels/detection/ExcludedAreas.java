@@ -109,6 +109,13 @@ public final class ExcludedAreas {
         return new ExcludedAreas(width, height, changed);
     }
 
+    /** The areas as {first column, first row, width, height}, as the engine's data areas take them. */
+    public static List<int[]> rectangles(List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
+        List<int[]> rectangles = new java.util.ArrayList<>(areas.size());
+        for (var area : areas) rectangles.add(new int[]{area.x(), area.y(), area.width(), area.height()});
+        return rectangles;
+    }
+
     /** The share of the frame inside at least one area, from 0 to 1; overlaps count once. */
     public double fraction() {
         if (areas.isEmpty() || width <= 0 || height <= 0) {

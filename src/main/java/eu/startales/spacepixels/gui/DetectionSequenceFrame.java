@@ -46,6 +46,10 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     /** The session's excluded areas, drawn and edited here; null without a session. */
     private final ExcludedAreasSection excludedAreas;
     private java.util.function.Consumer<FitsFileInformation> blinkAction = shown -> { };
+    /** The session's excluded areas, taken on the EDT for each frame prepared, as {@link #config} is. */
+    private volatile List<io.github.ppissias.jtransient.engine.ExcludedArea> areas = List.of();
+    /** The areas the image shows; a change prepares the frame again. EDT. */
+    private List<io.github.ppissias.jtransient.engine.ExcludedArea> shownAreas = List.of();
 
     /** Captures the session identity; trial controls copy values while each preparation reads fresh other settings. */
     public DetectionSequenceFrame(JFrame owner, SessionAccess sessions, DetectionConfigurationPanel detection,
@@ -137,18 +141,35 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     @Override
     protected void preparing() {
         config = trials.snapshot(detection.settingsInUse());
+        areas = ownerSession == null ? List.of() : ownerSession.getExcludedAreas().areas();
     }
 
     @Override
     protected Result prepare(int index) throws Exception {
-        return read(files[index], config);
+        return read(files[index], config, areas);
+    }
+
+    /** Shows the areas and, when they changed, finds the sources of the frame again without them. EDT. */
+    @Override
+    protected void showExcludedAreas(List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
+        super.showExcludedAreas(areas);
+        if (!areas.equals(shownAreas)) {
+            shownAreas = List.copyOf(areas);
+            refresh();
+        }
+    }
+
+    /** {@link #read(FitsFileInformation, DetectionConfig, List)} without excluded areas. */
+    static Result read(FitsFileInformation info, DetectionConfig settings) throws Exception {
+        return read(info, settings, List.of());
     }
 
     /**
-     * Reads a frame as the detection does (16-bit mono, the image HDU) and extracts its sources. Any other frame is
-     * read for display only, as Blink reads it.
+     * Reads a frame as the detection does (16-bit mono, the image HDU) and extracts its sources, leaving the excluded
+     * areas out as detection does: they are measured as fill and nothing near them is kept. The image shown is the
+     * frame itself. Any other frame is read for display only, as Blink reads it.
      */
-    static Result read(FitsFileInformation info, DetectionConfig settings) throws Exception {
+    static Result read(FitsFileInformation info, DetectionConfig settings, List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) throws Exception {
         short[][] data;
         try (Fits fits = new Fits(new File(info.getFilePath()))) {
             Object kernel = FitsInput.getImageHDU(fits).getKernel();
@@ -158,9 +179,11 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
             BlinkSequence.Frame shown = BlinkSequence.load(info);
             return Result.of(shown, null, (shown.getChannelCount() == 3 ? "colour" : "not 16-bit") + " · no raw detections");
         }
-        DataArea frameArea = DataArea.ofFrame(data);
+        DataArea frameArea = DataArea.ofFrame(data).excluding(
+                eu.startales.spacepixels.detection.ExcludedAreas.rectangles(areas));
+        short[][] measured = io.github.ppissias.jtransient.engine.ExcludedArea.filledCopy(data, areas);
         List<DetectedObject> objects = DebugOutput.withEngineDiagnostics(() -> SourceExtractor.extractSources(
-                data, settings.detectionSigmaMultiplier, settings.minDetectionPixels, settings, frameArea, frameArea)).objects;
+                measured, settings.detectionSigmaMultiplier, settings.minDetectionPixels, settings, frameArea, frameArea)).objects;
         int stars = 0;
         int streaks = 0;
         for (DetectedObject object : objects) {

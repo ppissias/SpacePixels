@@ -31,10 +31,18 @@ public class StarMaskStackTask implements Job<JTransientEngine.MasterStackResult
 
     private final FitsFileInformation[] filesInfo;
     private final DetectionConfig config;
+    private final List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas;
 
+    /** A stack without excluded areas. */
     public StarMaskStackTask(FitsFileInformation[] filesInfo, DetectionConfig config) {
+        this(filesInfo, config, List.of());
+    }
+
+    /** A stack that leaves the session's excluded areas out, as detection does; they are captured at admission. */
+    public StarMaskStackTask(FitsFileInformation[] filesInfo, DetectionConfig config, List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
         this.filesInfo = filesInfo;
         this.config = config;
+        this.excludedAreas = List.copyOf(excludedAreas);
     }
 
     @Override
@@ -50,7 +58,7 @@ public class StarMaskStackTask implements Job<JTransientEngine.MasterStackResult
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             List<ImageFrame> frames = SessionFrameLoader.loadAll(filesInfo, context::progress, 30);
             JTransientEngine.MasterStackResult result = engine.generateMasterStackWithDetails(frames, config,
-                    (percent, message) -> context.progress(30 + (int) (percent * 0.7), message));
+                    (percent, message) -> context.progress(30 + (int) (percent * 0.7), message), excludedAreas);
             context.progress(100, "Master stack ready");
             return JobOutcome.completed(result);
         } finally {

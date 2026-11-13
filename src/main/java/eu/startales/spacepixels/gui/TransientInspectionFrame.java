@@ -61,6 +61,8 @@ public class TransientInspectionFrame extends SequenceViewerFrame {
         masterNote.setFont(UiStyle.bodyFont());
         addControlRow(masterNote);
         detector = new TransientInspectionDetector(reference, this.allTransients, detection.settingsInUse());
+        // The areas the inspection left out, as detection does.
+        showExcludedAreas(reference.excludedAreas());
         if (filesInfo != null) {
             for (FitsFileInformation info : filesInfo) {
                 if (info != null && info.getFileName() != null) {

@@ -94,13 +94,24 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
     /** Shows the master stack with the display stretch of {@code visualization}. */
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
                           DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
-                          Function<Map<String, Number>, DetectionConfig> apply) {
-        this(owner, sessionName, stackResult, baseConfig, visualization, initial, apply, StarMaskExplorerFrame::computeMask);
+                          Function<Map<String, Number>, DetectionConfig> apply,
+                          List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
+        this(owner, sessionName, stackResult, baseConfig, visualization, initial, apply,
+                (stack, config, settings) -> computeMask(stack, config, settings,
+                        eu.startales.spacepixels.detection.ExcludedAreas.rectangles(excludedAreas)), excludedAreas);
     }
 
     StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
                           DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
                           Function<Map<String, Number>, DetectionConfig> apply, ComputeMask computeMask) {
+        this(owner, sessionName, stackResult, baseConfig, visualization, initial, apply, computeMask, List.of());
+    }
+
+    /** {@code excludedAreas} are the areas the stack left out; they are drawn on it and named under its title. */
+    StarMaskExplorerFrame(Window owner, String sessionName, JTransientEngine.MasterStackResult stackResult,
+                          DetectionConfig baseConfig, VisualizationSettings visualization, Settings initial,
+                          Function<Map<String, Number>, DetectionConfig> apply, ComputeMask computeMask,
+                          List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
         super("Star Mask Explorer · " + sessionName);
         AppIcon.apply(this);
         this.stack = stackResult.masterStack;
@@ -123,9 +134,10 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
                 visualization.getAutoStretchWhiteSigma()));
         ViewerSupport.bindZoomKeys(getRootPane(), view);
 
+        view.setExcludedAreas(excludedAreas);
         setLayout(new BorderLayout());
         add(view, BorderLayout.CENTER);
-        add(buildControls(stackResult), BorderLayout.EAST);
+        add(buildControls(stackResult, excludedAreas.size()), BorderLayout.EAST);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
         setSize(Math.min(1400, screen.width - 80), Math.min(900, screen.height - 80));
@@ -138,7 +150,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         recompute();
     }
 
-    private JComponent buildControls(JTransientEngine.MasterStackResult stackResult) {
+    private JComponent buildControls(JTransientEngine.MasterStackResult stackResult, int excludedAreas) {
         JPanel panel = new WidthTrackingPanel() {
             /** Keeps a useful sidebar width without fixing the content height. */
             @Override public Dimension getPreferredSize() {
@@ -151,7 +163,7 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         panel.setBorder(new EmptyBorder(12, 14, 12, 14));
 
         panel.add(left(DetectionConfigurationPanel.createSectionHeader("Star Mask")));
-        panel.add(left(muted(basisText(stackResult))));
+        panel.add(left(muted(basisText(stackResult, excludedAreas))));
         panel.add(Box.createVerticalStrut(10));
 
         panel.add(left(trials.grid()));
@@ -207,8 +219,12 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         return scroll;
     }
 
-    private static String basisText(JTransientEngine.MasterStackResult result) {
+    private static String basisText(JTransientEngine.MasterStackResult result, int excludedAreas) {
         StringBuilder text = new StringBuilder("Median of " + result.keptFrames.size() + " frames, built as in a detection run.");
+        if (excludedAreas > 0) {
+            text.append(excludedAreas == 1 ? " The excluded area is left out (light red)."
+                    : " The " + excludedAreas + " excluded areas are left out (light red).");
+        }
         if (!result.rejectedFrames.isEmpty()) {
             text.append(" Quality control left out frame");
             text.append(result.rejectedFrames.size() == 1 ? " " : "s ");
@@ -281,8 +297,9 @@ final class StarMaskExplorerFrame extends JFrame implements SessionViewer {
         worker.execute();
     }
 
-    private static Object[] computeMask(short[][] stack, DetectionConfig config, Settings settings) {
-        List<DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config).masterStars;
+    private static Object[] computeMask(short[][] stack, DetectionConfig config, Settings settings,
+                                        List<int[]> excludedRectangles) {
+        List<DetectedObject> stars = MasterReferenceAnalyzer.analyzeFromMasterStack(stack, config, excludedRectangles).masterStars;
         boolean[][] mask = MasterVetoMask.build(stars, stack[0].length, stack.length, settings.starJitter);
         return new Object[]{statistics(stars, mask), overlayLevels(mask, MASK_COLOR)};
     }

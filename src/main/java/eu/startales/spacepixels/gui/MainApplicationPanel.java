@@ -926,7 +926,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
-        startJob(JobKind.TRANSIENT_INSPECTION, owner, new ManualTransientInspectionTask(owner.getFiles(), settings), (handle, outcome) -> {
+        startJob(JobKind.TRANSIENT_INSPECTION, owner, new ManualTransientInspectionTask(owner.getFiles(), settings,
+                owner.getExcludedAreas().areas()), (handle, outcome) -> {
             if (outcome instanceof JobOutcome.Completed<ManualTransientInspectionTask.Result> completed) {
                 ManualTransientInspectionTask.Result result = completed.result();
                 TransientInspectionFrame frame = viewers.register(new TransientInspectionFrame(result.frames(), result.transients(), result.files(),

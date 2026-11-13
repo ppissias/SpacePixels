@@ -181,6 +181,36 @@ public class TaskOutcomesTest {
         }
     }
 
+    /** The star-mask stack and the inspection leave the admitted excluded areas out, as detection does. */
+    @Test
+    @SuppressWarnings("unchecked")
+    public void stackAndInspectionLeaveTheExcludedAreasOut() throws Exception {
+        Path sequence = SyntheticDatasetFactory.createMono16FitsSequence(folder.getRoot().toPath(), "areas", 5);
+        try (FitsImportService importer = new FitsImportService(sequence.toFile(), null)) {
+            FitsFileInformation[] files = importer.readFiles();
+            int width = files[0].getSizeWidth();
+            int height = files[0].getSizeHeight();
+            var areas = List.of(new io.github.ppissias.jtransient.engine.ExcludedArea(0, 0, width / 3, height));
+            DetectionConfig config = SyntheticDatasetFactory.createSyntheticDetectionConfig();
+
+            JobOutcome<?> stacked = outcomeOf(new StarMaskStackTask(files, config, areas));
+            assertTrue(String.valueOf(stacked), stacked instanceof JobOutcome.Completed<?>);
+            short[][] stack = ((JobOutcome.Completed<io.github.ppissias.jtransient.engine.JTransientEngine.MasterStackResult>) stacked)
+                    .result().masterStack;
+            assertEquals("fill in the area", Short.MIN_VALUE, stack[height / 2][width / 6]);
+            assertTrue("sky outside it", stack[height / 2][width * 2 / 3] > Short.MIN_VALUE + 100);
+
+            JobOutcome<?> inspected = outcomeOf(new ManualTransientInspectionTask(files, config, areas));
+            assertTrue(String.valueOf(inspected), inspected instanceof JobOutcome.Completed<?>);
+            var result = ((JobOutcome.Completed<ManualTransientInspectionTask.Result>) inspected).result();
+            assertEquals(areas, result.reference().excludedAreas());
+            assertTrue("the frames shown keep their pixels", result.frames().get(0).pixelData[height / 2][width / 6] > Short.MIN_VALUE + 100);
+            for (var frame : result.transients()) {
+                assertTrue(frame.transients.stream().noneMatch(o -> o.x < width / 3.0));
+            }
+        }
+    }
+
     /** The Auto-Tune frame limit that a completed detection wrote to its report's detection_config.json. */
     private static int recordedAutoTuneLimit(JobOutcome<File> outcome) throws Exception {
         return recordedProfile(report(outcome)).get("autoTuneMaxCandidateFrames").getAsInt();

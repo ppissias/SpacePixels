@@ -28,14 +28,22 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
 
     private final FitsFileInformation[] files;
     private final DetectionConfig config;
+    private final List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas;
 
     /**
      * Copies the frame array and settings at admission; metadata elements stay shared for the existing WCS contract.
      * Later array/configuration edits do not affect this inspection. Missing frames fail during execution.
      */
     public ManualTransientInspectionTask(FitsFileInformation[] files, DetectionConfig config) {
+        this(files, config, List.of());
+    }
+
+    /** An inspection that leaves the session's excluded areas out, as detection does; they are captured at admission. */
+    public ManualTransientInspectionTask(FitsFileInformation[] files, DetectionConfig config,
+                                         List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
         this.files = files == null ? null : files.clone();
         this.config = config.clone();
+        this.excludedAreas = List.copyOf(excludedAreas);
     }
 
     @Override
@@ -55,7 +63,8 @@ public class ManualTransientInspectionTask implements Job<ManualTransientInspect
             TransientEngineProgressListener progressListener =
                     (percentage, message) -> context.progress(20 + (int) (percentage * 0.8), message);
 
-            TransientInspection inspection = engine.inspectTransients(framesForLibrary, config, progressListener);
+            TransientInspection inspection = engine.inspectTransients(framesForLibrary, config, progressListener,
+                    excludedAreas);
             return JobOutcome.completed(new Result(framesForLibrary, inspection.frames(), filesInfo, inspection.reference()));
         } finally {
             engine.shutdown();

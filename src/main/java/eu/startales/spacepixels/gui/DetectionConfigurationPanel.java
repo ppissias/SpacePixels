@@ -429,19 +429,22 @@ public class DetectionConfigurationPanel extends JPanel {
         if (config == null) {
             return;
         }
-        String stackKey = masterStackKey(config);
+        // The areas the session leaves out shape the stack, as in detection.
+        var areas = owner.getExcludedAreas().areas();
+        String stackKey = eu.startales.spacepixels.detection.QualityControlSnapshot.withExcludedAreas(
+                masterStackKey(config), areas);
         if (owner != null && owner.getMasterStack(stackKey) != null) {
-            showStarMaskExplorer(files, config);
+            showStarMaskExplorer(files, config, stackKey, areas);
             return;
         }
         JobCoordinator.Admission admission = jobs.start(JobKind.STAR_MASK_STACK, owner,
-                new StarMaskStackTask(files, config.clone()), sessions.forCurrent((handle, outcome) -> {
+                new StarMaskStackTask(files, config.clone(), areas), sessions.forCurrent((handle, outcome) -> {
                     if (!(outcome instanceof JobOutcome.Completed<JTransientEngine.MasterStackResult> completed)) {
                         readout.showDetectionProblem(outcome);
                     } else if (sessions.isCurrent(handle.session())) {
                         // Kept only for the session it was built for.
                         owner.setMasterStack(stackKey, completed.result());
-                        showStarMaskExplorer(files, config);
+                        showStarMaskExplorer(files, config, stackKey, areas);
                     }
                 }));
         if (!admission.admitted()) {
@@ -450,15 +453,16 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** Opens the explorer on the settings taken when Test Star Mask was clicked. */
-    private void showStarMaskExplorer(FitsFileInformation[] files, DetectionConfig config) {
+    private void showStarMaskExplorer(FitsFileInformation[] files, DetectionConfig config, String stackKey,
+                                      java.util.List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
         File first = new File(files[0].getFilePath());
         String sessionName = ViewerSupport.sessionName(first);
         StarMaskExplorerFrame.Settings current = new StarMaskExplorerFrame.Settings(
                 config.masterSigmaMultiplier, config.masterGrowSigmaMultiplier, config.masterMinDetectionPixels, config.maxStarJitter);
         ProcessingSession owner = sessions.current();
-        StarMaskExplorerFrame frame = viewers.register(new StarMaskExplorerFrame(windowFrame, sessionName, owner.getMasterStack(masterStackKey(config)), config,
+        StarMaskExplorerFrame frame = viewers.register(new StarMaskExplorerFrame(windowFrame, sessionName, owner.getMasterStack(stackKey), config,
                 visualization, current,
-                changes -> sessions.isCurrent(owner) ? applyTrialSettings(changes) : null));
+                changes -> sessions.isCurrent(owner) ? applyTrialSettings(changes) : null, areas));
         frame.setVisible(true);
     }
 
