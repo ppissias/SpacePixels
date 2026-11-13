@@ -32,7 +32,8 @@ enum ViewerLayer {
     KNOWN_STARS("Known stars", CATALOGUE, true, false, true),
     KNOWN_VARIABLES("Known variables", CATALOGUE, true, true, true),
     DEEP_SKY("Deep-sky objects", CATALOGUE, true, true, true),
-    SOLAR_SYSTEM("Known asteroids & comets", CATALOGUE, true, true, true);
+    SOLAR_SYSTEM("Known asteroids & comets", CATALOGUE, true, true, true),
+    EXCLUDED_AREAS("Excluded areas", null, true, false, false);
 
     final String title;
     /** The group this layer belongs to, or null. */

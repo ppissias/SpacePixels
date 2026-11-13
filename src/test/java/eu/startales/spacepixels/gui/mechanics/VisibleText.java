@@ -31,6 +31,15 @@ final class VisibleText {
         };
     }
 
+    static GenericTypeMatcher<javax.swing.JToggleButton> toggleButton(String text) {
+        return new GenericTypeMatcher<>(javax.swing.JToggleButton.class, true) {
+            @Override
+            protected boolean isMatching(javax.swing.JToggleButton component) {
+                return text.equals(component.getText());
+            }
+        };
+    }
+
     static GenericTypeMatcher<JCheckBox> checkBox(String text) {
         return new GenericTypeMatcher<>(JCheckBox.class, true) {
             @Override

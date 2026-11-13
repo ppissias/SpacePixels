@@ -39,12 +39,21 @@ final class ReportData {
     private final List<RescueTrackAssociations.Match> rescueAssociations;
     private final KnownSolarSystemReport.Summary knownSolarSystem;
     private final List<eu.startales.spacepixels.detection.SavedReportOverlays.FrameIdentity> inputFrames;
+    /** The rectangles left out of detection, each {x, y, width, height} in frame pixels; empty for none. */
+    private final List<Map<String, Integer>> excludedAreas = new ArrayList<>();
     private final List<eu.startales.spacepixels.detection.VariableStarOverlay.Candidate> variableMarkers;
 
     private ReportData(DetectionReportContext context, PipelineTelemetry telemetry, VariableStarAnalysis variables,
                        List<ResidualTransientAnalysis.CommonMotionGroup> groups, ReportInclusion inclusion) {
         this.inclusion = inclusion;
         inputFrames = eu.startales.spacepixels.detection.SavedReportOverlays.identities(context.fitsFiles);
+        if (context.dataArea != null) {
+            for (int[] r : context.dataArea.excludedRectangles()) {
+                var area = new LinkedHashMap<String, Integer>();
+                area.put("x", r[0]); area.put("y", r[1]); area.put("width", r[2]); area.put("height", r[3]);
+                excludedAreas.add(area);
+            }
+        }
         variableStarOptions = context.settings.getVariableStarReportOptions();
         faintMovers = context.faintMoverPresentation;
         faintMoverSearch = FaintMoverPresentation.search(context);
@@ -187,6 +196,7 @@ final class ReportData {
         data.put("inputFrames", inputFrames);
         data.put("frameNumbering", "one-based; empty frames on stack candidates means per-frame evidence is unavailable");
         data.put("rejectedFrames", rejectedFrames.stream().sorted().map(i -> i + 1).toList());
+        if (!excludedAreas.isEmpty()) data.put("excludedAreas", excludedAreas);
         var groups = new LinkedHashMap<String, Boolean>();
         groups.put("anomalies", inclusion.anomalies); groups.put("slowMovers", inclusion.slowMovers);
         groups.put("localRescue", inclusion.localRescue); groups.put("localActivity", inclusion.localActivity);

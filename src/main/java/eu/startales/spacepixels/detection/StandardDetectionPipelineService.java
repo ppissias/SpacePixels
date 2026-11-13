@@ -162,7 +162,7 @@ public final class StandardDetectionPipelineService {
             // Loading took 0-20%; the engine reports 0-100%, shown as 20-100%.
             result = engine.runPipeline(framesForLibrary, effectiveConfig, progressListener == null ? null
                     : (percent, message) -> progressListener.onProgressUpdate(20 + (int) (percent * 0.8), message),
-                    null, liveFindings);
+                    null, liveFindings, reportContext.excludedAreas());
         } finally {
             engine.shutdown();
             if (liveFindings != null) {

@@ -22,9 +22,22 @@ import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
  * @param correction the correction, switched on or off; null when there is none
  * @param catalogue  the catalogue; null when there is none
  * @param solarSystem the saved or session-owned known-object predictions; null when unavailable
+ * @param excludedAreas the rectangles the session leaves out of detection; null when there are none
  */
 public record SkySnapshot(File folder, PlateSolutionCorrection correction, SkyCatalogue catalogue,
-                          eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem) {
+                          eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem,
+                          eu.startales.spacepixels.detection.ExcludedAreas excludedAreas) {
+
+    /** A snapshot without excluded areas. */
+    public SkySnapshot(File folder, PlateSolutionCorrection correction, SkyCatalogue catalogue,
+                       eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem) {
+        this(folder, correction, catalogue, solarSystem, null);
+    }
+
+    /** This snapshot with the session's excluded areas, which the session owns rather than the sky catalogue. */
+    public SkySnapshot withExcludedAreas(eu.startales.spacepixels.detection.ExcludedAreas areas) {
+        return new SkySnapshot(folder, correction, catalogue, solarSystem, areas);
+    }
 
     /** Whether this is the sky data of {@code directory}, the folder of a run's frames. */
     public boolean belongsTo(File directory) {

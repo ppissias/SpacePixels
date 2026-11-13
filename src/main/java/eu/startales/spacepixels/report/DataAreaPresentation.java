@@ -27,6 +27,9 @@ import java.util.Locale;
  */
 final class DataAreaPresentation {
     static final Color COLOR = new Color(60, 120, 255);
+    /** Areas left out of detection: a light, transparent red with a firmer outline, as in the viewers. */
+    static final Color EXCLUDED_FILL = new Color(255, 96, 96, 64);
+    static final Color EXCLUDED_LINE = new Color(255, 110, 110, 210);
     /** A limiting frame is named when leaving it out would add at least this share of the frame. */
     private static final double NAMED_LIMIT_FRACTION = 0.005;
 
@@ -46,7 +49,13 @@ final class DataAreaPresentation {
         for (double[] p : outline) {
             points.append(points.length() == 0 ? "" : " ").append(String.format(Locale.US, "%.0f,%.0f", p[0], p[1]));
         }
-        return "<polygon points='" + points + "' fill='none' stroke='" + hex(COLOR)
+        StringBuilder excluded = new StringBuilder();
+        for (int[] r : area.excludedRectangles()) {
+            excluded.append(String.format(Locale.US, "<rect x='%d' y='%d' width='%d' height='%d' fill='%s' fill-opacity='0.25' "
+                    + "stroke='%s' stroke-width='1.5' vector-effect='non-scaling-stroke'/>", r[0], r[1], r[2], r[3],
+                    hex(EXCLUDED_FILL), hex(EXCLUDED_LINE)));
+        }
+        return excluded + "<polygon points='" + points + "' fill='none' stroke='" + hex(COLOR)
                 + "' stroke-width='2' stroke-dasharray='8 5' vector-effect='non-scaling-stroke'/>";
     }
 
@@ -68,6 +77,13 @@ final class DataAreaPresentation {
         Graphics2D g = map.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         float width = Math.max(2f, map.getWidth() / 1500f);
+        for (int[] r : area.excludedRectangles()) {
+            g.setColor(EXCLUDED_FILL);
+            g.fillRect(r[0], r[1], r[2], r[3]);
+            g.setColor(EXCLUDED_LINE);
+            g.setStroke(new BasicStroke(width));
+            g.drawRect(r[0], r[1], r[2], r[3]);
+        }
         g.setStroke(new BasicStroke(width, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10f,
                 new float[]{6 * width, 4 * width}, 0f));
         g.setColor(COLOR);
@@ -83,9 +99,14 @@ final class DataAreaPresentation {
         if (area == null) {
             return "";
         }
-        StringBuilder text = new StringBuilder(String.format(Locale.US,
+        int excluded = area.excludedRectangles().size();
+        StringBuilder text = new StringBuilder(excluded == 0 ? String.format(Locale.US,
                 "Every kept frame has image data on %.1f %% of the frame (the data area, %d px in from the registration fill and the image edge).",
-                100 * area.getFraction(), DataArea.MARGIN));
+                100 * area.getFraction(), DataArea.MARGIN)
+                : String.format(Locale.US, "Detection used %.1f %% of the frame: where every kept frame has image data "
+                        + "(%d px in from the registration fill and the image edge), less %d excluded %s drawn in light red, "
+                        + "each kept %d px away.", 100 * area.getFraction(), DataArea.MARGIN, excluded,
+                        excluded == 1 ? "area" : "areas", DataArea.MARGIN));
         if (telemetry != null && !telemetry.dataAreaLimitingFrames.isEmpty()) {
             PipelineTelemetry.DataAreaFrameStat worst = telemetry.dataAreaLimitingFrames.get(0);
             if (worst.gainedFraction >= NAMED_LIMIT_FRACTION) {

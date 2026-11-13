@@ -37,6 +37,22 @@ public record QualityControlSnapshot(List<Input> inputs, String settingsKey, Fra
         return new GsonBuilder().serializeSpecialFloatingPointValues().create().toJson(config);
     }
 
+    /** The settings key of a run that leaves these areas out: QC measured without them is stale once they change. */
+    public static String settingsKey(DetectionConfig config, List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
+        return withExcludedAreas(settingsKey(config), areas);
+    }
+
+    /** The key followed by the excluded areas; the key itself when there are none, or when it is null. */
+    public static String withExcludedAreas(String settingsKey, List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
+        if (settingsKey == null || areas == null || areas.isEmpty()) return settingsKey;
+        StringBuilder key = new StringBuilder(settingsKey).append(" excluding");
+        for (var area : areas) {
+            key.append(' ').append(area.x()).append(',').append(area.y()).append(',').append(area.width())
+                    .append(',').append(area.height());
+        }
+        return key.toString();
+    }
+
     /** Copies all imported input identities in original order, independent of the table selection. */
     public static List<Input> inputs(FitsFileInformation[] files) {
         return Arrays.stream(files).map(Input::of).toList();

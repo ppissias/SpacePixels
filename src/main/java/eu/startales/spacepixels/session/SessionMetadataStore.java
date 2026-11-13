@@ -23,6 +23,8 @@ public interface SessionMetadataStore {
     void saveSolarSystem(File folder, SolarSystemObjects objects) throws IOException;
     void saveCorrection(File folder, PlateSolutionCorrection correction) throws IOException;
     void saveAutoTune(File folder, AutoTuneSessionStore.Document document) throws IOException;
+    /** Saves the session's excluded areas; none removes the file. */
+    void saveExcludedAreas(File folder, eu.startales.spacepixels.detection.ExcludedAreas areas) throws IOException;
 
     static SessionMetadataStore filesystem() {
         return new SessionMetadataStore() {
@@ -51,7 +53,10 @@ public interface SessionMetadataStore {
                                 "Cannot compact saved Auto-Tune results; the loaded measurements remain available.", failure);
                     }
                 }
-                return new SessionMetadata(catalogue, correction, tuning, solarSystem);
+                var excluded = eu.startales.spacepixels.detection.ExcludedAreas.load(folder);
+                if (excluded != null && (files.length == 0
+                        || !excluded.fits(files[0].getSizeWidth(), files[0].getSizeHeight()))) excluded = null;
+                return new SessionMetadata(catalogue, correction, tuning, solarSystem, excluded);
             }
 
             @Override public void saveCatalogue(File folder, SkyCatalogue catalogue) throws IOException {
@@ -65,6 +70,10 @@ public interface SessionMetadataStore {
             }
             @Override public void saveAutoTune(File folder, AutoTuneSessionStore.Document document) throws IOException {
                 AutoTuneSessionStore.save(folder, document);
+            }
+            @Override public void saveExcludedAreas(File folder, eu.startales.spacepixels.detection.ExcludedAreas areas)
+                    throws IOException {
+                eu.startales.spacepixels.detection.ExcludedAreas.save(folder, areas);
             }
         };
     }

@@ -362,5 +362,6 @@ public class ApplicationStorageSessionTest {
         @Override public void saveSolarSystem(File directory, SolarSystemObjects objects) {}
         @Override public void saveCorrection(File directory, PlateSolutionCorrection correction) throws IOException {}
         @Override public void saveAutoTune(File directory, AutoTuneSessionStore.Document document) throws IOException {}
+        @Override public void saveExcludedAreas(File directory, eu.startales.spacepixels.detection.ExcludedAreas areas) {}
     }
 }

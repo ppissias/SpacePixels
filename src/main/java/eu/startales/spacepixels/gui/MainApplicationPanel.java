@@ -105,7 +105,16 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JButton manualTransientInspectionButton = new JButton("Manual Transient Inspection");
     private final JButton qualityControlButton = new JButton("Run quality control");
     private final JButton qualityDetailsButton = new JButton("Quality details…");
+    /** The active detection settings' QC key, without the excluded areas. */
+    private String activeDetectionSettingsKey;
+    /** The QC identity in use: the active detection settings and the current session's excluded areas. */
     private String activeQualitySettingsKey;
+    /** The session whose excluded areas the QC and report currency follow; null when none. */
+    private ProcessingSession subscribedExcludedAreas;
+    private final Runnable excludedAreasChanged = () -> {
+        refreshQualityKey();
+        refreshActionEmphasis();
+    };
     private final JButton detectBatchButton = new JButton("Detect Moving Targets");
     private final JButton detectIterativelyButton = new JButton("Detect Iteratively (large datasets)");
     // The newest report of the session, under the Detect buttons; hidden when there is none.
@@ -641,7 +650,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (settings == null) return;
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
-        startJob(JobKind.QUALITY_CONTROL, owner, new QualityControlTask(owner.getFiles(), settings), (handle, outcome) -> {
+        startJob(JobKind.QUALITY_CONTROL, owner, new QualityControlTask(owner.getFiles(), settings,
+                owner.getExcludedAreas().areas()), (handle, outcome) -> {
             if (outcome instanceof JobOutcome.Completed<QualityControlSnapshot> completed) {
                 owner.setQualityControl(completed.result());
                 if (table.getModel() instanceof FitsFileTableModel model) {
@@ -697,7 +707,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         boolean tooFew = current && quality.tooFewFrames();
         qualityNote.setVisible(stale || tooFew);
         qualityNote.setText(stale ? "QC stale" : "⚠ too few for detection");
-        qualityNote.setToolTipText(stale ? "The settings or frames changed after quality control ran. Run it again for current results."
+        qualityNote.setToolTipText(stale ? "The settings, frames or excluded areas changed after quality control ran. Run it again for current results."
                 : "Quality control would keep fewer than three frames, so a detection run would stop there.");
         int selected = table == null ? 0 : table.getSelectedRowCount();
         selectionCount.setVisible(selected > 0);
@@ -770,7 +780,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         DetectionTask detection = new DetectionTask(owner.getFiles(), settings,
                 DetectionRunOptions.capture(applicationSettings.getConfig(), configuration.autoTuneMaxCandidateFrames())
                         .withVisualization(configuration.visualizationSettings()),
-                owner.getSkyCatalogue().snapshot(),
+                owner.runSnapshot(),
                 summary -> reportPrompt.confirm(summary, owner.hasPlateSolvedFrame(), 50, null, settings),
                 reportPrompt::confirmPreFlight)
                         .showingPreviews(progressDialog.previewSink());
@@ -949,7 +959,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
                 configuration.visualizationSettings(), selected.plan(),
                 selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames(),
-                sessions.current() == null ? null : sessions.current().getSkyCatalogue().snapshot());
+                sessions.current() == null ? null : sessions.current().runSnapshot());
         GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
         if (!reportPrompt.confirmReportPath(eu.startales.spacepixels.report.ReportPathWarnings.beforeDetection(
                 selected.directory(), true))) return;
@@ -1032,6 +1042,10 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         containsColorImages = false;
         FitsFileTableModel model = (FitsFileTableModel) tableModel;
         ProcessingSession owner = sessions.current();
+        if (subscribedExcludedAreas != null) subscribedExcludedAreas.removeExcludedAreasListener(excludedAreasChanged);
+        subscribedExcludedAreas = owner;
+        if (owner != null) owner.addExcludedAreasListener(excludedAreasChanged);
+        refreshQualityKey();
         model.showQuality(owner == null ? null : owner.getQualityControl(), activeQualitySettingsKey);
         if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
         subscribedSkyCatalogue = skyCatalogue();
@@ -1190,9 +1204,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
      */
     @Override
     public void showActiveDetectionSettings(DetectionConfig config) {
-        activeQualitySettingsKey = QualityControlSnapshot.settingsKey(config);
-        if (table != null && table.getModel() instanceof FitsFileTableModel model)
-            model.activeSettingsChanged(activeQualitySettingsKey);
+        activeDetectionSettingsKey = QualityControlSnapshot.settingsKey(config);
+        refreshQualityKey();
         activeDetectionSigma.setText(String.format(Locale.US, "%.2f", config.detectionSigmaMultiplier));
         activeDetectionGrow.setText(String.format(Locale.US, "%.2f", config.growSigmaMultiplier));
         activeDetectionPixels.setText(Integer.toString(config.minDetectionPixels));
@@ -1201,6 +1214,18 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         activeMaskPixels.setText(Integer.toString(config.masterMinDetectionPixels));
         activeLimits.setText(String.format(Locale.US, "Overlap %.2f · Jitter %.2f px", config.maxMaskOverlapFraction, config.maxStarJitter));
         refreshActionEmphasis();
+    }
+
+    /**
+     * Combines the active settings with the current session's excluded areas, so a QC result or report measured with
+     * other areas shows as stale. EDT only.
+     */
+    private void refreshQualityKey() {
+        ProcessingSession owner = sessions.current();
+        activeQualitySettingsKey = QualityControlSnapshot.withExcludedAreas(activeDetectionSettingsKey,
+                owner == null ? List.of() : owner.getExcludedAreas().areas());
+        if (table != null && table.getModel() instanceof FitsFileTableModel model)
+            model.activeSettingsChanged(activeQualitySettingsKey);
     }
 
     /** Small rectangle of the active detection settings, with the link that opens Detection Settings. */
@@ -1316,6 +1341,24 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         JPopupMenu menu = new JPopupMenu();
         menu.add(new JMenuItem(blinkAction));
         menu.add(new JMenuItem(previewAction));
+        // Preview Frame with drawing on: rectangles that detection leaves out in every frame.
+        JMenuItem excludeAreas = new JMenuItem("Exclude Areas…");
+        excludeAreas.setToolTipText("Open Preview Frame and draw rectangles that detection leaves out in every frame, "
+                + "such as blurred edges or a bad column.");
+        excludeAreas.addActionListener(event -> {
+            previewSelectedFrame();
+            if (detectionSequenceFrame != null && detectionSequenceFrame.isVisible()) {
+                detectionSequenceFrame.startDrawingExcludedAreas();
+            }
+        });
+        menu.add(excludeAreas);
+        menu.addPopupMenuListener(new javax.swing.event.PopupMenuListener() {
+            @Override public void popupMenuWillBecomeVisible(javax.swing.event.PopupMenuEvent e) {
+                excludeAreas.setEnabled(previewAction.isEnabled());
+            }
+            @Override public void popupMenuWillBecomeInvisible(javax.swing.event.PopupMenuEvent e) { }
+            @Override public void popupMenuCanceled(javax.swing.event.PopupMenuEvent e) { }
+        });
         menu.add(new JMenuItem(solveAction));
         // For the frame clicked, also among several selected; offered once that frame has a quality result.
         JMenuItem qualityDetails = new JMenuItem("Quality details…");
@@ -2031,6 +2074,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         solarController = null;
         if (subscribedSkyCatalogue != null) subscribedSkyCatalogue.removeCorrectionListener(correctionChanged);
         subscribedSkyCatalogue = null;
+        if (subscribedExcludedAreas != null) subscribedExcludedAreas.removeExcludedAreasListener(excludedAreasChanged);
+        subscribedExcludedAreas = null;
         if (detectionSequenceFrame != null) {
             detectionSequenceFrame.closeForSessionChange();
             detectionSequenceFrame = null;
@@ -2135,6 +2180,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     sessions.current() == null ? null : sessions.current().getVariableStarOverlay(), blinkStart);
             blinkFrame.setFaintMoverOverlay(sessions.current() == null ? null : sessions.current().getFaintMoverOverlay());
             blinkFrame.setFindingOverlay(sessions.current() == null ? null : sessions.current().getFindingOverlay());
+            blinkFrame.showExcludedAreasOf(sessions.current());
             return;
         }
         // Stopped, or failed: hides the window if it still shows the loading progress.

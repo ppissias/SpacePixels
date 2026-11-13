@@ -56,6 +56,10 @@ public class BlinkFrame extends JFrame implements SessionViewer {
     /** Told when a blink, or the loading before it, ends because the window closed; set by the main window. */
     private Runnable onClose = () -> { };
     private final FrameView view = new FrameView();
+    /** The session whose excluded areas are shown while a blink is open; null when none. */
+    private eu.startales.spacepixels.session.ProcessingSession excludedAreaSession;
+    private final Runnable excludedAreaListener = () -> view.setExcludedAreas(excludedAreaSession == null
+            ? java.util.List.of() : excludedAreaSession.getExcludedAreas().areas());
     private final JButton playButton = new JButton("❚❚ Pause");
     private final JButton previousButton = new JButton("◀");
     private final JButton nextButton = new JButton("▶");
@@ -368,6 +372,7 @@ public class BlinkFrame extends JFrame implements SessionViewer {
 
     /** Stops and lets go of the frames of the current blink, if any. */
     private void release() {
+        showExcludedAreasOf(null);
         view.setFaintMoverOverlay(null);
         view.setFindingOverlay(null);
         gifExport.release();
@@ -388,6 +393,14 @@ public class BlinkFrame extends JFrame implements SessionViewer {
         cursorPixel = null;
         view.clear();
         frameModel.fireTableDataChanged();
+    }
+
+    /** Shows the session's excluded areas while the blink is open, following later changes; null shows none. */
+    void showExcludedAreasOf(eu.startales.spacepixels.session.ProcessingSession session) {
+        if (excludedAreaSession != null) excludedAreaSession.removeExcludedAreasListener(excludedAreaListener);
+        excludedAreaSession = session;
+        if (session != null) session.addExcludedAreasListener(excludedAreaListener);
+        excludedAreaListener.run();
     }
 
     /** Installs the last completed run's fitted paths after a blink opens, using full frame identities. */

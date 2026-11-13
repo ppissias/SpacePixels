@@ -43,6 +43,10 @@ public class SessionIoMechanicsTest extends MechanicsTestCase {
         @Override public void saveAutoTune(File directory, AutoTuneSessionStore.Document document) throws IOException {
             files.saveAutoTune(directory, document);
         }
+        @Override public void saveExcludedAreas(File directory, eu.startales.spacepixels.detection.ExcludedAreas areas)
+                throws IOException {
+            files.saveExcludedAreas(directory, areas);
+        }
     });
 
     @Override protected ApplicationWindow createApplicationWindow() { return new ApplicationWindow(storage); }

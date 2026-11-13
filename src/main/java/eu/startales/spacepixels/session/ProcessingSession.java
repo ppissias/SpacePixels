@@ -46,6 +46,9 @@ public final class ProcessingSession implements AutoCloseable {
     private File lastReport;
     /** The overlays of the last detection run; written on the EDT when a run ends, read by the viewers. */
     private volatile DetectionOverlays lastRun;
+    /** The rectangles left out of detection; replaced, never changed, on the EDT. */
+    private volatile eu.startales.spacepixels.detection.ExcludedAreas excludedAreas;
+    private final List<Runnable> excludedAreaListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     /** Last completed all-frame QC, detached from images and live settings; updated on the session's UI owner. */
     private QualityControlSnapshot qualityControl;
     private String masterStackKey;
@@ -81,6 +84,37 @@ public final class ProcessingSession implements AutoCloseable {
         skyCatalogue.set(metadata.catalogue());
         skyCatalogue.setCorrection(metadata.correction());
         skyCatalogue.setSolarSystem(metadata.solarSystem());
+        int width = files.length == 0 ? 0 : files[0].getSizeWidth();
+        int height = files.length == 0 ? 0 : files[0].getSizeHeight();
+        var saved = metadata.excludedAreas();
+        excludedAreas = saved != null && saved.fits(width, height) ? saved
+                : eu.startales.spacepixels.detection.ExcludedAreas.none(width, height);
+    }
+
+    /** The rectangles this session leaves out of detection; empty when there are none. EDT. */
+    public eu.startales.spacepixels.detection.ExcludedAreas getExcludedAreas() { return excludedAreas; }
+
+    /**
+     * Replaces the session's excluded areas, tells the listeners, and saves them in the session's folder when the
+     * session has storage; the completion is delivered only while this session is open. EDT.
+     */
+    public void setExcludedAreas(eu.startales.spacepixels.detection.ExcludedAreas areas, Consumer<Throwable> finished) {
+        requireOpen();
+        excludedAreas = Objects.requireNonNull(areas);
+        for (Runnable listener : List.copyOf(excludedAreaListeners)) listener.run();
+        if (storage != null) saveMetadata(() -> storage.store().saveExcludedAreas(folder, areas), finished);
+        else finished.accept(null);
+    }
+
+    /** Calls the listener on the EDT whenever the excluded areas change. */
+    public void addExcludedAreasListener(Runnable listener) { excludedAreaListeners.add(Objects.requireNonNull(listener)); }
+
+    /** Stops calling the listener. */
+    public void removeExcludedAreasListener(Runnable listener) { excludedAreaListeners.remove(listener); }
+
+    /** What a run takes from this session when it is admitted: the sky data and the excluded areas. EDT. */
+    public eu.startales.spacepixels.skycatalog.SkySnapshot runSnapshot() {
+        return skyCatalogue.snapshot().withExcludedAreas(excludedAreas);
     }
 
     public SessionMetadata getMetadata() { return metadata; }

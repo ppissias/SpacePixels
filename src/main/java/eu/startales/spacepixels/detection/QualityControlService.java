@@ -32,10 +32,21 @@ public final class QualityControlService {
      */
     public QualityControlSnapshot evaluate(FitsFileInformation[] inputFiles, DetectionConfig config,
                                            TransientEngineProgressListener progress) throws Exception {
+        return evaluate(inputFiles, config, java.util.List.of(), progress);
+    }
+
+    /**
+     * {@link #evaluate(FitsFileInformation[], DetectionConfig, TransientEngineProgressListener)} that leaves the
+     * session's excluded areas out, as detection does, and names them in the result's settings key.
+     */
+    public QualityControlSnapshot evaluate(FitsFileInformation[] inputFiles, DetectionConfig config,
+                                           java.util.List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas,
+                                           TransientEngineProgressListener progress) throws Exception {
         FitsFileInformation[] files = inputFiles.clone();
+        var areas = java.util.List.copyOf(excludedAreas);
         DetectionConfig captured = DetectionPipelineSupport.createEffectiveDetectionConfig(config, files.length);
         var identities = QualityControlSnapshot.inputs(files);
-        String settingsKey = QualityControlSnapshot.settingsKey(captured);
+        String settingsKey = QualityControlSnapshot.settingsKey(captured, areas);
         Path[] paths = new Path[files.length];
         Stamp[] stamps = new Stamp[files.length];
         for (int index = 0; index < files.length; index++) {
@@ -58,7 +69,7 @@ public final class QualityControlService {
                     return new ImageFrame(index, paths[index].getFileName().toString(), pixels,
                             files[index].getObservationTimestamp(), files[index].getExposureDurationMillis());
                 }
-            }, captured, progress);
+            }, captured, progress, areas);
             for (int index = 0; index < paths.length; index++) checkUnchanged(paths[index], stamps[index]);
             return new QualityControlSnapshot(identities, settingsKey, result);
         }

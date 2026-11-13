@@ -33,6 +33,21 @@ public class QualityControlServiceTest {
         assertEquals(expectedKey, result.settingsKey());
     }
 
+    /** Excluded areas are measured without and named in the settings key, so a result taken with others is stale. */
+    @Test public void excludedAreasEnterTheMeasurementAndTheKey() throws Exception {
+        var files = files();
+        DetectionConfig config = new DetectionConfig();
+        var areas = java.util.List.of(new io.github.ppissias.jtransient.engine.ExcludedArea(30, 0, 30, files[0].getSizeHeight()));
+        var without = new QualityControlService().evaluate(files, config, null);
+        var with = new QualityControlService().evaluate(files, config, areas, null);
+        assertEquals(without.settingsKey() + " excluding 30,0,30," + files[0].getSizeHeight(), with.settingsKey());
+        assertEquals(QualityControlSnapshot.settingsKey(
+                DetectionPipelineSupport.createEffectiveDetectionConfig(config, files.length), areas), with.settingsKey());
+        assertNotEquals("the areas change the measurement", without.result(), with.result());
+        assertFalse(with.isCurrent(files, without.settingsKey()));
+        assertEquals(without.settingsKey(), QualityControlSnapshot.withExcludedAreas(without.settingsKey(), java.util.List.of()));
+    }
+
     /** A successful coverage pass does not authorize using changed image data in the measurement pass. */
     @Test public void editedFrameFailsWithItsOriginalCause() throws Exception {
         var files = files();

@@ -43,6 +43,9 @@ final class OverlayStyle {
     static final Color PERIOD_WITHIN_SESSION = new Color(0xFF9A1F);
     static final Color DETECTION_POINT = new Color(50, 255, 50);
     static final Color DETECTION_STREAK = new Color(255, 50, 50);
+    /** Areas left out of detection: a light, transparent red, with a firmer outline. */
+    static final Color EXCLUDED_FILL = new Color(255, 96, 96, 64);
+    static final Color EXCLUDED_LINE = new Color(255, 110, 110, 210);
     /** The image well behind the swatches, so light marks show in the light theme too. */
     private static final Color SWATCH_BACKGROUND = new Color(0x14121f);
     private static final float[] FAINT_MOVER_DASH = {5, 4};
@@ -218,6 +221,14 @@ final class OverlayStyle {
                     g2.setColor(CATALOGUE);
                     g2.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10, new float[]{2.5f, 2}, 0));
                     g2.draw(new Ellipse2D.Double(2.5, 5.5, 13, 7));
+                }
+                case EXCLUDED_AREAS -> {
+                    java.awt.geom.Rectangle2D box = new java.awt.geom.Rectangle2D.Double(3.5, 4.5, 11, 9);
+                    g2.setColor(EXCLUDED_FILL);
+                    g2.fill(box);
+                    g2.setColor(EXCLUDED_LINE);
+                    g2.setStroke(new BasicStroke(1.2f));
+                    g2.draw(box);
                 }
                 case SOLAR_SYSTEM -> {
                     g2.setColor(CATALOGUE);

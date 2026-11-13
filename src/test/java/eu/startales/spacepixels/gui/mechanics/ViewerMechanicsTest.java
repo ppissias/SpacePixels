@@ -8,6 +8,7 @@ import org.assertj.swing.fixture.JCheckBoxFixture;
 import org.junit.Test;
 
 import javax.swing.JFrame;
+import javax.swing.JComponent;
 import javax.swing.JLabel;
 import java.awt.event.WindowEvent;
 import java.nio.file.Path;
@@ -133,6 +134,91 @@ public class ViewerMechanicsTest extends MechanicsTestCase {
         FrameFixture preview = viewer("Preview Frame");
         waitForFrame(preview, "Frame 2 of 5", "detecting");
         closeViewer(preview);
+    }
+
+    /**
+     * In Preview Frame, a drag in drawing mode marks an excluded area, which the session saves in its folder; a right
+     * click inside it removes it, and a drawn area comes back when the folder is imported again.
+     */
+    @Test(timeout = 180_000)
+    public void excludedAreasAreDrawnSavedRemovedAndRestored() throws Exception {
+        Path session = SolvedSession.create(folder.newFolder("solved").toPath());
+        java.io.File saved = session.resolve("excluded_areas.json").toFile();
+        importFolder(session);
+        window().table().selectRows(0);
+        window().button(VisibleText.button("Preview Frame")).click();
+        FrameFixture preview = viewer("Preview Frame");
+        waitForFrame(preview, "Frame 1 of 5", "detecting");
+        assertTrue(excludedSummary(preview).contains("No excluded areas"));
+
+        javax.swing.AbstractButton draw = preview.toggleButton(VisibleText.toggleButton("Draw areas")).target();
+        GuiActionRunner.execute(() -> draw.doClick());
+        JComponent image = frameView(preview);
+        java.awt.Point middle = GuiActionRunner.execute(() -> new java.awt.Point(image.getWidth() / 2, image.getHeight() / 2));
+        dragOn(image, new java.awt.Point(middle.x - 40, middle.y - 30), new java.awt.Point(middle.x + 40, middle.y + 30));
+        waitFor("the drawn area is listed", () -> excludedSummary(preview).startsWith("1 area"));
+        waitFor("the session saves the area", saved::isFile);
+
+        robot().click(image, middle, org.assertj.swing.core.MouseButton.RIGHT_BUTTON, 1);
+        waitFor("a right click inside the area removes it", () -> excludedSummary(preview).contains("No excluded areas"));
+        waitFor("no areas removes the file", () -> !saved.exists());
+
+        dragOn(image, new java.awt.Point(middle.x - 60, middle.y - 20), new java.awt.Point(middle.x - 10, middle.y + 20));
+        waitFor("the second area is saved", () -> excludedSummary(preview).startsWith("1 area") && saved.isFile());
+        GuiActionRunner.execute(() -> draw.doClick());
+        closeViewer(preview);
+
+        importFolder(session);
+        window().table().selectRows(0);
+        window().button(VisibleText.button("Preview Frame")).click();
+        FrameFixture reopened = viewer("Preview Frame");
+        waitForFrame(reopened, "Frame 1 of 5", "detecting");
+        assertTrue("the saved area comes back with the folder", excludedSummary(reopened).startsWith("1 area"));
+        closeViewer(reopened);
+    }
+
+    /** A left drag between two points of the component, with a few steps so the view sees the motion. */
+    private void dragOn(JComponent component, java.awt.Point from, java.awt.Point to) {
+        robot().pressMouse(component, from, org.assertj.swing.core.MouseButton.LEFT_BUTTON);
+        for (int step = 1; step <= 4; step++) {
+            robot().moveMouse(component, new java.awt.Point(from.x + (to.x - from.x) * step / 4,
+                    from.y + (to.y - from.y) * step / 4));
+        }
+        robot().releaseMouse(org.assertj.swing.core.MouseButton.LEFT_BUTTON);
+        robot().waitForIdle();
+    }
+
+    /** The image view of the viewer: the largest showing frame view. */
+    private JComponent frameView(FrameFixture viewer) {
+        return GuiActionRunner.execute(() -> {
+            JComponent best = null;
+            for (JComponent c : robot().finder().findAll(viewer.target(), new GenericTypeMatcher<>(JComponent.class, true) {
+                @Override
+                protected boolean isMatching(JComponent component) {
+                    return component.getClass().getSimpleName().equals("FrameView");
+                }
+            })) {
+                if (best == null || c.getWidth() * c.getHeight() > best.getWidth() * best.getHeight()) best = c;
+            }
+            if (best == null) throw new AssertionError("no frame view in " + viewer.target().getTitle());
+            return best;
+        });
+    }
+
+    /** The Excluded areas section's summary line. */
+    private String excludedSummary(FrameFixture viewer) {
+        return GuiActionRunner.execute(() -> {
+            for (java.awt.Component c : robot().finder().findAll(viewer.target(), new GenericTypeMatcher<>(JLabel.class) {
+                @Override
+                protected boolean isMatching(JLabel label) {
+                    String text = label.getText();
+                    return text != null && (text.equals("No excluded areas.") || text.matches("\\d+ areas? · .*"));
+                }
+            })) {
+                return ((JLabel) c).getText();
+            }
+            return "";
+        });
     }
 
     private FrameFixture viewer(String titleStart) {

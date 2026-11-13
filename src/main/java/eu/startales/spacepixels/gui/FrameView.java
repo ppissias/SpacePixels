@@ -18,9 +18,11 @@ import eu.startales.spacepixels.detection.VariableStarOverlay;
 
 import javax.swing.JComponent;
 import javax.swing.UIManager;
+import javax.swing.SwingUtilities;
 import javax.swing.ToolTipManager;
 import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.FontMetrics;
@@ -166,6 +168,25 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
     private BufferedImage buffer;
     private int[] bufferPixels;
     private Point dragStart;
+    /**
+     * Receives what the user draws on the image in excluded-area mode: a new rectangle (left drag) or the index of an
+     * area to remove (right click inside it). EDT.
+     */
+    interface ExcludedAreaEditing {
+        /** A rectangle drawn on the frame, in frame pixels. */
+        void drawn(io.github.ppissias.jtransient.engine.ExcludedArea area);
+
+        /** The area at this index of {@link #setExcludedAreas}'s list, right-clicked. */
+        void removeAt(int index);
+    }
+
+    /** The areas left out of detection, drawn while their layer is on; empty for none. */
+    private java.util.List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas = java.util.List.of();
+    /** Non-null while the user draws excluded areas: a left drag draws a rectangle instead of moving the image. */
+    private ExcludedAreaEditing excludedAreaEditing;
+    /** The corners of the rectangle being drawn, in frame pixels; null when none. */
+    private Point drawStart;
+    private Point drawEnd;
     private double dragCenterX;
     private double dragCenterY;
 
@@ -181,13 +202,48 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
         MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
+                if (excludedAreaEditing != null && SwingUtilities.isLeftMouseButton(e)) {
+                    drawStart = clampedPixelAt(e.getX(), e.getY());
+                    drawEnd = drawStart;
+                    dragStart = null;
+                    repaint();
+                    return;
+                }
                 dragStart = e.getPoint();
                 dragCenterX = link.centerX;
                 dragCenterY = link.centerY;
             }
 
             @Override
+            public void mouseReleased(MouseEvent e) {
+                if (drawStart != null) {
+                    Point end = clampedPixelAt(e.getX(), e.getY());
+                    java.awt.Rectangle box = end == null ? null : box(drawStart, end);
+                    drawStart = null;
+                    drawEnd = null;
+                    repaint();
+                    if (box != null && box.width >= 2 && box.height >= 2 && excludedAreaEditing != null) {
+                        excludedAreaEditing.drawn(new io.github.ppissias.jtransient.engine.ExcludedArea(
+                                box.x, box.y, box.width, box.height));
+                    }
+                    return;
+                }
+                if (excludedAreaEditing != null && SwingUtilities.isRightMouseButton(e) && dragStart != null
+                        && e.getPoint().distance(dragStart) < 4) {
+                    int index = excludedAreaAt(e.getX(), e.getY());
+                    if (index >= 0) excludedAreaEditing.removeAt(index);
+                }
+            }
+
+            @Override
             public void mouseDragged(MouseEvent e) {
+                if (drawStart != null) {
+                    Point end = clampedPixelAt(e.getX(), e.getY());
+                    if (end != null) drawEnd = end;
+                    repaint();
+                    reportCursor(e.getX(), e.getY());
+                    return;
+                }
                 double scale = scale();
                 if (dragStart == null || shownWidth() <= 0 || scale <= 0) {
                     return;
@@ -237,6 +293,90 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
 
     void setCursorListener(CursorListener listener) {
         this.cursorListener = listener;
+    }
+
+    /** Shows these areas left out of detection, in frame pixels, while their layer is on. EDT. */
+    void setExcludedAreas(java.util.List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
+        excludedAreas = areas == null ? java.util.List.of() : java.util.List.copyOf(areas);
+        repaint();
+    }
+
+    /**
+     * Turns excluded-area drawing on (a non-null receiver) or off. While on, a left drag draws a rectangle, a right drag
+     * moves the image and a right click removes the area under it; the areas are drawn even when their layer is off. EDT.
+     */
+    void setExcludedAreaEditing(ExcludedAreaEditing editing) {
+        excludedAreaEditing = editing;
+        drawStart = null;
+        drawEnd = null;
+        setCursor(editing == null ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.CROSSHAIR_CURSOR));
+        repaint();
+    }
+
+    /** The frame pixel under the screen point, moved onto the frame when outside it; null without a frame. */
+    private Point clampedPixelAt(int screenX, int screenY) {
+        double scale = scale();
+        if (shownWidth() <= 0 || scale <= 0) return null;
+        int x = (int) Math.floor((screenX - left(scale)) / scale);
+        int y = (int) Math.floor((screenY - top(scale)) / scale);
+        return new Point(Math.max(0, Math.min(shownWidth() - 1, x)), Math.max(0, Math.min(shownHeight() - 1, y)));
+    }
+
+    /** The rectangle of frame pixels between two corner pixels, both included. */
+    private static java.awt.Rectangle box(Point a, Point b) {
+        int x = Math.min(a.x, b.x);
+        int y = Math.min(a.y, b.y);
+        return new java.awt.Rectangle(x, y, Math.abs(a.x - b.x) + 1, Math.abs(a.y - b.y) + 1);
+    }
+
+    /** The index of the last-drawn excluded area under the screen point, or -1. */
+    private int excludedAreaAt(int screenX, int screenY) {
+        Point p = pixelAt(screenX, screenY);
+        if (p == null) return -1;
+        for (int i = excludedAreas.size() - 1; i >= 0; i--) {
+            if (excludedAreas.get(i).contains(p.x, p.y)) return i;
+        }
+        return -1;
+    }
+
+    /** Draws the excluded areas and the one being drawn: light transparent red with a firmer outline. */
+    private void drawExcludedAreas(Graphics2D g2) {
+        boolean shown = layers.shows(ViewerLayer.EXCLUDED_AREAS) || excludedAreaEditing != null;
+        if (!shown && drawStart == null) return;
+        double scale = scale();
+        double left = left(scale);
+        double top = top(scale);
+        Graphics2D g = (Graphics2D) g2.create();
+        try {
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            if (shown) {
+                for (var area : excludedAreas) {
+                    java.awt.geom.Rectangle2D r = new java.awt.geom.Rectangle2D.Double(left + area.x() * scale,
+                            top + area.y() * scale, area.width() * scale, area.height() * scale);
+                    g.setColor(OverlayStyle.EXCLUDED_FILL);
+                    g.fill(r);
+                    g.setColor(OverlayStyle.EXCLUDED_LINE);
+                    g.setStroke(new BasicStroke(1.5f));
+                    g.draw(r);
+                }
+            }
+            if (drawStart != null && drawEnd != null) {
+                java.awt.Rectangle b = box(drawStart, drawEnd);
+                java.awt.geom.Rectangle2D r = new java.awt.geom.Rectangle2D.Double(left + b.x * scale, top + b.y * scale,
+                        b.width * scale, b.height * scale);
+                g.setColor(OverlayStyle.EXCLUDED_FILL);
+                g.fill(r);
+                g.setColor(OverlayStyle.EXCLUDED_LINE);
+                g.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10, new float[]{6, 4}, 0));
+                g.draw(r);
+                String size = b.width + " × " + b.height + " px";
+                g.setFont(UiStyle.bodyFont());
+                g.setColor(UiStyle.imageTextColor());
+                g.drawString(size, (float) (r.getX() + 4), (float) (r.getY() - 4));
+            }
+        } finally {
+            g.dispose();
+        }
     }
 
     void setCaption(String caption) {
@@ -714,6 +854,7 @@ final class FrameView extends JComponent implements javax.accessibility.Accessib
                 return;
             }
             drawFrame(g2);
+            drawExcludedAreas(g2);
             if (skyMarks != null) {
                 drawSkyMarks(g2);
             }

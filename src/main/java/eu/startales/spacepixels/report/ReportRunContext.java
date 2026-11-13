@@ -15,6 +15,7 @@ public final class ReportRunContext {
     private final DetectionReportAstrometry.Context astrometry;
     private final SessionCatalogue catalogue;
     private final eu.startales.spacepixels.solarsystem.SolarSystemObjects solarSystem;
+    private final eu.startales.spacepixels.detection.ExcludedAreas excludedAreas;
 
     /**
      * Resolves the correction and the catalogue once against privately copied FITS metadata: from {@code sky} when it
@@ -40,6 +41,20 @@ public final class ReportRunContext {
             var json = new com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create();
             this.solarSystem = json.fromJson(json.toJson(predictions), eu.startales.spacepixels.solarsystem.SolarSystemObjects.class);
         } else this.solarSystem = null;
+        var excluded = fromSession ? sky.excludedAreas() : directory == null ? null
+                : eu.startales.spacepixels.detection.ExcludedAreas.load(directory);
+        this.excludedAreas = excluded != null && first != null && excluded.fits(first.getSizeWidth(), first.getSizeHeight())
+                ? excluded : null;
+    }
+
+    /** The rectangles this run leaves out of detection, captured at admission; empty when there are none. */
+    public java.util.List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas() {
+        return excludedAreas == null ? java.util.List.of() : excludedAreas.areas();
+    }
+
+    /** The captured excluded areas with their frame size, for the report; null when there are none. */
+    public eu.startales.spacepixels.detection.ExcludedAreas excludedAreaSet() {
+        return excludedAreas == null || excludedAreas.isEmpty() ? null : excludedAreas;
     }
 
     /**

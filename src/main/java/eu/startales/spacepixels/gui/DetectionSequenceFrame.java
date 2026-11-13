@@ -43,6 +43,8 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     private final TrialSettingsControls trials;
     private final ProcessingSession ownerSession;
     private final JButton blinkButton = new JButton("Blink ↗");
+    /** The session's excluded areas, drawn and edited here; null without a session. */
+    private final ExcludedAreasSection excludedAreas;
     private java.util.function.Consumer<FitsFileInformation> blinkAction = shown -> { };
 
     /** Captures the session identity; trial controls copy values while each preparation reads fresh other settings. */
@@ -63,7 +65,15 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
             if (files != null && currentIndex() < files.length) blinkAction.accept(files[currentIndex()]);
         });
         addToolbarButton(blinkButton);
+        excludedAreas = ownerSession == null ? null
+                : new ExcludedAreasSection(layers, ownerSession, this::setExcludedAreaEditing, this::showExcludedAreas);
+        if (excludedAreas != null) addSideSection(excludedAreas.section());
         setLocationRelativeTo(owner);
+    }
+
+    /** Turns drawing excluded areas on, for the main window's Exclude Areas command. */
+    void startDrawingExcludedAreas() {
+        if (excludedAreas != null) excludedAreas.startDrawing();
     }
 
     /** Shows the frames of the session from {@code startIndex}. */
@@ -102,6 +112,7 @@ public class DetectionSequenceFrame extends SequenceViewerFrame {
     public void setSettingsEditable(boolean editable) {
         trials.setEditable(editable);
         blinkButton.setEnabled(editable);
+        if (excludedAreas != null) excludedAreas.setEditable(editable);
     }
 
     /** What the Blink button does with the frame shown. */

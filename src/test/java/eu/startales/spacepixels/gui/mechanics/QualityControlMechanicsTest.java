@@ -80,5 +80,19 @@ public class QualityControlMechanicsTest extends MechanicsTestCase {
         window().button(VisibleText.button("Run quality control")).click();
         waitFor("fresh complete quality replaces stale result", () -> GuiActionRunner.execute(() ->
                 application().getSession().getQualityControl() != snapshot && model.isQualityCurrent()));
+        waitFor("controls unlocked after the rerun", () -> window().button(VisibleText.button("Run quality control")).target().isEnabled());
+
+        // Excluded areas change what detection measures, so a result measured without them is stale.
+        var measuredWithout = GuiActionRunner.execute(() -> application().getSession().getQualityControl());
+        GuiActionRunner.execute(() -> application().getSession().setExcludedAreas(
+                new eu.startales.spacepixels.detection.ExcludedAreas(96, 96,
+                        java.util.List.of(new io.github.ppissias.jtransient.engine.ExcludedArea(0, 0, 20, 96))), failure -> { }));
+        waitFor("new excluded areas make quality stale", () -> !GuiActionRunner.execute(model::isQualityCurrent));
+        waitFor("the toolbar says it is stale", () -> window().label(VisibleText.labelExactly("QC stale")).target().isShowing());
+        window().button(VisibleText.button("Run quality control")).click();
+        waitFor("quality measured without the areas is current again", () -> GuiActionRunner.execute(() ->
+                application().getSession().getQualityControl() != measuredWithout && model.isQualityCurrent()));
+        assertTrue(GuiActionRunner.execute(() -> application().getSession().getQualityControl().settingsKey())
+                .endsWith(" excluding 0,0,20,96"));
     }
 }

@@ -295,6 +295,22 @@ abstract class SequenceViewerFrame extends JFrame implements SessionViewer {
         view.setVariableStarOverlay(available ? overlay : null);
     }
 
+    /** Shows these areas left out of detection on the image, while their layer is on. EDT. */
+    protected void showExcludedAreas(java.util.List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
+        view.setExcludedAreas(areas);
+    }
+
+    /** Turns drawing excluded areas on the image on (a non-null receiver) or off. EDT. */
+    protected void setExcludedAreaEditing(FrameView.ExcludedAreaEditing editing) {
+        view.setExcludedAreaEditing(editing);
+    }
+
+    /** Adds a section at the end of the side panel. */
+    protected void addSideSection(JComponent section) {
+        sidePanel.add(section);
+        ViewerSupport.prepareControls(section);
+    }
+
     /** Offers the run's experimental fitted paths independently of per-frame detections. */
     protected void setFaintMoverOverlay(eu.startales.spacepixels.detection.FaintMoverOverlay overlay, FitsFileInformation[] files) {
         boolean available = overlay != null && overlay.coversAnyOf(files);
