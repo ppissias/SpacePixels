@@ -4,12 +4,13 @@
 ## Contents
 
 - [2026.11-03](#202611-03)
+  - [Changed](#changed)
   - [Upgrading and API changes](#upgrading-and-api-changes)
 - [2026.11-01](#202611-01)
   - [Added](#added)
-  - [Changed](#changed)
-- [2026.10-04](#202610-04)
   - [Changed](#changed-1)
+- [2026.10-04](#202610-04)
+  - [Changed](#changed-2)
   - [Removed](#removed)
   - [Build and release checks](#build-and-release-checks)
   - [Upgrading and API changes](#upgrading-and-api-changes-1)
@@ -38,6 +39,10 @@
 <!-- root-toc:end -->
 
 ## 2026.11-03
+
+### Changed
+
+- **Faster faint-mover search, with a Search speed setting.** On the Faint Movers page, **Search speed** chooses how much cheaper the search's first pass may be: **Normal**, **Fast** (the default, which adds 2 × 2 pixels for wide stars and consecutive frames close in time) or **Faster** (which does so for narrower stars and wider time steps too and can miss more candidates close to the limits). Every candidate is still scored and checked on all frames at full resolution. The page estimates the time of each speed, from the star size the last detection run measured when there is one. The report says which speed was used, and `report-data.json` adds `searchSpeed`, `coarseBin` and `coarseFrames`. On wide-star sessions of 100–170 frames, Fast ran 3.5 to 7 times faster than before with the same candidates, apart from about one in 50–100 close to a limit; sessions with narrow stars and spaced frames keep their results and run up to about twice as fast. Faster was 9 to 13 times faster and, on one session with narrow stars, missed a real candidate close to the limits.
 
 ### Upgrading and API changes
 

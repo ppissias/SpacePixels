@@ -10,7 +10,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
-| [F31](#f31-tpv-plate-solutions) | TPV plate solutions (`RA---TPV`) | Proposed 2026-11-13 |
 
 Registration quality is owned by JTransient: [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -188,18 +187,3 @@ The saved Gaia star model contains source identity when available, position, pro
 - Check offline reopening, older caches/reports, additive CSV/schema behavior, saved provenance and uncertainty labels. Detection outputs, scores, candidates and engine readiness must be unchanged.
 
 **Scientific references used in the review.** [Gaia DR3 photometric relationships](https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html) describe the validity ranges and limitations of passband transformations. [AAVSO's guide to using its data](https://archive.aavso.org/index.php/quickstart-guide-using-aavso-data) distinguishes filtered and unfiltered observations and calibration limitations.
-
-## F31. TPV plate solutions
-
-**Request (2026-11-13).** Use plate solutions written in the TPV convention, as SpacePixels uses TAN and TAN-SIP solutions today. Professional pipelines write them; the Zwicky Transient Facility's science frames, for example, carry `CTYPE1 = 'RA---TPV'` with `PV1_*` and `PV2_*` distortion terms.
-
-**What happens today.** `WcsCoordinateTransformer` accepts only TAN and TAN-SIP, so a TPV solution is not used: the sky catalogue, known-object predictions and report lookups need a plate solve in SpacePixels first. The frame list still shows such frames as solved, because `FitsFileInformation.isWcsSolved()` only checks that `CTYPE1` and `CRVAL1` are present. Registration replaces every WCS in any case. ZTF frames of one field and quadrant share the native pixel grid but point tens of pixels apart, so they are normally registered, then solved; ASTAP solved a registered ZTF frame without hints.
-
-**Proposal.**
-
-1. Read TPV: apply the `PV` polynomial, including its radial terms, to the intermediate world coordinates from pixel to sky, and invert it iteratively from sky to pixel, as the SIP reader already does (it uses `AP`/`BP` only as the first guess).
-2. Make `isWcsSolved()` agree with what the transformer can use, so the frame list does not show an unsupported projection as solved.
-3. Check the result against WCSLIB (for example through astropy) on ZTF frames, to well below 0.1 px over the frame.
-
-**Decision points.** Support TPV (points 1 to 3), or only point 2 and keep relying on a plate solve in SpacePixels. Point 2 is useful on its own either way.
-
