@@ -3,6 +3,8 @@
 <!-- root-toc:start -->
 ## Contents
 
+- [2026.11-03](#202611-03)
+  - [Upgrading and API changes](#upgrading-and-api-changes)
 - [2026.11-01](#202611-01)
   - [Added](#added)
   - [Changed](#changed)
@@ -10,21 +12,21 @@
   - [Changed](#changed-1)
   - [Removed](#removed)
   - [Build and release checks](#build-and-release-checks)
-  - [Upgrading and API changes](#upgrading-and-api-changes)
+  - [Upgrading and API changes](#upgrading-and-api-changes-1)
 - [2026.10-03](#202610-03)
   - [Highlights](#highlights)
   - [Detection changes](#detection-changes)
   - [Import](#import)
   - [The settings tab and the application](#the-settings-tab-and-the-application)
   - [Fixes](#fixes)
-  - [Upgrading and API changes](#upgrading-and-api-changes-1)
+  - [Upgrading and API changes](#upgrading-and-api-changes-2)
 - [2026.10-02](#202610-02)
   - [Highlights](#highlights-1)
   - [Detection changes](#detection-changes-1)
   - [Variable-star photometry](#variable-star-photometry)
   - [The report and application](#the-report-and-application)
   - [Fixes](#fixes-1)
-  - [Upgrading and API changes](#upgrading-and-api-changes-2)
+  - [Upgrading and API changes](#upgrading-and-api-changes-3)
 - [2026.10-01](#202610-01)
   - [Highlights](#highlights-2)
   - [The report](#the-report)
@@ -34,6 +36,12 @@
   - [Upgrading](#upgrading)
   - [Under the hood](#under-the-hood)
 <!-- root-toc:end -->
+
+## 2026.11-03
+
+### Upgrading and API changes
+
+- **`ImageScaling.Summary` has a new component, `floatsInAdu`.** It is the record's last component and is true when the scan read the sequence's floating-point frames as ADU (detector counts) rather than values from 0 to 1. Code that reads the summary from `ImageScaling.OutlierException.summary()` needs no change; code that constructs a `Summary` must pass the new argument and be recompiled.
 
 ## 2026.11-01
 
