@@ -155,11 +155,14 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                     " frames, but only " + (filesInfo == null ? 0 : filesInfo.length) + " were available.");
         }
 
+        // The areas the run will leave out: the folder's saved ones, as the detection reads them.
+        var excludedAreas = eu.startales.spacepixels.detection.ExcludedAreas.forRun(filesInfo, null);
         List<ImageFrame> candidateFrames = AutoTuneCandidatePoolBuilder.buildCandidatePool(
                 filesInfo,
                 baseConfig,
                 autoTuneMaxCandidateFrames,
-                (percentage, message) -> emitProgress(progressListener, percentage, message));
+                (percentage, message) -> emitProgress(progressListener, percentage, message),
+                eu.startales.spacepixels.config.VisualizationSettings.defaults(), excludedAreas);
 
         emitProgress(progressListener, 50, "Starting mathematical tuning algorithms...");
 
@@ -169,7 +172,8 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
                         "Tuning: " + message);
 
         AutoTunerResult result =
-                AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener);
+                AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener,
+                        eu.startales.spacepixels.config.VisualizationSettings.defaults(), excludedAreas);
 
         if (result == null || !result.success || result.optimizedConfig == null) {
             throw new SpacePixelsPipelineException("Auto-Tune did not return an optimized configuration.");

@@ -43,9 +43,18 @@ public final class AutoTunerRunner {
     /** Uses the run's captured rendering choices when a live view is open; headless calls construct no observer. */
     public static AutoTunerResult run(List<ImageFrame> candidateFrames, DetectionConfig baseConfig,
             AutoTuneProfile profile, TransientEngineProgressListener listener, VisualizationSettings visualization) {
+        return run(candidateFrames, baseConfig, profile, listener, visualization, List.of());
+    }
+
+    /** Tunes on sky that detection uses: the tuner's measurement crops stay clear of the excluded areas. */
+    public static AutoTunerResult run(List<ImageFrame> candidateFrames, DetectionConfig baseConfig,
+            AutoTuneProfile profile, TransientEngineProgressListener listener, VisualizationSettings visualization,
+            List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             RunPreviewSink sink = RunPreviewScope.currentSink();
-            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, profile, listener,
+            CalibratedAutoTuner.Options.Builder options = CalibratedAutoTuner.Options.builder();
+            options.excludedAreas = excludedAreas;
+            return CalibratedAutoTuner.tune(candidateFrames, baseConfig, options.build(), profile, listener,
                     sink == null ? null : new AutoTuneLiveView(sink, visualization));
         }
     }

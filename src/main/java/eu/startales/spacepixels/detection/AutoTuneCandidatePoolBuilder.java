@@ -85,6 +85,13 @@ public final class AutoTuneCandidatePoolBuilder {
     /** Builds the same pool with the admitted run's rendering settings, only making pictures when requested. */
     public static List<ImageFrame> buildCandidatePool(FitsFileInformation[] filesInfo, DetectionConfig baseConfig,
             int autoTuneMaxCandidateFrames, ProgressListener progressListener, VisualizationSettings visualization) throws Exception {
+        return buildCandidatePool(filesInfo, baseConfig, autoTuneMaxCandidateFrames, progressListener, visualization, List.of());
+    }
+
+    /** Builds the pool scoring each frame's quality without the excluded areas, as detection measures it. */
+    public static List<ImageFrame> buildCandidatePool(FitsFileInformation[] filesInfo, DetectionConfig baseConfig,
+            int autoTuneMaxCandidateFrames, ProgressListener progressListener, VisualizationSettings visualization,
+            List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
         if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
         }
@@ -96,7 +103,8 @@ public final class AutoTuneCandidatePoolBuilder {
         }
 
         emitProgress(progressListener, 0, "Evaluating frame quality for candidate pool...");
-        List<FrameQualityRecord> frameQualityRecords = scoreFrames(filesInfo, baseConfig, progressListener, visualization);
+        List<FrameQualityRecord> frameQualityRecords = scoreFrames(filesInfo, baseConfig, progressListener, visualization,
+                excludedAreas);
         List<Integer> selectedIndices = selectCandidateSequenceIndices(frameQualityRecords, candidateLimit);
 
         emitProgress(progressListener, 40, "Loading deterministic candidate pool...");
@@ -142,7 +150,9 @@ public final class AutoTuneCandidatePoolBuilder {
 
     private static List<FrameQualityRecord> scoreFrames(FitsFileInformation[] filesInfo,
                                                         DetectionConfig baseConfig,
-                                                        ProgressListener progressListener, VisualizationSettings visualization) throws Exception {
+                                                        ProgressListener progressListener, VisualizationSettings visualization,
+                                                        List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
+        List<int[]> rectangles = ExcludedAreas.rectangles(excludedAreas);
         List<FrameQualityRecord> scoredFrames = new ArrayList<>(filesInfo.length);
 
         for (int i = 0; i < filesInfo.length; i++) {
@@ -160,8 +170,9 @@ public final class AutoTuneCandidatePoolBuilder {
 
                 short[][] pixelData = (short[][]) kernel;
                 // Quality scoring is driven by DetectionConfig's dedicated quality-only thresholds.
-                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(pixelData, baseConfig,
-                        DataArea.ofFrame(pixelData));
+                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(
+                        io.github.ppissias.jtransient.engine.ExcludedArea.filledCopy(pixelData, excludedAreas), baseConfig,
+                        DataArea.ofFrame(pixelData).excluding(rectangles));
                 double score = metrics.backgroundNoise * metrics.medianFWHM;
                 if (!Double.isFinite(score) || score <= 0.0d) {
                     score = Double.POSITIVE_INFINITY;

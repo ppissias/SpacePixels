@@ -71,6 +71,7 @@ public class AutoTuneSessionStoreTest {
         document.height = 80;
         document.fileNames = Arrays.asList("b.fits", "a.fits");
         document.calibrated = run("2026-10-15T16:42:00Z", 127, "HIGH", calibrated);
+        document.calibrated.excludedAreas = java.util.List.of(new int[]{5, 6, 7, 8});
 
         File session = folder.newFolder("session");
         AutoTuneSessionStore.save(session, document);
@@ -80,6 +81,9 @@ public class AutoTuneSessionStoreTest {
         assertNotNull(loaded);
         assertEquals(Arrays.asList("a.fits", "b.fits"), loaded.fileNames);
         assertEquals("report <line>", loaded.calibrated.result.telemetryReport);
+        assertEquals("the run keeps the excluded areas it measured without",
+                java.util.List.of(new io.github.ppissias.jtransient.engine.ExcludedArea(5, 6, 7, 8)),
+                ExcludedAreas.fromRectangles(loaded.calibrated.excludedAreas));
         assertEquals(0.9, loaded.calibrated.result.calibration.chosen[AutoTuneProfile.HIGH.ordinal()].completeness[1], 0);
         assertTrue(Double.isNaN(loaded.calibrated.result.calibration.chosen[AutoTuneProfile.HIGH.ordinal()].snr50));
         assertNull(loaded.calibrated.result.calibration.chosen[AutoTuneProfile.LOW.ordinal()]);

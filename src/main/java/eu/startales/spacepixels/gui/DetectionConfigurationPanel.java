@@ -669,11 +669,14 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
 
+        var owner = sessions.current();
         AutoTuneTask tuneTask = new AutoTuneTask(
                 poolToUse,
                 settings,
                 autoTuneMaxCandidateFrames,
-                selectedProfile).showingPreviews(frames.previewSink(), visualizationSettings());
+                selectedProfile,
+                owner == null ? java.util.List.of() : owner.getExcludedAreas().areas())
+                .showingPreviews(frames.previewSink(), visualizationSettings());
         JobCoordinator.Admission admission = jobs.start(JobKind.AUTO_TUNE,
                 sessions.current(), tuneTask,
                 sessions.forCurrent((handle, outcome) -> autoTuneFinished(outcome)));

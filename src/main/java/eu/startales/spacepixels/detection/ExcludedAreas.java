@@ -109,6 +109,38 @@ public final class ExcludedAreas {
         return new ExcludedAreas(width, height, changed);
     }
 
+    /**
+     * The areas a run on these frames leaves out: the session's, when {@code sky} is the sky data of the frames'
+     * folder, otherwise that folder's saved file; only when they fit the frames. Null when there are none.
+     */
+    public static ExcludedAreas ofRun(eu.startales.spacepixels.fits.FitsFileInformation[] files,
+                                      eu.startales.spacepixels.skycatalog.SkySnapshot sky) {
+        var first = files == null ? null : java.util.Arrays.stream(files).filter(java.util.Objects::nonNull)
+                .filter(file -> file.getFilePath() != null).findFirst().orElse(null);
+        if (first == null) return null;
+        File directory = new File(first.getFilePath()).getAbsoluteFile().getParentFile();
+        ExcludedAreas areas = sky != null && sky.belongsTo(directory) ? sky.excludedAreas() : load(directory);
+        return areas != null && areas.fits(first.getSizeWidth(), first.getSizeHeight()) ? areas : null;
+    }
+
+    /** {@link #ofRun}'s rectangles; empty when there are none. */
+    public static List<ExcludedArea> forRun(eu.startales.spacepixels.fits.FitsFileInformation[] files,
+                                            eu.startales.spacepixels.skycatalog.SkySnapshot sky) {
+        ExcludedAreas areas = ofRun(files, sky);
+        return areas == null ? List.of() : areas.areas();
+    }
+
+    /** Rectangles saved as {first column, first row, width, height}; invalid ones are skipped, null gives none. */
+    public static List<ExcludedArea> fromRectangles(List<int[]> rectangles) {
+        List<ExcludedArea> areas = new ArrayList<>();
+        if (rectangles != null) {
+            for (int[] r : rectangles) {
+                if (r != null && r.length == 4 && r[2] >= 1 && r[3] >= 1) areas.add(new ExcludedArea(r[0], r[1], r[2], r[3]));
+            }
+        }
+        return List.copyOf(areas);
+    }
+
     /** The areas as {first column, first row, width, height}, as the engine's data areas take them. */
     public static List<int[]> rectangles(List<io.github.ppissias.jtransient.engine.ExcludedArea> areas) {
         List<int[]> rectangles = new java.util.ArrayList<>(areas.size());

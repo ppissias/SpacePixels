@@ -222,7 +222,7 @@ public class IterativeDetectionRunTest {
                     assertFalse(messages.isEmpty());
                     progress.onProgressUpdate(10, "run");
                     return completed(output);
-                }, (files, settings, limit, profile, progress, visualization) -> {
+                }, (files, settings, limit, profile, progress, visualization, excludedAreas) -> {
                     assertSame("tuning captures the same rendering choices as its passes", tuningVisualization, visualization);
                     tuningCalls.incrementAndGet();
                     assertEquals(5, limit);

@@ -41,10 +41,7 @@ public final class ReportRunContext {
             var json = new com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create();
             this.solarSystem = json.fromJson(json.toJson(predictions), eu.startales.spacepixels.solarsystem.SolarSystemObjects.class);
         } else this.solarSystem = null;
-        var excluded = fromSession ? sky.excludedAreas() : directory == null ? null
-                : eu.startales.spacepixels.detection.ExcludedAreas.load(directory);
-        this.excludedAreas = excluded != null && first != null && excluded.fits(first.getSizeWidth(), first.getSizeHeight())
-                ? excluded : null;
+        this.excludedAreas = eu.startales.spacepixels.detection.ExcludedAreas.ofRun(this.files, sky);
     }
 
     /** The rectangles this run leaves out of detection, captured at admission; empty when there are none. */

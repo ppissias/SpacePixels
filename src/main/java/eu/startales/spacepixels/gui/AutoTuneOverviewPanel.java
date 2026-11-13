@@ -425,6 +425,8 @@ public class AutoTuneOverviewPanel extends JPanel {
         sessionReady = readyForTuning;
         if (!sameSession) {
             clearRuns();
+            if (session != null) session.removeExcludedAreasListener(excludedAreasChanged);
+            if (owner != null) owner.addExcludedAreasListener(excludedAreasChanged);
             session = owner;
             autoTune = owner == null ? new AutoTuneState() : owner.getAutoTune();
             sessionFolder = folder;
@@ -463,7 +465,9 @@ public class AutoTuneOverviewPanel extends JPanel {
             long seconds = result.calibration != null
                     ? Math.round(result.calibration.elapsedSeconds)
                     : (System.currentTimeMillis() - tuneStartedMillis) / 1000;
-            rememberRun(result, Instant.now(), seconds, (AutoTuneProfile) profileCombo.getSelectedItem());
+            rememberRun(result, Instant.now(), seconds, (AutoTuneProfile) profileCombo.getSelectedItem(),
+                    result.calibration == null || result.calibration.options == null ? List.of()
+                            : result.calibration.options.excludedAreas());
             restored = false;
             showResults();
             applyProfile((AutoTuneProfile) profileCombo.getSelectedItem());
@@ -527,12 +531,26 @@ public class AutoTuneOverviewPanel extends JPanel {
                 profile = null;
             }
         }
-        rememberRun(run.result, ranAt, run.elapsedSeconds, profile);
+        rememberRun(run.result, ranAt, run.elapsedSeconds, profile,
+                eu.startales.spacepixels.detection.ExcludedAreas.fromRectangles(run.excludedAreas));
     }
 
-    private void rememberRun(AutoTunerResult result, Instant ranAt, long elapsedSeconds, AutoTuneProfile profile) {
-        autoTune.remember(new AutoTuneState.Run(result, ranAt, elapsedSeconds, profile));
+    private void rememberRun(AutoTunerResult result, Instant ranAt, long elapsedSeconds, AutoTuneProfile profile,
+                             List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
+        autoTune.remember(new AutoTuneState.Run(result, ranAt, elapsedSeconds, profile, excludedAreas));
     }
+
+    /**
+     * Whether the run on show measured without other excluded areas than the session has now, so that running Auto-Tune
+     * again would measure other sky.
+     */
+    private boolean measuredWithOtherAreas() {
+        return !autoTune.isEmpty() && session != null
+                && !autoTune.excludedAreas().equals(session.getExcludedAreas().areas());
+    }
+
+    /** Follows the session's excluded areas: the status says when the run on show measured with others. */
+    private final Runnable excludedAreasChanged = this::refreshMarkers;
 
     /** The saved run holds settings for the profile selected in the box. */
     private boolean canApply(AutoTuneProfile profile) {
@@ -596,6 +614,8 @@ public class AutoTuneOverviewPanel extends JPanel {
         AutoTuneProfile profile = autoTune.profile();
         run.profile = profile == null ? null : profile.name();
         run.result = result;
+        run.excludedAreas = autoTune.excludedAreas().isEmpty() ? null
+                : eu.startales.spacepixels.detection.ExcludedAreas.rectangles(autoTune.excludedAreas());
         return run;
     }
 
@@ -633,6 +653,7 @@ public class AutoTuneOverviewPanel extends JPanel {
         }
         String when = AutoTuneSessionStore.formatRanAt(instantText(autoTune.ranAt()));
         return profileName(appliedProfile) + ", auto-tuned" + (editedSinceTune() ? ", edited" : "")
+                + (measuredWithOtherAreas() ? ", other excluded areas" : "")
                 + (when == null ? "" : " · run " + when);
     }
 
@@ -767,13 +788,15 @@ public class AutoTuneOverviewPanel extends JPanel {
         if (!tuning && appliedProfile != null) {
             statusLabel.setForeground(UIManager.getColor("Label.foreground"));
             String when = AutoTuneSessionStore.formatRanAt(instantText(autoTune.ranAt()));
+            String otherAreas = measuredWithOtherAreas()
+                    ? " · measured with other excluded areas than the session has now: run Auto-Tune again" : "";
             if (restored && when != null) {
                 statusLabel.setText(profileName(appliedProfile) + " settings from the saved run at " + when + " applied"
-                        + (editedSinceTune() ? " · manual changes since then" : "")
+                        + (editedSinceTune() ? " · manual changes since then" : "") + otherAreas
                         + ". Run Auto-Tune measures again; Save keeps these settings for the next start.");
             } else {
                 statusLabel.setText(profileName(appliedProfile) + " settings applied"
-                        + (editedSinceTune() ? " · manual changes since the tune" : "")
+                        + (editedSinceTune() ? " · manual changes since the tune" : "") + otherAreas
                         + ". Click Detect Moving Targets to run; Save keeps them for the next start.");
             }
         }

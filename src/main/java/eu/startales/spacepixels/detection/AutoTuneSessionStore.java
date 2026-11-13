@@ -69,6 +69,8 @@ public final class AutoTuneSessionStore {
         public long elapsedSeconds;
         public String profile;
         public AutoTunerResult result;
+        /** The excluded areas the run measured without, each {x, y, width, height}; absent for none. */
+        public List<int[]> excludedAreas;
     }
 
     public static File fileIn(File sessionFolder) {

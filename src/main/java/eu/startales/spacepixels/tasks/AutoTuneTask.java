@@ -42,6 +42,7 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
     private final DetectionConfig baseConfig;
     private final int autoTuneMaxCandidateFrames;
     private final AutoTuneProfile profile;
+    private final List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas;
     private RunPreviewSink previews;
     private VisualizationSettings visualization = VisualizationSettings.defaults();
 
@@ -49,10 +50,17 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
                         DetectionConfig baseConfig,
                         int autoTuneMaxCandidateFrames,
                         AutoTuneProfile profile) {
+        this(filesInfo, baseConfig, autoTuneMaxCandidateFrames, profile, List.of());
+    }
+
+    /** A tune that measures without the session's excluded areas, captured at admission. */
+    public AutoTuneTask(FitsFileInformation[] filesInfo, DetectionConfig baseConfig, int autoTuneMaxCandidateFrames,
+                        AutoTuneProfile profile, List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
         this.filesInfo = filesInfo;
         this.baseConfig = baseConfig;
         this.autoTuneMaxCandidateFrames = autoTuneMaxCandidateFrames;
         this.profile = profile;
+        this.excludedAreas = List.copyOf(excludedAreas);
     }
 
     @Override
@@ -82,7 +90,7 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
                 filesInfo,
                 baseConfig,
                 autoTuneMaxCandidateFrames,
-                context::progress, visualization);
+                context::progress, visualization, excludedAreas);
 
         LOGGER.info("Candidate pool ready. Passing " + candidateFrames.size() + " frames to AutoTuner.");
 
@@ -94,7 +102,8 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
         context.progress(50, "Starting mathematical tuning algorithms...");
 
         LOGGER.info("Auto-Tuner profile: " + profile);
-        AutoTunerResult result = AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener, visualization);
+        AutoTunerResult result = AutoTunerRunner.run(candidateFrames, baseConfig, profile, autoTuneListener, visualization,
+                excludedAreas);
         context.progress(100, "Auto-Tuning complete!");
         return JobOutcome.completed(result);
     }

@@ -41,6 +41,31 @@ public class ExcludedAreasTest {
         assertEquals(3, areas.with(new ExcludedArea(0, 0, 1, 1)).areas().size());
     }
 
+    /**
+     * A run uses the session's areas when its frames are in the session's folder, otherwise the folder's saved file,
+     * and only areas that fit its frames.
+     */
+    @Test
+    public void aRunUsesTheSessionsAreasInItsFolderOtherwiseTheFile() throws Exception {
+        File dir = folder.newFolder("frames");
+        var frame = new eu.startales.spacepixels.fits.FitsFileInformation(new File(dir, "a.fit").getPath(), "a.fit", true, 100, 50);
+        var files = new eu.startales.spacepixels.fits.FitsFileInformation[]{frame};
+        assertTrue(ExcludedAreas.forRun(files, null).isEmpty());
+        ExcludedAreas saved = new ExcludedAreas(100, 50, List.of(new ExcludedArea(0, 0, 10, 50)));
+        ExcludedAreas.save(dir, saved);
+        assertEquals(saved.areas(), ExcludedAreas.forRun(files, null));
+        ExcludedAreas session = new ExcludedAreas(100, 50, List.of(new ExcludedArea(5, 5, 5, 5)));
+        var sky = new eu.startales.spacepixels.skycatalog.SkySnapshot(dir, null, null, null, session);
+        assertEquals(session.areas(), ExcludedAreas.forRun(files, sky));
+        var elsewhere = new eu.startales.spacepixels.skycatalog.SkySnapshot(folder.newFolder("other"), null, null, null, session);
+        assertEquals(saved.areas(), ExcludedAreas.forRun(files, elsewhere));
+        var wider = new eu.startales.spacepixels.fits.FitsFileInformation(frame.getFilePath(), "a.fit", true, 200, 50);
+        assertTrue(ExcludedAreas.forRun(new eu.startales.spacepixels.fits.FitsFileInformation[]{wider}, null).isEmpty());
+        assertEquals(List.of(new ExcludedArea(1, 2, 3, 4)),
+                ExcludedAreas.fromRectangles(List.of(new int[]{1, 2, 3, 4}, new int[]{0, 0, 0, 5})));
+        assertTrue(ExcludedAreas.fromRectangles(null).isEmpty());
+    }
+
     /** Saving and loading keeps the frame size and the rectangles; no areas removes the file. */
     @Test
     public void areasSurviveSaveAndLoad() throws Exception {

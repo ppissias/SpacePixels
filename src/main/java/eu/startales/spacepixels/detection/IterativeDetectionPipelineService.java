@@ -43,7 +43,8 @@ public final class IterativeDetectionPipelineService {
     @FunctionalInterface
     interface Tuner {
         Tuned run(FitsFileInformation[] files, DetectionConfig config, int limit,
-                  AutoTuneProfile profile, TransientEngineProgressListener progress, VisualizationSettings visualization) throws Exception;
+                  AutoTuneProfile profile, TransientEngineProgressListener progress, VisualizationSettings visualization,
+                  List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception;
     }
 
     private static final Logger LOGGER = Logger.getLogger(IterativeDetectionPipelineService.class.getName());
@@ -120,7 +121,8 @@ public final class IterativeDetectionPipelineService {
         int tuneLimit = Math.min(request.autoTuneFrames(), counts.getLast());
         if (request.autoTuneProfile() != null) {
             RunPreviewScope.offer(true, () -> RunPreview.cleared("Auto-Tune is choosing the settings for every pass"));
-            Tuned tuned = tuner.run(files, config, tuneLimit, request.autoTuneProfile(), progress, request.runOptions().visualization());
+            Tuned tuned = tuner.run(files, config, tuneLimit, request.autoTuneProfile(), progress, request.runOptions().visualization(),
+                    ExcludedAreas.forRun(files, request.sky()));
             config = tuned.config();
             tuneReport = tuned.telemetry();
             passStart = 30;
@@ -261,12 +263,14 @@ public final class IterativeDetectionPipelineService {
     record Tuned(DetectionConfig config, String telemetry) {}
 
     private static Tuned tune(FitsFileInformation[] files, DetectionConfig config, int limit,
-                              AutoTuneProfile profile, TransientEngineProgressListener progress, VisualizationSettings visualization) throws Exception {
+                              AutoTuneProfile profile, TransientEngineProgressListener progress, VisualizationSettings visualization,
+                              List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
         List<ImageFrame> candidates = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, config, limit,
-                (percent, message) -> emit(progress, 10 + percent / 10, "Auto-Tune: " + message), visualization);
+                (percent, message) -> emit(progress, 10 + percent / 10, "Auto-Tune: " + message), visualization, excludedAreas);
         try {
             AutoTunerResult result = AutoTunerRunner.run(candidates, config.clone(), profile,
-                    (percent, message) -> emit(progress, 20 + percent / 10, "Auto-Tune: " + message), visualization);
+                    (percent, message) -> emit(progress, 20 + percent / 10, "Auto-Tune: " + message), visualization,
+                    excludedAreas);
             if (result == null || !result.success || result.optimizedConfig == null) {
                 throw new IOException("Auto-Tune did not produce usable settings. Import the dataset normally to experiment with settings."
                         + (result == null ? "" : "\n" + result.telemetryReport));
