@@ -23,7 +23,7 @@ repositories {
 }
 // Add your group and version here
 group = 'eu.startales.spacepixels'
-version = '2026.11-02'
+version = '2026.11-03'
 description = 'Headless SpacePixels Java API and command-line tools for moving and transient object detection in aligned astronomical image sequences.'
 
 base {
@@ -101,7 +101,7 @@ def excludeUnusedAnnotationJars = {
 }
 
 dependencies {
-    api('io.github.ppissias.jtransient:jtransient:1.0.9', excludeUnusedAnnotationJars())
+    api('io.github.ppissias.jtransient:jtransient:1.1.0', excludeUnusedAnnotationJars())
     implementation('gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0', excludeUnusedAnnotationJars())
     implementation('com.google.code.gson:gson:2.14.0', excludeUnusedAnnotationJars())
     implementation('io.github.ppissias.jplatesolve:jplatesolve:1.0.2', excludeUnusedAnnotationJars())
