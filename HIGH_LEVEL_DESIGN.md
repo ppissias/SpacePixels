@@ -840,7 +840,7 @@ Detection report output:
 - image and GIF assets beside the report
 - effective settings in `detection_config.json`, stable finding data in `report-data.json` and CSV exports
 - session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) and the asteroid and comet predictions (`solar_system.json`, used by the viewers and report comparisons) in the imported dataset folder, guarded by field and plate-solution identity; a GUI run takes them from the session when it is admitted (`SkySnapshot`), a headless run reads them once at its start
-- the excluded areas (`excluded_areas.json`, rectangles drawn in Preview Frame that detection leaves out of every frame) in the same folder, guarded by frame size; the session owns them (`ProcessingSession.setExcludedAreas`), a run captures them with the other session data (`ReportRunContext.excludedAreas`) and passes them to `JTransientEngine.runPipeline`
+- the excluded areas (`excluded_areas.json`, rectangles drawn in Preview Frame that detection leaves out of every frame) in the same folder, guarded by frame size; the session owns them (`ProcessingSession.setExcludedAreas`), a run captures them with the other session data (`ReportRunContext.excludedAreas`) and passes them to `JTransientEngine.runPipeline`; quality control, the star-mask stack (its cache key names them) and Manual Transient Inspection capture them at admission, and Preview Frame reads them for each frame it prepares
 - iterative root directory containing per-pass report directories, `index.html`, versioned `run-data.json`, per-pass `<count>_inputs.json` and optional `auto_tune.txt`; manifests use filenames rather than private absolute paths and do not store observing-site coordinates
 
 Replacing files:
