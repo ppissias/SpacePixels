@@ -1,8 +1,10 @@
 package eu.startales.spacepixels.preparation;
 
+import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.FitsInput;
 import eu.startales.spacepixels.fits.FitsPixelConverter;
 import eu.startales.spacepixels.fits.ImageScaling;
+import eu.startales.spacepixels.fits.ObservingSite;
 import eu.startales.spacepixels.util.StagedFile;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
@@ -12,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.function.BooleanSupplier;
@@ -19,6 +22,24 @@ import java.util.function.IntConsumer;
 
 /** Plans one sequence transform and writes metadata/provenance; FitsPixelConverter owns all pixel conversion. */
 public final class PreparedSequenceWriter {
+    /**
+     * Cards copied from each source exposure into its prepared frame, because the external registration may round or
+     * drop them: the times and site cards that SpacePixels reads, and the exposure and instrument description.
+     */
+    private static final List<String> RESTORED_KEYS = restoredKeys();
+
+    /** Builds {@link #RESTORED_KEYS} from the readers' own key lists, without duplicates. */
+    private static List<String> restoredKeys() {
+        LinkedHashSet<String> keys = new LinkedHashSet<>(List.of("DATE-OBS", "TIME-OBS", "EXPTIME", "EXPOSURE", "FILTER",
+                "SITELAT", "SITELONG", "LIVETIME", "EXPSTART", "EXPEND", "STACKCNT", "INSTRUME", "TELESCOP", "GAIN", "OFFSET",
+                "XBINNING", "YBINNING", "XPIXSZ", "YPIXSZ", "CCD-TEMP", "SET-TEMP", "OBSERVER", "OBJECT", "FOCALLEN"));
+        keys.addAll(FitsFileInformation.FALLBACK_TIME_KEYS);
+        keys.addAll(ObservingSite.LATITUDE_KEYS);
+        keys.addAll(ObservingSite.LONGITUDE_KEYS);
+        keys.addAll(ObservingSite.ALTITUDE_KEYS);
+        return List.copyOf(keys);
+    }
+
     /** An output's unambiguous association with its converted source metadata. */
     public record Frame(Path original, Path metadata, Path registered) { }
 
@@ -72,9 +93,7 @@ public final class PreparedSequenceWriter {
             Header metadata = SirilHeaderCorrections.imageHeader(frame.metadata());
             Header outputHeader = image.header();
             // The source association is explicit. Restore exact timestamps when an external writer rounds them.
-            for (String key : List.of("DATE-OBS", "TIME-OBS", "EXPTIME", "EXPOSURE", "FILTER", "SITELAT", "SITELONG",
-                    "LIVETIME", "EXPSTART", "EXPEND", "STACKCNT", "INSTRUME", "TELESCOP", "GAIN", "OFFSET",
-                    "XBINNING", "YBINNING", "XPIXSZ", "YPIXSZ", "CCD-TEMP", "SET-TEMP", "OBSERVER", "OBJECT", "FOCALLEN")) {
+            for (String key : RESTORED_KEYS) {
                 if (metadata.containsKey(key)) { outputHeader.deleteKey(key); outputHeader.addLine(metadata.findCard(key).copy()); }
             }
             List<String> remove = new ArrayList<>();

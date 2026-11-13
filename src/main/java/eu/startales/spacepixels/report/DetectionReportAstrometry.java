@@ -12,6 +12,7 @@ import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import io.github.ppissias.jtransient.model.Track;
 import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.ObservingSite;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.fits.WcsSolutionResolver;
 
@@ -156,6 +157,15 @@ public final class DetectionReportAstrometry {
             return skybotObserverCode;
         }
 
+        /**
+         * The code for JPL Small-Body Identification, which also accepts coordinates: none when the site comes from
+         * the FITS headers, because those describe the frames and the configured code may be another observatory.
+         * SkyBoT accepts only codes and keeps {@link #getSkybotObserverCode()}.
+         */
+        public String getJplObserverCode() {
+            return observerSite != null && observerSite.isFromFitsHeader() ? null : skybotObserverCode;
+        }
+
         public String getSkybotObserverSource() {
             return skybotObserverSource;
         }
@@ -180,6 +190,11 @@ public final class DetectionReportAstrometry {
 
         public String getSourceLabel() {
             return sourceLabel;
+        }
+
+        /** Whether these coordinates come from the frames' FITS headers rather than the settings or a lookup. */
+        public boolean isFromFitsHeader() {
+            return ObservingSite.FROM_HEADER.equals(sourceLabel);
         }
     }
 
@@ -453,7 +468,7 @@ public final class DetectionReportAstrometry {
         WcsCoordinateTransformer.SkyCoordinate skyCoordinate = astrometryContext.getTransformer().pixelToSky(queryTarget.pixelX, queryTarget.pixelY);
         ObserverSite observerSite = astrometryContext.getObserverSite();
         return JplSbIdentUrlBuilder.build(
-                astrometryContext.getSkybotObserverCode(),
+                astrometryContext.getJplObserverCode(),
                 observerSite != null ? observerSite.latitudeDeg : null,
                 observerSite != null ? observerSite.longitudeDeg : null,
                 observerSite != null ? observerSite.altitudeMeters : null,

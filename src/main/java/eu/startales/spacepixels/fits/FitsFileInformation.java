@@ -17,8 +17,10 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,6 +30,16 @@ import java.util.regex.Pattern;
  * the detection pipeline and report export.
  */
 public final class FitsFileInformation {
+    /**
+     * Cards that give the exposure start (UTC) when DATE-OBS is missing, in order of preference: the FITS standard's
+     * DATE-BEG, MJD-OBS and MJD-BEG, then the Zwicky Transient Facility's SHUTOPEN (shutter opening, to the
+     * millisecond) and OBSMJD (whole seconds).
+     */
+    public static final List<String> FALLBACK_TIME_KEYS = List.of("DATE-BEG", "MJD-OBS", "MJD-BEG", "SHUTOPEN", "OBSMJD");
+    /** The fallback cards that hold a Modified Julian Date rather than an ISO date and time. */
+    private static final Set<String> MJD_TIME_KEYS = Set.of("MJD-OBS", "MJD-BEG", "OBSMJD");
+    /** The Modified Julian Date of 1970-01-01T00:00:00 UTC. */
+    private static final double MJD_OF_UNIX_EPOCH = 40_587.0;
     private static final DateTimeFormatter PIPELINE_TIMESTAMP_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS 'UTC'").withZone(ZoneOffset.UTC);
     private static final Pattern COMBINED_DATE_TIME_PATTERN = Pattern.compile(
@@ -141,7 +153,8 @@ public final class FitsFileInformation {
     }
 
     /**
-     * Returns the normalized ISO-8601 DATE-OBS / TIME-OBS timestamp parsed when this descriptor was built.
+     * Returns the exposure start parsed when this descriptor was built: DATE-OBS / TIME-OBS, or when DATE-OBS is
+     * missing, the first usable card of {@link #FALLBACK_TIME_KEYS}.
      *
      * @return Epoch milliseconds, or -1 if the date is missing or malformed.
      */
@@ -213,9 +226,10 @@ public final class FitsFileInformation {
         return -1;
     }
 
+    /** The site as "latitude / longitude" from the header, else the OBSERVAT name, else "N/A". */
     public String getLocation() {
-        String lat = firstCoordinateHeader("SITELAT", "OBSGEO-B", "LAT-OBS");
-        String lon = firstCoordinateHeader("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS");
+        String lat = firstCoordinateHeader(ObservingSite.LATITUDE_KEYS);
+        String lon = firstCoordinateHeader(ObservingSite.LONGITUDE_KEYS);
 
         if (lat != null && lon != null) {
             return lat + " / " + lon;
@@ -229,8 +243,8 @@ public final class FitsFileInformation {
     }
 
     public String getGoogleEarthUrl() {
-        String latitude = firstCoordinateHeader("SITELAT", "OBSGEO-B", "LAT-OBS");
-        String longitude = firstCoordinateHeader("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS");
+        String latitude = firstCoordinateHeader(ObservingSite.LATITUDE_KEYS);
+        String longitude = firstCoordinateHeader(ObservingSite.LONGITUDE_KEYS);
         if (latitude == null || longitude == null) {
             return null;
         }
@@ -273,10 +287,7 @@ public final class FitsFileInformation {
         return "N/A";
     }
 
-    private String firstCoordinateHeader(String... keys) {
-        if (keys == null) {
-            return null;
-        }
+    private String firstCoordinateHeader(List<String> keys) {
         for (String key : keys) {
             String value = sanitizeHeaderValue(fitsHeader.get(key));
             if (value != null && !value.isBlank()) {
@@ -286,10 +297,14 @@ public final class FitsFileInformation {
         return null;
     }
 
+    /**
+     * DATE-OBS and TIME-OBS give the exposure start. Only when DATE-OBS is missing, the first of the
+     * {@link #FALLBACK_TIME_KEYS} that parses gives it instead; a malformed DATE-OBS is reported, not replaced.
+     */
     private static ObservationTimestampParseResult parseObservationTimestamp(Map<String, String> header) {
         String dateObs = sanitizeHeaderValue(header.get("DATE-OBS"));
         if (dateObs == null || dateObs.isEmpty()) {
-            return new ObservationTimestampParseResult(-1L, null, null, "DATE-OBS missing");
+            return parseFallbackTimestamp(header);
         }
 
         if (dateObs.contains("T")) {
@@ -309,6 +324,42 @@ public final class FitsFileInformation {
             return new ObservationTimestampParseResult(timestampMillis, dateObs, "DATE-OBS as ISO_LOCAL_DATE", null);
         } catch (Exception e) {
             return new ObservationTimestampParseResult(-1L, dateObs, "DATE-OBS as ISO_LOCAL_DATE", e.getMessage());
+        }
+    }
+
+    /** The first fallback card that parses; otherwise the first one's failure, or "DATE-OBS missing" when none is present. */
+    private static ObservationTimestampParseResult parseFallbackTimestamp(Map<String, String> header) {
+        ObservationTimestampParseResult firstFailure = null;
+        for (String key : FALLBACK_TIME_KEYS) {
+            String value = sanitizeHeaderValue(header.get(key));
+            if (value == null) {
+                continue;
+            }
+            ObservationTimestampParseResult result = MJD_TIME_KEYS.contains(key)
+                    ? parseModifiedJulianDate(value, key)
+                    : parseCombinedDateTime(value, key + " as combined date/time (DATE-OBS missing)");
+            if (result.timestampMillis > 0L) {
+                return result;
+            }
+            if (firstFailure == null) {
+                firstFailure = result;
+            }
+        }
+        return firstFailure != null ? firstFailure : new ObservationTimestampParseResult(-1L, null, null, "DATE-OBS missing");
+    }
+
+    /** A Modified Julian Date in UTC, as epoch milliseconds; a date before 1970 counts as unusable, like elsewhere. */
+    private static ObservationTimestampParseResult parseModifiedJulianDate(String value, String key) {
+        String strategy = key + " as Modified Julian Date (DATE-OBS missing)";
+        try {
+            double mjd = Double.parseDouble(value);
+            long timestampMillis = Double.isFinite(mjd) ? Math.round((mjd - MJD_OF_UNIX_EPOCH) * 86_400_000.0) : -1L;
+            if (timestampMillis <= 0L) {
+                return new ObservationTimestampParseResult(-1L, value, strategy, "Not a date after 1970");
+            }
+            return new ObservationTimestampParseResult(timestampMillis, value, strategy, null);
+        } catch (NumberFormatException e) {
+            return new ObservationTimestampParseResult(-1L, value, strategy, e.getMessage());
         }
     }
 

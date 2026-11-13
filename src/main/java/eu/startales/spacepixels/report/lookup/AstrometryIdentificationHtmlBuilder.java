@@ -162,9 +162,9 @@ public final class AstrometryIdentificationHtmlBuilder {
             }
             html.append("</div>");
             html.append("<div class='astro-note' style='margin-top: 6px;'>JPL Small-Body Identification uses ");
-            if (JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(astrometryContext.getSkybotObserverCode())) {
+            if (JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(astrometryContext.getJplObserverCode())) {
                 html.append("MPC observatory code ").append(DetectionReportAstrometry.escapeHtml(
-                        JplSbIdentUrlBuilder.normalizeObservatoryCode(astrometryContext.getSkybotObserverCode())));
+                        JplSbIdentUrlBuilder.normalizeObservatoryCode(astrometryContext.getJplObserverCode())));
             } else if (observerSite != null) {
                 html.append("topocentric site coordinates from ")
                         .append(DetectionReportAstrometry.escapeHtml(observerSite.getSourceLabel()));
@@ -234,7 +234,7 @@ public final class AstrometryIdentificationHtmlBuilder {
             return null;
         }
 
-        String observerCode = JplSbIdentUrlBuilder.normalizeObservatoryCode(astrometryContext.getSkybotObserverCode());
+        String observerCode = JplSbIdentUrlBuilder.normalizeObservatoryCode(astrometryContext.getJplObserverCode());
         if ("500".equals(observerCode) && astrometryContext.getObserverSite() == null) {
             return "JPL Small-Body Identification link unavailable: JPL does not accept MPC code 500. Configure a real MPC observatory code or site latitude/longitude.";
         }

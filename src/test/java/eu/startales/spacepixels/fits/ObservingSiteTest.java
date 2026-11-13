@@ -32,6 +32,21 @@ public class ObservingSiteTest {
                 null, null));
     }
 
+    /** Professional pipelines such as the Zwicky Transient Facility write OBSLAT, OBSLON and OBSALT (east-positive). */
+    @Test
+    public void readsObservatoryCards() {
+        FitsFileInformation palomar = frame(Map.of("OBSLAT", "33.3573", "OBSLON", "-116.8598", "OBSALT", "1668.0"));
+        ObservingSite site = ObservingSite.fromHeaders(new FitsFileInformation[]{palomar});
+        assertEquals(33.3573, site.latitudeDeg(), 1e-12);
+        assertEquals(-116.8598, site.longitudeDeg(), 1e-12);
+        assertEquals(1668, site.altitudeMeters(), 0);
+        assertEquals(ObservingSite.FROM_HEADER, site.source());
+        assertNull(ObservingSite.fromHeaders(new FitsFileInformation[]{frame(Map.of())}));
+        assertNull(ObservingSite.fromHeaders(null));
+        assertEquals(ObservingSite.FROM_CONFIGURATION, ObservingSite.fromConfiguration("37.9", "23.7").source());
+        assertNull(ObservingSite.fromConfiguration("37.9", null));
+    }
+
     private static FitsFileInformation frame(Map<String, String> site) {
         Map<String, String> header = new LinkedHashMap<>(site);
         header.put("NAXIS", "2");

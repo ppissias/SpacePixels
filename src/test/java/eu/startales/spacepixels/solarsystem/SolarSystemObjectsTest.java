@@ -150,13 +150,18 @@ public class SolarSystemObjectsTest {
         assertEquals(37.9, query.observer().site().latitudeDeg(), 1e-12);
 
         config.observatoryCode = " j95 ";
-        assertEquals("IAU code J95", SolarSystemQuery.of(new FitsFileInformation[]{first}, config).observer().description());
+        assertEquals("the frames' own site comes before a configured code, which may be another observatory",
+                "site from the FITS header", SolarSystemQuery.of(new FitsFileInformation[]{first}, config).observer().description());
+        FitsFileInformation noSite = frame("c.fit", "2026-03-10T02:00:00", "60", false);
+        SolarSystemQuery.Observer coded = SolarSystemQuery.of(new FitsFileInformation[]{noSite}, config).observer();
+        assertEquals("IAU code J95", coded.description());
+        assertEquals("J95", coded.observatoryCode());
         config.observatoryCode = "500";
         assertEquals("the geocentre is no observatory for JPL's field search", "site from the FITS header",
                 SolarSystemQuery.of(new FitsFileInformation[]{first}, config).observer().description());
+        expectProblem(() -> SolarSystemQuery.of(new FitsFileInformation[]{noSite}, config), "No observing site");
 
         config.observatoryCode = "";
-        FitsFileInformation noSite = frame("c.fit", "2026-03-10T02:00:00", "60", false);
         expectProblem(() -> SolarSystemQuery.of(new FitsFileInformation[]{noSite}, config), "No observing site");
         config.siteLat = "37.9";
         config.siteLong = "23.7E";

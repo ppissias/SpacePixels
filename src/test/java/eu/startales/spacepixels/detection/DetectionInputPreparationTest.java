@@ -133,10 +133,14 @@ public class DetectionInputPreparationTest {
                 2147483648.0, 1.0, new int[]{1000, 4000});
     }
 
+    /**
+     * BZERO/BSCALE apply before normalization: physical 0.2 and 0.6 on the [0,1] scale, then physical 1000 and 1900,
+     * which are detector counts (ADU) and keep one output level per ADU.
+     */
     @Test
     public void preparationAppliesFloatingPointScalingBeforeNormalization() throws Exception {
-        assertScaledPreparation(new float[][]{{1.0f, 2.0f}}, 100.0, 900.0,
-                new int[]{(int) Math.round(1000 * 65535.0 / 1900), 65535});
+        assertScaledPreparation(new float[][]{{1.0f, 2.0f}}, -0.2, 0.4, new int[]{13107, 39321});
+        assertScaledPreparation(new float[][]{{1.0f, 2.0f}}, 100.0, 900.0, new int[]{1000, 1900});
     }
 
     @Test

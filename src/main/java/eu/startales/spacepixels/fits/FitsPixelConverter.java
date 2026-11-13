@@ -180,7 +180,10 @@ public final class FitsPixelConverter {
             if (!Double.isFinite(offset) || !Double.isFinite(scale)) throw new IOException("FITS BZERO and BSCALE must be finite.");
         }
 
-        /** Whether physical samples use a nominal floating [0,1] scale rather than integer ADU. */
+        /**
+         * Whether the samples are stored as floating-point numbers. Such samples are normally [0,1] values;
+         * {@link ImageScaling.Scan} decides per sequence whether they hold ADU instead.
+         */
         public boolean floatingPoint() { return floatingPoint; }
 
         /** The image width in pixels. */

@@ -14,6 +14,7 @@ import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.platesolve.AstrometryNetAccount;
 import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.ObservingSite;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -22,6 +23,7 @@ import javax.swing.event.DocumentListener;
 import java.awt.*;
 import java.io.File;
 import java.net.URI;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
@@ -41,9 +43,9 @@ public class ConfigurationPanel extends JPanel {
 
     /** ASTAP download page, offered when no star database is found. */
     static final String ASTAP_DOWNLOAD_URL = "https://www.hnsky.org/astap.htm";
-    /** FITS keywords the report reads for the site, in the same order. */
-    static final String[] LATITUDE_KEYS = {"SITELAT", "OBSGEO-B", "LAT-OBS"};
-    static final String[] LONGITUDE_KEYS = {"SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS"};
+    /** FITS keywords the report reads for the site, in the same order (one list, owned by ObservingSite). */
+    static final List<String> LATITUDE_KEYS = ObservingSite.LATITUDE_KEYS;
+    static final List<String> LONGITUDE_KEYS = ObservingSite.LONGITUDE_KEYS;
 
     // link to main window
     private final ApplicationSettings applicationSettings;
@@ -195,7 +197,7 @@ public class ConfigurationPanel extends JPanel {
 
         observingSite.add(createConfigRow(
                 "IAU Observatory Code",
-                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups where supported.<br><b>Format:</b> MPC/IAU code such as <code>J95</code>.<br><b>Note:</b> <code>500</code> is only a SkyBoT geocenter fallback and is not valid for JPL Small-Body Identification.",
+                "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups where supported.<br>When the FITS headers hold a site, that site describes the frames and is used instead wherever a lookup accepts coordinates (JPL and the asteroid and comet fetch). SkyBoT accepts only codes and always uses this one.<br><b>Format:</b> MPC/IAU code such as <code>J95</code>.<br><b>Note:</b> <code>500</code> is only a SkyBoT geocenter fallback and is not valid for JPL Small-Body Identification.",
                 fieldWithStatus(observatoryCodeTextField, observatoryCodeStatus)));
 
         observingSite.add(createConfigRow(
@@ -350,11 +352,16 @@ public class ConfigurationPanel extends JPanel {
         return "Use 3 letters or digits, e.g. J95.";
     }
 
-    private static String observatoryCodeNote(String text) {
+    /** Status text for the code; notes when this session's FITS headers hold a site, which JPL lookups use instead. */
+    private String observatoryCodeNote(String text) {
         if ("500".equals(text)) {
             return "500 is the geocentre: SkyBoT only, not JPL.";
         }
-        return text.isEmpty() ? "Not set: geocentre-based lookups." : "✓ Valid";
+        if (text.isEmpty()) {
+            return "Not set: geocentre-based lookups.";
+        }
+        return headerValue(LATITUDE_KEYS) != null && headerValue(LONGITUDE_KEYS) != null
+                ? "✓ Valid. This session's FITS header has a site, which is used except for SkyBoT." : "✓ Valid";
     }
 
     /** Returns null when the value is empty or a valid coordinate within ±limit degrees, otherwise the reason. */
@@ -395,7 +402,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     /** Which value the report uses for this session: the FITS header's, if any frame has one. */
-    private String headerNote(String[] keys, String fieldText) {
+    private String headerNote(List<String> keys, String fieldText) {
         String[] header = headerValue(keys);
         if (header == null) {
             if (sessions.current() == null) {
@@ -407,7 +414,7 @@ public class ConfigurationPanel extends JPanel {
     }
 
     /** First value of the given keywords in the imported frames, as {key, value}; null when none has one. */
-    private String[] headerValue(String[] keys) {
+    private String[] headerValue(List<String> keys) {
         FitsFileInformation[] files = importedFiles();
         if (files == null) {
             return null;
@@ -455,7 +462,7 @@ public class ConfigurationPanel extends JPanel {
         footerMessageLabel.setText("Site filled from the FITS header.");
     }
 
-    private static String firstValue(Map<String, String> header, String[] keys) {
+    private static String firstValue(Map<String, String> header, List<String> keys) {
         for (String key : keys) {
             String value = header.get(key);
             if (value != null && !value.trim().replace("'", "").isEmpty()) {

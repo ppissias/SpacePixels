@@ -31,8 +31,8 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
     }
 
     /**
-     * The query for these frames with the application settings: the plate solution from the FITS headers, the
-     * observatory code when one is set, else the site of the headers or of the settings.
+     * The query for these frames with the application settings: the plate solution from the FITS headers, and the
+     * observer chosen by {@link #observer}.
      *
      * @throws IllegalArgumentException with a sentence for the user when something needed is missing
      */
@@ -52,19 +52,25 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
                 span[0], span[1], config.solarSystemMagnitude(), observer(files, config));
     }
 
-    /** The configured observatory code, else the site; throws with a sentence for the user when there is neither. */
+    /**
+     * The site in the FITS headers, which describes these frames; else the configured observatory code; else the
+     * configured site. Throws with a sentence for the user when there is none.
+     */
     static Observer observer(FitsFileInformation[] files, AppConfig config) {
+        ObservingSite headerSite = ObservingSite.fromHeaders(files);
+        if (headerSite != null) {
+            return new Observer(null, headerSite, "site from the FITS header");
+        }
         String code = JplSbIdentUrlBuilder.normalizeObservatoryCode(config.observatoryCode);
         if (JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(code)) {
             return new Observer(code, null, "IAU code " + code);
         }
-        ObservingSite site = ObservingSite.resolve(files, config.siteLat, config.siteLong);
+        ObservingSite site = ObservingSite.fromConfiguration(config.siteLat, config.siteLong);
         if (site == null) {
             throw new IllegalArgumentException("No observing site: the FITS headers have none. Enter the IAU observatory "
                     + "code, or the site latitude and longitude, in the Astrometry Config tab.");
         }
-        return new Observer(null, site, ObservingSite.FROM_HEADER.equals(site.source())
-                ? "site from the FITS header" : "site from the Astrometry Config tab");
+        return new Observer(null, site, "site from the Astrometry Config tab");
     }
 
     /**

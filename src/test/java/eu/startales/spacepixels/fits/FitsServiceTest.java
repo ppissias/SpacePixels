@@ -139,7 +139,7 @@ public class FitsServiceTest {
     @Test
     public void importUsesExplicitInteractionForConversionAndRedirect() throws Exception {
         File input = folder.newFolder("facade-float");
-        write(input, "float.fit", new float[][]{{1, 2}, {3, 4}}, false);
+        write(input, "float.fit", new float[][]{{0.1f, 0.2f}, {0.3f, 4}}, false);
         Interaction interaction = new Interaction();
         File converted;
         try (FitsImportService importer = new FitsImportService(input, interaction)) {
@@ -154,6 +154,29 @@ public class FitsServiceTest {
         assertEquals(0, interaction.openProgress);
         try (FitsImportService importer = new FitsImportService(converted, null)) {
             assertEquals(1, importer.readFiles().length);
+        }
+    }
+
+    /** Floating-point frames in ADU (sky of hundreds) convert like integer frames: no outlier question, values kept. */
+    @Test
+    public void floatingPointFramesInAduConvertWithoutAnOutlierQuestion() throws Exception {
+        File input = folder.newFolder("float-adu");
+        File original = write(input, "adu.fit", new float[][]{{240, 300.5f}, {310, 60_000}}, false);
+        Interaction interaction = new Interaction();
+        File converted;
+        try (FitsImportService importer = new FitsImportService(input, interaction)) {
+            converted = assertThrows(RedirectImportException.class, importer::readFiles).getNewDirectory();
+        }
+        assertEquals(List.of("Format Conversion Required", "Success"), interaction.questions);
+        try (Fits source = new Fits(original); Fits result = new Fits(new File(converted, "adu_16bit.fit"))) {
+            float[][] sourcePixels = (float[][]) FitsInput.getImageHDU(source).getKernel();
+            BasicHDU<?> after = FitsInput.getImageHDU(result);
+            short[][] output = (short[][]) after.getKernel();
+            assertEquals("one output level per ADU", 1, after.getHeader().getDoubleValue("SPPSCALE"), 0);
+            assertTrue(after.getHeader().getBooleanValue("SPPFADU"));
+            for (int y = 0; y < 2; y++) for (int x = 0; x < 2; x++) {
+                assertEquals(sourcePixels[y][x], output[y][x] + 32768.0, 0.5);
+            }
         }
     }
 

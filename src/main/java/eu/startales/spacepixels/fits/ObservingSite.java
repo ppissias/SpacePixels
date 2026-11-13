@@ -2,11 +2,13 @@ package eu.startales.spacepixels.fits;
 
 import eu.startales.spacepixels.util.SkyMath;
 
+import java.util.List;
 import java.util.Locale;
 
 /**
  * The observer's place on Earth: from the first frame whose FITS header holds a latitude and longitude, else from the
- * configured fallback (Astrometry Config). Latitude is north-positive and longitude east-positive, in degrees;
+ * configured fallback (Astrometry Config). A site in the header describes the frames actually loaded, so it also comes
+ * before a configured IAU observatory code wherever a lookup accepts coordinates. Latitude is north-positive and longitude east-positive, in degrees;
  * altitude is in metres above the ellipsoid, 0 when unknown.
  */
 public record ObservingSite(double latitudeDeg, double longitudeDeg, double altitudeMeters, String source) {
@@ -16,28 +18,49 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
     public static final String FROM_CONFIGURATION = "Configuration panel";
 
     /**
+     * Header cards for the latitude, longitude and altitude, in order of preference, as capture programs, the FITS
+     * standard and professional pipelines (OBSLAT/OBSLON/OBSALT, for example the Zwicky Transient Facility) write
+     * them. Longitudes are east-positive in all of them.
+     */
+    public static final List<String> LATITUDE_KEYS = List.of("SITELAT", "OBSGEO-B", "LAT-OBS", "OBSLAT");
+    public static final List<String> LONGITUDE_KEYS = List.of("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS", "OBSLON");
+    public static final List<String> ALTITUDE_KEYS = List.of("SITEELEV", "OBSALT", "ALT-OBS", "ELEVATIO");
+
+    /**
      * The site of these frames, or null when neither a header nor the fallback holds a valid one. The fallback values
      * are text as typed, such as {@code "37.98"} or {@code "24.6272S"}; either may be null.
      */
     public static ObservingSite resolve(FitsFileInformation[] files, String fallbackLatitude, String fallbackLongitude) {
-        if (files != null) {
-            for (FitsFileInformation file : files) {
-                if (file == null) {
-                    continue;
-                }
-                Double latitude = parseCoordinate(header(file, "SITELAT", "OBSGEO-B", "LAT-OBS"));
-                Double longitude = parseCoordinate(header(file, "SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS"));
-                if (latitude != null && longitude != null) {
-                    Double altitude = parseNumber(header(file, "SITEELEV", "OBSALT", "ALT-OBS", "ELEVATIO"));
-                    ObservingSite site = of(latitude, longitude, altitude, FROM_HEADER);
-                    if (site != null) {
-                        return site;
-                    }
+        ObservingSite site = fromHeaders(files);
+        return site != null ? site : fromConfiguration(fallbackLatitude, fallbackLongitude);
+    }
+
+    /** The site in the first frame whose header holds a valid latitude and longitude; null when none does. */
+    public static ObservingSite fromHeaders(FitsFileInformation[] files) {
+        if (files == null) {
+            return null;
+        }
+        for (FitsFileInformation file : files) {
+            if (file == null) {
+                continue;
+            }
+            Double latitude = parseCoordinate(header(file, LATITUDE_KEYS));
+            Double longitude = parseCoordinate(header(file, LONGITUDE_KEYS));
+            if (latitude != null && longitude != null) {
+                Double altitude = parseNumber(header(file, ALTITUDE_KEYS));
+                ObservingSite site = of(latitude, longitude, altitude, FROM_HEADER);
+                if (site != null) {
+                    return site;
                 }
             }
         }
-        Double latitude = parseCoordinate(fallbackLatitude);
-        Double longitude = parseCoordinate(fallbackLongitude);
+        return null;
+    }
+
+    /** The configured fallback site, as typed (either may be null); null when it is not a valid place. */
+    public static ObservingSite fromConfiguration(String latitudeText, String longitudeText) {
+        Double latitude = parseCoordinate(latitudeText);
+        Double longitude = parseCoordinate(longitudeText);
         return latitude == null || longitude == null ? null : of(latitude, longitude, 0.0, FROM_CONFIGURATION);
     }
 
@@ -54,7 +77,7 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
         return new ObservingSite(latitudeDeg, longitude, altitude, source);
     }
 
-    private static String header(FitsFileInformation file, String... keys) {
+    private static String header(FitsFileInformation file, List<String> keys) {
         if (file.getFitsHeader() == null) {
             return null;
         }
