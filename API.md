@@ -52,6 +52,8 @@ F21 adds an optional `streakObservations` map, keyed by ST ID, without changing 
 
 Report cards, maps, CSV labels and viewer overlays share category-owned identity rules. Track grouping retains engine order for multi-frame tracks and frame/file/position order for single-frame streaks. Variable IDs follow exported candidate order, not presentation sorting or card limits; candidates without a card link to the variable table.
 
+When the run left rectangles out of detection, `excludedAreas` lists them as `x`, `y`, `width` and `height` in frame pixels; the key is absent otherwise.
+
 Viewer restoration adds `inputFrames` (ordered file basenames, dimensions, start UTC milliseconds and exposure milliseconds), measured `findings[].positions` (one-based frame number and pixel x/y), and `variableMarkers` (captured names, confidence and hover descriptions) within schema version 1. No absolute input paths or pixels are added. New frame provenance must match before restoring. Older reports remain readable, with explicitly labelled reference markers where measured paths are unavailable. `SavedReportOverlays` reads completed exports on a worker; an unusable report never makes image import fail. The Java `DetectionOverlays` record now has a fourth `FindingOverlay findings` component: direct constructor callers must provide it, or null when unavailable. Existing track, variable and faint-mover components retain their meanings.
 
 ## Example: basic pipeline run with report export
@@ -128,7 +130,7 @@ The request defaults to `FAIL_IF_NOT_READY`, `ADD_OFFSET`, outlier policy `REQUI
 
 API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI reads the saved visualization preferences once at startup and passes them in its run options. Callers needing a particular site or presentation should supply run options.
 
-After input preparation, each run captures FITS metadata, the active plate correction and the matching saved catalogue before pixel loading/detection. Report export uses that captured context. Later settings edits or catalogue/correction-file replacements affect subsequent runs.
+After input preparation, each run captures FITS metadata, the active plate correction, the matching saved catalogue and the saved excluded areas (`excluded_areas.json`, when its frame size matches) before pixel loading/detection. Report export uses that captured context. Later settings edits or catalogue/correction-file replacements affect subsequent runs.
 
 ## Input preparation modes
 

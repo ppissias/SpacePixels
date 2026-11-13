@@ -141,7 +141,7 @@ Each `JobHandle` carries its explicit `ProcessingSession`, which has a UUID and 
 
 ### `eu.startales.spacepixels.session`
 
-`QualityControlSnapshot` holds detached all-frame quality measurements, exact engine limits and captured input/settings identities. `ProcessingSession` owns the last completed snapshot; the table retains a read-only reference and marks it stale when detection settings or quality-relevant metadata change. `QualityControlTask` delegates to `QualityControlService` and the engine's quality-only API on workers. Two-pass file loading bounds image memory and verifies stable file attributes. No automatic frame removal or new quality policy is introduced.
+`QualityControlSnapshot` holds detached all-frame quality measurements, exact engine limits and captured input/settings identities. `ProcessingSession` owns the last completed snapshot; the table retains a read-only reference and marks it stale when detection settings, the session's excluded areas or quality-relevant metadata change. `QualityControlTask` delegates to `QualityControlService` and the engine's quality-only API on workers. Two-pass file loading bounds image memory and verifies stable file attributes. No automatic frame removal or new quality policy is introduced.
 
 The imported dataset and its handover, without Swing dependencies. `ProcessingSession` owns the session identity,
 state and metadata-save completion lifetime; `SessionOwner` installs a candidate only for the expected current
@@ -840,6 +840,7 @@ Detection report output:
 - image and GIF assets beside the report
 - effective settings in `detection_config.json`, stable finding data in `report-data.json` and CSV exports
 - session catalogue/correction files (`sky_catalogue.json`, `plate_correction.json`) and the asteroid and comet predictions (`solar_system.json`, used by the viewers and report comparisons) in the imported dataset folder, guarded by field and plate-solution identity; a GUI run takes them from the session when it is admitted (`SkySnapshot`), a headless run reads them once at its start
+- the excluded areas (`excluded_areas.json`, rectangles drawn in Preview Frame that detection leaves out of every frame) in the same folder, guarded by frame size; the session owns them (`ProcessingSession.setExcludedAreas`), a run captures them with the other session data (`ReportRunContext.excludedAreas`) and passes them to `JTransientEngine.runPipeline`
 - iterative root directory containing per-pass report directories, `index.html`, versioned `run-data.json`, per-pass `<count>_inputs.json` and optional `auto_tune.txt`; manifests use filenames rather than private absolute paths and do not store observing-site coordinates
 
 Replacing files:

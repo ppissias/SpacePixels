@@ -118,7 +118,7 @@ The frame table fills its **Quality**, **FWHM (px)**, **Stars**, **Elongation** 
 
 Select one frame and click **Quality details…**, or right-click a frame and choose it from the menu, for the verdict and full reason, with each measurement beside its session limit, including bright-star elongation, reference-star counts, sky median/noise and common image area. **Copy details** copies them as text. Missing evidence is shown as unavailable. The registration edge-fit RMS describes padding geometry, not residual alignment of stars. With too few frames, statistical session limits may be unavailable; registration/coverage exclusions still apply. If fewer than three frames would remain, detection would stop after QC.
 
-Results belong to the open session. Changing detection settings marks them **Stale** and removes the verdict tint until you rerun QC (or restore the captured settings). Importing another session clears them. A cancelled or failed check preserves the last completed result.
+Results belong to the open session. Quality control leaves out the session's [excluded areas](#excluded-areas), as detection does. Changing detection settings or the excluded areas marks them **Stale** and removes the verdict tint until you rerun QC (or restore the captured settings). Importing another session clears them. A cancelled or failed check preserves the last completed result.
 
 ### Appearance and readable text
 
@@ -705,6 +705,18 @@ To try the per-frame settings on the frame itself, use **Detection Sigma**, **Gr
 After a full detection, the side panel's **Moving object tracks** (T) and **Streak tracks** (Shift+T) draw that run's tracks as Blink does, and with variable-star photometry **Variable stars** (V) draws its candidates, with the same labels and hover details as Blink. They are the positions that run measured: changing the single-frame preview settings does not change them, and showing them detects nothing again. Run the full detection again to update them. A run that ends while Preview Frame is open makes its tracks available there at once.
 
 Preview Frame shows the normal detection only; the faint-streak search runs in Detect Moving Targets.
+
+#### Excluded areas
+
+Some sensors leave parts of every frame unusable: a blurred edge, a bad or smeared column, a corner with stray light. Detection makes false findings there, many of them faint movers. Mark such parts as excluded areas, and detection leaves them out of every frame.
+
+- In Preview Frame's side panel, open **Excluded areas** and click **Draw areas**, or right-click a frame in the main window and choose **Exclude Areas…**.
+- Drag on the image to draw a rectangle; it shows in light, transparent red. Right-drag moves the image, and right-clicking an area removes it. The list removes one area (✕) or all of them, and gives each area's pixels.
+- The frames move a little from one to the next, and a sensor defect moves with them. Blink the frames first to see how far it goes, and draw the area over all of it.
+- The areas belong to the session: they are saved in its folder as `excluded_areas.json`, and Detect Moving Targets, Detect Iteratively, the command line and the API use them. Blink shows them too (layer **Excluded areas**).
+- Nothing inside an area is detected or measured, in any frame, and objects within 3 px of one are left out. A track that passes through an area loses its detections there and can be too short to report. The report draws the areas in light red on its pictures, says how much of the frame detection used, and lists them in `report-data.json`.
+- Quality control leaves the areas out too, so its verdicts match the next detection; changing the areas marks its result **Stale**.
+- Auto-Tune does not leave the areas out yet: it measures the frames whole.
 
 ### Manual Transient Inspection
 
