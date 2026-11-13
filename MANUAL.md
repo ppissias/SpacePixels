@@ -717,7 +717,7 @@ Some sensors leave parts of every frame unusable: a blurred edge, a bad or smear
 - Nothing inside an area is detected or measured, in any frame, and objects within 3 px of one are left out. A track that passes through an area loses its detections there and can be too short to report. The report draws the areas in light red on its pictures, says how much of the frame detection used, and lists them in `report-data.json`.
 - Quality control leaves the areas out too, so its verdicts match the next detection; changing the areas marks its result **Stale**.
 - Preview Frame's own detection, **Test Star Mask** and **Manual Transient Inspection** leave them out as well, as a detection run does. After you draw an area, Preview finds the frame's sources again: what lay inside the area disappears. The star mask's stack is black inside the areas, as the run's stack is.
-- Auto-Tune does not leave the areas out yet: it measures the frames whole.
+- Auto-Tune leaves them out too: its sample regions keep their places and measure without the areas, so a defect there no longer makes it choose stricter settings. After you change the areas, the Overview says that the run on show was measured with other areas; run Auto-Tune again.
 
 ### Manual Transient Inspection
 

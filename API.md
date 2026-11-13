@@ -130,7 +130,7 @@ The request defaults to `FAIL_IF_NOT_READY`, `ADD_OFFSET`, outlier policy `REQUI
 
 API requests use built-in rendering defaults and no configured observing site unless supplied explicitly. They do not load user-home preferences or modify desktop rendering/tuning defaults. The batch CLI reads the saved visualization preferences once at startup and passes them in its run options. Callers needing a particular site or presentation should supply run options.
 
-After input preparation, each run captures FITS metadata, the active plate correction, the matching saved catalogue and the saved excluded areas (`excluded_areas.json`, when its frame size matches) before pixel loading/detection. Report export uses that captured context. Later settings edits or catalogue/correction-file replacements affect subsequent runs.
+After input preparation, each run captures FITS metadata, the active plate correction, the matching saved catalogue and the saved excluded areas (`excluded_areas.json`, when its frame size matches) before pixel loading/detection; a requested Auto-Tune measures without the same areas. Report export uses that captured context. Later settings edits or catalogue/correction-file replacements affect subsequent runs.
 
 ## Input preparation modes
 
