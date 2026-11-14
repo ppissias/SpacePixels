@@ -85,30 +85,49 @@ public final class AstrometricReduction {
         return observations;
     }
 
+    /** The observations of a report's measured positions, in time order; positions without a frame or time are left out. */
+    public List<MpcObservation> reducePositions(List<ReportedObjects.Position> positions) {
+        var observations = new ArrayList<MpcObservation>();
+        for (var p : positions) {
+            MpcObservation observation = observe(p.frameNumber() - 1, p.x(), p.y(), p.fwhm(), p.snr());
+            if (observation != null) observations.add(observation);
+        }
+        observations.sort(java.util.Comparator.comparingLong(MpcObservation::midpointMillis));
+        return observations;
+    }
+
     /** One detection's observation, or null when its frame, time or sky position is unknown. */
     MpcObservation reduce(DetectedObject point) {
-        if (point == null || point.sourceFrameIndex < 0 || point.sourceFrameIndex >= files.length
-                || files[point.sourceFrameIndex] == null || !Double.isFinite(point.x) || !Double.isFinite(point.y)) {
+        return point == null ? null : observe(point.sourceFrameIndex, point.x, point.y, point.fwhm, point.integratedSigma);
+    }
+
+    /**
+     * The observation of a centroid on a zero-based frame, with the detection's FWHM in pixels and signal-to-noise
+     * (either null or not positive when unknown: then only the plate error is counted). Null when the frame, its time
+     * or the sky position is unknown.
+     */
+    MpcObservation observe(int frameIndex, double x, double y, Double fwhm, Double snr) {
+        if (frameIndex < 0 || frameIndex >= files.length || files[frameIndex] == null || !Double.isFinite(x) || !Double.isFinite(y)) {
             return null;
         }
-        FitsFileInformation file = files[point.sourceFrameIndex];
+        FitsFileInformation file = files[frameIndex];
         if (file.getObservationTimestamp() <= 0) {
             return null;
         }
         long exposure = Math.max(0, file.getExposureDurationMillis());
         long midpoint = file.getObservationTimestamp() + exposure / 2;
         WcsCoordinateTransformer frame = correction.apply(header, file.getFileName(), file.getSizeWidth(), file.getSizeHeight());
-        var sky = frame.pixelToSky(point.x, point.y);
-        var right = frame.pixelToSky(point.x + 1, point.y);
-        var down = frame.pixelToSky(point.x, point.y + 1);
+        var sky = frame.pixelToSky(x, y);
+        var right = frame.pixelToSky(x + 1, y);
+        var down = frame.pixelToSky(x, y + 1);
         if (sky == null || right == null || down == null) {
             return null;
         }
         double scale = (SkyMath.separationArcsec(sky.getRaDegrees(), sky.getDecDegrees(), right.getRaDegrees(), right.getDecDegrees())
                 + SkyMath.separationArcsec(sky.getRaDegrees(), sky.getDecDegrees(), down.getRaDegrees(), down.getDecDegrees())) / 2;
-        double centroid = point.fwhm > 0 && point.integratedSigma > 0 ? point.fwhm / (FWHM_PER_SIGMA * point.integratedSigma) : 0;
+        double centroid = fwhm != null && snr != null && fwhm > 0 && snr > 0 ? fwhm / (FWHM_PER_SIGMA * snr) : 0;
         double sigma = Math.max(MIN_RMS_ARCSEC, scale * Math.hypot(centroid, platePixels));
-        return new MpcObservation(point.sourceFrameIndex + 1, midpoint, exposure, point.x, point.y,
+        return new MpcObservation(frameIndex + 1, midpoint, exposure, x, y,
                 SkyMath.normalizeDegrees(sky.getRaDegrees()), sky.getDecDegrees(), sigma, sigma, GAIA_DR3, "");
     }
 }

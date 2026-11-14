@@ -11,8 +11,17 @@ import java.util.*;
 
 /** Detached measured markers and explicitly labelled stack/reference positions for the report's other categories. */
 public final class FindingOverlay {
-    /** One measured centroid in registered image pixels; frame numbers refer to the run's one-based input order. */
-    public record Position(int frameNumber, double x, double y) { }
+    /**
+     * One measured centroid in registered image pixels; frame numbers refer to the run's one-based input order. The
+     * detection's FWHM in pixels and its signal-to-noise (integrated sigma) are kept for astrometric uncertainties;
+     * null when not measured, as for saved reports written before they were kept.
+     */
+    public record Position(int frameNumber, double x, double y, Double fwhm, Double snr) {
+        /** A centroid without the size and signal-to-noise of its detection. */
+        public Position(int frameNumber, double x, double y) {
+            this(frameNumber, x, y, null, null);
+        }
+    }
     /** A finding's report identity and display geometry; no positions means a reference, never a per-frame detection. */
     public record Marker(String id, double x, double y, List<Position> positions, String description) {
         /** Owns the small position container without retaining mutable engine objects. */
@@ -53,7 +62,12 @@ public final class FindingOverlay {
     public static List<Position> positions(List<DetectedObject> points) {
         return points == null ? List.of() : points.stream().filter(Objects::nonNull)
                 .filter(p -> p.sourceFrameIndex >= 0 && Double.isFinite(p.x) && Double.isFinite(p.y))
-                .map(p -> new Position(p.sourceFrameIndex + 1, p.x, p.y)).toList();
+                .map(p -> new Position(p.sourceFrameIndex + 1, p.x, p.y, positive(p.fwhm), positive(p.integratedSigma))).toList();
+    }
+
+    /** A measured positive value, or null. */
+    private static Double positive(double value) {
+        return Double.isFinite(value) && value > 0 ? value : null;
     }
 
     /** Captures categories not already drawn by the track, variable-star and fitted-faint-mover layers. */
