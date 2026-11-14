@@ -48,6 +48,12 @@
 
 - **Excluded areas.** In Preview Frame, **Excluded areas** › **Draw areas** marks rectangles of the aligned frames that detection leaves out in every frame, such as blurred edges or a bad column. They are saved in the dataset folder (`excluded_areas.json`) and used by the next detection, also by headless runs of that folder. Detection treats them as having no data: nothing is found inside them, and they do not count in the sky and noise measurements. The report draws them in light red on its pictures, says how much of the frame detection used and lists them in `report-data.json`. **Run quality control**, Auto-Tune, Preview Frame's detection, **Test Star Mask** and **Manual Transient Inspection** leave them out too; changing them marks a quality result stale, and the Overview says when the Auto-Tune run on show was measured with other areas.
 
+- **Faint-mover review for long paths.** The report showed no source or residual blink for a faint mover whose path did not fit in 256 × 256 pixels, or for a session of more than 128 frames ("Review limited to 128 frames and 256 pixels per side"). Such a path is now reviewed in a 71 × 71 pixel cutout that follows it from frame to frame; shorter paths keep their fixed rectangle. On a 115-frame DECam session, none of the 12 faint movers had a review before.
+
+- **Asteroid paths no longer jump off the frame (fix).** On the time step where an asteroid rises, transits or sets for the observing site, JPL Horizons writes one field fewer before the position, and SpacePixels read that step's Dec as its R.A. and its magnitude as its Dec. The predicted path then ran to a point far outside the field and back, drawn as two dashed lines from the object to the edge of the frame. The columns are now read from the end of each row. Predictions saved before this fix keep the wrong steps; fetch them again.
+
+- **Single-frame anomalies, most significant first.** Anomalies are numbered by integrated sigma (the signal-to-noise of the whole footprint), then peak sigma, then size, instead of by frame. The report, its data files and the viewers use the same numbers; before, the viewers numbered anomalies in the engine's order, so their A3 could be another anomaly than the report's.
+
 ### Upgrading and API changes
 
 - **`SkySnapshot` and `SessionMetadata` have a new last component, `excludedAreas`.** The previous constructors remain and mean no excluded areas. A `SessionMetadataStore` implementation must add `saveExcludedAreas`.
