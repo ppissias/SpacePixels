@@ -202,7 +202,7 @@ All packages are under `eu.startales.spacepixels`.
 | `platesolve` | Plate solving integration and session plate solution correction | `PlateSolveService`, `PlateSolutionCorrection`, `AstrometryNetAccount` |
 | `skycatalog` | Fetching and storing the sky catalogue; the plate-solution correction fit; sky snapshots | `SkyCatalogueClient`, `SkyCatalogueStore`, `FetchStep`, `PlateCorrectionFitter`, `SkySnapshot` |
 | `solarsystem` | Predicting the known asteroids and comets of a session's field with JPL, and storing the predictions; the JPL Small-Body Identification URLs | `SolarSystemClient`, `SolarSystemQuery`, `SolarSystemObjects`, `SolarSystemStore`, `JplSbIdentUrlBuilder` |
-| `mpc` | Observations for the Minor Planet Center: the astrometric reduction of detections against the Gaia-checked plate solution, and ADES PSV export with its checks; no Swing | `AstrometricReduction`, `MpcObservation`, `AdesPsv` |
+| `mpc` | Observations for the Minor Planet Center: the astrometric reduction of detections against the Gaia-checked plate solution, ADES PSV export with its checks, Find_Orb orbits and moving-object light curves; no Swing | `AstrometricReduction`, `MpcObservation`, `AdesPsv`, `FindOrb`, `LightCurve` |
 | `report` | The HTML report, its model, section writers, and lookup proxy/builders (`report.lookup`) | `ReportExporter`, `ReportRequest`, `ReportData`, `FindingCategory`, `ReportLookupProxyServer` |
 | `util` | General cross-cutting utilities | `StagedFile`, `Statistics`, `SkyMath`, `BuildInfo`, `Cancellation`, `DebugOutput` |
 | `api`, `tools` | The public Java API and the command-line tools | `DefaultSpacePixelsPipelineApi`, `SpacePixelsPipelineRequest`, `BatchDetectionCli` |
