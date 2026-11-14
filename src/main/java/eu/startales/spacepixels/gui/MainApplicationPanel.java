@@ -121,6 +121,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final JButton lastReportButton = new JButton();
     private final JButton outputFolderButton = AccessibleControls.link("Open output folder", "Open last report output folder",
             this::openOutputFolder);
+    /** Opens the Asteroids &amp; Comets window on the last report; shown with it. */
+    private final JButton asteroidsButton = AccessibleControls.link("Asteroids & Comets…",
+            "Review the moving objects of the last report and prepare MPC observations", this::openAsteroidsComets);
     /** What follows "Open last report" on its button: the report's date, and whether it is iterative. */
     private String lastReportDetail = "";
     /** The settings of the last run of this session that wrote a report, or null: the report is current while they are in use. */
@@ -426,6 +429,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         outputFolderButton.setHorizontalAlignment(SwingConstants.LEFT);
         outputFolderButton.setMargin(new Insets(2, 2, 2, 2));
         outputFolderButton.setVisible(false);
+        asteroidsButton.setHorizontalAlignment(SwingConstants.LEFT);
+        asteroidsButton.setMargin(new Insets(2, 2, 2, 2));
+        asteroidsButton.setVisible(false);
         // Auto-Tune over the settings it sets; Detect over the other run and the links to the last report. The settings
         // are as tall as those rows with the links in them, so the step keeps its height when a report appears.
         JPanel detectBody = new JPanel(new GridBagLayout()) {
@@ -458,6 +464,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         detectBody.add(lastReportButton, cell);
         cell.gridy = 3;
         detectBody.add(outputFolderButton, cell);
+        cell.gridy = 4;
+        detectBody.add(asteroidsButton, cell);
         JPanel detectGroup = new WorkflowStep(workflowSteps, 4, "Detect", false, detectStatus, detectBody);
 
         JPanel workflowStrip = new JPanel(new WrapLayout(FlowLayout.LEFT, 8, 6));
@@ -2095,6 +2103,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             lastReportDetail = "";
             lastReportButton.setVisible(false);
             outputFolderButton.setVisible(false);
+            asteroidsButton.setVisible(false);
             refreshActionEmphasis();
             return;
         }
@@ -2107,7 +2116,62 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         lastReportButton.setVisible(true);
         outputFolderButton.setToolTipText(report.getAbsoluteFile().getParent());
         outputFolderButton.setVisible(true);
+        asteroidsButton.setVisible(true);
         refreshActionEmphasis();
+    }
+
+    /**
+     * Opens the Asteroids &amp; Comets window on the last report, or on a report folder the user chooses when the last
+     * report is an iterative index. The report data is read on a worker; the report must come from this session's frames.
+     */
+    private void openAsteroidsComets() {
+        ProcessingSession session = sessions.current();
+        File lastReport = session == null ? null : session.getLastReport();
+        if (lastReport == null) return;
+        File folder = lastReport.getAbsoluteFile().getParentFile();
+        if (!new File(folder, "report-data.json").isFile()) {
+            JFileChooser chooser = WindowSizing.fileChooser(folder);
+            chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+            chooser.setDialogTitle("Choose the report folder of one pass");
+            if (chooser.showOpenDialog(windowFrame) != JFileChooser.APPROVE_OPTION) return;
+            folder = chooser.getSelectedFile();
+        }
+        File chosen = folder;
+        FitsFileInformation[] files = session.getFiles();
+        PlateSolutionCorrection correction = skyCatalogue().getCorrection();
+        var config = applicationSettings.getConfig();
+        var site = eu.startales.spacepixels.fits.ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
+        var visualization = detectionSettings.visualizationSettings();
+        new SwingWorker<eu.startales.spacepixels.mpc.ReportedObjects.Report, Void>() {
+            @Override protected eu.startales.spacepixels.mpc.ReportedObjects.Report doInBackground() throws Exception {
+                return eu.startales.spacepixels.mpc.ReportedObjects.load(chosen);
+            }
+
+            @Override protected void done() {
+                if (sessions.current() != session) return;
+                eu.startales.spacepixels.mpc.ReportedObjects.Report report;
+                try {
+                    report = get();
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    JOptionPane.showMessageDialog(windowFrame, cause.getMessage(), "Asteroids & Comets", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                boolean sameFrames = report.frames().size() == files.length;
+                for (int i = 0; sameFrames && i < files.length; i++) {
+                    sameFrames = report.frames().get(i).fileName().equals(files[i].getFileName());
+                }
+                if (!sameFrames) {
+                    JOptionPane.showMessageDialog(windowFrame, "This report was made from other frames than the open session's.",
+                            "Asteroids & Comets", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+                var resolved = WcsSolutionResolver.resolveUncorrected(null, files);
+                var window = viewers.register(new AsteroidsCometsWindow(windowFrame, files, report,
+                        resolved == null ? null : resolved.getTransformer(), correction, applicationSettings, storage, visualization, site));
+                window.setVisible(true);
+            }
+        }.execute();
     }
 
     /** Opens the current session's completed output directory without starting or changing any analysis. */
