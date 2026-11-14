@@ -196,7 +196,7 @@ public class ConfigurationPanel extends JPanel {
         solarDepthSpinner.addChangeListener(e -> solarDepthChanged());
         skyCatalogue.add(createConfigRow(
                 "Asteroid and Comet Depth (V)",
-                "The faintest asteroids and comets that <b>Fetch Asteroids and Comets</b> asks JPL for, as a predicted V "
+                "The faintest asteroids and comets that <b>Fetch Asteroids and Comets</b> asks JPL and IMCCE SkyBoT for, as a predicted V "
                         + "magnitude. For comets JPL predicts the total magnitude, which can be off by a magnitude or more. "
                         + "A deeper limit finds more objects and takes longer: a search of one field took from half a minute "
                         + "to four minutes in tests, and for frames more than about ten years old JPL may not answer at all "

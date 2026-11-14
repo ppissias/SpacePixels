@@ -47,7 +47,9 @@ import java.util.regex.Pattern;
  * field during the night, and older frames need it too: the search picks its candidates by moving current orbits as
  * simple two-body orbits, which for a near-Earth object with a close approach in between can be degrees off (Apophis
  * on 2021-03-06: 4.4°, more than the search's own error estimate), and an object it does not pick is never computed
- * precisely. The near-Earth population is small, so the wide search stays quick. JPL Horizons then
+ * precisely. The near-Earth population is small, so the wide search stays quick. IMCCE's SkyBoT cone search then
+ * looks again over the field; its catalogue and JPL's differ for some objects (recent designations, very faint ones),
+ * so the objects it finds that JPL did not are added, matched by designation. JPL Horizons then
  * gives each object that passes over the frame its positions, predicted magnitude and 3-sigma uncertainty every few
  * minutes over the span plus fourteen hours on each side for clock review. Both services integrate current orbits
  * numerically, so the predictions also hold for frames taken years ago. When Horizons cannot answer for an object, its position and rate from the field search are kept as
@@ -98,7 +100,11 @@ public final class SolarSystemClient {
     static final double FRAME_ROOM = 0.05;
 
     static final String HORIZONS = "https://ssd.jpl.nasa.gov/api/horizons.api";
+    static final String SKYBOT = "https://ssp.imcce.fr/webservices/skybot/api/conesearch.php";
+    /** SkyBoT's observer for the geocentre, used when no observatory code is set (it accepts only codes). */
+    static final String GEOCENTRE = "500";
     private static final Duration SB_IDENT_TIMEOUT = Duration.ofMinutes(5);
+    private static final Duration SKYBOT_TIMEOUT = Duration.ofSeconds(90);
     private static final Duration HORIZONS_TIMEOUT = Duration.ofSeconds(90);
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(15);
     private static final DateTimeFormatter HORIZONS_INPUT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss", Locale.US)
@@ -158,6 +164,7 @@ public final class SolarSystemClient {
 
         boolean fieldDone = false;
         boolean neoDone = false;
+        boolean skybotDone = false;
         boolean horizonsDone = false;
         List<Candidate> crossing = new ArrayList<>();
         int refined = 0;
@@ -174,7 +181,7 @@ public final class SolarSystemClient {
                     Math.max(MIN_MARGIN_DEG, GENERAL_RATE_DEG_PER_DAY * halfSpanDays), null);
             try {
                 Search search = loadField(fieldUrl, middle);
-                search.candidates().forEach(candidate -> found.putIfAbsent(candidate.name(), candidate));
+                search.candidates().forEach(candidate -> found.putIfAbsent(designationKey(candidate.name()), candidate));
                 fieldVersion = search.version();
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.SUCCEEDED,
                         count(search.candidates().size(), "object"), "", fieldUrl, null));
@@ -183,6 +190,8 @@ public final class SolarSystemClient {
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.FAILED,
                         "", problem.getMessage(), fieldUrl, null));
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent, because the field search failed.", null, null));
+                addStep(result, progress, FetchStep.of("IMCCE SkyBoT", "Field search", FetchStep.Status.NOT_ASKED,
                         "", "Not sent, because the field search failed.", null, null));
                 addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
                         "", "Not sent, because the field search failed.", null, null));
@@ -195,7 +204,7 @@ public final class SolarSystemClient {
             String neoUrl = fieldSearchUrl(query, result.field, middle, NEO_MARGIN_DEG, "neo");
             try {
                 Search search = loadField(neoUrl, middle);
-                search.candidates().forEach(candidate -> found.putIfAbsent(candidate.name(), candidate));
+                search.candidates().forEach(candidate -> found.putIfAbsent(designationKey(candidate.name()), candidate));
                 fieldVersion = fieldVersion == null ? search.version() : fieldVersion;
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.SUCCEEDED,
                         count(search.candidates().size(), "object"), "", neoUrl, null));
@@ -205,6 +214,27 @@ public final class SolarSystemClient {
                 result.problems.add("Near-Earth object search (JPL SB-Ident): " + problem.getMessage());
             }
             neoDone = true;
+            progress.stage("asteroids and comets in the field (IMCCE SkyBoT)");
+            String skybotUrl = skybotUrl(query, result.field, middle,
+                    Math.max(MIN_MARGIN_DEG, GENERAL_RATE_DEG_PER_DAY * halfSpanDays));
+            boolean skybotAnswered = false;
+            try {
+                List<Candidate> listed = parseSkybot(http.get(URI.create(skybotUrl), SKYBOT_TIMEOUT), middle, query.magnitudeLimit());
+                int added = 0;
+                for (Candidate candidate : listed) {
+                    if (found.putIfAbsent(designationKey(candidate.name()), candidate) == null) {
+                        added++;
+                    }
+                }
+                skybotAnswered = true;
+                addStep(result, progress, FetchStep.of("IMCCE SkyBoT", "Field search", FetchStep.Status.SUCCEEDED,
+                        count(listed.size(), "object") + (added > 0 ? ", " + added + " not found by JPL" : ""), "", skybotUrl, null));
+            } catch (IOException problem) {
+                addStep(result, progress, FetchStep.of("IMCCE SkyBoT", "Field search", FetchStep.Status.FAILED,
+                        "", problem.getMessage() + " The JPL search is used alone.", skybotUrl, null));
+                result.problems.add("Field search (IMCCE SkyBoT): " + problem.getMessage());
+            }
+            skybotDone = true;
 
             for (Candidate candidate : found.values()) {
                 if (crossesFrame(query, straightLine(candidate, query).samples)) {
@@ -261,6 +291,7 @@ public final class SolarSystemClient {
             progress.steps(List.copyOf(result.fetchSteps));
             List<String> sources = new ArrayList<>();
             if (fieldVersion != null) sources.add("JPL SB-Ident API " + fieldVersion);
+            if (skybotAnswered) sources.add("IMCCE SkyBoT");
             if (horizonsVersion != null) sources.add("JPL Horizons API " + horizonsVersion);
             result.source = String.join(", ", sources);
             return result;
@@ -270,10 +301,19 @@ public final class SolarSystemClient {
                         "", "The fetch was cancelled.", null, null));
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.NOT_ASKED,
                         "", "Not sent.", null, null));
+                addStep(result, progress, FetchStep.of("IMCCE SkyBoT", "Field search", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent.", null, null));
                 addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
                         "", "Not sent.", null, null));
             } else if (!neoDone) {
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.NOT_ASKED,
+                        "", "The fetch was cancelled.", null, null));
+                addStep(result, progress, FetchStep.of("IMCCE SkyBoT", "Field search", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent.", null, null));
+                addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
+                        "", "Not sent.", null, null));
+            } else if (!skybotDone) {
+                addStep(result, progress, FetchStep.of("IMCCE SkyBoT", "Field search", FetchStep.Status.NOT_ASKED,
                         "", "The fetch was cancelled.", null, null));
                 addStep(result, progress, FetchStep.of("JPL Horizons", "Positions", FetchStep.Status.NOT_ASKED,
                         "", "Not sent.", null, null));
@@ -418,6 +458,123 @@ public final class SolarSystemClient {
                     raRateValue == null ? 0 : raRateValue, decRateValue == null ? 0 : decRateValue, epochMillis));
         }
         return new Search(candidates, version);
+    }
+
+    // ==========================================
+    // FIELD SEARCH (SKYBOT)
+    // ==========================================
+
+    /**
+     * The SkyBoT cone search over the field widened by {@code marginDeg}, at {@code epochMillis}, for the configured
+     * observatory code or else the geocentre: SkyBoT takes no coordinates. The topocentric offset only moves where an
+     * object is found, not whether; Horizons then computes its positions for the actual observer.
+     */
+    static String skybotUrl(SolarSystemQuery query, SkyField field, long epochMillis, double marginDeg) {
+        String code = query.observer().observatoryCode();
+        double radius = Math.hypot(field.widthDeg, field.heightDeg) / 2 + marginDeg;
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put("-ep", DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss", Locale.US).withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochMilli(epochMillis)));
+        parameters.put("-ra", String.format(Locale.US, "%.6f", field.centerRa));
+        parameters.put("-dec", String.format(Locale.US, "%.6f", field.centerDec));
+        parameters.put("-rd", String.format(Locale.US, "%.6f", radius));
+        parameters.put("-mime", "json");
+        parameters.put("-output", "all");
+        parameters.put("-observer", code == null || code.isBlank() ? GEOCENTRE : code.trim());
+        // Asteroids, no planets, comets.
+        parameters.put("-objFilter", "101");
+        parameters.put("-from", "SpacePixels");
+        StringBuilder url = new StringBuilder(SKYBOT).append('?');
+        for (Map.Entry<String, String> parameter : parameters.entrySet()) {
+            url.append(url.charAt(url.length() - 1) == '?' ? "" : "&").append(parameter.getKey()).append('=')
+                    .append(URLEncoder.encode(parameter.getValue(), StandardCharsets.UTF_8));
+        }
+        return url.toString();
+    }
+
+    /**
+     * The asteroids and comets of a SkyBoT answer no fainter than {@code magnitudeLimit}, named as JPL names them so
+     * Horizons can be asked for them. An empty answer (SkyBoT's HTTP 204) is an empty field. Rates are on the sky,
+     * in arcseconds per hour, like JPL's.
+     */
+    static List<Candidate> parseSkybot(String answer, long epochMillis, double magnitudeLimit) throws IOException {
+        if (answer == null || answer.isBlank()) {
+            return List.of();
+        }
+        JsonArray rows;
+        try {
+            rows = JsonParser.parseString(answer).getAsJsonArray();
+        } catch (RuntimeException notAList) {
+            throw new IOException("SkyBoT answered without a list of objects.");
+        }
+        List<Candidate> candidates = new ArrayList<>();
+        for (JsonElement element : rows) {
+            if (!element.isJsonObject()) {
+                continue;
+            }
+            JsonObject row = element.getAsJsonObject();
+            String designation = string(row, "Name");
+            Double ra = parseSexagesimal(string(row, "RA (hms)"), 15);
+            Double dec = parseSexagesimal(string(row, "DEC (dms)"), 1);
+            Double magnitude = leadingNumber(string(row, "VMag (mag)"));
+            if (designation == null || ra == null || dec == null || magnitude != null && magnitude > magnitudeLimit) {
+                continue;
+            }
+            String objectClass = string(row, "Class");
+            boolean comet = objectClass != null && objectClass.toLowerCase(Locale.ROOT).contains("comet");
+            Double raRate = leadingNumber(string(row, "dRA (arcsec/h)"));
+            Double decRate = leadingNumber(string(row, "dDEC (arcsec/h)"));
+            candidates.add(new Candidate(skybotName(string(row, "Num"), designation.trim(), comet), comet || isComet(designation),
+                    ra, dec, magnitude, raRate == null ? 0 : raRate, decRate == null ? 0 : decRate, epochMillis));
+        }
+        return candidates;
+    }
+
+    /** A SkyBoT member as text, or null when it is absent. */
+    private static String string(JsonObject row, String key) {
+        return row.has(key) && row.get(key).isJsonPrimitive() ? row.get(key).getAsString() : null;
+    }
+
+    /**
+     * A SkyBoT object named as JPL names it: "649341 (2011 DK30)" for a numbered asteroid with a provisional name,
+     * "194 Prokne" for a named one, "(2022 QJ95)" for an unnumbered one, a numbered comet as "29P/name" and another
+     * comet's designation as it is.
+     */
+    static String skybotName(String number, String designation, boolean comet) {
+        if (comet) {
+            boolean numbered = number != null && !number.isBlank() && !number.equals("-") && !designation.startsWith(number.trim());
+            return numbered ? number.trim() + "/" + designation : designation;
+        }
+        boolean provisional = PROVISIONAL_ASTEROID.matcher(designation).matches();
+        if (number == null || number.isBlank() || number.equals("-")) {
+            return provisional ? "(" + designation + ")" : designation;
+        }
+        return number.trim() + (provisional ? " (" + designation + ")" : " " + designation);
+    }
+
+    /**
+     * The key that identifies one object across JPL and SkyBoT names: the number of a numbered asteroid, the
+     * designation of an unnumbered one, and a comet's designation without its name.
+     */
+    static String designationKey(String name) {
+        String trimmed = name.trim();
+        Matcher matcher = NUMBERED_COMET.matcher(trimmed);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        matcher = PROVISIONAL_COMET.matcher(trimmed);
+        if (matcher.find()) {
+            return matcher.group(1);
+        }
+        matcher = PROVISIONAL_ASTEROID.matcher(trimmed);
+        if (matcher.matches()) {
+            return matcher.group(1);
+        }
+        matcher = NUMBERED_ASTEROID.matcher(trimmed);
+        if (matcher.matches()) {
+            return matcher.group(1);
+        }
+        return trimmed;
     }
 
     // ==========================================
@@ -662,19 +819,23 @@ public final class SolarSystemClient {
     private static Http defaultHttp() {
         HttpClient client = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).followRedirects(HttpClient.Redirect.NORMAL).build();
         return (uri, timeout) -> {
+            String service = uri.getHost() != null && uri.getHost().contains("imcce") ? "SkyBoT" : "JPL";
             HttpRequest request = HttpRequest.newBuilder(uri).timeout(timeout)
                     .header("Accept", "application/json").header("User-Agent", "SpacePixels").GET().build();
             HttpResponse<String> response;
             try {
                 response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             } catch (java.net.http.HttpTimeoutException e) {
-                throw new IOException("JPL did not answer within " + timeout.toSeconds() + " s.");
+                throw new IOException(service + " did not answer within " + timeout.toSeconds() + " s.");
             } catch (java.net.ConnectException e) {
-                throw new IOException("JPL cannot be reached (no internet connection?).");
+                throw new IOException(service + " cannot be reached (no internet connection?).");
             }
             String body = response.body() == null ? "" : response.body();
+            if (response.statusCode() == 204) {
+                return "";
+            }
             if (response.statusCode() != 200) {
-                throw new IOException("JPL answered HTTP " + response.statusCode() + messageOf(body));
+                throw new IOException(service + " answered HTTP " + response.statusCode() + messageOf(body));
             }
             return body;
         };

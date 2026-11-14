@@ -205,7 +205,7 @@ public class SolarSystemClientTest {
     public void fetchesTheObjectsThatCrossTheFrame() throws Exception {
         double cosDec = Math.cos(Math.toRadians(20));
         List<String> asked = new ArrayList<>();
-        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemClient client = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             asked.add(url);
             if (url.contains("sb_ident.api") && url.contains("sb-group=neo")) {
@@ -229,7 +229,7 @@ public class SolarSystemClientTest {
                         new double[]{-10, 150.04, 20.083, 11.6, 0.2, 0.2}, new double[]{70, 150.05, 20.083, 11.6, 0.2, 0.2}));
             }
             throw new IOException("JPL answered HTTP 503.");
-        });
+        }));
         List<String> stages = new ArrayList<>();
         SolarSystemObjects result = client.fetch(query(), stages::add);
 
@@ -242,7 +242,7 @@ public class SolarSystemClientTest {
                 bodies.get("99942 Apophis (2004 MN4)").orbitSolution);
         assertEquals(1, result.problems.size());
         assertTrue(result.problems.get(0), result.problems.get(0).contains("1 of 3 objects"));
-        assertEquals("JPL SB-Ident API 1.1, JPL Horizons API 1.2", result.source);
+        assertEquals("JPL SB-Ident API 1.1, IMCCE SkyBoT, JPL Horizons API 1.2", result.source);
         assertEquals("site from the FITS header", result.observer);
         assertEquals(START, result.startMillis);
         assertEquals(19.0, result.magnitudeLimit, 0);
@@ -266,7 +266,7 @@ public class SolarSystemClientTest {
 
     /** Extended clock samples must not admit an object that crosses the field only far outside the observing span. */
     @Test public void extendedClockCoverageDoesNotWidenFinalFieldSelection() throws Exception {
-        var client = new SolarSystemClient((uri, timeout) -> {
+        var client = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb-group=neo")) return fieldAnswer(List.of());
             if (url.contains("sb_ident.api")) return fieldAnswer(List.of(
@@ -276,7 +276,7 @@ public class SolarSystemClientTest {
                     new double[]{-10, 152, 22, 14.1, .01, .01}, new double[]{0, 152, 22, 14.1, .01, .01},
                     new double[]{60, 152, 22, 14.1, .01, .01}, new double[]{70, 152, 22, 14.1, .01, .01},
                     new double[]{900, 150, 20, 14.1, .01, .01}));
-        });
+        }));
         var result = client.fetch(query(), ignored -> { });
         assertTrue(result.problems.toString(), result.problems.isEmpty());
         assertTrue(result.bodies.isEmpty());
@@ -284,9 +284,9 @@ public class SolarSystemClientTest {
 
     @Test
     public void aFailingFieldSearchIsAProblemAndLeavesNoSource() throws Exception {
-        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemClient client = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             throw new IOException("JPL did not answer within 300 s.");
-        });
+        }));
         SolarSystemObjects result = client.fetch(query(), text -> { });
         assertTrue(result.bodies.isEmpty());
         assertEquals("nothing else is asked", 1, result.problems.size());
@@ -302,12 +302,105 @@ public class SolarSystemClientTest {
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
     }
 
+    /**
+     * SkyBoT's catalogue and JPL's differ for some objects. An object only SkyBoT lists is added and gets its path
+     * from Horizons; one both list is asked once, under JPL's name; one fainter than the depth is left out.
+     */
+    @Test
+    public void skybotAddsTheObjectsJplLeftOut() throws Exception {
+        List<String> asked = new ArrayList<>();
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            asked.add(url);
+            if (url.startsWith(SolarSystemClient.SKYBOT)) {
+                return "[" + skybotRow("194", "Prokne", "10 00 00.00", "+20 00 00.0", "14.1", "MB>Middle") + ","
+                        + skybotRow(null, "2022 QL26", "10 00 02.00", "+20 01 00.0", "18.5", "MB>Outer") + ","
+                        + skybotRow("800463", "2014 FM90", "10 00 01.00", "+20 00 30.0", "23.3", "MB>Outer") + "]";
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of()
+                        : List.of(row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            }
+            if (url.contains("COMMAND='194;'")) {
+                return horizonsAnswer("194 Prokne (A879 FA)", "JPL#172", "APmag", List.of(
+                        new double[]{0, 150, 20, 14.1, 0.01, 0.01}, new double[]{60, 150, 20, 14.1, 0.01, 0.01}));
+            }
+            if (url.contains("COMMAND='DES=2022 QL26;'")) {
+                return horizonsAnswer("(2022 QL26)", "JPL#3", "APmag", List.of(
+                        new double[]{0, 150.0083, 20.0167, 18.5, 0.3, 0.2}, new double[]{60, 150.0083, 20.0167, 18.5, 0.3, 0.2}));
+            }
+            throw new AssertionError(url);
+        }).fetch(query(), text -> { });
+
+        assertEquals(List.of("194 Prokne (A879 FA)", "(2022 QL26)"), result.bodies.stream().map(body -> body.name).toList());
+        assertEquals("JPL#3", result.bodies.get(1).orbitSolution);
+        assertEquals("one Horizons request for the object both list", 1, asked.stream().filter(url -> url.contains("COMMAND='194;'")).count());
+        FetchStep skybot = step(result.fetchSteps, "IMCCE SkyBoT", "Field search");
+        assertEquals(FetchStep.Status.SUCCEEDED, skybot.status);
+        assertEquals("2 objects, 1 not found by JPL", skybot.outcome);
+        String skybotUrl = asked.stream().filter(url -> url.startsWith(SolarSystemClient.SKYBOT)).findFirst().orElseThrow();
+        assertTrue(skybotUrl, skybotUrl.contains("-observer=500") && skybotUrl.contains("-ep=2026-03-10T02:30:00")
+                && skybotUrl.contains("-objFilter=101"));
+        assertTrue(result.problems.toString(), result.problems.isEmpty());
+        assertEquals("JPL SB-Ident API 1.1, IMCCE SkyBoT, JPL Horizons API 1.2", result.source);
+    }
+
+    /** A SkyBoT failure is a problem, and the fetch goes on with JPL's searches alone. */
+    @Test
+    public void aSkybotFailureKeepsJplsObjects() throws Exception {
+        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.startsWith(SolarSystemClient.SKYBOT)) {
+                throw new IOException("SkyBoT answered HTTP 500.");
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of()
+                        : List.of(row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            }
+            return horizonsAnswer("194 Prokne (A879 FA)", "JPL#172", "APmag", List.of(
+                    new double[]{0, 150, 20, 14.1, 0.01, 0.01}, new double[]{60, 150, 20, 14.1, 0.01, 0.01}));
+        }).fetch(query(), text -> { });
+        assertEquals(1, result.bodies.size());
+        assertEquals(List.of("Field search (IMCCE SkyBoT): SkyBoT answered HTTP 500."), result.problems);
+        FetchStep skybot = step(result.fetchSteps, "IMCCE SkyBoT", "Field search");
+        assertEquals(FetchStep.Status.FAILED, skybot.status);
+        assertTrue(skybot.detail, skybot.detail.endsWith("The JPL search is used alone."));
+        assertEquals("JPL SB-Ident API 1.1, JPL Horizons API 1.2", result.source);
+    }
+
+    /** SkyBoT names become JPL's, and both name one object with the same key. */
+    @Test
+    public void skybotNamesMatchJplNames() throws IOException {
+        assertEquals("649341 (2011 DK30)", SolarSystemClient.skybotName("649341", "2011 DK30", false));
+        assertEquals("194 Prokne", SolarSystemClient.skybotName("194", "Prokne", false));
+        assertEquals("(2022 QJ95)", SolarSystemClient.skybotName("-", "2022 QJ95", false));
+        assertEquals("(2022 QJ95)", SolarSystemClient.skybotName(null, "2022 QJ95", false));
+        assertEquals("C/2018 Y1", SolarSystemClient.skybotName(null, "C/2018 Y1", true));
+        assertEquals("29P/Schwassmann-Wachmann", SolarSystemClient.skybotName("29P", "Schwassmann-Wachmann", true));
+        for (String[] same : new String[][]{{"649341 (2011 DK30)", "649341"}, {"194 Prokne (A879 FA)", "194 Prokne"},
+                {"(2022 QJ95)", "2022 QJ95"}, {"C/2018 Y1 (Iwamoto)", "C/2018 Y1"}, {"29P/Schwassmann-Wachmann", "29P/Schwassmann-Wachmann 1"}}) {
+            assertEquals(same[0], SolarSystemClient.designationKey(same[0]), SolarSystemClient.designationKey(same[1]));
+        }
+        assertEquals("DES=2022 QJ95;", SolarSystemClient.horizonsCommand(SolarSystemClient.skybotName(null, "2022 QJ95", false)));
+        // A real answer row; its rates are on the sky in arcseconds per hour, as JPL's are.
+        var real = SolarSystemClient.parseSkybot("[{\"Num\":649341,\"Name\":\"2011 DK30\",\"RA (hms)\":\"23 48 16.8039\","
+                + "\"DEC (dms)\":\"-01 43 33.490\",\"Class\":\"MB>Inner\",\"VMag (mag)\":21.6,\"Err (arcsec)\":0.656,"
+                + "\"dRA (arcsec/h)\":-29.9258,\"dDEC (arcsec/h)\":-10.4968}]", START, 22);
+        assertEquals("649341 (2011 DK30)", real.get(0).name());
+        assertEquals(357.0700, real.get(0).ra(), 1e-4);
+        assertEquals(-1.72597, real.get(0).dec(), 1e-4);
+        assertEquals(-29.9258, real.get(0).raRateArcsecPerHour(), 1e-9);
+        assertTrue("fainter than the depth", SolarSystemClient.parseSkybot("[{\"Name\":\"2016 DN2\",\"RA (hms)\":\"23 49 2.0\","
+                + "\"DEC (dms)\":\"-01 51 49.2\",\"Class\":\"NEA>Apollo\",\"VMag (mag)\":30.6}]", START, 25).isEmpty());
+        assertTrue("an empty field is HTTP 204", SolarSystemClient.parseSkybot("", START, 22).isEmpty());
+    }
+
     /** A field-search HTTP 404 records the address that was sent and asks nothing further. */
     @Test
     public void aFieldSearch404AsksNothingFurther() throws Exception {
-        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             throw new IOException("JPL answered HTTP 404.");
-        }).fetch(query(), text -> { });
+        })).fetch(query(), text -> { });
         assertTrue(result.bodies.isEmpty());
         assertEquals("", result.source);
         assertEquals(1, result.problems.size());
@@ -323,7 +416,7 @@ public class SolarSystemClientTest {
     /** A near-Earth 503 keeps the field search and does not pretend Horizons was asked. */
     @Test
     public void aNearEarth503KeepsTheFieldSearch() throws Exception {
-        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb-group=neo")) {
                 throw new IOException("JPL answered HTTP 503.");
@@ -332,8 +425,8 @@ public class SolarSystemClientTest {
                 return fieldAnswer(List.of());
             }
             throw new AssertionError(url);
-        }).fetch(query(), text -> { });
-        assertEquals("JPL SB-Ident API 1.1", result.source);
+        })).fetch(query(), text -> { });
+        assertEquals("JPL SB-Ident API 1.1, IMCCE SkyBoT", result.source);
         assertEquals(1, result.problems.size());
         assertTrue(result.problems.get(0), result.problems.get(0).startsWith("Near-Earth object search (JPL SB-Ident):"));
         assertEquals("0 objects", step(result.fetchSteps, "JPL SB-Ident", "Field search").outcome);
@@ -348,7 +441,7 @@ public class SolarSystemClientTest {
     /** Two Horizons failures among objects that succeeded: the summary succeeded, and each failure stays. */
     @Test
     public void twoHorizonsFailuresStayBesideASuccessfulSummary() throws Exception {
-        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb-group=neo")) {
                 return fieldAnswer(List.of());
@@ -364,7 +457,7 @@ public class SolarSystemClientTest {
                         new double[]{0, 150, 20, 14.1, 0.01, 0.01}, new double[]{60, 150.001, 20, 14.1, 0.01, 0.01}));
             }
             throw new IOException("JPL answered HTTP 503.");
-        }).fetch(query(), text -> { });
+        })).fetch(query(), text -> { });
         assertEquals(FetchStep.Status.SUCCEEDED, step(result.fetchSteps, "JPL Horizons", "Positions").status);
         assertEquals("1 of 3 objects received positions", step(result.fetchSteps, "JPL Horizons", "Positions").outcome);
         assertEquals("Kept with the field search's straight-line motion, without an uncertainty.",
@@ -380,14 +473,14 @@ public class SolarSystemClientTest {
     /** Every asked object failed: the Horizons summary is failed, and the objects are kept. */
     @Test
     public void everyHorizonsFailureFailsTheSummary() throws Exception {
-        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb_ident.api")) {
                 return fieldAnswer(url.contains("sb-group=neo") ? List.of()
                         : List.of(row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
             }
             throw new IOException("JPL answered HTTP 503.");
-        }).fetch(query(), text -> { });
+        })).fetch(query(), text -> { });
         FetchStep positions = step(result.fetchSteps, "JPL Horizons", "Positions");
         assertEquals(FetchStep.Status.FAILED, positions.status);
         assertEquals("0 of 1 objects received positions", positions.outcome);
@@ -397,21 +490,21 @@ public class SolarSystemClientTest {
         assertEquals(1, result.problems.size());
         assertTrue(result.problems.get(0), result.problems.get(0).contains("1 of 1 objects"));
         assertNull(result.bodies.get(0).orbitSolution);
-        assertEquals("JPL SB-Ident API 1.1", result.source);
+        assertEquals("JPL SB-Ident API 1.1, IMCCE SkyBoT", result.source);
     }
 
     /** Cancelling inside the first Horizons request marks that object as not yet asked. */
     @Test
     public void cancellingDuringHorizonsMarksTheRestNotAsked() throws Exception {
         List<FetchStep> shown = new ArrayList<>();
-        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemClient client = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb_ident.api")) {
                 return fieldAnswer(url.contains("sb-group=neo") ? List.of()
                         : List.of(row("194 Prokne (A879 FA)", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
             }
             throw new InterruptedException();
-        });
+        }));
         try {
             client.fetch(query(), new SolarSystemClient.Progress() {
                 /** @param text ignored; the published steps are the account of a cancel */
@@ -436,7 +529,7 @@ public class SolarSystemClientTest {
     /** One object past the test limit is a single not-asked row, with the existing magnitude advice. */
     @Test
     public void objectsPastTheLimitAreOneNotAskedRow() throws Exception {
-        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb_ident.api")) {
                 return fieldAnswer(url.contains("sb-group=neo") ? List.of() : List.of(
@@ -448,7 +541,7 @@ public class SolarSystemClientTest {
                         new double[]{0, 150.04, 20.083, 11.6, 0.2, 0.2}, new double[]{60, 150.05, 20.083, 11.6, 0.2, 0.2}));
             }
             throw new AssertionError(url);
-        }, 1).fetch(query(), text -> { });
+        }), 1).fetch(query(), text -> { });
         assertEquals(FetchStep.Status.NOT_ASKED, step(result.fetchSteps, "JPL Horizons", "Fainter objects").status);
         assertTrue(result.problems.toString(), result.problems.stream().anyMatch(line -> line.startsWith("Only the 1 brightest of 2")));
         assertTrue(step(result.fetchSteps, "JPL Horizons", "Fainter objects").detail.contains("Only the 1 brightest of 2"));
@@ -459,13 +552,13 @@ public class SolarSystemClientTest {
     /** An empty field is a successful count of zero, and Horizons is not asked. */
     @Test
     public void anEmptyFieldSucceedsAndDoesNotAskHorizons() throws Exception {
-        SolarSystemObjects result = new SolarSystemClient((uri, timeout) -> {
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> {
             String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
             if (url.contains("sb_ident.api")) {
                 return fieldAnswer(List.of());
             }
             throw new AssertionError(url);
-        }).fetch(query(), text -> { });
+        })).fetch(query(), text -> { });
         assertTrue(result.problems.isEmpty());
         assertTrue(result.bodies.isEmpty());
         assertEquals("0 objects", step(result.fetchSteps, "JPL SB-Ident", "Field search").outcome);
@@ -537,6 +630,18 @@ public class SolarSystemClientTest {
      * A Horizons observer-table answer: each row is {minutes after START, RA, Dec, magnitude, RA 3σ, Dec 3σ}, as
      * CSV with the empty flag columns Horizons writes.
      */
+    /** One object of a SkyBoT answer; {@code number} null for an unnumbered object, as SkyBoT leaves it out. */
+    private static String skybotRow(String number, String name, String ra, String dec, String magnitude, String objectClass) {
+        return "{" + (number == null ? "" : "\"Num\":" + number + ",") + "\"Name\":" + quote(name) + ",\"RA (hms)\":" + quote(ra)
+                + ",\"DEC (dms)\":" + quote(dec) + ",\"Class\":" + quote(objectClass) + ",\"VMag (mag)\":" + magnitude
+                + ",\"dRA (arcsec/h)\":0,\"dDEC (arcsec/h)\":0}";
+    }
+
+    /** Answers SkyBoT with an empty field (its HTTP 204) and passes every other request to {@code jpl}. */
+    private static SolarSystemClient.Http emptySkybot(SolarSystemClient.Http jpl) {
+        return (uri, timeout) -> uri.toString().startsWith(SolarSystemClient.SKYBOT) ? "" : jpl.get(uri, timeout);
+    }
+
     static String horizonsAnswer(String target, String solution, String magnitudeColumn, List<double[]> rows) {
         StringBuilder result = new StringBuilder("*******************************************************************************\n")
                 .append("Target body name: ").append(target).append("            {source: ").append(solution).append("}\n")
