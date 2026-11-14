@@ -11,9 +11,7 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.config.VisualizationSettings;
 import io.github.ppissias.jtransient.engine.AutoTuneSnapshot;
 import io.github.ppissias.jtransient.config.DetectionConfig;
-import io.github.ppissias.jtransient.core.DataArea;
 import io.github.ppissias.jtransient.engine.ImageFrame;
-import io.github.ppissias.jtransient.quality.FrameQualityAnalyzer;
 import nom.tam.fits.BasicHDU;
 import nom.tam.fits.Fits;
 
@@ -31,6 +29,10 @@ import eu.startales.spacepixels.fits.FitsInput;
  * <p>
  * SpacePixels does not pick the final internal tuning sample. It only provides a broader candidate
  * pool, using frame quality plus sequence coverage, and leaves the final sampling to JTransient.
+ * <p>
+ * Frame quality comes from the engine's quality control over the whole session
+ * ({@link QualityControlService}), the measurement detection uses: frames it rejects are not candidates, and the
+ * others are ranked by its noise and star size.
  */
 public final class AutoTuneCandidatePoolBuilder {
 
@@ -53,6 +55,13 @@ public final class AutoTuneCandidatePoolBuilder {
     }
 
     /**
+     * The frames Auto-Tune measures on. {@code qualityControlled} says that quality control over the whole session
+     * already left its rejected frames out, so the tuner must not select again within this subset; otherwise the
+     * pool is the whole session and the tuner selects, as detection does.
+     */
+    public record CandidatePool(List<ImageFrame> frames, boolean qualityControlled) { }
+
+    /**
      * Minimal per-frame record used during the quality-only selection pass so the full pixel data
      * does not need to stay resident in memory for every input frame.
      */
@@ -69,9 +78,10 @@ public final class AutoTuneCandidatePoolBuilder {
     /**
      * Produces the ordered candidate frames for auto-tuning.
      * <p>
-     * If the sequence is already within the configured limit, all frames are used. Otherwise the
-     * selected pool is built from roughly 40% best-quality frames, 40% median-quality frames, and
-     * 20% evenly spaced sequence coverage, with duplicates removed and the final output sorted by
+     * If the sequence is already within the configured limit, all frames are used; the tuner then leaves out the
+     * ones quality control rejects. Otherwise quality control runs over the whole session, its rejected frames are
+     * left out, and the pool is built from the kept frames: roughly 40% best-quality frames, 40% median-quality
+     * frames, and 20% evenly spaced sequence coverage, with duplicates removed and the final output sorted by
      * {@link ImageFrame#sequenceIndex}.
      */
     public static List<ImageFrame> buildCandidatePool(FitsFileInformation[] filesInfo,
@@ -92,6 +102,14 @@ public final class AutoTuneCandidatePoolBuilder {
     public static List<ImageFrame> buildCandidatePool(FitsFileInformation[] filesInfo, DetectionConfig baseConfig,
             int autoTuneMaxCandidateFrames, ProgressListener progressListener, VisualizationSettings visualization,
             List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
+        return candidatePool(filesInfo, baseConfig, autoTuneMaxCandidateFrames, progressListener, visualization,
+                excludedAreas).frames();
+    }
+
+    /** {@link #buildCandidatePool} with the fact of whether quality control already chose the frames. */
+    public static CandidatePool candidatePool(FitsFileInformation[] filesInfo, DetectionConfig baseConfig,
+            int autoTuneMaxCandidateFrames, ProgressListener progressListener, VisualizationSettings visualization,
+            List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
         if (filesInfo == null || filesInfo.length < SpacePixelsDetectionProfile.MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES) {
             throw new IllegalStateException("Not enough frames to run Auto-Tuning.");
         }
@@ -99,16 +117,23 @@ public final class AutoTuneCandidatePoolBuilder {
         int candidateLimit = SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
         if (filesInfo.length <= candidateLimit) {
             emitProgress(progressListener, 0, "Loading full candidate pool...");
-            return loadFrames(filesInfo, buildSequentialIndices(filesInfo.length), progressListener, 0, 50, "Loading candidate frame", visualization);
+            return new CandidatePool(loadFrames(filesInfo, buildSequentialIndices(filesInfo.length), progressListener, 0, 50,
+                    "Loading candidate frame", visualization), false);
         }
 
         emitProgress(progressListener, 0, "Evaluating frame quality for candidate pool...");
-        List<FrameQualityRecord> frameQualityRecords = scoreFrames(filesInfo, baseConfig, progressListener, visualization,
-                excludedAreas);
-        List<Integer> selectedIndices = selectCandidateSequenceIndices(frameQualityRecords, candidateLimit);
+        // Positions in keptFrames are what the selection works on; a rejected frame is never a candidate.
+        List<Integer> keptFrames = new ArrayList<>();
+        List<FrameQualityRecord> frameQualityRecords = scoreKeptFrames(filesInfo, baseConfig, progressListener,
+                excludedAreas, keptFrames);
+        List<Integer> selectedIndices = new ArrayList<>();
+        for (int position : selectCandidateSequenceIndices(frameQualityRecords, candidateLimit)) {
+            selectedIndices.add(keptFrames.get(position));
+        }
 
         emitProgress(progressListener, 40, "Loading deterministic candidate pool...");
-        return loadFrames(filesInfo, selectedIndices, progressListener, 40, 50, "Loading candidate frame", visualization);
+        return new CandidatePool(loadFrames(filesInfo, selectedIndices, progressListener, 40, 50, "Loading candidate frame",
+                visualization), true);
     }
 
     static List<Integer> selectCandidateSequenceIndices(List<FrameQualityRecord> frameQualityRecords, int autoTuneMaxCandidateFrames) {
@@ -148,43 +173,29 @@ public final class AutoTuneCandidatePoolBuilder {
         return orderedSelection;
     }
 
-    private static List<FrameQualityRecord> scoreFrames(FitsFileInformation[] filesInfo,
-                                                        DetectionConfig baseConfig,
-                                                        ProgressListener progressListener, VisualizationSettings visualization,
-                                                        List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
-        List<int[]> rectangles = ExcludedAreas.rectangles(excludedAreas);
-        List<FrameQualityRecord> scoredFrames = new ArrayList<>(filesInfo.length);
-
-        for (int i = 0; i < filesInfo.length; i++) {
-            emitProgress(progressListener,
-                    scaleProgress(i + 1, filesInfo.length, 0, 40),
-                    "Evaluating frame " + (i + 1) + " of " + filesInfo.length + "...");
-
-            FitsFileInformation info = filesInfo[i];
-            try (Fits fitsFile = new Fits(info.getFilePath())) {
-                BasicHDU<?> hdu = FitsInput.getImageHDU(fitsFile);
-                Object kernel = hdu.getKernel();
-                if (!(kernel instanceof short[][])) {
-                    throw new IOException("FITS file is not 16-bit monochrome: " + info.getFileName());
-                }
-
-                short[][] pixelData = (short[][]) kernel;
-                // Quality scoring is driven by DetectionConfig's dedicated quality-only thresholds.
-                FrameQualityAnalyzer.FrameMetrics metrics = FrameQualityAnalyzer.evaluateFrame(
-                        io.github.ppissias.jtransient.engine.ExcludedArea.filledCopy(pixelData, excludedAreas), baseConfig,
-                        DataArea.ofFrame(pixelData).excluding(rectangles));
-                double score = metrics.backgroundNoise * metrics.medianFWHM;
-                if (!Double.isFinite(score) || score <= 0.0d) {
-                    score = Double.POSITIVE_INFINITY;
-                }
-
-                scoredFrames.add(new FrameQualityRecord(i, score));
-                offerFrame(pixelData, "Evaluating frame " + (i + 1) + " of " + filesInfo.length
-                        + String.format(java.util.Locale.US, " · noise %.1f · FWHM %.2f px",
-                        metrics.backgroundNoise, metrics.medianFWHM), visualization);
+    /**
+     * Runs the engine's quality control over every frame, as the Inspect step does, and scores the frames it keeps
+     * by noise × star size (lower is better). Fills {@code keptFrames} with their file positions; a record's index
+     * is its position in that list.
+     */
+    private static List<FrameQualityRecord> scoreKeptFrames(FitsFileInformation[] filesInfo, DetectionConfig baseConfig,
+            ProgressListener progressListener, List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas,
+            List<Integer> keptFrames) throws Exception {
+        var quality = new QualityControlService().evaluate(filesInfo, baseConfig, excludedAreas,
+                (percent, message) -> emitProgress(progressListener, scaleProgress(percent, 100, 0, 40), message)).result();
+        List<FrameQualityRecord> scoredFrames = new ArrayList<>();
+        for (int i = 0; i < quality.frames().size(); i++) {
+            var frame = quality.frames().get(i);
+            if (frame.rejected()) {
+                continue;
             }
+            double score = frame.backgroundNoise() * frame.medianFwhm();
+            if (!Double.isFinite(score) || score <= 0.0d) {
+                score = Double.POSITIVE_INFINITY;
+            }
+            scoredFrames.add(new FrameQualityRecord(keptFrames.size(), score));
+            keptFrames.add(i);
         }
-
         return scoredFrames;
     }
 

@@ -57,4 +57,44 @@ public class AutoTuneCandidatePoolBuilderTest {
         long medianBandCount = firstSelection.stream().filter(index -> index >= 20 && index <= 30).count();
         assertTrue(medianBandCount >= 3);
     }
+
+    /**
+     * With more frames than the pool limit, the pool comes from the engine's quality control over the whole session:
+     * a frame it rejects (here a blank one) is never a candidate, though it would otherwise fill the pool.
+     */
+    @Test
+    public void framesThatQualityControlRejectsStayOutOfThePool() throws Exception {
+        org.junit.rules.TemporaryFolder folder = new org.junit.rules.TemporaryFolder();
+        folder.create();
+        try {
+            java.nio.file.Path directory = eu.startales.spacepixels.testsupport.SyntheticDatasetFactory
+                    .createMono16FitsSequence(folder.newFolder("frames").toPath(), "session", 7);
+            java.nio.file.Path blankFile = directory.resolve("frame_03.fit");
+            short[][] blank = new short[96][96];
+            for (short[] row : blank) java.util.Arrays.fill(row, Short.MIN_VALUE);
+            var hdu = nom.tam.fits.Fits.makeHDU(blank);
+            hdu.getHeader().addValue("BZERO", 32768, null);
+            hdu.getHeader().addValue("BSCALE", 1, null);
+            hdu.getHeader().addValue("DATE-OBS", "2026-04-08T00:00:02", null);
+            hdu.getHeader().addValue("EXPTIME", 30.0, null);
+            java.nio.file.Files.delete(blankFile);
+            try (var fits = new nom.tam.fits.Fits()) { fits.addHDU(hdu); fits.write(blankFile.toFile()); }
+            FitsFileInformation[] files;
+            try (var importer = new eu.startales.spacepixels.fits.FitsImportService(directory.toFile(), null)) {
+                files = importer.readFiles();
+            }
+            assertEquals(7, files.length);
+            var config = new io.github.ppissias.jtransient.config.DetectionConfig();
+            var verdicts = new QualityControlService().evaluate(files, config, null).result();
+            assertTrue("quality control rejects the blank frame", verdicts.frames().get(2).rejected());
+            List<io.github.ppissias.jtransient.engine.ImageFrame> pool = AutoTuneCandidatePoolBuilder.buildCandidatePool(
+                    files, config, 6, (percent, message) -> { });
+            List<Integer> chosen = pool.stream().map(frame -> frame.sequenceIndex).toList();
+            assertFalse("the rejected frame is not in the pool: " + chosen, chosen.contains(2));
+            for (int index : chosen) assertFalse(verdicts.frames().get(index).rejected());
+            assertEquals(verdicts.keptFrames(), chosen.size());
+        } finally {
+            folder.delete();
+        }
+    }
 }

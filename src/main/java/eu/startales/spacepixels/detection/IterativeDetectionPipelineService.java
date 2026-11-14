@@ -265,10 +265,11 @@ public final class IterativeDetectionPipelineService {
     private static Tuned tune(FitsFileInformation[] files, DetectionConfig config, int limit,
                               AutoTuneProfile profile, TransientEngineProgressListener progress, VisualizationSettings visualization,
                               List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) throws Exception {
-        List<ImageFrame> candidates = AutoTuneCandidatePoolBuilder.buildCandidatePool(files, config, limit,
+        AutoTuneCandidatePoolBuilder.CandidatePool pool = AutoTuneCandidatePoolBuilder.candidatePool(files, config, limit,
                 (percent, message) -> emit(progress, 10 + percent / 10, "Auto-Tune: " + message), visualization, excludedAreas);
+        List<ImageFrame> candidates = pool.frames();
         try {
-            AutoTunerResult result = AutoTunerRunner.run(candidates, config.clone(), profile,
+            AutoTunerResult result = AutoTunerRunner.run(pool, config.clone(), profile,
                     (percent, message) -> emit(progress, 20 + percent / 10, "Auto-Tune: " + message), visualization,
                     excludedAreas);
             if (result == null || !result.success || result.optimizedConfig == null) {

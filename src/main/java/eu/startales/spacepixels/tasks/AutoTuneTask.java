@@ -86,13 +86,13 @@ public class AutoTuneTask implements Job<AutoTunerResult> {
 
         LOGGER.info("Auto-Tuner evaluating up to " + autoTuneMaxCandidateFrames + " candidate frames from " + filesInfo.length + " inputs.");
 
-        List<ImageFrame> candidateFrames = AutoTuneCandidatePoolBuilder.buildCandidatePool(
+        AutoTuneCandidatePoolBuilder.CandidatePool candidateFrames = AutoTuneCandidatePoolBuilder.candidatePool(
                 filesInfo,
                 baseConfig,
                 autoTuneMaxCandidateFrames,
                 context::progress, visualization, excludedAreas);
 
-        LOGGER.info("Candidate pool ready. Passing " + candidateFrames.size() + " frames to AutoTuner.");
+        LOGGER.info("Candidate pool ready. Passing " + candidateFrames.frames().size() + " frames to AutoTuner.");
 
         TransientEngineProgressListener autoTuneListener = (enginePercent, message) -> {
             int scaledPercent = 50 + (int) ((enginePercent / 100.0f) * 50);

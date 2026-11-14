@@ -157,7 +157,7 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
 
         // The areas the run will leave out: the folder's saved ones, as the detection reads them.
         var excludedAreas = eu.startales.spacepixels.detection.ExcludedAreas.forRun(filesInfo, null);
-        List<ImageFrame> candidateFrames = AutoTuneCandidatePoolBuilder.buildCandidatePool(
+        AutoTuneCandidatePoolBuilder.CandidatePool candidateFrames = AutoTuneCandidatePoolBuilder.candidatePool(
                 filesInfo,
                 baseConfig,
                 autoTuneMaxCandidateFrames,

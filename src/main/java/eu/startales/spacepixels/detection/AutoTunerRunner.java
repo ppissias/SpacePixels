@@ -46,14 +46,27 @@ public final class AutoTunerRunner {
         return run(candidateFrames, baseConfig, profile, listener, visualization, List.of());
     }
 
-    /** Tunes on sky that detection uses: the tuner's measurement crops stay clear of the excluded areas. */
+    /** Tunes on the sky and the frames detection uses: without the excluded areas and the frames it rejects. */
     public static AutoTunerResult run(List<ImageFrame> candidateFrames, DetectionConfig baseConfig,
             AutoTuneProfile profile, TransientEngineProgressListener listener, VisualizationSettings visualization,
             List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
+        return run(new AutoTuneCandidatePoolBuilder.CandidatePool(candidateFrames, false), baseConfig, profile, listener,
+                visualization, excludedAreas);
+    }
+
+    /**
+     * Tunes on a pool from {@link AutoTuneCandidatePoolBuilder#candidatePool}: the tuner selects frames as detection
+     * does, unless quality control over the whole session already chose the pool.
+     */
+    public static AutoTunerResult run(AutoTuneCandidatePoolBuilder.CandidatePool pool, DetectionConfig baseConfig,
+            AutoTuneProfile profile, TransientEngineProgressListener listener, VisualizationSettings visualization,
+            List<io.github.ppissias.jtransient.engine.ExcludedArea> excludedAreas) {
+        List<ImageFrame> candidateFrames = pool.frames();
         try (var diagnostics = DebugOutput.openEngineDiagnostics()) {
             RunPreviewSink sink = RunPreviewScope.currentSink();
             CalibratedAutoTuner.Options.Builder options = CalibratedAutoTuner.Options.builder();
             options.excludedAreas = excludedAreas;
+            options.selectFrames = !pool.qualityControlled();
             return CalibratedAutoTuner.tune(candidateFrames, baseConfig, options.build(), profile, listener,
                     sink == null ? null : new AutoTuneLiveView(sink, visualization));
         }
