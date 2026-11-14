@@ -11,7 +11,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
 | [F32](#f32-excluded-areas-for-runs-on-converted-copies) | Excluded areas for runs on converted copies | Noted 2026-11-14; to be understood first, kept for later |
-| [F33](#f33-mpc-observation-export-and-find_orb) | MPC observation export and Find_Orb | Decided 2026-11-14: Asteroids & Comets window, five stages; stage 1 in progress |
+| [F33](#f33-mpc-observation-export-and-find_orb) | MPC observation export and Find_Orb | Decided 2026-11-14: Asteroids & Comets window, five stages; stage 1 done, stage 2 next |
 | [F34](#f34-moving-object-light-curves-and-rotation-periods) | Moving-object light curves and rotation periods | Decided 2026-11-14: part of F33, with JTransient MP-1 (stage 5) |
 
 Registration quality is owned by JTransient: [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
@@ -226,8 +226,8 @@ The saved Gaia star model contains source identity when available, position, pro
 
 ### Stages
 
-1. **Identification.** The combined report section; the higher JPL limit and the SkyBoT search; the observatory code check and the horizon check; O−C against the prediction for known objects.
-2. **Track astrometry and export.** The per-frame Gaia plate fit and uncertainties; the window with selection; ADES PSV export and validation with the MPC test endpoint.
+1. **Identification.** Done 2026-11-14: the SkyBoT search beside JPL and a depth to V 25; the horizon check in the fetch and the report; the report's **Asteroids and comets** section with Known, Check, No known match and Not compared, and the O−C of the known objects (see the [manual](MANUAL.md#known-asteroids-and-comets)). On a DECam session the known asteroids' mean O−C was 0.05–0.20″. Still open: a rule for **Check** on unusual motion, to be agreed; **Weak** arrives with stage 4.
+2. **Track astrometry and export.** The per-frame Gaia plate fit and uncertainties; the window with selection; the check that the observatory code's MPC coordinates agree with the site (moved here from stage 1: it guards the station written to the export); ADES PSV export and validation with the MPC test endpoint.
 3. **Find_Orb and digest2.** Verify the online Find_Orb interface and how digest2 is run (the MPC distributes it as a program) before designing this step.
 4. **Faint-mover astrometry.** Sub-stack measurement, the K note and the visibility check.
 5. **Photometry and light curves.** JTransient [MP-1](../JTransient/FEATURE-REQUESTS.md#mp-1-moving-object-photometry), then the F34 light curves and period search.
