@@ -521,7 +521,8 @@ public final class SolarSystemClient {
         for (int i = head.length - 1; i >= 0; i--) {
             if (head[i].contains("R.A.") && head[i].contains("DEC")) {
                 columns = new ArrayList<>();
-                for (String column : head[i].split(",")) {
+                // Split like the rows, keeping the empty field after the final comma, so the two align.
+                for (String column : head[i].split(",", -1)) {
                     columns.add(column.trim());
                 }
                 break;
@@ -548,9 +549,13 @@ public final class SolarSystemClient {
                 continue;
             }
             String[] values = line.split(",", -1);
-            Double raValue = number(values, ra);
-            Double decValue = number(values, dec);
-            if (raValue == null || decValue == null) {
+            // The flag fields between the time and R.A. vary: on the step where the object rises, transits or sets
+            // for the site, Horizons writes its two flags as one field ("r " for " , "). The columns from R.A. on
+            // are fixed, so they are counted from the end of the row.
+            int shift = values.length - columns.size();
+            Double raValue = number(values, shifted(ra, shift));
+            Double decValue = number(values, shifted(dec, shift));
+            if (raValue == null || decValue == null || raValue < 0 || raValue > 360 || decValue < -90 || decValue > 90) {
                 continue;
             }
             SolarSystemObjects.Sample sample = new SolarSystemObjects.Sample();
@@ -561,9 +566,9 @@ public final class SolarSystemClient {
             }
             sample.ra = raValue;
             sample.dec = decValue;
-            sample.magnitude = number(values, magnitude);
-            sample.raSigmaArcsec = number(values, raSigma);
-            sample.decSigmaArcsec = number(values, decSigma);
+            sample.magnitude = number(values, shifted(magnitude, shift));
+            sample.raSigmaArcsec = number(values, shifted(raSigma, shift));
+            sample.decSigmaArcsec = number(values, shifted(decSigma, shift));
             body.samples.add(sample);
         }
         if (body.samples.isEmpty()) {
@@ -736,6 +741,11 @@ public final class SolarSystemClient {
 
     private static String text(JsonArray row, int index) {
         return index < 0 || index >= row.size() || row.get(index).isJsonNull() ? null : row.get(index).getAsString();
+    }
+
+    /** A header column's index in a row whose fields before R.A. are shifted; an absent column stays absent. */
+    private static int shifted(int index, int shift) {
+        return index < 0 ? index : index + shift;
     }
 
     private static Double number(String[] values, int index) {

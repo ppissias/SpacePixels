@@ -117,6 +117,34 @@ public class SolarSystemClientTest {
         assertEquals("the total magnitude of a comet", 11.6, comet.samples.get(0).magnitude, 1e-12);
     }
 
+    /**
+     * On the step where the object rises, transits or sets for the site, Horizons writes its two flag fields as one
+     * ("r ", "t ", "*sm"), so the row has one field fewer before R.A. Such a row must keep its own values; it once
+     * read Dec as R.A. and the magnitude as Dec, which drew the path off the frame and back.
+     */
+    @Test
+    public void riseTransitAndSetRowsKeepTheirColumns() throws IOException {
+        String answer = horizonsAnswer("(2022 QJ95)", "JPL#2", "APmag", List.of(
+                new double[]{0, 357.238955918, -1.797789329, 21.75, 0.673, 0.404},
+                new double[]{10, 357.237981919, -1.798023722, 21.75, 0.672, 0.404},
+                new double[]{20, 357.237004510, -1.798258225, 21.75, 0.671, 0.404},
+                new double[]{30, 357.236023687, -1.798492836, 21.75, 0.671, 0.404}));
+        java.time.format.DateTimeFormatter format = java.time.format.DateTimeFormatter.ofPattern("yyyy-MMM-dd HH:mm:ss", java.util.Locale.US)
+                .withZone(java.time.ZoneOffset.UTC);
+        String rise = format.format(Instant.ofEpochMilli(START + 10 * 60_000L));
+        String set = format.format(Instant.ofEpochMilli(START + 30 * 60_000L));
+        answer = answer.replace(rise + ", , , ", rise + ", r , ").replace(set + ", , , ", set + ",*sm, ");
+        SolarSystemObjects.Body body = SolarSystemClient.parseHorizons(answer, candidate("(2022 QJ95)", 357.2, -1.8, 0, 0));
+        assertEquals(4, body.samples.size());
+        for (int i : new int[]{1, 3}) {
+            assertEquals(357.23, body.samples.get(i).ra, 0.01);
+            assertEquals(-1.798, body.samples.get(i).dec, 0.001);
+            assertEquals(21.75, body.samples.get(i).magnitude, 1e-12);
+            assertEquals(0.404, body.samples.get(i).decSigmaArcsec, 1e-12);
+        }
+        assertEquals(0.672, body.samples.get(1).raSigmaArcsec, 1e-12);
+    }
+
     @Test
     public void anUnknownObjectIsAProblemNotAnEmptyBody() {
         try {
