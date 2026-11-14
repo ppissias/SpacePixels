@@ -119,6 +119,23 @@ public final class MpcExport {
         return String.format(Locale.US, "%s · %s · %d observation%s over %.2f h", findingId, id, o.size(), o.size() == 1 ? "" : "s", hours);
     }
 
+    /**
+     * The values MPChecker's form asks for, for one observation: the UTC date with a decimal day, RA and Dec in
+     * sexagesimal and the observatory code. MPChecker has no documented programmatic interface, so the user types or
+     * pastes these into its page.
+     */
+    public static String mpcheckerValues(MpcObservation observation, String stationCode) {
+        var time = java.time.Instant.ofEpochMilli(observation.midpointMillis()).atZone(java.time.ZoneOffset.UTC);
+        double day = time.getDayOfMonth() + time.toLocalTime().toNanoOfDay() / 86_400e9;
+        long tenthsOfTimeSecond = Math.round(observation.raDegrees() / 15 * 36_000) % (24 * 36_000);
+        long tenthsOfArcsecond = Math.round(Math.abs(observation.decDegrees()) * 36_000);
+        return String.format(Locale.US, "Date (UT): %04d %02d %08.5f%nRA: %02d %02d %04.1f%nDec: %s%02d %02d %04.1f%nObservatory code: %s",
+                time.getYear(), time.getMonthValue(), day,
+                tenthsOfTimeSecond / 36_000, tenthsOfTimeSecond / 600 % 60, tenthsOfTimeSecond % 600 / 10.0,
+                observation.decDegrees() < 0 ? "-" : "+", tenthsOfArcsecond / 36_000, tenthsOfArcsecond / 600 % 60, tenthsOfArcsecond % 600 / 10.0,
+                stationCode == null || stationCode.isBlank() ? "500" : stationCode.trim().toUpperCase(Locale.ROOT));
+    }
+
     /** The objects the window offers to export by default: tracks that are known or match nothing known. */
     public static boolean includedByDefault(ReportedObjects.ReportedObject object) {
         return object.measured() && (ReportedObjects.KNOWN.equals(object.status()) || ReportedObjects.NO_KNOWN_MATCH.equals(object.status()));

@@ -60,6 +60,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     static final int CROP = 64;
     /** Largest side of the star-centred picture of a whole path; a longer path is shown object-centred only. */
     static final int MAX_FIXED = 600;
+    /** The MPC's guide to reporting observations. */
+    static final String REPORTING_GUIDE = "https://docs.minorplanetcenter.net/mpc-ops-docs/astrometry/reporting-observations/";
+    /** The MPC's MPChecker form; it has no documented programmatic interface. */
+    static final String MPCHECKER = "https://minorplanetcenter.net/cgi-bin/checkmp.cgi";
     private static final DateTimeFormatter UTC = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US).withZone(ZoneOffset.UTC);
 
     private final FitsFileInformation[] files;
@@ -239,8 +243,30 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private JComponent sidePanel() {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.add(title("Before you report"));
+        JLabel guidance = new JLabel(UiStyle.htmlWrappedTo(320, "Anyone may report to the MPC, under an observatory code. "
+                + "<b>Your own observations</b> need your own code: apply for one by reporting at least ten numbered "
+                + "near-Earth asteroids on two nights each under code XXX. <b>Archival data</b> (such as DECam, W84) uses the "
+                + "telescope's code; contact the archive's member of the MPC's SARC list first. Report known objects first, "
+                + "to show your astrometry is good; check a possible new object with MPChecker; never send single "
+                + "positions or marginal detections."));
+        guidance.setForeground(UiStyle.helpColor());
+        guidance.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(guidance);
+        JButton guide = new JButton("MPC reporting guide");
+        guide.setToolTipText(REPORTING_GUIDE);
+        guide.addActionListener(e -> browse(REPORTING_GUIDE));
+        guide.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(guide);
+        panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Identification"));
+        identificationLabel.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(identificationLabel);
+        JButton mpchecker = new JButton("MPChecker…");
+        mpchecker.setToolTipText("Copies the date, position and code of the middle selected observation and opens the MPC's MPChecker");
+        mpchecker.addActionListener(e -> openMpchecker());
+        mpchecker.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(mpchecker);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Details for the MPC"));
         AppConfig config = settings.getConfig();
@@ -553,6 +579,35 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 refreshExport();
             }
         }.execute();
+    }
+
+    /**
+     * Copies the MPChecker values of the shown object's middle selected observation (else its middle observation)
+     * and opens MPChecker in the browser, where the user pastes them; nothing is sent from here.
+     */
+    private void openMpchecker() {
+        if (shown == null) return;
+        var list = observations.get(shown.id());
+        if (list.isEmpty()) {
+            problemsArea.setText("MPChecker needs a measured position: " + shown.id() + " has none.");
+            return;
+        }
+        var chosen = new ArrayList<>(selected.get(shown.id()));
+        int index = chosen.isEmpty() ? list.size() / 2 : chosen.get(chosen.size() / 2);
+        String values = MpcExport.mpcheckerValues(list.get(index), settings.getConfig().observatoryCode);
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(values), null);
+        problemsArea.setText("Copied for MPChecker (" + shown.id() + ", frame " + list.get(index).frameNumber() + "):\n" + values);
+        browse(MPCHECKER);
+    }
+
+    /** Opens an address in the user's browser, when the desktop allows it. */
+    private void browse(String address) {
+        if (!Desktop.isDesktopSupported()) return;
+        try {
+            Desktop.getDesktop().browse(java.net.URI.create(address));
+        } catch (Exception e) {
+            problemsArea.setText("The browser could not be opened: " + e.getMessage() + "\n" + address);
+        }
     }
 
     /** Writes the file where the user chooses. */

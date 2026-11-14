@@ -20,7 +20,7 @@ public final class AdesPsv {
     static final String VERSION = "2022";
     /** ADES detector modes SpacePixels writes: CCD and CMOS. */
     public static final List<String> MODES = List.of("CCD", "CMO");
-    private static final Pattern TRK_SUB = Pattern.compile("[A-Za-z0-9]{1,8}");
+    private static final Pattern TRK_SUB = Pattern.compile("[A-Za-z0-9]{1,7}");
     private static final Pattern STATION = Pattern.compile("[A-Za-z0-9]{3,4}");
     private static final DateTimeFormatter OBS_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US)
             .withZone(ZoneOffset.UTC);
@@ -73,13 +73,14 @@ public final class AdesPsv {
         for (Tracklet t : tracklets) {
             if (blank(t.permID()) && blank(t.provID())) {
                 if (t.trkSub() == null || !TRK_SUB.matcher(t.trkSub()).matches()) {
-                    problems.add("Tracklet ID " + t.trkSub() + " must be 1 to 8 letters or digits.");
+                    problems.add("Tracklet ID " + t.trkSub() + " must be 1 to 7 letters or digits.");
                 } else if (!ids.add(t.trkSub())) {
                     problems.add("Tracklet ID " + t.trkSub() + " is used twice.");
                 }
             }
-            if (t.observations().isEmpty()) problems.add((blank(t.permID()) ? blank(t.provID()) ? t.trkSub() : t.provID() : t.permID())
-                    + " has no observations.");
+            if (t.observations().size() == 1) problems.add(name(t) + " has a single observation: the MPC returns a whole batch "
+                    + "that contains single positions. Report at least two per night, preferably three to five.");
+            if (t.observations().isEmpty()) problems.add(name(t) + " has no observations.");
         }
         return problems;
     }
@@ -163,6 +164,11 @@ public final class AdesPsv {
 
     private static boolean blank(String s) { return s == null || s.isBlank(); }
 
+    /** How an object is named in the file. */
+    private static String name(Tracklet t) {
+        return blank(t.permID()) ? blank(t.provID()) ? t.trkSub() : t.provID() : t.permID();
+    }
+
     private static int length(String s) { return s == null ? 0 : s.trim().length(); }
 
     /** RA in [0, 360) with seven decimals; a value that rounds up to 360 is written as 0. */
@@ -174,14 +180,14 @@ public final class AdesPsv {
     private static String text(String s) { return s == null ? "" : s.trim(); }
 
     /**
-     * A tracklet ID for an unidentified object of a session: "S", the last digit of the year and the UTC month and
-     * day of the session's first frame, and a two-character sequence (0-9, A-Z), so IDs stay unique within a night's
-     * submission and say when the object was seen.
+     * A tracklet ID for an unidentified object of a session: "S", the UTC month and day of the session's first frame,
+     * and a two-character sequence (0-9, A-Z). The MPC asks for temporary designations of seven characters or less,
+     * unique within the submission; the date says when the object was seen, and the year is in every observation time.
      */
     public static String trkSub(long sessionStartMillis, int sequence) {
         if (sequence < 0 || sequence >= 36 * 36) throw new IllegalArgumentException("sequence " + sequence);
-        String date = DateTimeFormatter.ofPattern("yyMMdd", Locale.US).withZone(ZoneOffset.UTC).format(Instant.ofEpochMilli(sessionStartMillis));
+        String date = DateTimeFormatter.ofPattern("MMdd", Locale.US).withZone(ZoneOffset.UTC).format(Instant.ofEpochMilli(sessionStartMillis));
         String digits = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        return "S" + date.substring(1) + digits.charAt(sequence / 36) + digits.charAt(sequence % 36);
+        return "S" + date + digits.charAt(sequence / 36) + digits.charAt(sequence % 36);
     }
 }

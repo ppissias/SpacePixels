@@ -32,8 +32,8 @@ public class MpcExportTest {
         assertEquals("194", MpcExport.tracklet(object("known", List.of("194 Prokne")), List.of(), START, 0).permID());
         var provisional = MpcExport.tracklet(object("known", List.of("(2022 QJ95)")), List.of(), START, 0);
         assertEquals("2022 QJ95", provisional.provID());
-        assertEquals("S2082405", MpcExport.tracklet(object("no-known-match", List.of()), List.of(), START, 5).trkSub());
-        assertEquals("an ambiguous match is not an identity", "S2082401",
+        assertEquals("S082405", MpcExport.tracklet(object("no-known-match", List.of()), List.of(), START, 5).trkSub());
+        assertEquals("an ambiguous match is not an identity", "S082401",
                 MpcExport.tracklet(object("check", List.of("A", "B")), List.of(), START, 1).trkSub());
     }
 
@@ -72,6 +72,20 @@ public class MpcExportTest {
         for (double[] r : residuals) assertEquals(0, r[0], 1e-6);
         assertEquals(0, MpcExport.linearResiduals(observations.subList(0, 2)).length);
         assertTrue(Double.isNaN(MpcExport.rms(residuals, List.of())));
+    }
+
+    /** MPChecker's values: decimal day, sexagesimal RA and Dec without a 60, and the code. */
+    @Test
+    public void mpcheckerValuesForOneObservation() {
+        var o = new MpcObservation(1, java.time.Instant.parse("2022-08-24T05:13:22Z").toEpochMilli(), 120_000, 0, 0,
+                357.207083, -1.805139, 0.1, 0.1, "Gaia3", "");
+        String values = MpcExport.mpcheckerValues(o, "w84");
+        assertTrue(values, values.contains("Date (UT): 2022 08 24.21762"));
+        assertTrue(values, values.contains("RA: 23 48 49.7"));
+        assertTrue(values, values.contains("Dec: -01 48 18.5"));
+        assertTrue(values, values.contains("Observatory code: W84"));
+        var edge = new MpcObservation(1, 0, 0, 0, 0, 359.99999, 0.0, 0.1, 0.1, "Gaia3", "");
+        assertTrue("RA rounds to 00 00 00.0, not 24 or a 60", MpcExport.mpcheckerValues(edge, "").contains("RA: 00 00 00.0"));
     }
 
     /** Only measured tracks that are known or match nothing are offered by default. */

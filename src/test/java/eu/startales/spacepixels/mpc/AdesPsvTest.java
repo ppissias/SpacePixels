@@ -31,7 +31,7 @@ public class AdesPsvTest {
                 List.of(keywords.split("\\|")).stream().map(String::trim).toList());
         String[] first = lines[lines.length - 2].split("\\|", -1);
         assertEquals("", first[0].trim());
-        assertEquals("S2082403", first[2].trim());
+        assertEquals("S082403", first[2].trim());
         assertEquals("CCD", first[3].trim());
         assertEquals("2022-08-24T05:13:22.149Z", first[5].trim());
         assertEquals("357.2070830", first[6].trim());
@@ -50,24 +50,25 @@ public class AdesPsvTest {
     @Test
     public void problemsNameWhatIsMissing() {
         var observation = new MpcObservation(1, TIME, 120_000, 10, 20, 1, 1, 0.1, 0.1, "Gaia3", "");
-        assertEquals(List.of(), AdesPsv.problems(CONTEXT, List.of(new AdesPsv.Tracklet(null, null, "S2082401", List.of(observation)))));
+        assertEquals(List.of(), AdesPsv.problems(CONTEXT, List.of(new AdesPsv.Tracklet(null, null, "S082401", List.of(observation, observation)))));
         var empty = new AdesPsv.Context("", " ", List.of(), List.of(), "", 0, "", "PHO", "a|b");
         var problems = AdesPsv.problems(empty, List.of(new AdesPsv.Tracklet(null, null, "TOO-LONG-ID", List.of()),
                 new AdesPsv.Tracklet(null, null, "S1", List.of(observation)), new AdesPsv.Tracklet(null, null, "S1", List.of(observation))));
         String all = String.join("\n", problems);
         for (String expected : List.of("IAU observatory code", "Name the submitter", "Name the measurer", "Describe the telescope",
-                "CCD or CMOS", "character |", "must be 1 to 8 letters or digits", "S1 is used twice", "TOO-LONG-ID has no observations")) {
+                "CCD or CMOS", "character |", "must be 1 to 7 letters or digits", "S1 is used twice", "TOO-LONG-ID has no observations",
+                "S1 has a single observation")) {
             assertTrue(expected + " in\n" + all, all.contains(expected));
         }
     }
 
-    /** Tracklet IDs carry the night and stay within eight letters and digits; RA never rounds up to 360. */
+    /** Tracklet IDs carry the night and stay within the MPC's seven characters; RA never rounds up to 360. */
     @Test
     public void trackletIdsAndRaLimits() {
-        assertEquals("S2082400", AdesPsv.trkSub(TIME, 0));
-        assertEquals("S208240Z", AdesPsv.trkSub(TIME, 35));
-        assertEquals("S2082410", AdesPsv.trkSub(TIME, 36));
-        assertEquals("S20824ZZ", AdesPsv.trkSub(TIME, 36 * 36 - 1));
+        assertEquals("S082400", AdesPsv.trkSub(TIME, 0));
+        assertEquals("S08240Z", AdesPsv.trkSub(TIME, 35));
+        assertEquals("S082410", AdesPsv.trkSub(TIME, 36));
+        assertEquals("S0824ZZ", AdesPsv.trkSub(TIME, 36 * 36 - 1));
         assertEquals("0.0000000", AdesPsv.ra(359.99999999));
         assertEquals("7.1234567", AdesPsv.ra(7.12345671));
     }
