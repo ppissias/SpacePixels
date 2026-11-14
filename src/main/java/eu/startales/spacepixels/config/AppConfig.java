@@ -17,6 +17,14 @@ public class AppConfig {
         copy.focalLength = focalLength;
         copy.skyCatalogueStarMagnitude = skyCatalogueStarMagnitude;
         copy.solarSystemMagnitude = solarSystemMagnitude;
+        copy.mpcSubmitter = mpcSubmitter;
+        copy.mpcObservers = mpcObservers;
+        copy.mpcMeasurers = mpcMeasurers;
+        copy.mpcTelescopeDesign = mpcTelescopeDesign;
+        copy.mpcAperture = mpcAperture;
+        copy.mpcDetector = mpcDetector;
+        copy.mpcMode = mpcMode;
+        copy.mpcComment = mpcComment;
         return copy;
     }
 
@@ -36,6 +44,19 @@ public class AppConfig {
     public String siteAltitude = "";
     public String pixelSize = "";
     public String focalLength = "";
+    /*
+     * The details written into an MPC observation file (ADES): names as initials and surname, observers and
+     * measurers separated by commas, the aperture in metres as typed, and the ADES mode (CCD or CMO for CMOS). Kept
+     * only in this file and in the exports the user makes.
+     */
+    public String mpcSubmitter = "";
+    public String mpcObservers = "";
+    public String mpcMeasurers = "";
+    public String mpcTelescopeDesign = "";
+    public String mpcAperture = "";
+    public String mpcDetector = "";
+    public String mpcMode = "CCD";
+    public String mpcComment = "";
     /** Faintest Gaia G magnitude fetched by Fetch Sky Catalogue. */
     public double skyCatalogueStarMagnitude = DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE;
 

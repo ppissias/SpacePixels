@@ -4,6 +4,7 @@ import org.junit.Test;
 
 import java.io.StringReader;
 import java.io.StringWriter;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -93,6 +94,19 @@ public class SpacePixelsAppConfigIOTest {
 
         assertTrue(copy.astrometryNetUseOwnKey);
         assertEquals("abcdefghijklmnop", copy.astrometryNetApiKey);
+    }
+
+    /** The MPC submission details survive the copy that every save writes. */
+    @Test
+    public void aCopyKeepsTheMpcDetails() {
+        AppConfig config = new AppConfig();
+        config.mpcSubmitter = "P. Smith"; config.mpcObservers = "A. One, B. Two"; config.mpcMeasurers = "P. Smith";
+        config.mpcTelescopeDesign = "Reflector"; config.mpcAperture = "0.35"; config.mpcDetector = "CMOS";
+        config.mpcMode = "CMO"; config.mpcComment = "Remote telescope";
+        AppConfig copy = config.copy();
+        assertEquals(List.of("P. Smith", "A. One, B. Two", "P. Smith", "Reflector", "0.35", "CMOS", "CMO", "Remote telescope"),
+                List.of(copy.mpcSubmitter, copy.mpcObservers, copy.mpcMeasurers, copy.mpcTelescopeDesign, copy.mpcAperture,
+                        copy.mpcDetector, copy.mpcMode, copy.mpcComment));
     }
 
     @Test
