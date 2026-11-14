@@ -118,6 +118,23 @@ public final class AdesPsv {
                 .append("! detector ").append(context.detector().trim()).append('\n');
         out.append("# software\n! astrometry SpacePixels\n");
         if (!blank(context.comment())) out.append("# comment\n! line ").append(context.comment().trim().replace('\n', ' ')).append('\n');
+        appendData(out, context, tracklets);
+        return out.toString();
+    }
+
+    /**
+     * The observations alone, for an orbit program such as Find_Orb: the version, the observatory code and the data
+     * lines, without the submitter, observers, measurers or comment. Nothing personal leaves with it.
+     */
+    public static String writeObservations(Context context, List<Tracklet> tracklets) {
+        var out = new StringBuilder("# version=").append(VERSION).append('\n');
+        out.append("# observatory\n! mpcCode ").append(context.stationCode().trim()).append('\n');
+        appendData(out, context, tracklets);
+        return out.toString();
+    }
+
+    /** The keyword line and one data line per observation. */
+    private static void appendData(StringBuilder out, Context context, List<Tracklet> tracklets) {
         out.append(row("permID", "provID", "trkSub", "mode", "stn", "obsTime", "ra", "dec", "rmsRA", "rmsDec", "astCat", "exp", "notes"))
                 .append('\n');
         for (Tracklet t : tracklets) {
@@ -131,7 +148,6 @@ public final class AdesPsv {
                         text(o.notes()))).append('\n');
             }
         }
-        return out.toString();
     }
 
     /** The ADES default PSV widths of these fields (chapter 5.1); values are padded, never cut. */

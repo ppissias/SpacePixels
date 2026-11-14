@@ -64,6 +64,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     static final String REPORTING_GUIDE = "https://docs.minorplanetcenter.net/mpc-ops-docs/astrometry/reporting-observations/";
     /** The MPC's MPChecker form; it has no documented programmatic interface. */
     static final String MPCHECKER = "https://minorplanetcenter.net/cgi-bin/checkmp.cgi";
+    /** Bill Gray's online Find_Orb. */
+    static final String FIND_ORB = "https://www.projectpluto.com/fo.htm";
     private static final DateTimeFormatter UTC = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US).withZone(ZoneOffset.UTC);
 
     private final FitsFileInformation[] files;
@@ -267,6 +269,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         mpchecker.addActionListener(e -> openMpchecker());
         mpchecker.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(mpchecker);
+        JButton findOrb = new JButton("Find_Orb…");
+        findOrb.setToolTipText("Copies the selected observations of this object (station code and positions only, no names) "
+                + "and opens Find_Orb's page, where you paste them to compute a preliminary orbit");
+        findOrb.addActionListener(e -> openFindOrb());
+        findOrb.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(findOrb);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Details for the MPC"));
         AppConfig config = settings.getConfig();
@@ -598,6 +606,35 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(values), null);
         problemsArea.setText("Copied for MPChecker (" + shown.id() + ", frame " + list.get(index).frameNumber() + "):\n" + values);
         browse(MPCHECKER);
+    }
+
+    /**
+     * Copies the shown object's selected observations, with the station code only, and opens Find_Orb's page, where the
+     * user pastes them. Find_Orb's online service did not read observations sent by a program in tests (it returned
+     * another user's earlier result), so the user submits them in the browser and sees the answer there.
+     */
+    private void openFindOrb() {
+        if (shown == null) return;
+        var list = observations.get(shown.id());
+        var chosen = new ArrayList<MpcObservation>();
+        for (int index : selected.get(shown.id())) if (index < list.size()) chosen.add(list.get(index));
+        if (chosen.size() < 3) {
+            problemsArea.setText("An orbit needs at least three selected observations of " + shown.id() + ".");
+            return;
+        }
+        AppConfig details = settings.getConfig().copy();
+        readDetails(details);
+        AdesPsv.Context context = MpcExport.context(details);
+        if (context.stationCode().isBlank()) {
+            problemsArea.setText("Set the IAU observatory code in Astrometry Config first: Find_Orb needs the station.");
+            return;
+        }
+        int sequence = report.objects().indexOf(shown);
+        String text = AdesPsv.writeObservations(context, List.of(MpcExport.tracklet(shown, chosen, report.sessionStartMillis(), sequence)));
+        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+        problemsArea.setText("Copied " + chosen.size() + " observations of " + shown.id() + " for Find_Orb: paste them into its "
+                + "box and choose Compute. A preliminary orbit from one night is uncertain; a good fit does not prove the object is real.");
+        browse(FIND_ORB);
     }
 
     /** Opens an address in the user's browser, when the desktop allows it. */

@@ -46,6 +46,18 @@ public class AdesPsvTest {
         assertEquals(keywords.indexOf("|obsTime"), lines[lines.length - 1].indexOf("|2022-"));
     }
 
+    /** For an orbit program, only the station and the observations: no submitter, observers, measurers or comment. */
+    @Test
+    public void observationsAloneCarryNoNames() {
+        var observation = new MpcObservation(1, TIME, 120_000, 10, 20, 357.207083, -1.805139, 0.123, 0.123, "Gaia3", "");
+        String text = AdesPsv.writeObservations(CONTEXT, List.of(new AdesPsv.Tracklet(null, null, "S082401", List.of(observation, observation))));
+        assertTrue(text, text.startsWith("# version=2022\n# observatory\n! mpcCode W84\npermID"));
+        for (String personal : List.of("Smith", "Observer", "Archival", "# submitter", "# telescope")) {
+            assertTrue(personal, !text.contains(personal));
+        }
+        assertEquals("version, observatory, code, keywords and two observations", 6, text.split("\n").length);
+    }
+
     /** The checks name each missing or invalid detail, and accept a complete submission. */
     @Test
     public void problemsNameWhatIsMissing() {
