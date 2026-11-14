@@ -191,7 +191,7 @@ All packages are under `eu.startales.spacepixels`.
 
 | Package | What it holds | Main classes |
 |---|---|---|
-| `gui` | Swing views, shared commands and their availability, settings pages, frame viewers | `ApplicationWindow`, `MainApplicationPanel`, `DetectionConfigurationPanel`, `CommandAction`, `CommandAvailability`, `SequenceViewerFrame`, `BlinkFrame`, `TipsDialog` |
+| `gui` | Swing views, shared commands and their availability, settings pages, frame viewers | `ApplicationWindow`, `MainApplicationPanel`, `DetectionConfigurationPanel`, `CommandAction`, `CommandAvailability`, `SequenceViewerFrame`, `BlinkFrame`, `AsteroidsCometsWindow`, `TipsDialog` |
 | `jobs` | Runs long operations one at a time; no Swing | `JobCoordinator`, `Job`, `JobOutcome`, `JobKind` |
 | `tasks` | The long operations, one class per job | `FitsImportTask`, `DetectionTask`, `PlateSolveTask`, `AutoTuneTask`, … |
 | `session` | The imported dataset: identity, owned state and handover; the application I/O queue; no Swing | `ProcessingSession`, `SessionOwner`, `SkyCatalogueModel`, `AutoTuneState`, `ApplicationStorage` |
