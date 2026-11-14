@@ -691,38 +691,9 @@ public final class DetectionReportAstrometry {
             return null;
         }
 
-        double localSiderealTimeDeg = computeLocalSiderealTimeDegrees(timestampMillis, observerSite.longitudeDeg);
-        double hourAngleDeg = SkyMath.normalizeSignedDegrees(localSiderealTimeDeg - SkyMath.normalizeDegrees(raDegrees));
-
-        double latitudeRad = Math.toRadians(observerSite.latitudeDeg);
-        double declinationRad = Math.toRadians(decDegrees);
-        double hourAngleRad = Math.toRadians(hourAngleDeg);
-
-        double sinAltitude = (Math.sin(declinationRad) * Math.sin(latitudeRad))
-                + (Math.cos(declinationRad) * Math.cos(latitudeRad) * Math.cos(hourAngleRad));
-        sinAltitude = Math.max(-1.0d, Math.min(1.0d, sinAltitude));
-        double altitudeRad = Math.asin(sinAltitude);
-        double cosAltitude = Math.max(1.0e-12d, Math.cos(altitudeRad));
-
-        double sinAzimuth = -(Math.cos(declinationRad) * Math.sin(hourAngleRad)) / cosAltitude;
-        double cosAzimuth = (Math.sin(declinationRad) - (Math.sin(altitudeRad) * Math.sin(latitudeRad)))
-                / (cosAltitude * Math.cos(latitudeRad));
-        sinAzimuth = Math.max(-1.0d, Math.min(1.0d, sinAzimuth));
-        cosAzimuth = Math.max(-1.0d, Math.min(1.0d, cosAzimuth));
-
-        double azimuthDeg = SkyMath.normalizeDegrees(Math.toDegrees(Math.atan2(sinAzimuth, cosAzimuth)));
-        double altitudeDeg = Math.toDegrees(altitudeRad);
-        return new HorizontalCoordinate(altitudeDeg, azimuthDeg);
-    }
-
-    private static double computeLocalSiderealTimeDegrees(long timestampMillis, double longitudeDegrees) {
-        double julianDate = (timestampMillis / 86400000.0d) + 2440587.5d;
-        double centuriesSinceJ2000 = (julianDate - 2451545.0d) / 36525.0d;
-        double gmstDegrees = 280.46061837d
-                + (360.98564736629d * (julianDate - 2451545.0d))
-                + (0.000387933d * centuriesSinceJ2000 * centuriesSinceJ2000)
-                - ((centuriesSinceJ2000 * centuriesSinceJ2000 * centuriesSinceJ2000) / 38710000.0d);
-        return SkyMath.normalizeDegrees(gmstDegrees + longitudeDegrees);
+        double[] horizontal = SkyMath.horizontal(raDegrees, decDegrees, observerSite.latitudeDeg, observerSite.longitudeDeg,
+                timestampMillis);
+        return new HorizontalCoordinate(horizontal[0], horizontal[1]);
     }
 
     public static String buildSatCheckerFovUrl(ObserverSite observerSite,

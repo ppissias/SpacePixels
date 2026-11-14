@@ -84,6 +84,38 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
         return latitude == null || longitude == null ? null : of(latitude, longitude, parseAltitude(altitudeText), FROM_CONFIGURATION);
     }
 
+    /** How far below the horizon a field may seem before the site is doubted, in degrees: refraction and rounding. */
+    static final double HORIZON_TOLERANCE_DEG = 2.0;
+
+    /**
+     * Why this site cannot have seen a field at RA/Dec (J2000 degrees) between two UTC times, or null when it can (or
+     * the times are unknown). A field below the horizon at the start, middle or end means the site is wrong, most
+     * often a latitude or longitude typed without its sign: then the asteroid predictions and other topocentric
+     * lookups are computed for another place.
+     */
+    public String horizonProblem(double raDegrees, double decDegrees, long startMillis, long endMillis) {
+        if (startMillis <= 0 || endMillis < startMillis || !Double.isFinite(raDegrees) || !Double.isFinite(decDegrees)) {
+            return null;
+        }
+        double lowest = Double.POSITIVE_INFINITY;
+        for (long time : new long[]{startMillis, startMillis + (endMillis - startMillis) / 2, endMillis}) {
+            lowest = Math.min(lowest, SkyMath.horizontal(raDegrees, decDegrees, latitudeDeg, longitudeDeg, time)[0]);
+        }
+        if (lowest >= -HORIZON_TOLERANCE_DEG) {
+            return null;
+        }
+        return String.format(Locale.US, "The field is %.0f° below the horizon for the observing site (%s, from the %s) "
+                        + "during the session, so the site cannot be where these frames were taken. Check its latitude and "
+                        + "longitude: north and east are positive, south and west negative.",
+                -lowest, describe(), FROM_HEADER.equals(source) ? "FITS header" : "Astrometry Config tab");
+    }
+
+    /** The site as "30.170° S, 70.807° W". */
+    public String describe() {
+        return String.format(Locale.US, "%.3f° %s, %.3f° %s", Math.abs(latitudeDeg), latitudeDeg < 0 ? "S" : "N",
+                Math.abs(longitudeDeg), longitudeDeg < 0 ? "W" : "E");
+    }
+
     /** Parses finite metre-valued heights, allowing decimal commas and negative elevations; null when absent/invalid. */
     public static Double parseAltitude(String text) {
         Double value = text == null ? null : parseNumber(text.replace(',', '.'));

@@ -395,6 +395,20 @@ public class SolarSystemClientTest {
         assertTrue("an empty field is HTTP 204", SolarSystemClient.parseSkybot("", START, 22).isEmpty());
     }
 
+    /** A site that cannot see the field is a problem: the predictions are still fetched, but for another place. */
+    @Test
+    public void aSiteBelowTheFieldsHorizonIsAProblem() throws Exception {
+        var antipode = new SolarSystemQuery(TRANSFORMER, 2000, 1600, START, END, 19,
+                new SolarSystemQuery.Observer(null, new ObservingSite(-37.9, -156.3, 0, ObservingSite.FROM_CONFIGURATION),
+                        "site from the Astrometry Config tab"));
+        SolarSystemObjects result = new SolarSystemClient(emptySkybot((uri, timeout) -> fieldAnswer(List.of())))
+                .fetch(antipode, text -> { });
+        assertEquals(1, result.problems.size());
+        assertTrue(result.problems.get(0), result.problems.get(0).contains("below the horizon")
+                && result.problems.get(0).endsWith("The predictions below are computed for that site."));
+        assertEquals("the fetch still ran", FetchStep.Status.SUCCEEDED, step(result.fetchSteps, "JPL SB-Ident", "Field search").status);
+    }
+
     /** A field-search HTTP 404 records the address that was sent and asks nothing further. */
     @Test
     public void aFieldSearch404AsksNothingFurther() throws Exception {

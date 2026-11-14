@@ -79,4 +79,33 @@ public final class SkyMath {
                                           double ra2Degrees, double dec2Degrees) {
         return separationDegrees(ra1Degrees, dec1Degrees, ra2Degrees, dec2Degrees) * 3600.0;
     }
+
+    /**
+     * Altitude and azimuth, in degrees (azimuth from north through east), of a J2000 position seen from a site at
+     * latitude and east longitude in degrees at a UTC time. Precession, nutation and refraction are ignored: this is
+     * good to a fraction of a degree, enough to tell where the sky is, not for astrometry.
+     */
+    public static double[] horizontal(double raDegrees, double decDegrees, double latitudeDegrees, double longitudeDegrees,
+                                      long timestampMillis) {
+        double hourAngle = Math.toRadians(normalizeSignedDegrees(localSiderealTimeDegrees(timestampMillis, longitudeDegrees)
+                - normalizeDegrees(raDegrees)));
+        double latitude = Math.toRadians(latitudeDegrees);
+        double declination = Math.toRadians(decDegrees);
+        double sinAltitude = Math.sin(declination) * Math.sin(latitude) + Math.cos(declination) * Math.cos(latitude) * Math.cos(hourAngle);
+        double altitude = Math.asin(Math.max(-1.0, Math.min(1.0, sinAltitude)));
+        double cosAltitude = Math.max(1.0e-12, Math.cos(altitude));
+        double sinAzimuth = Math.max(-1.0, Math.min(1.0, -(Math.cos(declination) * Math.sin(hourAngle)) / cosAltitude));
+        double cosAzimuth = Math.max(-1.0, Math.min(1.0, (Math.sin(declination) - Math.sin(altitude) * Math.sin(latitude))
+                / (cosAltitude * Math.cos(latitude))));
+        return new double[]{Math.toDegrees(altitude), normalizeDegrees(Math.toDegrees(Math.atan2(sinAzimuth, cosAzimuth)))};
+    }
+
+    /** Local mean sidereal time in degrees at a UTC time and east longitude in degrees (IAU 1982 mean sidereal time). */
+    public static double localSiderealTimeDegrees(long timestampMillis, double longitudeDegrees) {
+        double julianDate = timestampMillis / 86_400_000.0 + 2_440_587.5;
+        double centuries = (julianDate - 2_451_545.0) / 36_525.0;
+        double gmst = 280.46061837 + 360.98564736629 * (julianDate - 2_451_545.0)
+                + 0.000387933 * centuries * centuries - centuries * centuries * centuries / 38_710_000.0;
+        return normalizeDegrees(gmst + longitudeDegrees);
+    }
 }

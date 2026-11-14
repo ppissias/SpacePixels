@@ -7,6 +7,7 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /** The observing site: the first frame header that has one wins over the configured fallback. */
 public class ObservingSiteTest {
@@ -81,5 +82,23 @@ public class ObservingSiteTest {
         Map<String, String> header = new LinkedHashMap<>(site);
         header.put("NAXIS", "2");
         return new FitsFileInformation("f.fit", "f.fit", true, 10, 10).withFitsHeader(header);
+    }
+
+    /**
+     * A DECam session at Cerro Tololo (2022-08-24, 05:12 to 09:57 UTC, field at RA 357.18°, Dec -1.79°): the real site
+     * sees it; the same coordinates typed without their signs put the site in Central Asia, in daylight, where the
+     * field is far below the horizon.
+     */
+    @Test
+    public void aSiteThatCannotSeeTheFieldIsAProblem() {
+        long start = 1_661_317_942_149L, end = 1_661_335_034_182L;
+        assertNull(new ObservingSite(-30.16966, -70.80653, 2207, ObservingSite.FROM_CONFIGURATION)
+                .horizonProblem(357.18, -1.79, start, end));
+        String problem = new ObservingSite(30.16966, 70.80653, 2280, ObservingSite.FROM_CONFIGURATION)
+                .horizonProblem(357.18, -1.79, start, end);
+        assertTrue(problem, problem.startsWith("The field is ") && problem.contains("below the horizon")
+                && problem.contains("30.170° N, 70.807° E") && problem.contains("Astrometry Config tab"));
+        assertNull("unknown times are not checked", new ObservingSite(30.16966, 70.80653, 0, ObservingSite.FROM_HEADER)
+                .horizonProblem(357.18, -1.79, 0, 0));
     }
 }

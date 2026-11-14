@@ -161,6 +161,13 @@ public final class SolarSystemClient {
         result.endMillis = query.endMillis();
         result.magnitudeLimit = query.magnitudeLimit();
         result.observer = query.observer().description();
+        ObservingSite site = query.observer().site();
+        String horizon = site == null ? null : site.horizonProblem(result.field.centerRa, result.field.centerDec,
+                query.startMillis(), query.endMillis());
+        if (horizon != null) {
+            // The fetch still runs, so the user sees the effect; the problem says the predictions are for another place.
+            result.problems.add(horizon + " The predictions below are computed for that site.");
+        }
 
         boolean fieldDone = false;
         boolean neoDone = false;

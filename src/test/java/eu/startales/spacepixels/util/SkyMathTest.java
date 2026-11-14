@@ -46,4 +46,18 @@ public class SkyMathTest {
         assertTrue(Double.isNaN(SkyMath.separationDegrees(Double.POSITIVE_INFINITY, 0, 0, 0)));
         assertTrue(Double.isNaN(SkyMath.separationArcsec(0, Double.NaN, 0, 0)));
     }
+
+    /** A star on the meridian culminates at 90° minus the latitude difference; Polaris stays at the latitude. */
+    @Test
+    public void horizontalCoordinates() {
+        long time = 1_661_326_488_000L;
+        double lst = SkyMath.localSiderealTimeDegrees(time, -70.80653);
+        double[] meridian = SkyMath.horizontal(lst, -1.79, -30.16966, -70.80653, time);
+        assertEquals(90 - 28.37966, meridian[0], 1e-6);
+        assertEquals("due north for a southern site", 0, Math.min(meridian[1], 360 - meridian[1]), 1e-6);
+        double[] pole = SkyMath.horizontal(0, 90, 37.9, 23.7, time);
+        assertEquals(37.9, pole[0], 1e-6);
+        // A known value: the GMST at J2000.0 is 280.46061837°.
+        assertEquals(280.46061837, SkyMath.localSiderealTimeDegrees(946_728_000_000L, 0), 1e-6);
+    }
 }
