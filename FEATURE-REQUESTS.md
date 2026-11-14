@@ -10,6 +10,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F09](#f09-consolidated-super-report-for-iterative-runs) | Consolidated "super report" for iterative runs | Retained for future work; the matching policy is to be proposed. |
 | [F23](#f23-fixed-camera-and-all-sky-sequence-analysis) | Fixed-camera and all-sky sequence analysis | Analysed 2026-11-02: streaming design proposed; needs camera details and sample data |
 | [F24](#f24-calibrated-magnitudes-for-variable-stars) | Calibrated magnitudes for variable stars | Reviewed 2026-11-03; estimated-G scope proposed, implementation deferred |
+| [F32](#f32-excluded-areas-for-runs-on-converted-copies) | Excluded areas for runs on converted copies | Noted 2026-11-14; to be understood first, kept for later |
 
 Registration quality is owned by JTransient: [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -187,3 +188,7 @@ The saved Gaia star model contains source identity when available, position, pro
 - Check offline reopening, older caches/reports, additive CSV/schema behavior, saved provenance and uncertainty labels. Detection outputs, scores, candidates and engine readiness must be unchanged.
 
 **Scientific references used in the review.** [Gaia DR3 photometric relationships](https://gea.esac.esa.int/archive/documentation/GDR3/Data_processing/chap_cu5pho/cu5pho_sec_photSystem/cu5pho_ssec_photRelations.html) describe the validity ranges and limitations of passband transformations. [AAVSO's guide to using its data](https://archive.aavso.org/index.php/quickstart-guide-using-aavso-data) distinguishes filtered and unfiltered observations and calibration limitations.
+
+## F32. Excluded areas for runs on converted copies
+
+**Note (2026-11-14), kept for later.** A headless or iterative run that converts its input first (for example 32-bit frames) works on a copy in a new subfolder and reads `excluded_areas.json` beside that copy, so areas saved in the original folder are not used. The catalogue and plate-correction files behave the same way. Areas are drawn in the window, on a session that is already 16-bit, so it is not yet clear how a user would reach this case; understand that before proposing a change.

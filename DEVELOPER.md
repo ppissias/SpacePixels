@@ -45,6 +45,7 @@ Scientific correctness and preservation of valid results constrain every design 
 2. **A clear application design with clear boundaries.** Each piece of mutable state has one authoritative owner. Each package has one job, and its dependencies point one way.
 3. **No abstraction or engineering without a real need.** An interface normally needs two implementations or a test seam that is actually used; an explicit listener or ownership boundary can also justify one. A layer needs a responsibility of its own. A compatibility path needs a caller that still uses it. Remove unused machinery after identifying the contracts it protects. Fewer classes or files alone do not make a design simpler.
 4. **A few chosen design patterns, applied consistently.** They are listed in the [table below](#design-patterns-in-use). Reuse them when their responsibilities fit; consistency does not justify an unnecessary abstraction.
+5. **One implementation of each behaviour.** Code that must give the same result is written once and called from every place that needs it: a preview, a check or a tool that shows what detection will do runs detection's own code. A second implementation is acceptable when it has a reason of its own, such as bounded memory, speed or a different measurement. It then gives that reason in its Javadoc, and a test pins the two together where they must agree. Prefer a parameter or a small shared step to a copy; sharing is a real need in the sense of principle 3, but share the step, not a framework.
 
 The design rules that follow from them:
 
