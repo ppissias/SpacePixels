@@ -20,7 +20,6 @@ import io.github.ppissias.jtransient.telemetry.PipelineTelemetry;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 /** Complete, run-owned report inputs and identities, shared by its section writers without live lookups. */
@@ -92,7 +91,7 @@ final class DetectionReportContext {
         // Extract variables from the PipelineResult and normalize newer track categories for rendering.
         List<Track> tracks = result.tracks != null ? result.tracks : new ArrayList<>();
         this.anomalies = FindingCategory.ANOMALY.included(inclusion)
-                ? sortAnomaliesForDisplay(result.anomalies)
+                ? AnomalyOrder.sorted(result.anomalies)
                 : new ArrayList<>();
         this.pipelineTelemetry = result.telemetry;
         this.faintMoverCandidates = FindingCategory.FAINT_MOVER.included(inclusion) ? result.faintMoverCandidates : List.of();
@@ -295,27 +294,6 @@ final class DetectionReportContext {
         return data.sample(mandatory, limit);
     }
 
-    /** Orders anomaly cards without changing engine order. */
-    private static List<AnomalyDetection> sortAnomaliesForDisplay(List<AnomalyDetection> anomalies) {
-        List<AnomalyDetection> ordered = new ArrayList<>();
-        if (anomalies != null) {
-            ordered.addAll(anomalies);
-        }
-        ordered.sort(Comparator
-                .comparingInt(DetectionReportContext::getAnomalyDisplayFrameIndex)
-                .thenComparingInt(DetectionReportContext::getAnomalyDisplayOrder)
-                .thenComparing(anomaly -> anomaly != null && anomaly.object != null && anomaly.object.sourceFilename != null
-                        ? anomaly.object.sourceFilename
-                        : "")
-                .thenComparingDouble(anomaly -> anomaly != null && anomaly.object != null
-                        ? anomaly.object.x
-                        : Double.POSITIVE_INFINITY)
-                .thenComparingDouble(anomaly -> anomaly != null && anomaly.object != null
-                        ? anomaly.object.y
-                        : Double.POSITIVE_INFINITY));
-        return ordered;
-    }
-
     /** Counts one anomaly category while tolerating absent entries. */
     private static int countAnomaliesOfType(List<AnomalyDetection> anomalies, AnomalyType type) {
         if (anomalies == null || anomalies.isEmpty()) {
@@ -408,29 +386,4 @@ final class DetectionReportContext {
                 || telemetry.minFrameSupportThreshold > 0.0
                 || telemetry.maxStationaryLikelihoodThreshold > 0.0;
     }
-    /** Keeps the established peak, integrated and other anomaly ordering. */
-    private static int getAnomalyDisplayOrder(AnomalyDetection anomaly) {
-        if (anomaly == null || anomaly.type == null) {
-            return 2;
-        }
-        switch (anomaly.type) {
-            case PEAK_SIGMA:
-                return 0;
-            case INTEGRATED_SIGMA:
-                return 1;
-            default:
-                return 2;
-        }
-    }
-
-    /** Places an anomaly at its source frame, with missing entries last. */
-    private static int getAnomalyDisplayFrameIndex(AnomalyDetection anomaly) {
-        if (anomaly == null || anomaly.object == null) {
-            return Integer.MAX_VALUE;
-        }
-        return anomaly.object.sourceFrameIndex;
-    }
-
-
-
 }

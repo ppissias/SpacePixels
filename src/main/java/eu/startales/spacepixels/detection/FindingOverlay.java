@@ -1,6 +1,7 @@
 package eu.startales.spacepixels.detection;
 
 import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.report.AnomalyOrder;
 import eu.startales.spacepixels.report.FindingCategory;
 import eu.startales.spacepixels.report.TrackFindingIndex;
 import io.github.ppissias.jtransient.engine.PipelineResult;
@@ -61,8 +62,9 @@ public final class FindingOverlay {
         if (result != null) {
             var tracks = TrackFindingIndex.of(result.tracks);
             for (var track : tracks.singleStreaks()) add(markers, tracks.id(track), track.points);
-            for (int i = 0; i < result.anomalies.size(); i++) if (result.anomalies.get(i).object != null)
-                add(markers, FindingCategory.ANOMALY.id(i + 1), List.of(result.anomalies.get(i).object));
+            var anomalies = AnomalyOrder.sorted(result.anomalies);
+            for (int i = 0; i < anomalies.size(); i++) if (anomalies.get(i).object != null)
+                add(markers, FindingCategory.ANOMALY.id(i + 1), List.of(anomalies.get(i).object));
             for (int i = 0; i < result.slowMoverCandidates.size(); i++) {
                 var p = result.slowMoverCandidates.get(i);
                 markers.add(new Marker(FindingCategory.SLOW_MOVER.id(i + 1), p.x, p.y, List.of(), "Stack candidate reference; not a per-frame detection"));

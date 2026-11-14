@@ -10,6 +10,7 @@
 package eu.startales.spacepixels.detection;
 
 import eu.startales.spacepixels.config.VisualizationSettings;
+import eu.startales.spacepixels.report.AnomalyOrder;
 import eu.startales.spacepixels.report.LiveFindingPictures;
 import eu.startales.spacepixels.report.LiveFindingPictures.Spot;
 import io.github.ppissias.jtransient.core.ResidualTransientAnalysis;
@@ -265,8 +266,7 @@ public final class LiveFindings implements PipelineStageObserver, AutoCloseable 
         Comparator<Track> longestFirst = Comparator.comparingInt((Track track) -> track.points.size()).reversed();
         pointTracks.sort(longestFirst);
         streakTracks.sort(longestFirst);
-        List<AnomalyDetection> anomalies = new ArrayList<>(stage.anomalies());
-        anomalies.sort(Comparator.comparingDouble((AnomalyDetection anomaly) -> anomaly.object.peakSigma).reversed());
+        List<AnomalyDetection> anomalies = AnomalyOrder.sorted(stage.anomalies());
         String total = count(pointTracks.size(), "moving object", "moving objects") + ", "
                 + count(streakTracks.size(), "streak", "streaks") + ", "
                 + count(anomalies.size(), "anomaly", "anomalies") + " so far";
