@@ -130,6 +130,57 @@ public class FaintMoverReportTest {
         assertTrue(html.contains("not a count of individual detections"));
     }
 
+    /** Path-following engine cutouts keep their per-frame origins; source pixels outside the image are fill. */
+    @Test public void pathFollowingReviewUsesEachFramesOwnCutout() throws Exception {
+        var files = files();
+        var c = candidate(files[0].getObservationTimestamp() + 60_000);
+        var tree = new com.google.gson.GsonBuilder().serializeSpecialFloatingPointValues().create().toJsonTree(c).getAsJsonObject();
+        int side = io.github.ppissias.jtransient.core.FaintMoverDiagnostics.FOLLOWING_SIDE;
+        var d = new com.google.gson.JsonObject();
+        d.addProperty("x", -20); d.addProperty("y", 15); d.addProperty("width", side); d.addProperty("height", side);
+        d.addProperty("followsPath", true); d.addProperty("scoreX", 50); d.addProperty("scoreY", 50);
+        var frames = new com.google.gson.JsonArray();
+        int[][] origins = {{-20, 15}, {10, 15}};
+        int[] indices = {0, 2};
+        for (int k = 0; k < 2; k++) {
+            var f = new com.google.gson.JsonObject();
+            f.addProperty("sequenceIndex", indices[k]);
+            f.addProperty("midpointMillis", files[indices[k]].getObservationTimestamp() + 60_000);
+            f.addProperty("sampleX", origins[k][0] + 35); f.addProperty("sampleY", origins[k][1] + 35);
+            f.addProperty("x", origins[k][0]); f.addProperty("y", origins[k][1]);
+            f.addProperty("unmasked", true); f.addProperty("signal", 1f);
+            f.add("residual", new Gson().toJsonTree(new float[side * side]));
+            frames.add(f);
+        }
+        d.add("frames", frames); tree.add("diagnostics", d);
+        c = new Gson().fromJson(tree, FaintMoverCandidate.class);
+        File output = export(files, c, telemetry(), ReportInclusion.all());
+
+        var entry = JsonParser.parseString(Files.readString(output.toPath().resolve("report-data.json"))).getAsJsonObject()
+                .getAsJsonArray("faintMovers").get(0).getAsJsonObject();
+        var review = entry.getAsJsonObject("review");
+        double fittedX = entry.getAsJsonArray("fittedPositions").get(1).getAsJsonObject().get("x").getAsDouble();
+        assertTrue(review.get("followsPath").getAsBoolean());
+        assertEquals(side, review.get("width").getAsInt());
+        assertEquals(10, review.getAsJsonArray("frameOrigins").get(1).getAsJsonObject().get("x").getAsInt());
+        assertFalse(review.has("unavailableReason"));
+        String asset = Files.readString(output.toPath().resolve(review.get("data").getAsString()));
+        var payload = JsonParser.parseString(asset.substring(asset.indexOf(',') + 1, asset.length() - 2)).getAsJsonObject();
+        assertTrue(payload.get("followsPath").getAsBoolean());
+        var second = payload.getAsJsonArray("frames").get(1).getAsJsonObject();
+        assertEquals(10, second.get("originX").getAsInt());
+        assertEquals(fittedX - 10, second.get("x").getAsDouble(), 1e-6);
+        var source = java.nio.ByteBuffer.wrap(java.util.Base64.getDecoder().decode(payload.get("source").getAsString()))
+                .order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        assertEquals(2 * 2 * side * side, source.capacity());
+        assertEquals("left of the image is fill", 0, Short.toUnsignedInt(source.getShort(0)));
+        assertEquals(768 + (16 * 1) % 100, Short.toUnsignedInt(source.getShort(2 * (side + 21))));
+        assertEquals(768 + (10 * 15) % 100, Short.toUnsignedInt(source.getShort(2 * side * side)));
+        String html = Files.readString(output.toPath().resolve("detection_report.html"));
+        assertTrue(html.contains(side + " × " + side + " px around the fitted path in each frame"));
+        assertTrue(output.toPath().resolve("faint_movers/fm1_blink.gif").toFile().isFile());
+    }
+
     /** A skip is distinct from a completed empty search, while report omission removes candidates and their assets. */
     @Test public void skipAndReportExclusionHaveNoCandidateAssets() throws Exception {
         var files = files();

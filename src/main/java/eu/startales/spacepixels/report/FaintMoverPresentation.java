@@ -4,6 +4,7 @@ import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.util.SkyMath;
 import io.github.ppissias.jtransient.core.FaintMoverCandidate;
+import io.github.ppissias.jtransient.core.FaintMoverDiagnostics;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -26,10 +27,19 @@ final class FaintMoverPresentation {
     record Position(int frameNumber, long midpointMillis, double x, double y, Double raDegrees, Double decDegrees) { }
     /** Actual scoring-grid sample and mask test from the engine, not a fitted per-frame detection or photometry. */
     record PathSample(int frameNumber, long midpointMillis, int sampleX, int sampleY, boolean unmasked, Double processedSignal) { }
-    /** Bounded review assets and actual mask support; no scientific pixels enter report-data.json. */
-    record Review(String data, int x, int y, int width, int height, String unavailableReason,
-                  String residualUnavailableReason, Integer unmaskedFrames, String firstHalfStack, String secondHalfStack,
-                  List<PathSample> pathSamples) { }
+    /** Registered-image origin of one frame's review cutout. */
+    record Origin(int x, int y) { }
+    /**
+     * Bounded review assets and actual mask support; no scientific pixels enter report-data.json. The cutouts share
+     * one rectangle at x, y, or, when {@code followsPath}, each searched frame has its own width-by-height square at
+     * its entry in {@code frameOrigins} (empty otherwise), in searched-frame order.
+     */
+    record Review(String data, int x, int y, int width, int height, boolean followsPath, List<Origin> frameOrigins,
+                  String unavailableReason, String residualUnavailableReason, Integer unmaskedFrames,
+                  String firstHalfStack, String secondHalfStack, List<PathSample> pathSamples) {
+        /** The origin of the cutout of the searched frame at this index. */
+        Origin origin(int index) { return followsPath ? frameOrigins.get(index) : new Origin(x, y); }
+    }
     /** Finite export values and image links for one unverified candidate; no image arrays are retained here. */
     record Entry(String id, double x, double y, long referenceTimeMillis, double vxPixelsPerMinute,
                  double vyPixelsPerMinute, double speedPixelsPerMinute, double score, Double firstHalfScore,
@@ -77,7 +87,11 @@ final class FaintMoverPresentation {
         return List.copyOf(output);
     }
 
-    /** Chooses a bounded native-pixel rectangle and reports missing engine evidence without inventing support. */
+    /**
+     * Chooses bounded native-pixel cutouts and reports missing engine evidence without inventing support. A path that
+     * fits the engine's fixed review rectangle shares one; a longer one gets a square per frame centred on its fitted
+     * position, or the engine's own squares when its residual evidence is available, so both stay aligned.
+     */
     private static Review review(DetectionReportContext context, FaintMoverCandidate c, String id,
                                  List<Position> positions, long[] budget) {
         var d = c.diagnostics;
@@ -93,17 +107,28 @@ final class FaintMoverPresentation {
         }
         if (!residual && residualReason == null) residualReason = "Engine review frames are incomplete";
         int x = 0, y = 0, w = 0, h = 0;
+        boolean follow = false;
+        List<Origin> origins = List.of();
         String unavailable = positions.isEmpty() ? "No searched source frames are available" : null;
         if (unavailable == null) {
             int height = context.rawFrames.getFirst().length, width = context.rawFrames.getFirst()[0].length;
-            x = Math.max(0, (int) Math.floor(positions.stream().mapToDouble(Position::x).min().orElse(c.x) - 35));
-            y = Math.max(0, (int) Math.floor(positions.stream().mapToDouble(Position::y).min().orElse(c.y) - 35));
-            w = Math.max(0, Math.min(width, (int) Math.ceil(positions.stream().mapToDouble(Position::x).max().orElse(c.x) + 36)) - x);
-            h = Math.max(0, Math.min(height, (int) Math.ceil(positions.stream().mapToDouble(Position::y).max().orElse(c.y) + 36)) - y);
-            if (residual) { x = d.x; y = d.y; w = d.width; h = d.height; }
+            int margin = FaintMoverDiagnostics.CONTEXT;
+            x = Math.max(0, (int) Math.floor(positions.stream().mapToDouble(Position::x).min().orElse(c.x) - margin));
+            y = Math.max(0, (int) Math.floor(positions.stream().mapToDouble(Position::y).min().orElse(c.y) - margin));
+            w = Math.max(0, Math.min(width, (int) Math.ceil(positions.stream().mapToDouble(Position::x).max().orElse(c.x) + margin + 1)) - x);
+            h = Math.max(0, Math.min(height, (int) Math.ceil(positions.stream().mapToDouble(Position::y).max().orElse(c.y) + margin + 1)) - y);
+            if (residual) { x = d.x; y = d.y; w = d.width; h = d.height; follow = d.followsPath; }
+            else follow = w > 0 && h > 0 && !FaintMoverDiagnostics.fixedRectangleFits(w, h, positions.size());
+            if (follow) {
+                w = h = FaintMoverDiagnostics.FOLLOWING_SIDE;
+                origins = residual ? d.frames.stream().map(f -> new Origin(f.x, f.y)).toList()
+                        : positions.stream().map(p -> new Origin((int) Math.round(p.x()) - margin,
+                        (int) Math.round(p.y()) - margin)).toList();
+                x = origins.getFirst().x();
+                y = origins.getFirst().y();
+            }
             long bytes = (residual ? 6L : 2L) * w * h * positions.size();
-            if (w <= 0 || h <= 0 || w > 256 || h > 256 || positions.size() > 128)
-                unavailable = "Review limited to 128 frames and 256 pixels per side";
+            if (w <= 0 || h <= 0) unavailable = "The fitted path lies outside the frames";
             else if (bytes > budget[0]) unavailable = "96 MiB report review pixel budget exhausted";
             else budget[0] -= bytes;
         }
@@ -111,7 +136,7 @@ final class FaintMoverPresentation {
         Integer unmasked = residual ? (int) d.frames.stream().filter(f -> f.unmasked).count() : null;
         List<PathSample> samples = residual ? d.frames.stream().map(f -> new PathSample(f.sequenceIndex + 1,
                 f.midpointMillis, f.sampleX, f.sampleY, f.unmasked, finite(f.signal))).toList() : List.of();
-        return new Review(unavailable == null ? prefix + "_view.js" : null, x, y, w, h, unavailable,
+        return new Review(unavailable == null ? prefix + "_view.js" : null, x, y, w, h, follow, origins, unavailable,
                 residualReason, unmasked, residual && d.firstHalf != null ? prefix + "_first_half.png" : null,
                 residual && d.secondHalf != null ? prefix + "_second_half.png" : null, samples);
     }

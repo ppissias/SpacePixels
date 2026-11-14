@@ -77,7 +77,7 @@
     if (!element) return;
     try {
       if (data.version !== 1 || !(data.width > 0 && data.width <= 256) || !(data.height > 0 && data.height <= 256)
-          || !Array.isArray(data.frames) || !data.frames.length || data.frames.length > 128)
+          || !Array.isArray(data.frames) || !data.frames.length)
         throw new Error('Unsupported review data');
       data.source = decodeSamples(data.source, false);
       data.residual = data.residual ? decodeSamples(data.residual, true) : null;
@@ -103,6 +103,9 @@
       const frame = data.frames[frameIndex], offset = frameIndex * data.width * data.height;
       const dx = centred.checked ? frame.x - (data.width - 1) / 2 : 0;
       const dy = centred.checked ? frame.y - (data.height - 1) / 2 : 0;
+      // A path-following cutout has its own origin per frame; place the whole path relative to this frame's cutout.
+      const px = f => f.x + (data.followsPath ? f.originX - frame.originX : 0) - dx;
+      const py = f => f.y + (data.followsPath ? f.originY - frame.originY : 0) - dy;
       for (let y = 0; y < data.height; y++) for (let x = 0; x < data.width; x++) {
         const value = sample(pixels, offset, data.width, data.height, x + dx, y + dy, residual ? null : data.fillMaximum);
         let gray = 0;
@@ -120,8 +123,9 @@
       context.putImageData(image, 0, 0);
       if (annotations.checked) {
         context.strokeStyle = '#50e1d2'; context.lineWidth = 0.65; context.setLineDash([2, 2]); context.beginPath();
-        context.moveTo(data.frames[0].x - dx, data.frames[0].y - dy);
-        context.lineTo(data.frames[data.frames.length - 1].x - dx, data.frames[data.frames.length - 1].y - dy);
+        const last = data.frames[data.frames.length - 1];
+        context.moveTo(px(data.frames[0]), py(data.frames[0]));
+        context.lineTo(px(last), py(last));
         context.stroke(); context.setLineDash([]); context.beginPath();
         context.arc(frame.x - dx, frame.y - dy, 6, 0, Math.PI * 2); context.stroke();
       }
@@ -158,7 +162,8 @@
       element.style.setProperty('--fm-stack-height', (data.stackHeight * stackScale) + 'px');
       element.classList.toggle('fm-no-annotations', !annotations.checked);
       query('.fm-frame-label').textContent = 'Frame ' + frame.number + ' · midpoint ' + frame.midpoint + ' · ' + (frameIndex + 1) + ' / ' + data.frames.length
-          + (centred.checked ? ' · motion-centred (bilinear resampling)' : ' · fixed registered coordinates')
+          + (centred.checked ? ' · motion-centred (bilinear resampling)'
+            : data.followsPath ? ' · cutout follows the fitted path' : ' · fixed registered coordinates')
           + (data.residual ? ' · scoring-path centre ' + (frame.unmasked ? 'unmasked' : 'masked') : '');
       let low = 0, high = 0, valid = 0;
       const start = frameIndex * data.width * data.height;

@@ -60,7 +60,9 @@ final class FaintMoverReviewWriter {
             out.println("<figure><div class='fm-viewport'><img class='fm-fallback' src='" + entry.blink()
                     + ".poster.png' alt='" + entry.id() + " source frame; open the GIF for a blink without JavaScript'>"
                     + "<canvas data-fm-source hidden role='img' aria-label='" + entry.id() + " searched source-frame blink'></canvas></div>"
-                    + "<figcaption>Searched source frames · unsigned 16-bit intensities<br><a href='" + entry.blink()
+                    + "<figcaption>Searched source frames · unsigned 16-bit intensities<br>"
+                    + (review.followsPath() ? review.width() + " × " + review.height()
+                    + " px around the fitted path in each frame; the stars move<br>" : "") + "<a href='" + entry.blink()
                     + "'>Open / save source GIF</a></figcaption></figure>");
         } else out.println("<p>Source review unavailable: " + escape(review.unavailableReason()) + ".</p>");
         if (review.data() != null && review.residualUnavailableReason() == null) {
@@ -109,12 +111,13 @@ final class FaintMoverReviewWriter {
         for (int k = 0; k < count; k++) {
             CancellationScope.check();
             var p = entry.fittedPositions().get(k);
-            var raw = c.rawFrames.get(p.frameNumber() - 1);
-            for (int y = 0; y < r.height(); y++) for (int x = 0; x < r.width(); x++)
-                source.putShort((short) (raw[r.y() + y][r.x() + x] + 32768));
+            var origin = r.origin(k);
+            for (short[] row : crop(c.rawFrames.get(p.frameNumber() - 1), origin.x(), origin.y(), r.width(), r.height()))
+                for (short value : row) source.putShort((short) (value + 32768));
             Map<String, Object> frame = new LinkedHashMap<>();
             frame.put("number", p.frameNumber()); frame.put("midpoint", java.time.Instant.ofEpochMilli(p.midpointMillis()).toString());
-            frame.put("x", p.x() - r.x()); frame.put("y", p.y() - r.y());
+            frame.put("x", p.x() - origin.x()); frame.put("y", p.y() - origin.y());
+            if (r.followsPath()) { frame.put("originX", origin.x()); frame.put("originY", origin.y()); }
             if (residualAvailable) {
                 var f = candidate.diagnostics.frames.get(k);
                 for (float value : f.residual) residual.putFloat(value);
@@ -122,11 +125,10 @@ final class FaintMoverReviewWriter {
             }
             frameData.add(frame);
         }
-        Iterable<short[][]> crops = () -> entry.fittedPositions().stream()
-                .map(p -> crop(c.rawFrames.get(p.frameNumber() - 1), r.x(), r.y(), r.width(), r.height())).iterator();
-        var stats = DisplayImageRenderer.sharedDisplayStatistics(crops);
+        var stats = DisplayImageRenderer.sharedDisplayStatistics(crops(c, entry));
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("version", 1); data.put("width", r.width()); data.put("height", r.height());
+        data.put("followsPath", r.followsPath());
         data.put("stackWidth", candidate.cutout[0].length); data.put("stackHeight", candidate.cutout.length);
         data.put("frames", frameData); data.put("source", Base64.getEncoder().encodeToString(source.array()));
         if (residual != null) data.put("residual", Base64.getEncoder().encodeToString(residual.array()));
@@ -138,10 +140,27 @@ final class FaintMoverReviewWriter {
                 + new Gson().toJson(data) + ");", StandardCharsets.UTF_8);
     }
 
-    /** Copies one small signed-short source rectangle; the source is borrowed and unchanged. */
+    /** Streams the review cutout of every searched frame, one at a time, so they are never all held together. */
+    static Iterable<short[][]> crops(DetectionReportContext c, FaintMoverPresentation.Entry entry) {
+        var r = entry.review();
+        return () -> java.util.stream.IntStream.range(0, entry.fittedPositions().size()).mapToObj(k -> crop(
+                c.rawFrames.get(entry.fittedPositions().get(k).frameNumber() - 1), r.origin(k).x(), r.origin(k).y(),
+                r.width(), r.height())).iterator();
+    }
+
+    /**
+     * Copies one small signed-short source rectangle; the source is borrowed and unchanged. Pixels outside the image,
+     * which a path-following cutout can reach, are registration fill (unsigned zero).
+     */
     static short[][] crop(short[][] raw, int x, int y, int width, int height) {
         short[][] out = new short[height][width];
-        for (int row = 0; row < height; row++) System.arraycopy(raw[y + row], x, out[row], 0, width);
+        int imageWidth = raw[0].length;
+        int from = Math.max(0, -x), to = Math.min(width, imageWidth - x);
+        for (int row = 0; row < height; row++) {
+            java.util.Arrays.fill(out[row], Short.MIN_VALUE);
+            int source = y + row;
+            if (source >= 0 && source < raw.length && from < to) System.arraycopy(raw[source], x + from, out[row], from, to - from);
+        }
         return out;
     }
 

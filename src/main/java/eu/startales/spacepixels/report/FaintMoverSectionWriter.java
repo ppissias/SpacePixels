@@ -165,35 +165,35 @@ final class FaintMoverSectionWriter {
     /** Streams one source-frame crop at a time, using one shared stretch for a faithful blink. */
     private static void writeBlink(DetectionReportContext c, FaintMoverPresentation.Entry entry) throws IOException {
         var review = entry.review();
-        int x = review.x(), y = review.y(), w = review.width(), h = review.height();
-        Iterable<short[][]> crops = () -> entry.fittedPositions().stream().map(p -> crop(c.rawFrames.get(p.frameNumber() - 1), x, y, w, h)).iterator();
+        int w = review.width(), h = review.height();
+        var crops = FaintMoverReviewWriter.crops(c, entry);
         double[] levels = DisplayImageRenderer.sharedDisplayLevels(crops, c.settings.getAutoStretchBlackSigma(), c.settings.getAutoStretchWhiteSigma());
         final var first = entry.fittedPositions().getFirst();
         final var last = entry.fittedPositions().getLast();
-        var frames = entry.fittedPositions().stream().map(p -> {
+        var source = crops.iterator();
+        var frames = java.util.stream.IntStream.range(0, entry.fittedPositions().size()).mapToObj(k -> {
             CancellationScope.check();
-            var image = DisplayImageRenderer.createDisplayImageAtLevels(crop(c.rawFrames.get(p.frameNumber() - 1), x, y, w, h), levels[0], levels[1]);
+            var p = entry.fittedPositions().get(k);
+            int x = review.origin(k).x(), y = review.origin(k).y();
+            var image = DisplayImageRenderer.createDisplayImageAtLevels(source.next(), levels[0], levels[1]);
             var rgb = new BufferedImage(w, h + 22, BufferedImage.TYPE_INT_RGB);
             var g = rgb.createGraphics();
             try {
                 g.drawImage(image, 0, 22, null);
                 g.setColor(new Color(80, 225, 210));
                 g.setStroke(new BasicStroke(1, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND, 10, new float[]{3, 3}, 0));
+                // A path-following cutout shows only part of the path; keep it off the label strip.
+                g.setClip(0, 22, w, h);
                 g.draw(new java.awt.geom.Line2D.Double(first.x() - x, first.y() - y + 22, last.x() - x, last.y() - y + 22));
                 g.draw(new Ellipse2D.Double(p.x() - x - 6, p.y() - y + 16, 12, 12));
+                g.setClip(null);
                 g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 11));
-                g.drawString(entry.id() + " · frame " + p.frameNumber(), 3, 15);
+                // A path-following cutout is too narrow for the identity; its card names it.
+                g.drawString((review.followsPath() ? "" : entry.id() + " · ") + "frame " + p.frameNumber(), 3, 15);
             } finally { g.dispose(); }
             return rgb;
         }).iterator();
         GifSequenceWriter.saveAnimatedGif(frames, c.file(entry.blink()), c.settings.getGifBlinkSpeedMs(), c.animations);
-    }
-
-    /** Copies a bounded rectangle from a borrowed signed-short image without changing the source. */
-    private static short[][] crop(short[][] raw, int x, int y, int width, int height) {
-        short[][] out = new short[height][width];
-        for (int row = 0; row < height; row++) System.arraycopy(raw[y + row], x, out[row], 0, width);
-        return out;
     }
 
     /** Formats optional evidence for readable cards. */
