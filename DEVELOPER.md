@@ -19,6 +19,8 @@ Machine-specific paths (tools, test datasets, scratch folders, memory limits) ar
 ## Contents
 
 - [Principles](#principles)
+- [Design patterns in use](#design-patterns-in-use)
+- [How to add](#how-to-add)
 - [Working rules](#working-rules)
 - [Build and run](#build-and-run)
   - [Dependencies](#dependencies)
@@ -33,7 +35,6 @@ Machine-specific paths (tools, test datasets, scratch folders, memory limits) ar
 - [Persistence and outputs](#persistence-and-outputs)
 - [Testing](#testing)
   - [Real-data regression](#real-data-regression)
-- [Design patterns in use](#design-patterns-in-use)
 - [Diagnostics](#diagnostics)
 <!-- root-toc:end -->
 
@@ -44,24 +45,80 @@ Scientific correctness and preservation of valid results constrain every design 
 1. **Readable code.** A reader should understand a class from its name, its Javadoc and its fields. Prefer plain, direct code over clever generality.
 2. **A clear application design with clear boundaries.** Each piece of mutable state has one authoritative owner. Each package has one job, and its dependencies point one way.
 3. **No abstraction or engineering without a real need.** An interface normally needs two implementations or a test seam that is actually used; an explicit listener or ownership boundary can also justify one. A layer needs a responsibility of its own. A compatibility path needs a caller that still uses it. Remove unused machinery after identifying the contracts it protects. Fewer classes or files alone do not make a design simpler.
-4. **A few chosen design patterns, applied consistently.** They are listed in the [table below](#design-patterns-in-use). Reuse them when their responsibilities fit; consistency does not justify an unnecessary abstraction.
+4. **A few chosen design patterns, applied consistently.** They are listed in the [table below](#design-patterns-in-use), with when to use each. Reuse them when their responsibilities fit; consistency does not justify an unnecessary abstraction.
 5. **One implementation of each behaviour.** Code that must give the same result is written once and called from every place that needs it: a preview, a check or a tool that shows what detection will do runs detection's own code. A second implementation is acceptable when it has a reason of its own, such as bounded memory, speed or a different measurement. It then gives that reason in its Javadoc, and a test pins the two together where they must agree. Prefer a parameter or a small shared step to a copy; sharing is a real need in the sense of principle 3, but share the step, not a framework.
 
-The design rules that follow from them:
+The design rules that follow from them, each with what checks it: a test where one exists, otherwise review.
 
-- **JTransient owns detection.** SpacePixels prepares data, runs the work and presents results; it never changes detection behaviour. Engine changes belong in JTransient.
-- **One authoritative mutable owner, with explicit snapshots.** A run receives everything it uses (settings, options, correction, catalogue) when it is admitted, and never reads live controls, globals or files that another component may be rewriting. Live values, immutable run snapshots and saved baselines have distinct responsibilities; multiple representations are not by themselves duplicate ownership. Immutability of an element does not make its containing array immutable. No mutable static application state.
-- **Constructor injection and explicit listeners.** No service locator, no global event bus, no DI framework.
-- **The EDT is for the window.** Swing is touched only on the event dispatch thread; file, network and processing work run on owned workers. `DependencyRulesTest` enforces the package boundaries.
-- **Every job ends exactly once,** with its result or a reason, and no failure leaves the window locked. Cancellation does not retract queued UI callbacks: delivery still checks the job and session identity. Preserve completed detection products separately from the outcome of report export.
-- **Files are replaced only when complete** (`StagedFile`, `AtomicReportFile`).
-- **The console shows only problems.** Diagnostics go through `DebugOutput` and appear with `-Dspacepixels.debug=true`.
-- **Logic is testable without the window.** The GUI mechanics tests drive the real window separately.
-- **The three repositories are one coordinated source set.** SpacePixels, JTransient and JPlateSolve change together; there is no promise to keep old library signatures, and no reflection or fallback code for older library versions. Changes to exposed API types still need an explicit compatibility decision, updated consumer checks and release documentation; updating sibling callers does not update external consumers.
+| Rule | Checked by |
+|---|---|
+| **JTransient owns detection.** SpacePixels prepares data, runs the work and presents results; a change to what is detected belongs in the engine. | Review. The tools that preview detection are pinned to it by the engine's equality tests (`FrameQualityResultTest`, `ExcludedAreaTest`). |
+| **One owner for each piece of mutable state, and a run works on a snapshot taken when it is admitted.** It never reads live controls, globals or files that another component may be rewriting. | `ProcessingSessionTest`, `TaskOutcomesTest` (admitted frames and settings), `IterativeDetectionRunTest`; otherwise review |
+| **Collaborators are passed in constructors and listeners are explicit.** No service locator, global event bus, DI framework or mutable static application state. | Review |
+| **Swing is touched only on the event dispatch thread;** file, network and processing work runs on owned workers. | `DependencyRulesTest` for the package boundaries (no window code in jobs, tasks, session state or the headless packages) and `check` for the two source sets; thread confinement itself by review and `guiMechanicsTest` |
+| **Every job ends exactly once,** with its result or a reason, and no failure leaves the window locked. | `JobCoordinatorTest`, `JobFailuresTest`, `TaskOutcomesTest` |
+| **Files are replaced only when complete** (`StagedFile`, `AtomicReportFile`). | `StagedFileTest`; otherwise review |
+| **The console shows only problems.** Diagnostics go through `DebugOutput` and appear with `-Dspacepixels.debug=true`. | Review |
+| **Logic is testable without the window.** | The `test` task runs without the GUI mechanics tests, which drive the real window separately |
+| **The three repositories are one coordinated source set.** They change together, with no fallback code for older library versions. | `check` (the API consumer build and the published metadata); otherwise review |
+| **One implementation of each behaviour** (principle 5). | The tests that pin two paths together: `IterativeDetectionRunTest` (passes against ordinary runs), `FitsPreparationParityTest` (GUI against API preparation), and the engine's equality tests |
 
-**Enforcement.** Package dependency tests enforce selected structural boundaries, not runtime thread confinement or every ownership rule.
+The tests check selected boundaries and outcomes. They do not prove thread confinement or every ownership rule; those rely on review.
 
 **Avoid:** rewriting the Swing UI in another toolkit to fix state problems; splitting classes by line count; replacing a large panel with an equally large controller; generic jobs with untyped results; making every object observable; keeping large image buffers for later convenience; changing the viewers' focus rules without real keyboard tests.
+
+## Design patterns in use
+
+Reach for one of these before inventing a structure. JTransient's own patterns are in its [developer guide](../JTransient/DEVELOPER.md#design-patterns-in-use).
+
+| Pattern | Use it when | Where |
+|---|---|---|
+| Command with a coordinator | an action is long enough to need progress or Cancel | `Job` and `JobCoordinator`: one admission rule, one outcome per job |
+| Shared command (Swing `Action`) | one action has a button, a shortcut and a menu item | `CommandAction`, enabled by `CommandAvailability` |
+| Typed outcome | a caller must tell completed, declined, cancelled and failed apart | `JobOutcome` |
+| Explicit ownership and guarded handover | state lives as long as a session and must not reach the next one | `ProcessingSession`, `SessionOwner` |
+| Observer with explicit listeners | a view follows a model that something else owns | `JobCoordinator.Listener`, `SessionListener`, `SkyCatalogueModel` listeners |
+| Interaction adapter | work on a worker needs a decision from the user | `FitsImportInteraction` / `GuiFitsImportInteraction`; `GuiDetectionReportPrompt`: decisions on the EDT, work on a worker |
+| Request and result objects | an operation takes more than a few inputs, or its inputs are captured at admission | `SpacePixelsPipelineRequest` / `Result`, `IterativeDetectionRequest`, `DetectionRunOptions`, `SkySnapshot` |
+| Template method | several windows share a flow and differ in one step | `SequenceViewerFrame.prepare(...)` |
+| Newest request wins | a preview is recomputed while the user keeps changing its input | `SequenceViewerFrame`, `StretchPreviewRenderer`, `AstapInstallationCheck` |
+| Staged publication | a file that others read is rewritten | `StagedFile`, `AtomicReportFile` |
+| One writer per report section | the report gets a section | the `…SectionWriter` classes |
+| Settings table | a detection setting gets a row | the `DetectionSetting` definitions, one table per settings page |
+
+## How to add
+
+Short recipes for the common additions. Each follows a pattern above; the sections further down describe the parts.
+
+**A detection setting.**
+1. Add the field to the engine first (JTransient's [Changing DetectionConfig](../JTransient/DEVELOPER.md#changing-detectionconfig)).
+2. Ask the maintainer for its class: core, basic, expert or hidden ([Settings](#settings)). A hidden setting stops here.
+3. Add a `DetectionSetting` to the table of its page, such as `MovingObjectsSettings`, and build its row where the page builds the others.
+4. Add the key to `src/dist/config/default_detection_profile.json`; the profile migration offer follows from the changed key set.
+5. Update the counts in `TypedDetectionSettingsTest` and the settings mechanics tests, and describe the setting in MANUAL.md.
+
+**A long action (a command with a job).**
+1. Add a `JobKind` and a class in `tasks` that implements `Job<T>` and copies what it needs in its constructor.
+2. Say when it may run in `CommandAvailability`, and give it one `CommandAction` for its button, shortcut and menu item.
+3. Start it through the job coordinator (`startJob` in `MainApplicationPanel`), and apply its `JobOutcome` in the handler, which runs on the EDT for the session that started it.
+4. Add it to `TaskOutcomesTest`, and drive it in a GUI mechanics test.
+
+**A report section.**
+1. Write a `…SectionWriter`; findings of a new kind also get a `FindingCategory`, which owns their prefix, colour, folder and inclusion option.
+2. Name every file with `ReportFiles.link(..)` and write it to `context.file(link)`.
+3. Put data other tools read into `ReportData` as new keys, and describe them in API.md.
+4. Put styles and scripts in the `report/` resources and list them in `ReportAssets`.
+
+**A viewer layer.**
+1. Add it to `ViewerLayer`, and give it a colour and a legend swatch in `OverlayStyle`.
+2. Draw it in `FrameView` only while the layer is on.
+3. Give it a switch in a side-panel section (`SidePanelSection`), following the shared `ViewerLayerState`.
+4. Deliver its data detached from the run (`DetectionOverlays`) or from the session through a listener; never keep image buffers for it.
+
+**A file saved with the session.**
+1. Give `ProcessingSession` the value and a setter that saves through the session's storage (`SessionMetadataStore`), and add it to `SessionMetadata` with a guarded restore at import.
+2. Let a run take it at admission (`ProcessingSession.runSnapshot`, `ReportRunContext`); a run never reads the file while it works.
+3. List the file under [Persistence and outputs](#persistence-and-outputs) and in MANUAL.md.
 
 ## Working rules
 
@@ -158,54 +215,28 @@ The main paths through the code:
 
 **Input contract.** Detection consumes aligned, equally sized monochrome frames with unsigned-16-bit pixels (`BZERO=32768`, `BSCALE=1`) in `short[][]` buffers. `FitsFileInformation` carries each frame's immutable metadata, unmodifiable header map and construction-time normalised timing. Compressed FITS can have an empty primary HDU, so use the HDU helper (`FitsInput.getImageHDU`). Preparation keeps timing and WCS headers, the registration padding, and the sequence-wide offset recorded in `SPOFFSET`.
 
-`FitsInput` owns discovery, image-HDU selection, format/readiness inspection and sequence validation. Its `Input` facts
-come from one inspection per file, on the importer's optional owned executor. Strict headless loading checks readiness
-before cohort consistency; interactive import preserves its sequence checks before conversion offers.
-`FitsPreparation` writes prepared copies through `FitsPixelConverter`; `XisfImageConverter` remains separate.
-These are static helpers; `FitsImportService` and `FitsBatchService` retain their instance-owned work.
-
-`ImageScaling` owns one sequence-wide linear scaling policy for ordinary FITS conversion, Siril preparation and XISF import. Format readers supply physical samples and their storage type; the scan decides once per sequence whether floating-point samples are `[0,1]` values or ADU (every floating-point frame's median above the headroom). `FitsPixelConverter` owns decoding, registration-fill preservation, RGB reduction and 16-bit quantization. Out-of-headroom samples require an explicit clipping or full-range decision; headless callers reject them by default. `PreparedSequenceWriter` owns source association, metadata and publication. Registration exclusions are recorded without shifting remaining source identities. `RunDirectories` gives reports and preparation runs the same dated, collision-safe naming.
-
-`PlateSolveService` edits the selected physical image header in a staged copy, including a tile-compressed image extension. It preserves every other stored byte, verifies all extensions and the saved logical image metadata, then publishes. It refuses whole-file compressed streams until decompressed.
-
-`WcsCoordinateTransformer` reads TAN, TAN-SIP and TPV. TPV applies the PV polynomial through degree seven, including radial terms, after the linear pixel-to-plane transform and inverts it iteratively for sky-to-pixel coordinates. Nominal header export preserves the projection and coefficients. `FitsFileInformation.isWcsSolved()` uses the same transformer acceptance as coordinate consumers, so incomplete or unsupported headers are not shown as solved.
-
-Siril preparation removes the original WCS but `PlateSolveHints` retains its image-centre RA/Dec, local geometric-mean pixel scale and a registration search margin in `SPHRA`, `SPHDEC`, `SPHSCALE`, `SPHRAD`. A retained solved input supplies fallback hints to unsolved exposures in the overlapping registered sequence. These cards never establish solved status. `PlateSolveService` reads them on its worker and supplies immutable JPlateSolve `SolveHints` to either backend; absent or invalid hints preserve blind behavior. Import offers one Siril realignment attempt when sampled misalignment is found in at least three monochrome frames and the admitted CLI path resolves. It uses the existing private-copy preparation recipe, redirects import to completed output, and rechecks quality before session replacement; it does not claim to fix calibration defects.
-
-`FrameCalibrationInspector` reads the first/middle/last frame without changing pixels. Its sharp-spike criterion (above sky + 10 sigma, four-neighbour excess sum below 0.25 of the peak) warns at at least 5 spikes/MP and 30 spikes in a sample.
-
-Alignment uses spaced optical-peak centroids, requiring at least three matches and half of the smaller star set to support one translation above 2.5 pixels. Missing or dimmer stars do not become artificial offsets. Floating samples keep their physical noise scale; only known unsigned-integer samples use integer histogram bins. Pixel-row and matching checks observe `CancellationScope`; unreadable samples fail rather than returning a clean verdict.
-
-Interactive import can decline before session replacement. Both desktop detection workflows supply `PreFlightSafetyPrompt` before tuning/passes; cancellation is the default, with an explicit override. Headless imports log warnings; the public API exposes warning-only or fail-fast policy. Benchmark tests require the explicit `spacepixels.testdata.root` property and never fall back to a machine-specific path.
+More on input inspection, intensity scaling, WCS, plate-solve hints and the import quality checks: [implementation notes](HIGH_LEVEL_DESIGN.md#input-preparation-and-plate-solving).
 
 ## How a user action runs
 
 The job pattern covers observing-session preparation, import, Convert to Mono, Batch Stretch, plate solve, writing the WCS header, Blink, Auto-Tune, Detect, Detect Iteratively, Manual Transient Inspection, standalone quality control and the Test Star Mask stack.
-
-Stretched-copy export is an explicit whole-dataset action in the modeless Image Stretch editor, sharing the normal command/job lock. Its confirmation captures the function/parameters and displays the frame count and destination before admission. Convert to Mono writes linear copies only. Successful colour import offers conversion, followed by the existing optional import of the mono output; these follow-ups check the session and shutdown state before starting another job.
 
 1. **The command, on the EDT.** `CommandAvailability` decides from session facts whether the command can run, and why not. `CommandAction` is the one Swing `Action` behind the command's button, shortcut, menu item and Overview button. The handler captures what the job needs: a validated copy of the settings (`DetectionConfigurationPanel.checkedSettings`), the files, the run options and the session.
 
 The window creates the four panels and passes each one the collaborators it uses (`SessionAccess`, the job coordinator, the frame list, the settings readout, storage and the folder import). Panels do not take the window or call each other by type. The settings page publishes the current `DetectionConfig`; the main readout copies the eight Overview values during that EDT call and does not keep the configuration. The wiring lasts as long as the window, so there is no listener to detach. A job still copies the session and settings at admission.
 2. **Admission.** `JobCoordinator.start(kind, session, job, handler)` reserves the single job slot or says why it cannot. On admission, `MainApplicationPanel` locks the window and shows `ProcessingProgressDialog`.
 3. **The work, on a worker.** The task reports progress through `JobContext.progress` and returns a `JobOutcome`: `Completed`, `Declined`, `Cancelled` or `Failed`. Cancel makes the next progress report throw `JobCancelledException`; engine tasks also bind JTransient's `CancellationScope`, which stops computation between reports. An exception becomes `Failed`, except out-of-memory, which closes the application with a message.
-4. **The outcome, on the EDT,** arrives exactly once after the window is unlocked, and is applied only if its session is still the current one (`ApplicationWindow.forCurrentSession`).
+4. **The outcome, on the EDT,** arrives exactly once after the window is unlocked, and is applied only if its session is still the current one (`ApplicationWindow.forCurrentSession`). Cancellation does not retract queued UI callbacks: delivery still checks the job and session identity. Completed detection products are kept separately from the outcome of the report export.
 
 Shutdown cancels the current job and waits off the EDT for its worker to return after cleanup, independently of queued outcome delivery. This covers local plate-solver processes, preparation and an already admitted noncancellable WCS write. Accepted storage writes drain afterwards, before exit or committing a restart.
 
 Blink is the exception: loading the frames is the job, and the blink window then keeps the main window locked until it closes, because a run would have to fit in memory beside its frames. An open blink is not a job, so the viewers' trial inputs stay usable. Blink and Preview Frame stay open side by side: each one's ↗ button brings the other forward on the frame shown, and returning to an open blink reads nothing. Work outside the job slot has its own owner: the sky-catalogue fetch and correction fit (`gui.SkyCatalogueController`, with one executor per session and a future per request), the asteroid and comet fetch (`gui.SolarSystemController`, built the same way), session and preference writes (single-thread writers owned by the window), ASTAP checks, stretch previews and viewer preparation (newest request wins).
 
-**Observing-session preparation** opens in one application-owned `PreparationWindow`, launched by **Prepare Frames…** above ordinary import. Its panel captures the Siril recipe; `FramePreparationTask` uses the shared job slot and `FramePreparationService` works only on private input copies. Installation checks and input inspection run outside the EDT and discard stale completions; opening the window checks an already configured Siril path automatically. Live script output reaches a bounded progress-dialog log through guarded job detail callbacks, alongside elapsed time. The process owner waits for owned descendants on completion/cancellation; application shutdown also joins preparation cleanup. Successful products are independent of later import outcomes. The optional guarded import closes the preparation window and confirms the new dataset only after successful session installation; failures keep the window available. Pending follow-ups are suppressed after closure or a session change. See [Preparation implementation](docs/features/preparation-integrations.md) for the current contracts and metadata handling.
-
-Camera presets are desktop shortcuts into the existing captured Bayer settings. Metadata remains the default; a camera model never determines file row order. Advanced Bayer controls retain their values when collapsed, and the readiness summary shows the effective interpretation.
-
-Preparation light-frame exposure validation shares ordinary import's exposure-group tolerance and checks the whole range. Calibration exposure checks remain strict; accepted measured variations do not rewrite the per-frame metadata.
-
-The catalogue controller owns its progress timer and delivers model changes and status on the EDT. Delivery checks the request identity and the current session even after cancellation, replacement or shutdown. The session owns a non-blocking shutdown callback, with no dependency on the GUI; closing it cancels work, shuts down the executor, stops the timer and detaches the view. A catalogue completed before its correction remains available and saves independently of the fit outcome. Each fetch publishes its finished steps as they complete. The main window opens one modeless summary of those steps from a small indicator beside the Astrometry status; replacing the session closes that window.
+More on the preparation window, stretched-copy export and the catalogue controller: [implementation notes](HIGH_LEVEL_DESIGN.md#jobs-controllers-and-the-preparation-window).
 
 ## The session
 
-Standalone frame QC runs as a cancellable `QualityControlTask` under Inspect. It captures all imported metadata, the detection profile and the session's excluded areas, then `QualityControlService` reads independent FITS handles through JTransient's two-pass quality-only loader. File attributes are checked across reads; no source files, detection products or settings are written. All quality policy remains in the engine. `ProcessingSession` owns the small immutable `QualityControlSnapshot`; the table maps original input identities and compares the captured profile/cohort before showing current verdicts. Settings changes make old readouts stale, and so do changes to the excluded areas: the snapshot's settings key names them (`QualityControlSnapshot.withExcludedAreas`), and the window recomputes its active key when they change. WCS-only descriptor replacement preserves them. Session/job guards admit only completed current-session results; cancellation/failure leaves the previous snapshot intact.
+Standalone quality control keeps its small result (`QualityControlSnapshot`) in the session; see the [implementation notes](HIGH_LEVEL_DESIGN.md#standalone-quality-control).
 
 `SessionOwner` holds the current `ProcessingSession`. A session has a UUID and owns its frame metadata (`ProcessingSession.replaceFrameHeader` replaces a frame's `FitsFileInformation` after a WCS write while existing runs keep their snapshots), selection, sky catalogue, asteroid and comet predictions and correction (`SkyCatalogueModel`), Auto-Tune state, master-stack cache, last report and last run's overlays, and the services that work on its frames: its plate solver (`PlateSolveService`) and the batch operations on its folder (`FitsBatchService`). Large image buffers are shared by ownership, never deep-copied.
 
@@ -214,12 +245,11 @@ Standalone frame QC runs as a cancellable `QualityControlTask` under Inspect. It
 - **Session files** (`sky_catalogue.json`, `plate_correction.json`, `auto_tune.json`, `solar_system.json`, `excluded_areas.json`) are written on the window's session writer. They are restored at import only if they match the frames (field, plate solution, frame count and size; for the asteroid and comet predictions, the field and a time span that covers the frames). The catalogue and the asteroid file also keep the fetch steps beside the problem sentences. A saved JPL address is the request that was sent, including the observing site.
 - **A run never reads the session files.** Detect and Detect Iteratively take the session's catalogue, correction and excluded areas when they are admitted (`ProcessingSession.runSnapshot`, a `SkySnapshot`); an iterative pass on a prepared copy in another folder, and every headless run, read that folder's files once, at the start (`ReportRunContext.capture`). Jobs therefore never wait for session writes. When a save fails, the value stays in use until SpacePixels closes, in the viewers and in the reports, and the window says it was not saved.
 - **Application settings** (`ApplicationSettings`, the Astrometry Config tab) are loaded once by the window, before any import. Each session's plate solver reads that one live object, so unsaved edits reach the next solve; an import never reads or reloads them.
+- **Snapshots.** Live values, immutable run snapshots and saved baselines have distinct responsibilities; several representations are not by themselves duplicate ownership. Immutability of an element does not make its containing array immutable.
 
 ## Settings
 
-`AppConfig.siteAltitude` stores an optional metre-valued default above the WGS84 ellipsoid. `DetectionRunOptions` captures altitude for ordinary and iterative runs; its original five-argument constructor remains available with an unset altitude. `ObservingSite` prefers valid FITS elevation cards, including `OBSGEO-H`, then the configured height, then 0 m. The settings editor validates finite decimal values, applies valid edits on the EDT, and includes altitude in Save, Revert and Fill Site from FITS Header. The two-line main fetch readout includes configured altitude in rounded metres and preserves its full value in the tooltip.
-
-`FetchSettingsPanel` presents the live Gaia G limit, solar-system V limit and configured site defaults beside the main fetch commands. `ConfigurationPanel` notifies it through the window's explicit EDT callback after valid edits or a refresh; no saved settings are reread. Its Edit settings link selects Astrometry Config. The two-line solar-system readout rounds coordinates for display and retains full values in its tooltip, which identifies them as defaults because the JPL observer resolver prefers FITS-header coordinates, then a compatible observatory code, then the configured site.
+How the pages are laid out, the site and fetch settings, the Faint Movers page and the stretch preview: [implementation notes](HIGH_LEVEL_DESIGN.md#settings-pages).
 
 **Classification.** The maintainer classifies every detection setting as core, basic, expert or hidden. Preserve it when editing the settings pages.
 
@@ -236,17 +266,9 @@ Standalone frame QC runs as a cancellable `QualityControlTask` under Inspect. It
 - **Expert** sections start with `createExpertSectionHeader`. They are shown only while "Show expert settings" is on, but search and "Show only unsaved changes" always find them. Each page says how many of its expert settings are hidden and how many of those are changed.
 - **Hidden** settings have no row. They stay in `DetectionConfig` and in the profile, keep their loaded values on Apply, and are reset by Load Defaults and Revert. Do not add rows for them without asking the maintainer.
 
-Variable-star numeric rows are limited to score threshold, minimum amplitude/frames/time span/persistence, maximum measured stars, minimum SNR and local comparison radius. The four linearity thresholds and six other candidate-gate thresholds have no GUI bindings; their engine fields, defaults, validation and profile keys remain unchanged. Hidden custom values survive unrelated edits, Save, Revert and reload; Load Defaults restores engine defaults. The hidden Limited amplitude floor is adjusted only through the explicit reviewed-consistency policy, preserving existing behavior.
-
 **The pages.**
 
-`WrappingControlsPanel` uses `WrapLayout` and re-measures enclosing layouts after width changes, so wrapped viewer rows receive their full height. `WidthTrackingPanel` shares viewport-width tracking between settings, Astrometry, the workflow strip and the star-mask sidebar. It reveals focused descendants without changing focus ownership and detaches its focus listener when removed. The workflow scroll area reserves table space; the sidebar retains natural content height. The Auto-Tune table scrolls locally rather than imposing its full column width on the page.
 - `DetectionConfigurationPanel` builds the pages. `SettingsNavigator` provides the page list, search, the unsaved-changes filter and the expert switch. Each `SettingRow` has a changed marker and a reset button, and `CheckedNumberEditor` accepts only a complete number in range. Create every spinner with `UiStyle.spinner`, which keeps the caret where the user puts it when the spinner gains the focus (FlatLaf would select the whole value), and give every decimal spinner a `DecimalSpinnerModel`: its arrows step in decimal, where `SpinnerNumberModel` gives 19.299999999999997 for 19.2 + 0.1, which `CheckedNumberEditor` would show in full. Overview notes, Astrometry status, the stretch-editor guidance and the star-mask sidebar use `WrappingHelpLabel`, so a larger body font increases their height instead of clipping them. Viewer sliders take their width from `UiStyle.space`, which follows the display scale.
-
-Detailed settings rows share one `SettingsRowPanel.ControlColumn` per form. It fits the widest input/unit group and its natural Reset size, reserving that size even while Reset is hidden. Reset sits beside its input rather than at the far edge of the column. `SpinnerSlider.create` links a slider to its number model; `SettingsRowPanel.setAccessory` places it below the number field and fits it into the existing column width, so visualization sliders do not widen every category page. The navigator reserves the vertical scrollbar on detailed pages so viewport widths agree. The Overview retains its own layout. Measurements follow the active fonts and display scale on the EDT.
-
-The Faint Movers page uses below-control accessories for units and estimates. Both speed controls display arcsec/min with a usable WCS; without WCS they use px/min, and without timing the minimum uses FWHM/session. Profiles retain canonical minimum FWHM displacement and maximum px/min. `FaintMoverRuntimeEstimate.importedSession` supplies metadata timing for the minimum conversion and resource estimate. The star size is the one the session's last run or restored report measured (`FaintMoverOverlay.starSizePixels`), or an explicitly assumed seeing width before the first run. The estimate gives a time for each search speed through `FaintMoverSearch.coarseSearchShape`, so the binning and frame-grouping rules stay in JTransient. The GUI minimum is two FWHM/session; context changes preserve saved values outside the displayed bounds for correction, and inactive controls do not block other settings. Converted controls retain exact canonical values when their rounded display has not changed; saved-value comparisons use the same context on the EDT. Reports derive final rates from engine telemetry and the captured WCS.
-- `StretchSamplePanel`, under Auto Stretch Black and White Sigma on the Report Visualization page, shows up to three crops stretched with the two values and the share of each drawn black and white. Its crops come from the session's last run (`TrackOverlay`, a frame shared by tracks where it can) or, before a run, from tiles of the middle frame without registration fill (quiet sky, the most stars that stand out from their surroundings, the most pixels at the 99.99th percentile). A worker reads them once per session and run, only while the page is on screen; the window tells the panel when a run's tracks arrive (`lastRunChanged`). Its two settings have sliders (`SpinnerSlider`, one notch per step of the spinner): dragging sets the value as it moves, and a number typed into the field moves the slider and the preview before it is committed. A change of the values re-stretches the crops on the EDT. The preview hides with its two rows when a search or the unsaved-changes filter hides them.
 - Every visible engine setting is described by a `DetectionSetting` (stable field ID, title, unit, guidance, expert flag, getter and setter) in one table per page, such as `CoreDetectionSettings` and `MovingObjectsSettings`. The binding to its control is registered where the row is built. Application-owned controls on those pages (`ApplicationSettingBinding`) carry their metadata, owner getter/setter and UI accessors directly, and `SettingRow` receives its setting ID and expert visibility directly at construction rather than through component client properties.
 - **Strictness** (Lenient / Normal / Strict) sets the five frame-outlier limits together (`frameRejectionPresetValues`) and shows "Custom" when they match no preset.
 - `showOnlyWhen(toggle, rows…)` shows dependent rows only while their switch is on: the geometric linker, activity clusters and the bright-star eccentricity limit.
@@ -259,45 +281,17 @@ The Faint Movers page uses below-control accessories for units and estimates. Bo
 
 ## Frame viewers
 
-The experimental faint-mover search has its own typed definitions in `FaintMoversSettings`. The settings page converts speed units using image WCS and displays minutes while keeping the engine/profile values in px/min and seconds. `FaintMoverRuntimeEstimate` uses metadata and the last run's measured star size; it does not decide which frames the engine searches. **Search speed** is an integer engine field shown as a list of labelled choices (`addTypedChoice`): the list holds the stored values and a renderer shows their names. Auto-Tune retains these controls.
-
-`DetectionOverlays` includes a detached `FaintMoverOverlay`: primitive fitted path values and full file identities with exposure midpoints, without cutouts or image buffers. JTransient's `searchedFrameIndices` are original input sequence indices; overlays and report blinks must use those identities, never infer the search session again or renumber kept frames. Preview Frame and Blink offer an independent visibility switch. Session/job identity checks govern delivery like the existing track layer.
-
-Auto-Tune shares the detection progress dialog's live view, including the saved Hide/Show preference and the strict three-second picture gate. `AutoTuneTask` opens `RunPreviewScope`; candidate scoring/loading offer already-read frames. `AutoTunerRunner` installs `AutoTuneLiveView` only when a sink exists, also before iterative passes. JTransient's optional `AutoTuneObserver` supplies lazily requested, read-only borrowed images, masks and annotations during registration, reference preparation and the trial search. SpacePixels synchronously renders a detached thumbnail on the job or joined engine worker, never the EDT; regional pictures copy only a central 384-pixel detail. No borrowed buffers reach the UI or survive a callback, and there is no extra rendering queue or repeating slideshow. Callbacks reuse extracted sources and masks without changing calibration counters or selection. Phase changes discard pending pictures without bypassing the clock. Hidden and headless runs make no pictures; preview failures do not fail calibration.
-
-Desktop appearance is owned by `gui.AppearanceSettings`, `AppearanceTheme` and `AppearancePanel`, independently of engine, application and report settings. `main` reads the checked `spacepixels_appearance.json` and optional UTF-8 FlatLaf properties file before entering the EDT. The EDT installs an instance-owned FlatLaf definition and the saved zoom factor before constructing any windows. The Appearance tab is available without a session; Save captures its controls and uses `ApplicationStorage` under the Appearance target, with `StagedFile` replacement. Changes apply after restart, so existing windows never keep a mixture of old and new fonts or colours. Restore Defaults changes only the form until Save. Unreadable overrides preserve the selected built-in theme and size; malformed preferences use defaults with a warning and are not automatically rewritten. Essential invalid custom UI defaults fall back to the built-in theme.
-
-`UiStyle` supplies body/heading typography, readable help/link colours and a separate foreground for the permanently dark image canvas. Enabled explanatory text uses the help colour instead of the disabled-control colour. Image-viewer annotations, histogram text and chart axes follow the base font; their note backdrops use font metrics. The distributed `config/appearance-example.properties` shows optional overrides. Appearance changes remain in the desktop source set.
-
-After a successful appearance save, the user can choose Restart now or Later. `ApplicationWindow` owns the restart request and timer: existing work finishes, new job admissions pause, and a worker prepares `ApplicationRestart` before session shutdown. Preparation failure keeps the current window usable. Shutdown drains `ApplicationStorage` before committing the helper. The small helper JVM waits for the old process to exit before launching the same runtime, JVM options, classpath, home, arguments and working directory, avoiding overlapping application heaps. An uncommitted helper never relaunches the application.
-
-`WindowSizing` installs per-window minimum sizes from logical baselines and measured content, including wrapped controls and current font metrics. It bounds those limits and initial placement to the usable monitor. Viewer toolbars and long dialog forms retain scroll access if enlarged controls exceed the available display; `WidthTrackingPanel` reveals focused controls on Tab. Standard file choosers use the same protected dialog sizing. The Appearance editors use their native preferred widths.
-
-`StretchEditorWindow` hosts the one shared `StretchPanel` outside the main tabs, reusing the window from Main or viewer links. Its independent frame cursor leaves the Main selection unchanged. `StretchHistogram` renders both the original linear and stretched 16-bit histograms and statistics (excluding registration fill) in `StretchPanel` and `StretchControls`. Closing the editor releases previews; the viewer registry disposes it on a session change or shutdown.
+The faint-mover overlay, the Auto-Tune live view, appearance and restart, window sizing, the stretch editor, saved-report overlays and GIF export: [implementation notes](HIGH_LEVEL_DESIGN.md#viewers-live-view-and-appearance).
 
 Preview Frame (`DetectionSequenceFrame`) and Manual Transient Inspection (`TransientInspectionFrame`) extend `SequenceViewerFrame`. The stretch editor's Show in Preview uses Preview Frame, which shows a frame the detection cannot read, such as a colour frame, without raw detections. Each prepares one frame at a time in `prepare(...)` on a `SwingWorker`, and the newest request wins. Blink (`BlinkFrame`) is built from the same parts: `FrameView` draws, `StretchControls` shares the stretch models owned by `StretchPanel`, `ViewerSupport` provides the keys and status bar, and `SkyAnnotations` draws catalogue labels and the predicted asteroids and comets (placed per frame, at the middle of its exposure). Blink, Preview Frame and Manual Transient Inspection can show all the last run's findings from the session's overlays, among them moving object tracks (T) and streak tracks (Shift+T) from its `TrackOverlay`. Manual Transient Inspection keeps the master reference from its first pass and re-detects only the frame on show when its trial per-frame settings change.
 
-`TransientInspectionDetector` owns that window's cache, keyed by the kept frame and a serialized snapshot of the complete `DetectionConfig`. Each cache miss creates and closes its own engine on the preparation worker. Closing the window clears the cache without waiting for computation or closing a running engine; the cancelled worker finishes its engine cleanup. Cache locks cover only lookups and updates, and a late result cannot repopulate a closed cache. Re-detection borrows the original star mask, including its original jitter footprint.
-
-`FitsImportTask` also reads the newest compatible completed report through `SavedReportOverlays` on its worker, including compatible iterative passes. The result carries detached `DetectionOverlays`; `ApplicationWindow` installs them into the new session before opening viewers. New exports include ordered portable frame identities, measured finding positions and captured variable hover text. Older exports use explicit reference markers where measured geometry is missing; malformed/incompatible reports do not reject images, and cancellation propagates. `FindingOverlay` adds the other report categories beside tracks, variables and fitted movers; available layers start visible. No imported overlay retains image buffers or reruns detection. The main Astrometry Apply checkbox uses the same `SkyCatalogueModel.setCorrectionEnabled` path and listeners as viewer correction controls.
-
 **Closing a viewer** cancels pending preparation, drops its result, detaches the catalogue and shared stretch listeners (`StretchControls` must detach, or the shared models keep the window and its buffers), and releases its frames. All viewers register with `ViewerRegistry`, which unregisters disposed windows and closes every viewer on session change and at exit.
-
-Faint-mover report review pixels have separate ownership: JTransient copies bounded residual/support evidence from resident search tiles; SpacePixels never reconstructs the scientific residual model. `FaintMoverPresentation` projects finite, buffer-free summary/sample metadata from the captured run. `FaintMoverReviewWriter` exports bounded native source intensities and engine residuals in little-endian binary/base64 classic-script assets, loaded lazily by `faint-mover-review.js` so `file://` reports need no fetch or server. The browser shares the report animation clock and applies common display levels per candidate. No report review buffer is added to the desktop session or fitted-path overlays.
-
-`BlinkGifExport` owns region selection and one streamed GIF worker. Admission captures the included frame order, playback speed, stretch, viewport and overlay state. An independent `FrameView` paints each selected device-pixel crop on the EDT; the worker computes stretch tables and encodes one frame at a time. Closing or reloading cancels its staged output, and session identity guards later UI updates. The selection layer does not change ordinary pan gestures or appear in the export.
 
 **Focus rules** (tested with real key and mouse events): only the frame view takes the focus, except the preview settings fields. Their spinners use `setRequestFocusEnabled(false)`, so an arrow click leaves the keys on the frame. Window keys bound through `ViewerSupport.bind` do not fire while a text field has the focus. Enter commits a valid trial value and Esc discards unfinished text; either returns focus to the image. Save to settings changes session settings. Trial inputs, Revert and Save to settings follow the application job lock through ViewerRegistry, not the lock of an open blink. A blink of selected frames resolves its WCS over the whole session (`BlinkFrame.open` takes `sessionFiles`).
 
 ## The report
 
-Night & Equipment optics tooltips describe measured local grid-cell values. Their captions distinguish the largest available local distortion from shared stretch, the average outer-field radial/tangential stretch, and the fitted centre offset and radial coma component. Coma percentages use the same session reference star size in the maps and summaries. A weak or statistically unresolved fitted pattern does not imply locally round or symmetric stars. These are presentation summaries over unchanged `NightEquipment` measurements.
-
-`FindingCategory.FAINT_MOVER` supplies the FM identity, inclusion, summary, colour and map contract. `FaintMoverPresentation` projects engine candidates into finite report evidence and fitted positions; optional unavailable values are omitted from JSON and have availability flags where needed. `FaintMoverSectionWriter` streams source-frame crops with shared display levels and writes score-unit cutouts and CSV. Fits are never represented as per-frame detections. `ReportRunContext` validates the saved solar-system prediction field and detaches its mutable lists at admission. Catalogue comparisons use the captured WCS, position within two FWHM and mean motion within 0.1 px/min over the searched interval, retaining ambiguity and the fetch limit. They never enter the engine inputs.
-
-FM cards use the ordinary moving-track identification builder at their fitted reference position and epoch, with independent lookup slots and sidecars. The saved comparison names link to JPL object details without confirming identity. Faint-mover review starts at Fit (the original panel-filling scale); Native pixels maps each source, residual and score pixel to one CSS pixel. The review asset records the score-cutout dimensions separately from the source crop.
-
-Full-field SVG and PNG annotations use `ReportMaps.ANNOTATION_OPACITY`; backgrounds retain their original intensity mapping. Variable-candidate maps use the same opacity and smaller labels. `KnownSolarSystemReport` limits the HTML field inventory to bodies with at least one in-field exposure midpoint, but retains every body and all comparison evidence in JSON and the clock review. See the [report review investigation](docs/research/2026-11-05-report-review.md) for the motivating field-border discrepancy.
+Individual report features (faint-mover review, satellite and known-object comparisons, lookups, path checks, cutouts): [implementation notes](HIGH_LEVEL_DESIGN.md#report-details).
 
 `ReportExporter.export(ReportRequest)` is the single normal-report entry point. The API and the standard/iterative
 detection services pass the engine result, shared image buffers, copied metadata/configuration, captured run context,
@@ -315,29 +309,13 @@ Styles and scripts live in resources under `report/` and reach the browser only 
 `ReportMaps` draws the map and mask pictures, and `ReportFormat` formats report text. `IterativeDetectionIndex` writes the iterative index; `DetectionReportGenerator` retains representative-frame sampling helpers.
 Internal Java callers use `ReportExporter.export(new ReportRequest(...))`; the supported `api` surface and report schemas are unchanged.
 
-Windows report path checks are advisory and independent of the registry's long-path setting. Desktop detection estimates the full asset path before admission, including iterative pass directories, and allows cancellation. Export counts actual written picture and other file paths at or above 260 characters and adds a notice near the top of the completed HTML. Completion also explains that moving the complete report folder to a shorter path preserves its relative asset links. These checks do not apply on other operating systems and never change scientific results or output naming.
-
-Moving-object clean Wide downloads crop twice the narrow source field, with a minimum of 400 source pixels per side when available and dimensions bounded by the input frame. The complete field is then scaled proportionally to at most 1000 output pixels per side. This separates sky coverage from output resolution, so the size limit cannot crop the ends of a long track. Narrow downloads and the annotated animations keep their existing geometry.
-
-Variable-star brightest/faintest cutouts use each crop's median as its local sky, with one shared span from the brightest crop's maximum minus its sky. A frame's `PhotometryFrameStat.skyMedian` summarizes the field; local gradients can leave unequal cutout backgrounds when that field-wide statistic is used directly. The faintest crop's sky-subtracted signal is multiplied by `10^(0.4 * (Z_faint - Z_bright))`, using the ensemble magnitude zero points, before the existing square-root display curve. Nonfinite zero points leave the flux scale unchanged and the caption says the correction is unavailable. This is display-only: source pixels, photometry, light curves, CSVs and findings are not modified.
-
 The report never changes the engine's results. When the engine stops after quality control because it kept fewer than three frames (`PipelineResult.tooFewFrames`), the report says so and shows the quality-control results. Its live lookups (SatChecker, JPL, SkyBoT, VSX) go through `ReportLookupProxyServer`, a small localhost server owned by the window; its **Stellarium Local** buttons post directly from `report-lookups.js` to a local Stellarium Remote Control server on `127.0.0.1:8090`. `report-data.json` is versioned. Its frame numbers are one-based, and its finding IDs are local to the report.
-
-Streak-track satellite comparisons capture the export's own `StreakTrackObservation` in the JSON and HTML. The proxy discovers over actual exposures, follows NORAD identities, compares finite spherical exposure paths and saves the observations, raw provider responses and measured evidence together. Cache identity includes the complete observation snapshot. Network cancellation, coverage and sampling limits remain distinct from a successful empty search. Comparisons report numeric evidence and coordinate/timing assumptions, without changing engine classification or assigning an identity probability. See [Satellite motion comparison](docs/features/satellite-motion-comparison.md).
-
-The direct Stellarium command sequence has one 10-second deadline and shares an abort signal across its requests. A timeout aborts outstanding work and prevents later commands from being sent; the button is restored even if the transport settles late. Opaque responses are reported as sent but unconfirmed, not as a completed slew. Readable replies must have a successful HTTP status and the `ok` command acknowledgement before the report confirms acceptance.
-
-`ReportTrackMotion` copies actual centroids and exposure midpoints for report comparisons; ambiguous frame identities, clocks and unavailable exposure lengths disable comparison. `RescueTrackAssociations` links separate rescue frames to the measured ordinary track by interpolation inside its supported span, with positional/displacement evidence and all plausible associations retained. `KnownSolarSystemReport` captures the admitted saved predictions, sampled path coverage and multi-frame position/rate comparisons. Its empirical pixel floor is labelled separately from supplied ephemeris 3-sigma RSS; it is not a complete uncertainty model. The common-clock diagnostic requires independent, unambiguous comparisons and rechecks shifted positions within saved samples. Both models are additive in report JSON and leave scientific products and identities untouched.
-
-`KnownSolarSystemReport` builds JPL SBDB information links from captured object designations and supplies nominal-time possible-identification notes to ordinary track cards. Numeric evidence is expandable in the inventory table; every competing association stays visible. Supplied ephemeris uncertainty at least as large as the frame diagonal is explicitly non-discriminating: the inventory retains its maximum sampled scale and disables ordinary-track/clock comparisons instead of allowing a huge error radius to match unrelated tracks. Trial-time-only comparisons never label a nominal track identity. No catalogue value enters engine detection.
-
-Horizons requests retain the current sampling cadence over the observing span plus fourteen hours on each side for clock review. Discovery and the final field-crossing check retain their original ten-minute motion margin, preventing the extended cache from changing the field selection. Query span, depth and cache compatibility retain their previous meanings; old caches still load, but can lack the extended clock coverage. Straight-line fallbacks do not invent ephemeris uncertainty.
-
-Faint-search work notices are throttled across joined tile workers; `LiveSnapshot` carries only active-tile corners and trial-path endpoints after the shared observer gate accepts a picture. `LiveFindings` coalesces these snapshots on its existing worker, copies at most a 544-pixel-square source crop, and guards delivery with the phase identity. No residual replay, score image or new session image cache is needed. Overall engine progress stays in its faint-search share while messages expose phase-local estimated work and completed tiles; skipped, complete and time-limited outcomes remain distinct.
 
 ## Headless: the API and the command line
 
 `DefaultSpacePixelsPipelineApi.run(request)` prepares the input according to the request's policy (no questions), validates the frames strictly, optionally runs Auto-Tune, detects, and optionally writes the report. It is synchronous, reads the frames with its own `FitsImportService`, which it closes, and never touches a GUI session or creates a plate solver. `BatchDetectionCli` is a thin client of it. The supported surface is the `api` package and the types it exposes ([API.md](API.md)); everything else is internal.
+
+A change to an exposed API type needs an explicit compatibility decision, updated consumer checks and release documentation; updating the sibling callers does not update external consumers.
 
 ## Persistence and outputs
 
@@ -353,8 +331,6 @@ Faint-search work notices are throttled across joined tile workers; `LiveSnapsho
 | Selected preparation output parent | A unique `spacepixels_prepared_…` folder with private working copies, `aligned/`, optional reference stack, generated instructions, log and versioned preparation manifest |
 
 Saving the profile and the visualization preferences stages both files, but replaces them independently; an error names the file that was not saved. A cancelled run removes its unfinished output folder; a cancelled iterative run keeps the passes it finished.
-
-Siril executable selections belong to `AppConfig` and its `copy()`, persisted through the existing application settings queue. Recipe, input-role, sensor/CFA and working-file retention selections are request values recorded in the local preparation manifest, not detection settings or Gradle properties. Working copies/intermediates are removed by default after owned processes stop, including on failure/cancellation; retaining them is an explicit request option. Final products and run records remain, and incomplete output is never automatically imported.
 
 ## Testing
 
@@ -388,23 +364,6 @@ To check a change:
 3. Report the differences to the maintainer before committing.
 
 Run large datasets one at a time; the memory available per JVM is in `LOCAL-ENVIRONMENT.txt`.
-
-## Design patterns in use
-
-| Pattern | Where |
-|---|---|
-| Command with a coordinator | `Job` and `JobCoordinator`: one admission rule, one outcome per job |
-| Shared command (Swing `Action`) | `CommandAction`, enabled by `CommandAvailability` |
-| Typed outcome | `JobOutcome` (completed, declined, cancelled, failed) |
-| Explicit ownership and guarded handover | `ProcessingSession`, `SessionOwner` |
-| Observer with explicit listeners | `JobCoordinator.Listener`, `SessionListener`, `SkyCatalogueModel` listeners |
-| Interaction adapter | `FitsImportInteraction` / `GuiFitsImportInteraction`; `GuiDetectionReportPrompt`: decisions on the EDT, work on a worker |
-| Request and result objects | `SpacePixelsPipelineRequest` / `Result`, `IterativeDetectionRequest`, `DetectionRunOptions` |
-| Template method | `SequenceViewerFrame.prepare(...)` |
-| Newest request wins | `SequenceViewerFrame`, `StretchPreviewRenderer`, `AstapInstallationCheck` |
-| Staged publication | `StagedFile`, `AtomicReportFile` |
-| One writer per report section | the `…SectionWriter` classes |
-| Settings table | the `DetectionSetting` definitions, one table per settings page |
 
 ## Diagnostics
 
