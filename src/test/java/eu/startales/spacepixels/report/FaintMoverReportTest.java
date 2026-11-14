@@ -305,7 +305,8 @@ public class FaintMoverReportTest {
         assertFalse(html.contains("Outside border object"));
         assertTrue(html.contains("Entering later"));
         assertTrue(html.contains("Saved inventory entries without an in-field midpoint omitted from this table: 1"));
-        assertTrue(html.contains("Known asteroids &amp; comets<span class='nav-count'>4</span>"));
+        assertTrue("the count is the tracks and faint movers", html.contains("Asteroids &amp; comets<span class='nav-count'>1</span>"));
+        assertTrue(html.contains("<h3>Tracks and faint movers</h3>") && html.contains("<h3>Predicted objects in the field</h3>"));
         var data = JsonParser.parseString(Files.readString(output.toPath().resolve("report-data.json"))).getAsJsonObject();
         assertEquals(5, data.getAsJsonObject("knownSolarSystem").getAsJsonArray("bodies").size());
         assertTrue(data.toString().contains("Outside border object"));

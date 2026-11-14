@@ -53,12 +53,24 @@ public class ReportAssociationsIntegrationTest {
         for (var id : List.of("t1", "t2", "lr1")) assertTrue(html.contains("href='#finding-" + id + "'"));
         assertTrue(html.contains("do not confirm identity or merge findings"));
         assertTrue(html.contains("&lt;synthetic object&gt;"));
-        assertTrue(html.contains("Partial fetch: one &lt;request&gt; failed"));
+        assertTrue(html.contains("Fetch problems: one &lt;request&gt; failed"));
         assertTrue(html.contains("Image FILTER metadata: L"));
         assertTrue(html.contains("not a moving-object completeness limit"));
         assertTrue(html.contains("Possible identification: "));
         assertTrue(html.contains("known-object-identification"));
         assertTrue(html.contains("rel='noopener noreferrer'"));
+        // Each track agrees with the one predicted object: both are Known, with their O−C in arcseconds.
+        var identifications = c.knownSolarSystem.identifications();
+        assertEquals(List.of("T1", "T2"), identifications.stream().map(KnownSolarSystemReport.Identification::id).toList());
+        for (var row : identifications) {
+            assertEquals(row.id(), KnownSolarSystemReport.KNOWN, row.status());
+            assertEquals(1, row.names().size());
+            assertEquals(row.frames(), row.offsets().size());
+            assertTrue(row.id(), row.rmsArcsec() != null && Double.isFinite(row.rmsArcsec()) && row.speedArcsecPerHour() != null);
+        }
+        assertTrue(html.contains("<span class='asteroid-status asteroid-status-known'>Known</span>"));
+        assertTrue(html.contains("class='asteroid-oc-plot'"));
+        assertFalse("the synthetic site sees the field", html.contains("asteroid-site-alert"));
         c.data.writeJson(folder.getRoot());
         var json = JsonParser.parseString(Files.readString(folder.getRoot().toPath().resolve("report-data.json"))).getAsJsonObject();
         assertEquals(1, json.get("schemaVersion").getAsInt());

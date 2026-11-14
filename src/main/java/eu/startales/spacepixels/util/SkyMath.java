@@ -80,6 +80,14 @@ public final class SkyMath {
         return separationDegrees(ra1Degrees, dec1Degrees, ra2Degrees, dec2Degrees) * 3600.0;
     }
 
+    /** Position angle from the first position to the second, in degrees east of north (0 to 360). */
+    public static double positionAngleDegrees(double ra1Degrees, double dec1Degrees, double ra2Degrees, double dec2Degrees) {
+        double r1 = Math.toRadians(ra1Degrees), r2 = Math.toRadians(ra2Degrees);
+        double d1 = Math.toRadians(dec1Degrees), d2 = Math.toRadians(dec2Degrees);
+        return normalizeDegrees(Math.toDegrees(Math.atan2(Math.sin(r2 - r1) * Math.cos(d2),
+                Math.cos(d1) * Math.sin(d2) - Math.sin(d1) * Math.cos(d2) * Math.cos(r2 - r1))));
+    }
+
     /**
      * Altitude and azimuth, in degrees (azimuth from north through east), of a J2000 position seen from a site at
      * latitude and east longitude in degrees at a UTC time. Precession, nutation and refraction are ignored: this is

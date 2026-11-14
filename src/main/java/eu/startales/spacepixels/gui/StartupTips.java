@@ -55,9 +55,9 @@ final class StartupTips {
             new Tip("<b>Fetch Asteroids and Comets</b> asks JPL which known objects cross your field, and where each one is "
                     + "at every frame's time. Switch on <b>Known asteroids &amp; comets</b> under <b>Catalog annotations</b> in "
                     + "<b>Preview Frame</b> or <b>Blink</b> to see them on the frames.", KNOWN_OBJECTS),
-            new Tip("After <b>Fetch Asteroids and Comets</b>, the next report has a <b>Known asteroids &amp; comets</b> "
-                    + "section. It compares your tracks with the predictions by position and speed, and lists the known "
-                    + "objects in the field.", KNOWN_OBJECTS),
+            new Tip("After <b>Fetch Asteroids and Comets</b>, the next report has an <b>Asteroids &amp; comets</b> "
+                    + "section. It marks each track and faint mover Known, Check or No known match against the predictions, "
+                    + "shows how far the known ones are from their predicted positions, and lists the known objects in the field.", KNOWN_OBJECTS),
             new Tip("Double-click a frame in the main window's list to show it in <b>Preview Frame</b> and see what the "
                     + "detector picks up in it.", PREVIEW),
             new Tip("In <b>Preview Frame</b> you can try <b>Detection Sigma</b> and the other per-frame settings on the frame "

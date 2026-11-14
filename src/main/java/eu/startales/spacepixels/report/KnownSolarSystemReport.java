@@ -31,10 +31,26 @@ final class KnownSolarSystemReport {
     /** Common time-offset evidence from at least two independent, unambiguous objects; never a correction command. */
     record Clock(String status, Double suggestedOffsetSeconds, Double minimumSeconds, Double maximumSeconds,
                  int independentObjects, String explanation) { }
-    /** Buffer-free offline provenance, coverage and comparisons from the admitted run's catalogue/WCS snapshot. */
+    /** One frame's observed-minus-predicted offset on the sky, in arcseconds, RA scaled by cos Dec. */
+    record Offset(int frameNumber, long midpointMillis, double raArcsec, double decArcsec) { }
+    /**
+     * One track or faint mover against the predictions. {@code status} is "known" (position and motion agree with one
+     * object), "check" (agreeing with several, or only with shifted frame times), "no-known-match", or "not-compared"
+     * (the predictions do not cover it). The O−C is the measured position minus the prediction for a known track, and
+     * the fitted path minus the prediction for a known faint mover; absent otherwise. Agreement is not proof of identity.
+     */
+    record Identification(String id, String kind, String status, List<String> names, String note, int frames,
+                          Double arcHours, Double speedArcsecPerHour, Double positionAngleDegrees, Double meanRaArcsec,
+                          Double meanDecArcsec, Double rmsArcsec, List<Offset> offsets) { }
+    /**
+     * Buffer-free offline provenance, coverage and comparisons from the admitted run's catalogue/WCS snapshot.
+     * {@code siteProblem} says why the run's observing site cannot have seen the field, or is null.
+     */
     record Summary(String source, String fetchedAtUtc, Double magnitudeLimit, long startMillis, long endMillis,
                    List<String> problems, List<String> imageFilters, String faintSearchStatus, double fieldDiagonalPixels,
-                   List<Body> bodies, Clock clock) { }
+                   List<Body> bodies, Clock clock, String siteProblem, List<Identification> identifications) { }
+
+    static final String KNOWN = "known", CHECK = "check", NO_KNOWN_MATCH = "no-known-match", NOT_COMPARED = "not-compared";
 
     /** Static report calculations retain no live settings or source buffers. */
     private KnownSolarSystemReport() { }
@@ -103,10 +119,145 @@ final class KnownSolarSystemReport {
         var filters = java.util.Arrays.stream(c.fitsFiles).filter(java.util.Objects::nonNull)
                 .map(f -> f.getFitsHeader().get("FILTER")).filter(java.util.Objects::nonNull)
                 .map(s -> s.replace("'", "").trim()).filter(s -> !s.isEmpty()).distinct().sorted().toList();
-        return new Summary(catalogue.source, catalogue.fetchedAtUtc,
-                Double.isFinite(catalogue.magnitudeLimit) ? catalogue.magnitudeLimit : null, catalogue.startMillis,
+        Double limit = Double.isFinite(catalogue.magnitudeLimit) ? catalogue.magnitudeLimit : null;
+        var identifications = new ArrayList<Identification>();
+        for (var track : c.movingTargets) identifications.add(identifyTrack(c, wcs, bodies, track, limit));
+        for (var entry : c.faintMoverPresentation) identifications.add(identifyFaintMover(wcs, entry, limit));
+        return new Summary(catalogue.source, catalogue.fetchedAtUtc, limit, catalogue.startMillis,
                 catalogue.endMillis, catalogue.problems == null ? List.of() : catalogue.problems.stream().filter(java.util.Objects::nonNull).toList(), filters, faint,
-                fieldDiagonal, List.copyOf(bodies), clock(bodies));
+                fieldDiagonal, List.copyOf(bodies), clock(bodies), siteProblem(c, wcs, dimensions), List.copyOf(identifications));
+    }
+
+    /** A track's status from the comparisons already made: one agreeing object, several, a clock shift only, or none. */
+    private static Identification identifyTrack(DetectionReportContext c, WcsCoordinateTransformer wcs, List<Body> bodies,
+                                                io.github.ppissias.jtransient.model.Track track, Double limit) {
+        String id = c.trackFindings.id(track);
+        var points = ReportTrackMotion.points(track.points, c.fitsFiles);
+        var fit = points.size() >= 2 ? ReportTrackMotion.fit(points) : null;
+        double[] motion = fit == null ? null : skyMotion(wcs, fit.x(), fit.y(), fit.vx(), fit.vy());
+        Double arc = points.size() < 2 ? null : (points.stream().mapToLong(ReportTrackMotion.Point::midpointMillis).max().orElseThrow()
+                - points.stream().mapToLong(ReportTrackMotion.Point::midpointMillis).min().orElseThrow()) / 3_600_000.0;
+        var agreeing = new ArrayList<String>();
+        var shiftOnly = new ArrayList<Comparison>();
+        var shiftNames = new ArrayList<String>();
+        Comparison known = null;
+        for (var body : bodies) for (var m : body.trackComparisons()) {
+            if (!m.trackId().equals(id)) continue;
+            if (m.positionAgreement()) { agreeing.add(body.name()); known = m; }
+            else { shiftOnly.add(m); shiftNames.add(body.name()); }
+        }
+        String status, note;
+        List<Offset> offsets = List.of();
+        if (agreeing.size() == 1) {
+            status = KNOWN;
+            note = "Position and motion agree with the prediction in every measured frame.";
+            var list = new ArrayList<Offset>();
+            for (var r : known.residuals()) {
+                var o = offset(wcs, r.frameNumber(), r.midpointMillis(), r.observedX(), r.observedY(), r.predictedX(), r.predictedY());
+                if (o != null) list.add(o);
+            }
+            offsets = List.copyOf(list);
+        } else if (agreeing.size() > 1) {
+            status = CHECK;
+            note = "Agrees with " + agreeing.size() + " known objects: the identification is ambiguous.";
+        } else if (!shiftOnly.isEmpty()) {
+            status = CHECK;
+            note = String.format(Locale.US, "Agrees with %s only if the frame times are shifted by %+.0f s: check the clock "
+                    + "and the observing site.", String.join(" or ", shiftNames), shiftOnly.getFirst().suggestedTimeOffsetSeconds());
+            agreeing.addAll(shiftNames);
+        } else {
+            status = NO_KNOWN_MATCH;
+            note = noMatchNote(limit);
+        }
+        return identification(id, "track", status, agreeing, note, points.size(), arc, motion, offsets);
+    }
+
+    /** A faint mover's status from its fitted-path comparisons with the predictions. */
+    private static Identification identifyFaintMover(WcsCoordinateTransformer wcs, FaintMoverPresentation.Entry entry, Double limit) {
+        var times = entry.fittedPositions().stream().mapToLong(FaintMoverPresentation.Position::midpointMillis).sorted().toArray();
+        Double arc = times.length < 2 ? null : (times[times.length - 1] - times[0]) / 3_600_000.0;
+        var sky = entry.sky();
+        double[] motion = sky.speedArcsecPerMinute() == null ? null
+                : new double[]{60 * sky.speedArcsecPerMinute(), sky.positionAngleDegrees() == null ? Double.NaN : sky.positionAngleDegrees()};
+        var names = entry.catalogueComparisons().stream().map(FaintMoverPresentation.Match::name).toList();
+        String status, note;
+        List<Offset> offsets = List.of();
+        if (!entry.catalogueComparisonAvailable()) {
+            status = NOT_COMPARED;
+            note = "The saved predictions do not cover this session or field.";
+        } else if (names.size() == 1) {
+            status = KNOWN;
+            note = "The fitted path and motion agree with the prediction; the path is fitted, not measured frame by frame.";
+            var list = new ArrayList<Offset>();
+            for (var r : entry.catalogueComparisons().getFirst().residuals()) {
+                var o = offset(wcs, r.frameNumber(), r.midpointMillis(), r.fittedX(), r.fittedY(), r.predictedX(), r.predictedY());
+                if (o != null) list.add(o);
+            }
+            offsets = List.copyOf(list);
+        } else if (names.size() > 1) {
+            status = CHECK;
+            note = "Agrees with " + names.size() + " known objects: the identification is ambiguous.";
+        } else {
+            status = NO_KNOWN_MATCH;
+            note = noMatchNote(limit);
+        }
+        return identification(entry.id(), "faint mover", status, names, note, entry.fittedPositions().size(), arc, motion, offsets);
+    }
+
+    /** Completes an identification with its mean and RMS O−C. */
+    private static Identification identification(String id, String kind, String status, List<String> names, String note,
+                                                 int frames, Double arc, double[] motion, List<Offset> offsets) {
+        Double meanRa = null, meanDec = null, rms = null;
+        if (!offsets.isEmpty()) {
+            double ra = 0, dec = 0, squares = 0;
+            for (var o : offsets) { ra += o.raArcsec(); dec += o.decArcsec(); squares += o.raArcsec() * o.raArcsec() + o.decArcsec() * o.decArcsec(); }
+            meanRa = ra / offsets.size(); meanDec = dec / offsets.size(); rms = Math.sqrt(squares / offsets.size());
+        }
+        return new Identification(id, kind, status, List.copyOf(names), note, frames, arc,
+                motion == null || !Double.isFinite(motion[0]) ? null : motion[0],
+                motion == null || !Double.isFinite(motion[1]) ? null : motion[1], meanRa, meanDec, rms, offsets);
+    }
+
+    /** Names the depth of the search that found nothing, so absence is not read as completeness. */
+    private static String noMatchNote(Double limit) {
+        return limit == null ? "No predicted object agrees with its position and motion."
+                : String.format(Locale.US, "No known object to V %.1f agrees with its position and motion.", limit);
+    }
+
+    /** Observed minus predicted on the sky, in arcseconds; null where the WCS has no answer. */
+    private static Offset offset(WcsCoordinateTransformer wcs, int frame, long time, double ox, double oy, double px, double py) {
+        var o = wcs.pixelToSky(ox, oy);
+        var p = wcs.pixelToSky(px, py);
+        if (o == null || p == null) return null;
+        double ra = SkyMath.normalizeSignedDegrees(o.getRaDegrees() - p.getRaDegrees()) * Math.cos(Math.toRadians(p.getDecDegrees())) * 3600;
+        double dec = (o.getDecDegrees() - p.getDecDegrees()) * 3600;
+        return Double.isFinite(ra) && Double.isFinite(dec) ? new Offset(frame, time, ra, dec) : null;
+    }
+
+    /** Sky speed in arcseconds per hour and position angle of a pixel motion (px per minute) at a pixel; null without WCS. */
+    private static double[] skyMotion(WcsCoordinateTransformer wcs, double x, double y, double vx, double vy) {
+        var a = wcs.pixelToSky(x, y);
+        var b = wcs.pixelToSky(x + vx, y + vy);
+        if (a == null || b == null) return null;
+        double speed = 60 * SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
+        return new double[]{speed, speed > 0 ? SkyMath.positionAngleDegrees(a.getRaDegrees(), a.getDecDegrees(),
+                b.getRaDegrees(), b.getDecDegrees()) : Double.NaN};
+    }
+
+    /** Why the run's observing site cannot have seen the field centre during the session; null when it can or is unknown. */
+    private static String siteProblem(DetectionReportContext c, WcsCoordinateTransformer wcs, int[] dimensions) {
+        var site = c.astrometryContext.getObserverSite();
+        var centre = wcs.pixelToSky(dimensions[0] / 2.0, dimensions[1] / 2.0);
+        if (site == null || centre == null) return null;
+        long start = Long.MAX_VALUE, end = Long.MIN_VALUE;
+        for (var file : c.fitsFiles) {
+            if (file == null || file.getObservationTimestamp() <= 0) continue;
+            start = Math.min(start, file.getObservationTimestamp());
+            end = Math.max(end, file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()));
+        }
+        if (start == Long.MAX_VALUE) return null;
+        return new eu.startales.spacepixels.fits.ObservingSite(site.latitudeDeg, site.longitudeDeg, site.altitudeMeters,
+                site.getSourceLabel()).horizonProblem(centre.getRaDegrees(), centre.getDecDegrees(), start, end);
     }
 
     /** Compares actual centroids/rates; field-wide ephemeris uncertainty cannot support a local association or clock check. */
@@ -259,15 +410,26 @@ final class KnownSolarSystemReport {
                 matches.size(), "Add this offset to stored capture times to align these comparisons. This is a diagnostic, not proof of a clock error: WCS, centroid, observer-site or orbit errors can imitate it. No timestamp has been changed.");
     }
 
-    /** Writes the field inventory and comparison evidence as static HTML, including explicit coverage/passband limits. */
+    /**
+     * Writes the Asteroids and comets section: the site check, every track and faint mover with its status against the
+     * predictions and the O−C of the known ones, then the predicted objects with their coverage and comparison evidence.
+     */
     static void write(PrintWriter out, DetectionReportContext c, FieldDepth depth) {
         var s = c.knownSolarSystem;
         if (s == null) return;
         var inField = inFieldBodies(s);
-        out.print("<section id='known-solar-system'><h2>Known asteroids and comets in the field</h2>");
+        out.print("<section id='known-solar-system'><h2>Asteroids and comets</h2>");
+        out.print("<p>Each moving-object track and faint mover is compared with the known asteroids and comets predicted "
+                + "for this field. <strong>Known</strong> means its position and motion agree with one predicted object; "
+                + "<strong>Check</strong> means it agrees with several, or only with shifted frame times; <strong>No known match</strong> "
+                + "means no predicted object agrees. Agreement supports an identification but does not prove it.</p>");
+        if (s.siteProblem() != null) out.print("<div class='asteroid-site-alert' role='alert'><strong>Observing site:</strong> "
+                + escape(s.siteProblem()) + " The predictions and the matches below were computed for that site.</div>");
         out.printf(Locale.US, "<p>Saved predictions: %s; fetched %s; magnitude limit %s. %s</p>",
                 escape(s.source()), escape(s.fetchedAtUtc()), s.magnitudeLimit() == null ? "unknown" : String.format(Locale.US, "%.2f", s.magnitudeLimit()),
-                s.problems().isEmpty() ? "Fetch reported complete." : "Partial fetch: " + escape(String.join("; ", s.problems())));
+                s.problems().isEmpty() ? "Fetch reported complete." : "Fetch problems: " + escape(String.join("; ", s.problems())));
+        writeIdentifications(out, c, s.identifications());
+        out.print("<h3>Predicted objects in the field</h3>");
         out.print("<p>Predicted magnitudes are V for asteroids or total comet magnitudes. Field depth: "
                 + (depth == null || depth.isEmpty() ? "unavailable" : escape(depth.medianLabel()))
                 + ". Image FILTER metadata: " + escape(s.imageFilters().isEmpty() ? "unknown" : String.join(", ", s.imageFilters()))
@@ -327,6 +489,78 @@ final class KnownSolarSystemReport {
                 "<p>%d independent comparisons suggest adding %+.1f s (review interval %+.1f to %+.1f s) to the recorded time.</p>",
                 s.clock().independentObjects(), s.clock().suggestedOffsetSeconds(), s.clock().minimumSeconds(), s.clock().maximumSeconds());
         out.print("</details></section>");
+    }
+
+    /** The tracks and faint movers with their status, identification, arc, motion and O−C against the prediction. */
+    private static void writeIdentifications(PrintWriter out, DetectionReportContext c, List<Identification> rows) {
+        out.print("<h3>Tracks and faint movers</h3>");
+        if (rows.isEmpty()) {
+            out.print("<p>This run reported no moving-object track or faint mover.</p>");
+            return;
+        }
+        out.print("<div class='known-objects-table-wrap'><table class='known-objects-table asteroid-findings'><thead><tr>"
+                + "<th>Finding</th><th>Status</th><th>Identification</th><th>Arc</th><th>Motion</th><th>O−C against the prediction</th>"
+                + "</tr></thead><tbody>");
+        for (var row : rows) {
+            String link = findingAnchor(c, row.id());
+            out.print("<tr><td>" + (link == null ? "<strong>" + escape(row.id()) + "</strong>"
+                    : "<a class='known-finding-link' href='#" + escape(link) + "'>" + escape(row.id()) + "</a>")
+                    + "<span class='known-object-meta'>" + ("track".equals(row.kind()) ? "Moving-object track" : "Faint mover") + "</span></td>");
+            out.print("<td><span class='asteroid-status asteroid-status-" + row.status() + "'>" + statusLabel(row.status()) + "</span></td>");
+            out.print("<td>" + (row.names().isEmpty() ? "" : "<span class='known-object-name'>" + escape(String.join(" or ", row.names())) + "</span>")
+                    + "<span class='known-object-meta'>" + escape(row.note()) + "</span></td>");
+            out.printf(Locale.US, "<td>%d %s%s</td>", row.frames(), "track".equals(row.kind()) ? "frames" : "searched frames",
+                    row.arcHours() == null ? "" : String.format(Locale.US, "<span class='known-object-meta'>%.2f h</span>", row.arcHours()));
+            out.print("<td>" + (row.speedArcsecPerHour() == null ? "N/A" : String.format(Locale.US, "%.1f″/h", row.speedArcsecPerHour())
+                    + (row.positionAngleDegrees() == null ? "" : String.format(Locale.US, "<span class='known-object-meta'>PA %.0f°</span>", row.positionAngleDegrees())))
+                    + "</td><td>");
+            if (row.rmsArcsec() == null) out.print("<span class='known-object-meta'>—</span>");
+            else {
+                out.printf(Locale.US, "Mean %+.2f″ RA, %+.2f″ Dec<span class='known-object-meta'>RMS %.2f″ over %d %s</span>",
+                        row.meanRaArcsec(), row.meanDecArcsec(), row.rmsArcsec(), row.offsets().size(),
+                        "track".equals(row.kind()) ? "measured frames" : "fitted positions");
+                out.print(offsetPlot(row));
+            }
+            out.print("</td></tr>");
+        }
+        out.print("</tbody></table></div>");
+        out.print("<p>O−C is the position minus the prediction, in arcseconds (RA scaled by cos Dec), through this run's plate "
+                + "solution. A mean offset well beyond the scatter in every known object points to the plate solution, the "
+                + "frame times or the observing site rather than the objects.</p>");
+    }
+
+    /** A small time plot of one row's O−C: RA filled, Dec hollow, on a symmetric scale of at least one arcsecond. */
+    private static String offsetPlot(Identification row) {
+        var offsets = row.offsets();
+        long first = offsets.stream().mapToLong(Offset::midpointMillis).min().orElse(0);
+        long last = offsets.stream().mapToLong(Offset::midpointMillis).max().orElse(first);
+        double range = 1;
+        for (var o : offsets) range = Math.max(range, Math.max(Math.abs(o.raArcsec()), Math.abs(o.decArcsec())));
+        double width = 150, height = 44, span = Math.max(1, last - first);
+        var svg = new StringBuilder(String.format(Locale.US, "<svg class='asteroid-oc-plot' viewBox='0 0 %.0f %.0f' role='img' "
+                + "aria-label='%s O−C per frame, RA filled and Dec hollow, scale ±%.1f″'><line x1='0' y1='%.1f' x2='%.0f' y2='%.1f'/>",
+                width, height, escape(row.id()), range, height / 2, width, height / 2));
+        for (var o : offsets) {
+            double x = 3 + (width - 6) * (o.midpointMillis() - first) / span;
+            svg.append(String.format(Locale.US, "<circle class='oc-ra' cx='%.1f' cy='%.1f' r='1.6'/>", x, height / 2 - (height / 2 - 3) * o.raArcsec() / range));
+            svg.append(String.format(Locale.US, "<circle class='oc-dec' cx='%.1f' cy='%.1f' r='1.6'/>", x, height / 2 - (height / 2 - 3) * o.decArcsec() / range));
+        }
+        return svg.append(String.format(Locale.US, "</svg><span class='known-object-meta'>±%.1f″ · RA ● Dec ○</span>", range)).toString();
+    }
+
+    /** The label of a status. */
+    static String statusLabel(String status) {
+        return switch (status) {
+            case KNOWN -> "Known";
+            case CHECK -> "Check";
+            case NO_KNOWN_MATCH -> "No known match";
+            default -> "Not compared";
+        };
+    }
+
+    /** The anchor of a finding shown in this report, or null when its group is left out. */
+    private static String findingAnchor(DetectionReportContext c, String id) {
+        return c.data.findings.stream().filter(f -> f.id().equals(id)).findFirst().map(f -> f.anchor()).orElse(null);
     }
 
     /** Selects nominally in-field objects across all sampled exposure midpoints for both the table and navigation count. */

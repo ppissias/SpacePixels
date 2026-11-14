@@ -149,13 +149,10 @@ final class FaintMoverPresentation {
         var a = wcs.pixelToSky(p[0], p[1]);
         var b = wcs.pixelToSky(q[0], q[1]);
         if (a == null || b == null) return new Sky(null, null, null, null);
-        double r1 = Math.toRadians(a.getRaDegrees()), r2 = Math.toRadians(b.getRaDegrees());
-        double d1 = Math.toRadians(a.getDecDegrees()), d2 = Math.toRadians(b.getDecDegrees());
-        double angle = Math.toDegrees(Math.atan2(Math.sin(r2 - r1) * Math.cos(d2),
-                Math.cos(d1) * Math.sin(d2) - Math.sin(d1) * Math.cos(d2) * Math.cos(r2 - r1)));
+        double angle = SkyMath.positionAngleDegrees(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
         double speed = SkyMath.separationArcsec(a.getRaDegrees(), a.getDecDegrees(), b.getRaDegrees(), b.getDecDegrees());
         return new Sky(finite(a.getRaDegrees()), finite(a.getDecDegrees()), finite(speed),
-                speed > 0 ? finite(SkyMath.normalizeDegrees(angle)) : null);
+                speed > 0 ? finite(angle) : null);
     }
 
     /** Checks every searched fitted epoch and the predicted rate with the existing heuristic screens; retains all alternatives. */

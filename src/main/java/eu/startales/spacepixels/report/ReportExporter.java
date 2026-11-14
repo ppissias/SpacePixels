@@ -186,7 +186,7 @@ public final class ReportExporter {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("dither-drift", "Dither & drift", null, false));
         }
         if (context.knownSolarSystem != null) items.add(new PipelineDiagnosticsSectionWriter.NavItem(
-                "known-solar-system", "Known asteroids & comets", Integer.toString(KnownSolarSystemReport.inFieldBodies(context.knownSolarSystem).size()), false));
+                "known-solar-system", "Asteroids & comets", Integer.toString(context.knownSolarSystem.identifications().size()), false));
         if (FindingCategory.FAINT_MOVER.included(inclusion) && pipelineTelemetry != null && pipelineTelemetry.faintMoverSearchTelemetry != null) {
             var faint = pipelineTelemetry.faintMoverSearchTelemetry;
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("faint-movers", "Faint movers",
