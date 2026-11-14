@@ -14,7 +14,6 @@ Every item here is a proposal until the maintainer decides on it. When an item i
 | [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
 | [JT-04](#shared-logging-review-jt-04) | Shared logging review across all three repositories | Medium | Review first |
 | [SP-26](#sp-26-review-of-the-sky-catalogue-fallback-services) | Unify sky-catalogue fallback chains (Item 6) | Medium | Small |
-| [SP-27](#sp-27-auto-tunes-frame-pool-uses-the-engines-quality-measurement) | Auto-Tune's frame pool uses the engine's quality measurement | Medium | Small |
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
@@ -33,16 +32,6 @@ With 1.23.0, dithered floating-point `.fz` frames still differ from cfitsio by a
 **Deferred to the next dependency update.** Upgrade Gson from the [current 2.14.0](DEVELOPER.md#dependencies) to 2.15.0 in all three repositories, reviewing its change of the default `Map` type to `LinkedHashMap`.
 
 **Verification.** Round-trip saved settings files and check that their values and compatibility are preserved; run the relevant tests and reference-data comparisons from DEVELOPER.md.
-
-### SP-27. Auto-Tune's frame pool uses the engine's quality measurement
-
-**Problem (2026-11-14).** `AutoTuneCandidatePoolBuilder.scoreFrames` reads every frame and calls `FrameQualityAnalyzer.evaluateFrame` itself, over each frame's own area, to rank frames by noise × star size. Standalone quality control measures the same two values through the engine (`JTransientEngine.evaluateFrameQuality`), over the session's area and without the excluded areas, and also says which frames detection would reject. The pool builder does not know those verdicts, so a frame that detection will reject can be tuned on.
-
-**Proposal.** Rank the frames from the engine's quality result (`QualityControlService`), the same loader-based measurement the Inspect step uses. Keep the 40 % best, 40 % median, 20 % spread rule. Belongs with [JT-07](../JTransient/DESIGN-IMPROVEMENTS.md#jt-07-one-front-end-for-frame-selection-and-one-veto-rule).
-
-**Decision (made 2026-11-14).** Frames that quality control rejects leave the pool: Auto-Tune follows detection's rules (see JT-07). This changes tuned settings on sessions with rejected frames or more frames than the pool limit, and is shown on real data.
-
-**Stays separate.** Preview Frame's single-frame detection (`DetectionSequenceFrame.read`) calls the engine's extractor directly with the frame's own area. It answers "what does this one frame contain" at once, without a session-wide pass, and uses the same extractor.
 
 ### Shared logging review (JT-04)
 
