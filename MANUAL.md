@@ -463,7 +463,7 @@ The session of [section 3](#3-workflow-find-moving-objects-in-a-session): 33 fra
 | T2 | 611 Valeria | 14.3 |
 | T3 | 194 Prokne | 13.3 |
 
-Sutoku moved only 15 pixels in 77 minutes, yet it was linked through 25 frames. With **Known Asteroids and Comets** fetched and the experimental **Faint Movers** search enabled on the same session, the report's [Known asteroids and comets in the field](#known-asteroids-and-comets) table also matches five fainter catalogued asteroids around *V* 18.5–19.0 to faint-mover candidates **FM1**, **FM2**, **FM4**, **FM5** and **FM6** (see [Faint movers](#faint-movers-experimental)). The same report has the satellite trails as streak tracks. When a run finds this many objects, the summary appears before the report is written, and a noisy group can be left out:
+Sutoku moved only 15 pixels in 77 minutes, yet it was linked through 25 frames. With **Known Asteroids and Comets** fetched and the experimental **Faint Movers** search enabled on the same session, the report's [Asteroids and comets](#known-asteroids-and-comets) section also matches five fainter catalogued asteroids around *V* 18.5–19.0 to faint-mover candidates **FM1**, **FM2**, **FM4**, **FM5** and **FM6** (see [Faint movers](#faint-movers-experimental)). The same report has the satellite trails as streak tracks. When a run finds this many objects, the summary appears before the report is written, and a noisy group can be left out:
 
 ![Detection summary, with the optional groups ticked for the report](docs/images/manual/ui-warning.png)
 
@@ -768,9 +768,18 @@ In every viewer, **Catalog annotations** (A) then draws each object in off-white
 
 These are predictions, not detections: an asteroid may be too faint to see, and a detected track is not identified just because a prediction is near it. On a plate-solved frame the predictions agree with detected known asteroids to well under a pixel when **Align markers to corrected plate solution** (C) is on; the FITS header solution alone can be several pixels off. If all known objects sit along their paths ahead of or behind the detections, the frame times are probably off, for example camera local time written as `DATE-OBS`.
 
-Reports with saved predictions include **Known asteroids and comets in the field**. The table shows predicted magnitude ranges, sampled path coverage, kept frames with data, star-mask intersections, ordinary-track comparisons and the existing FM fitted-path comparisons. Predicted V or comet total magnitudes and the sampled stellar Gaia G field depth have different passbands and detection requirements. An object with no compatible reported finding is not a measured completeness failure: blends, masks, aperture coverage, rejected frames, disabled or truncated searches, catalogue limits and omitted report categories can matter.
+Reports with saved predictions include an **Asteroids and comets** section. Its first table, **Tracks and faint movers**, gives every moving-object track and faint mover a status against the predictions:
 
-![Known asteroids and comets in the field, comparing predicted paths with detected tracks and faint movers](docs/images/manual/report-known-asteroids.png)
+- **Known**, with the object's name: its position and motion agree with one predicted object.
+- **Check**: it agrees with several objects, or only if the frame times are shifted, which points to the clock or the observing site.
+- **No known match**: no predicted object agrees. The note names the depth of the predictions, such as *V* 24.0: a fainter or unknown object can still be there.
+- **Not compared**: the predictions do not cover the session.
+
+For a known object the table shows the **O−C**, the detected position minus the predicted one, in arcseconds (RA scaled by cos Dec): the mean offset, the scatter (RMS) and a small plot of every frame, RA filled and Dec hollow. For a faint mover these are fitted positions, not separate measurements. When the plate solution, the frame times and the observing site are right, the known objects scatter around zero; on a DECam session the three known asteroids were 0.05–0.20″ off on average, with 0.09–0.22″ scatter. A mean offset well beyond its scatter in every known object points to one of the three rather than to the objects. When the observing site cannot have seen the field during the session, a red note at the top of the section says so.
+
+The second table, **Predicted objects in the field**, shows predicted magnitude ranges, sampled path coverage, kept frames with data, star-mask intersections, ordinary-track comparisons and the existing FM fitted-path comparisons. Predicted V or comet total magnitudes and the sampled stellar Gaia G field depth have different passbands and detection requirements. An object with no compatible reported finding is not a measured completeness failure: blends, masks, aperture coverage, rejected frames, disabled or truncated searches, catalogue limits and omitted report categories can matter.
+
+![Predicted objects in the field, comparing predicted paths with detected tracks and faint movers](docs/images/manual/report-known-asteroids.png)
 
 In this 61-megapixel session (field depth *G* 17.7, predictions fetched to *V* 19.0), the table lists nine asteroids predicted inside the field: the three brighter ones (*V* 13.3–17.7) match the ordinary moving-object tracks **T3** (194 Prokne), **T2** (611 Valeria) and **T1** (4767 Sutoku) within 0.07–0.27 px RMS, the five fainter ones below the single-frame field depth (*V* 18.46–18.97) agree with the fitted paths of faint-mover candidates **FM2**, **FM1**, **FM5**, **FM4** and **FM6** within 0.19–0.62 px RMS across all 28 kept frames, and **(2010 DR82)** is marked **Orbit too uncertain for comparison** because its formal ephemeris uncertainty exceeds the field diagonal.
 
