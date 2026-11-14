@@ -25,6 +25,7 @@ public class AppConfig {
         copy.mpcDetector = mpcDetector;
         copy.mpcMode = mpcMode;
         copy.mpcComment = mpcComment;
+        copy.findOrbExecutable = findOrbExecutable;
         return copy;
     }
 
@@ -57,6 +58,8 @@ public class AppConfig {
     public String mpcDetector = "";
     public String mpcMode = "CCD";
     public String mpcComment = "";
+    /** Bill Gray's command-line Find_Orb (fo64.exe on Windows), in the folder of the console Find_Orb; empty when not installed. */
+    public String findOrbExecutable = "";
     /** Faintest Gaia G magnitude fetched by Fetch Sky Catalogue. */
     public double skyCatalogueStarMagnitude = DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE;
 

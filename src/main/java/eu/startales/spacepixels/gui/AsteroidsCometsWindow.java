@@ -19,6 +19,8 @@ import eu.startales.spacepixels.fits.ObservingSite;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.mpc.AdesPsv;
 import eu.startales.spacepixels.mpc.AstrometricReduction;
+import eu.startales.spacepixels.mpc.FindOrb;
+import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
 import eu.startales.spacepixels.mpc.MpcObservation;
 import eu.startales.spacepixels.mpc.ReportedObjects;
@@ -79,6 +81,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final Map<String, Boolean> exported = new HashMap<>();
     private final Map<String, Set<Integer>> selected = new HashMap<>();
     private final Map<String, List<MpcObservation>> observations = new HashMap<>();
+    private final Map<String, FindOrb.Orbit> orbits = new HashMap<>();
+    private final Map<String, String> orbitProblems = new HashMap<>();
+    private final JLabel orbitLabel = new JLabel(" ");
+    private final OrbitDiagram orbitDiagram = new OrbitDiagram();
     private final AtomicInteger generation = new AtomicInteger();
     private SwingWorker<List<BufferedImage[]>, Void> worker;
     private boolean closed;
@@ -269,12 +275,26 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         mpchecker.addActionListener(e -> openMpchecker());
         mpchecker.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(mpchecker);
-        JButton findOrb = new JButton("Find_Orb…");
-        findOrb.setToolTipText("Copies the selected observations of this object (station code and positions only, no names) "
-                + "and opens Find_Orb's page, where you paste them to compute a preliminary orbit");
+        panel.add(Box.createVerticalStrut(UiStyle.space(10)));
+        panel.add(title("Orbit · Find_Orb"));
+        JButton findOrb = new JButton("Compute orbit");
+        findOrb.setToolTipText("Fits a preliminary orbit to the selected observations with Find_Orb on this computer; without "
+                + "it, copies them (station code and positions, no names) and opens the online Find_Orb to paste them");
         findOrb.addActionListener(e -> openFindOrb());
-        findOrb.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(findOrb);
+        JButton chooseFindOrb = new JButton("Find_Orb program…");
+        chooseFindOrb.setToolTipText("Choose fo64.exe in the folder of the console Find_Orb (projectpluto.com)");
+        chooseFindOrb.addActionListener(e -> chooseFindOrb());
+        JPanel orbitButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        orbitButtons.add(findOrb);
+        orbitButtons.add(chooseFindOrb);
+        orbitButtons.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(orbitButtons);
+        orbitLabel.setForeground(UiStyle.helpColor());
+        orbitLabel.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(orbitLabel);
+        orbitDiagram.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(orbitDiagram);
+        updateOrbit();
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Details for the MPC"));
         AppConfig config = settings.getConfig();
@@ -379,6 +399,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         playButton.setText("Play");
         observationsModel.fireTableDataChanged();
         updateFit();
+        updateOrbit();
         if (object == null) {
             identificationLabel.setText(" ");
             return;
@@ -493,6 +514,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private void select(java.util.function.Function<List<MpcObservation>, Set<Integer>> rule) {
         if (shown == null) return;
         selected.put(shown.id(), rule.apply(observations.get(shown.id())));
+        forgetOrbit();
         observationsModel.fireTableDataChanged();
         objectsModel.fireTableDataChanged();
         updateFit();
@@ -631,10 +653,88 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
         int sequence = report.objects().indexOf(shown);
         String text = AdesPsv.writeObservations(context, List.of(MpcExport.tracklet(shown, chosen, report.sessionStartMillis(), sequence)));
-        Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-        problemsArea.setText("Copied " + chosen.size() + " observations of " + shown.id() + " for Find_Orb: paste them into its "
-                + "box and choose Compute. A preliminary orbit from one night is uncertain; a good fit does not prove the object is real.");
-        browse(FIND_ORB);
+        File program = details.findOrbExecutable == null || details.findOrbExecutable.isBlank() ? null : new File(details.findOrbExecutable);
+        if (program == null || !program.isFile()) {
+            Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
+            problemsArea.setText("Copied " + chosen.size() + " observations of " + shown.id() + " for Find_Orb: paste them into "
+                    + "its box and choose Compute. (With Find_Orb on this computer, choose Find_Orb program… to fit here.)");
+            browse(FIND_ORB);
+            return;
+        }
+        var times = chosen.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
+        var object = shown;
+        orbitLabel.setText("Fitting " + object.id() + " with Find_Orb…");
+        new SwingWorker<FindOrb.Orbit, Void>() {
+            @Override protected FindOrb.Orbit doInBackground() throws Exception {
+                return FindOrb.fit(program, text, times);
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                try {
+                    orbits.put(object.id(), get());
+                    orbitProblems.remove(object.id());
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    orbits.remove(object.id());
+                    orbitProblems.put(object.id(), cause.getMessage());
+                }
+                if (shown == object) updateOrbit();
+            }
+        }.execute();
+    }
+
+    /** A fit belongs to the observations it was made from: a changed selection drops it. */
+    private void forgetOrbit() {
+        if (shown == null) return;
+        orbits.remove(shown.id());
+        orbitProblems.remove(shown.id());
+        updateOrbit();
+    }
+
+    /** Lets the user point to fo64.exe; kept in the settings with the other details. */
+    private void chooseFindOrb() {
+        JFileChooser chooser = WindowSizing.fileChooser(null);
+        chooser.setDialogTitle("Choose fo64.exe in the console Find_Orb folder");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        settings.getConfig().findOrbExecutable = chooser.getSelectedFile().getAbsolutePath();
+        saveDetails();
+        updateOrbit();
+    }
+
+    /** Shows the shown object's fitted orbit, why it could not be fitted, or how to fit one. */
+    private void updateOrbit() {
+        var orbit = shown == null ? null : orbits.get(shown.id());
+        orbitDiagram.orbit = orbit;
+        orbitDiagram.repaint();
+        if (shown == null) { orbitLabel.setText(" "); return; }
+        if (orbit == null) {
+            String problem = orbitProblems.get(shown.id());
+            String program = settings.getConfig().findOrbExecutable;
+            orbitLabel.setText(UiStyle.htmlWrappedTo(320, escape(problem != null ? problem : program == null || program.isBlank()
+                    ? "Find_Orb is not set up here: Compute orbit copies the observations for the online Find_Orb."
+                    : "Compute orbit fits the selected observations of " + shown.id() + ".")));
+            return;
+        }
+        long used = orbit.residuals().stream().filter(FindOrb.Residual::used).count();
+        double span = observations.get(shown.id()).isEmpty() ? 0 : orbit.residuals().size() < 2 ? 0
+                : (Instant.parse(orbit.residuals().getLast().isoTime()).toEpochMilli() - Instant.parse(orbit.residuals().getFirst().isoTime()).toEpochMilli()) / 3_600_000.0;
+        orbitLabel.setText(UiStyle.htmlWrappedTo(320, String.format(Locale.US, "<b>Preliminary</b> · %d of %d observations used over %.1f h"
+                        + " · epoch %s<br>a %s AU · e %s · i %s°<br>q %s AU · node %s° · peri %s°<br>Residual RMS %s · P(NEO) %s · Earth MOID %s"
+                        + "<br>An orbit from a short arc is uncertain (±1σ shown); a good fit does not prove the object is real.",
+                used, orbit.residuals().size(), span, orbit.epochIso() == null ? "?" : orbit.epochIso().substring(0, 10),
+                withSigma(orbit.a(), orbit.aSigma(), 3), withSigma(orbit.e(), orbit.eSigma(), 3), withSigma(orbit.i(), orbit.iSigma(), 1),
+                withSigma(orbit.q(), orbit.qSigma(), 3), withSigma(orbit.ascendingNode(), orbit.nodeSigma(), 1),
+                withSigma(orbit.argumentOfPerihelion(), orbit.perihelionSigma(), 1),
+                orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec()),
+                orbit.neoProbability() == null ? "?" : String.format(Locale.US, "%.0f %%", orbit.neoProbability()),
+                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f AU", orbit.earthMoid()))));
+    }
+
+    /** "2.36 ± 1.09", or the value alone when Find_Orb gave no uncertainty. */
+    private static String withSigma(double value, Double sigma, int decimals) {
+        String format = "%." + decimals + "f";
+        return String.format(Locale.US, format, value) + (sigma == null ? "" : " ± " + String.format(Locale.US, format, sigma));
     }
 
     /** Opens an address in the user's browser, when the desktop allows it. */
@@ -755,10 +855,72 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         @Override public void setValueAt(Object value, int row, int column) {
             Set<Integer> set = selected.get(shown.id());
             if (Boolean.TRUE.equals(value)) set.add(row); else set.remove(row);
+            forgetOrbit();
             fireTableCellUpdated(row, column);
             objectsModel.fireTableDataChanged();
             updateFit();
             refreshExport();
+        }
+    }
+
+    /**
+     * The fitted orbit seen from above the ecliptic: the Sun, the planets' mean orbits to Jupiter with their places on
+     * the epoch date, the orbit (the near part of an unbound one) and the object's place. Scaled to the orbit, at least
+     * to Mars and at most to Jupiter's distance.
+     */
+    private static final class OrbitDiagram extends JComponent {
+        FindOrb.Orbit orbit;
+
+        OrbitDiagram() {
+            setPreferredSize(new Dimension(UiStyle.space(300), UiStyle.space(300)));
+            setMaximumSize(new Dimension(UiStyle.space(320), UiStyle.space(320)));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            if (orbit == null) return;
+            Graphics2D g = (Graphics2D) graphics.create();
+            try {
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int size = Math.min(getWidth(), getHeight());
+                g.setColor(new Color(16, 18, 24));
+                g.fillRect(0, 0, size, size);
+                double extent = Math.max(1.7, Math.min(5.6, orbit.bound() ? orbit.a() * (1 + orbit.e()) * 1.08 : 3));
+                double scale = size / 2.0 / extent, cx = size / 2.0, cy = size / 2.0;
+                g.setFont(UiStyle.bodyFont().deriveFont(UiStyle.bodyFont().getSize2D() - 2));
+                for (int p = 0; p < OrbitGeometry.PLANET_DISTANCES.length; p++) {
+                    double r = OrbitGeometry.PLANET_DISTANCES[p] * scale;
+                    if (OrbitGeometry.PLANET_DISTANCES[p] > extent * 1.02) continue;
+                    g.setColor(new Color(90, 100, 120));
+                    g.draw(new Ellipse2D.Double(cx - r, cy - r, 2 * r, 2 * r));
+                    double[] place = OrbitGeometry.planetAt(p, orbit.epochJd());
+                    double px = cx + place[0] * scale, py = cy - place[1] * scale;
+                    g.setColor(p == 2 ? new Color(90, 160, 255) : new Color(160, 170, 190));
+                    g.fill(new Ellipse2D.Double(px - 3, py - 3, 6, 6));
+                    if (p >= 2) g.drawString(OrbitGeometry.PLANET_NAMES[p], (float) px + 5, (float) py - 4);
+                }
+                g.setColor(new Color(255, 210, 90));
+                g.fill(new Ellipse2D.Double(cx - 4, cy - 4, 8, 8));
+                double[][] path = OrbitGeometry.path(orbit, 240, extent * 1.5);
+                var line = new java.awt.geom.Path2D.Double();
+                for (int k = 0; k < path.length; k++) {
+                    double x = cx + path[k][0] * scale, y = cy - path[k][1] * scale;
+                    if (k == 0) line.moveTo(x, y); else line.lineTo(x, y);
+                }
+                if (orbit.bound()) line.closePath();
+                g.setColor(new Color(80, 225, 210));
+                g.setStroke(new BasicStroke(1.5f));
+                g.draw(line);
+                double[] object = OrbitGeometry.atEpoch(orbit);
+                if (object != null) {
+                    double ox = cx + object[0] * scale, oy = cy - object[1] * scale;
+                    g.fill(new Ellipse2D.Double(ox - 4, oy - 4, 8, 8));
+                }
+                g.setColor(new Color(170, 175, 190));
+                g.drawString("Ecliptic, from the north · planets on mean circular orbits", 6, size - 6);
+            } finally {
+                g.dispose();
+            }
         }
     }
 
