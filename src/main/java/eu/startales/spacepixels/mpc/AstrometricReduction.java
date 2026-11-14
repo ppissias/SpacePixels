@@ -96,6 +96,18 @@ public final class AstrometricReduction {
         return observations;
     }
 
+    /**
+     * The observation of a sub-stack's centroid: its mean exposure midpoint and total exposure, through the plate
+     * correction of the frame nearest that time ({@code referenceFrameIndex}, zero-based), noted K for a stacked image.
+     */
+    public MpcObservation observeStack(int referenceFrameIndex, long midpointMillis, long exposureMillis, double x, double y,
+                                       double fwhm, double snr) {
+        MpcObservation single = observe(referenceFrameIndex, x, y, fwhm, snr);
+        if (single == null) return null;
+        return new MpcObservation(single.frameNumber(), midpointMillis, exposureMillis, x, y, single.raDegrees(), single.decDegrees(),
+                single.rmsRaArcsec(), single.rmsDecArcsec(), single.astCat(), "K");
+    }
+
     /** One detection's observation, or null when its frame, time or sky position is unknown. */
     MpcObservation reduce(DetectedObject point) {
         return point == null ? null : observe(point.sourceFrameIndex, point.x, point.y, point.fwhm, point.integratedSigma);

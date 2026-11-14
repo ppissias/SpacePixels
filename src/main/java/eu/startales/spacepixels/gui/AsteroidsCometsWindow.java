@@ -24,6 +24,7 @@ import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
 import eu.startales.spacepixels.mpc.MpcObservation;
 import eu.startales.spacepixels.mpc.ReportedObjects;
+import io.github.ppissias.jtransient.core.SubStackAstrometry;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.solarsystem.SolarSystemClient;
@@ -68,6 +69,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     static final String MPCHECKER = "https://minorplanetcenter.net/cgi-bin/checkmp.cgi";
     /** Bill Gray's online Find_Orb. */
     static final String FIND_ORB = "https://www.projectpluto.com/fo.htm";
+    /** The status of a faint mover with a marginal sub-stack. */
+    static final String WEAK = "weak";
+    /** The most cut-out pixels a sub-stack measurement may read, in bytes. */
+    static final long MAX_SUB_STACK_BYTES = 512L * 1024 * 1024;
     private static final DateTimeFormatter UTC = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US).withZone(ZoneOffset.UTC);
 
     private final FitsFileInformation[] files;
@@ -83,10 +88,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final Map<String, List<MpcObservation>> observations = new HashMap<>();
     private final Map<String, FindOrb.Orbit> orbits = new HashMap<>();
     private final Map<String, String> orbitProblems = new HashMap<>();
+    /** Each measured faint mover's sub-stacks, in time order. */
+    private final Map<String, List<SubStackAstrometry.Measurement>> subStacks = new HashMap<>();
+    private final JButton measureButton = new JButton("Measure in sub-stacks");
+    /** Sub-stacks a faint mover is measured in; the MPC asks for at least two per night, preferably three to five. */
+    static final int SUB_STACKS = 3;
     private final JLabel orbitLabel = new JLabel(" ");
     private final OrbitDiagram orbitDiagram = new OrbitDiagram();
     private final AtomicInteger generation = new AtomicInteger();
-    private SwingWorker<List<BufferedImage[]>, Void> worker;
+    private SwingWorker<List<short[][][]>, Void> worker;
     private boolean closed;
     private String stationProblem;
     private String stationText = "not checked";
@@ -101,6 +111,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JRadioButton objectCentred = new JRadioButton("Object-centred", true);
     private final JRadioButton starCentred = new JRadioButton("Star-centred");
     private final JLabel pictureLabel = new JLabel(" ");
+    private final JLabel stretchLabel = new JLabel(" ");
     private final JLabel fitLabel = new JLabel(" ");
     private final JLabel identificationLabel = new JLabel(" ");
     private final JLabel stationLabel = new JLabel(" ");
@@ -109,7 +120,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JButton copyButton = new JButton("Copy");
     private final JButton saveButton = new JButton("Save .psv…");
     private final Timer playTimer;
-    private List<BufferedImage[]> pictures = List.of();
+    /** The shown object's cut-outs per frame: {object-centred, star-centred or null}, kept raw so the stretch can change. */
+    private List<short[][][]> pictures = List.of();
+    /** Shared sky statistics of the object-centred and the star-centred cut-outs, for one stretch across the frames. */
+    private DisplayImageRenderer.DisplayStatistics[] pictureStatistics = new DisplayImageRenderer.DisplayStatistics[2];
+    private final JSlider blackSlider = new JSlider(0, 60, 20);
+    private final JSlider whiteSlider = new JSlider(10, 300, 60);
     private ReportedObjects.ReportedObject shown;
 
     private final JTextField submitter = new JTextField(16);
@@ -180,6 +196,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JLabel source = new JLabel("Report: " + report.folder().getName());
         source.setForeground(UiStyle.helpColor());
         panel.add(source, BorderLayout.EAST);
+        if (!lacking().isEmpty()) {
+            JLabel old = new JLabel("This report was written before SpacePixels kept each detection's size and signal-to-noise: "
+                    + "review, measure and fit orbits as usual, but detect again to export its tracks.");
+            old.setForeground(UiStyle.helpColor());
+            panel.add(old, BorderLayout.SOUTH);
+        }
         return panel;
     }
 
@@ -192,6 +214,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(title("Objects · " + report.objects().size()), BorderLayout.NORTH);
         panel.add(new JScrollPane(objectsTable), BorderLayout.CENTER);
+        // Wide enough for the five columns; the split panes would otherwise squeeze the list to a strip.
+        panel.setMinimumSize(new Dimension(UiStyle.space(340), UiStyle.space(200)));
+        panel.setPreferredSize(new Dimension(UiStyle.space(380), UiStyle.space(400)));
         return panel;
     }
 
@@ -216,11 +241,36 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         });
         JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         for (JComponent c : new JComponent[]{playButton, previous, next, frameSlider, objectCentred, starCentred}) controls.add(c);
+        blackSlider.setValue((int) Math.round(10 * visualization.getAutoStretchBlackSigma()));
+        whiteSlider.setValue((int) Math.round(10 * visualization.getAutoStretchWhiteSigma()));
+        for (JSlider slider : new JSlider[]{blackSlider, whiteSlider}) {
+            slider.setPreferredSize(new Dimension(UiStyle.space(140), slider.getPreferredSize().height));
+            slider.addChangeListener(e -> { picture.repaint(); updateStretchLabel(); });
+        }
+        blackSlider.setToolTipText("Black point: the sky level minus this many noise sigmas shows as black");
+        whiteSlider.setToolTipText("White point: the sky level plus this many noise sigmas shows as white");
+        JButton resetStretch = new JButton("Reset");
+        resetStretch.addActionListener(e -> {
+            blackSlider.setValue((int) Math.round(10 * visualization.getAutoStretchBlackSigma()));
+            whiteSlider.setValue((int) Math.round(10 * visualization.getAutoStretchWhiteSigma()));
+        });
+        JPanel stretch = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        stretch.add(new JLabel("Black"));
+        stretch.add(blackSlider);
+        stretch.add(new JLabel("White"));
+        stretch.add(whiteSlider);
+        stretch.add(stretchLabel);
+        stretch.add(resetStretch);
+        stretchLabel.setForeground(UiStyle.helpColor());
+        updateStretchLabel();
+        pictureLabel.setForeground(UiStyle.helpColor());
+        JPanel south = new JPanel(new BorderLayout());
+        south.add(stretch, BorderLayout.NORTH);
+        south.add(pictureLabel, BorderLayout.SOUTH);
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(controls, BorderLayout.NORTH);
         panel.add(picture, BorderLayout.CENTER);
-        pictureLabel.setForeground(UiStyle.helpColor());
-        panel.add(pictureLabel, BorderLayout.SOUTH);
+        panel.add(south, BorderLayout.SOUTH);
         return panel;
     }
 
@@ -238,6 +288,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         buttons.add(spread);
         buttons.add(all);
         buttons.add(none);
+        measureButton.setToolTipText("Stacks the frames in three independent groups along the faint mover's motion and measures "
+                + "its centroid in each, for the MPC (noted K, stacked)");
+        measureButton.addActionListener(e -> measureSubStacks());
+        measureButton.setEnabled(false);
+        buttons.add(measureButton);
         fitLabel.setForeground(UiStyle.helpColor());
         buttons.add(fitLabel);
         JPanel panel = new JPanel(new BorderLayout());
@@ -405,10 +460,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             return;
         }
         String names = object.names().isEmpty() ? "" : "<b>" + escape(String.join(" or ", object.names())) + "</b><br>";
-        String measure = object.measured() ? "" : "<br>A faint mover is measured in independent sub-stacks, a later step; its "
-                + "positions here are fitted, not measured, and cannot be reported.";
+        measureButton.setEnabled(!object.measured() && object.motion() != null && reduction.reduction() != null);
+        String measure = object.measured() ? "" : subStackText(object);
         String reduced = reduction.reduction() == null ? "<br>" + escape(reduction.problem()) : "";
-        identificationLabel.setText(UiStyle.htmlWrappedTo(320, object.id() + " · " + statusText(object.status()) + "<br>" + names
+        identificationLabel.setText(UiStyle.htmlWrappedTo(320, object.id() + " · " + statusText(status(object)) + "<br>" + names
                 + escape(object.note() == null ? "" : object.note()) + measure + reduced));
         loadPictures(object);
     }
@@ -430,10 +485,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         boolean fixed = fw <= MAX_FIXED && fh <= MAX_FIXED;
         starCentred.setEnabled(fixed);
         if (!fixed) objectCentred.setSelected(true);
-        double black = visualization.getAutoStretchBlackSigma(), white = visualization.getAutoStretchWhiteSigma();
+        var statistics = new DisplayImageRenderer.DisplayStatistics[2];
         worker = new SwingWorker<>() {
             @Override
-            protected List<BufferedImage[]> doInBackground() throws Exception {
+            protected List<short[][][]> doInBackground() throws Exception {
                 var objectCrops = new ArrayList<short[][]>();
                 var fixedCrops = new ArrayList<short[][]>();
                 for (var p : positions) {
@@ -451,15 +506,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     objectCrops.add(crop(frame, (int) Math.round(p.x()) - CROP / 2, (int) Math.round(p.y()) - CROP / 2, CROP, CROP));
                     if (fixed) fixedCrops.add(crop(frame, fx, fy, fw, fh));
                 }
-                double[] objectLevels = DisplayImageRenderer.sharedDisplayLevels(objectCrops, black, white);
-                double[] fixedLevels = fixed ? DisplayImageRenderer.sharedDisplayLevels(fixedCrops, black, white) : null;
-                var images = new ArrayList<BufferedImage[]>();
-                for (int i = 0; i < objectCrops.size(); i++) {
-                    images.add(new BufferedImage[]{
-                            DisplayImageRenderer.createDisplayImageAtLevels(objectCrops.get(i), objectLevels[0], objectLevels[1]),
-                            fixed ? DisplayImageRenderer.createDisplayImageAtLevels(fixedCrops.get(i), fixedLevels[0], fixedLevels[1]) : null});
-                }
-                return images;
+                statistics[0] = DisplayImageRenderer.sharedDisplayStatistics(objectCrops);
+                statistics[1] = fixed ? DisplayImageRenderer.sharedDisplayStatistics(fixedCrops) : null;
+                var crops = new ArrayList<short[][][]>();
+                for (int i = 0; i < objectCrops.size(); i++) crops.add(new short[][][]{objectCrops.get(i), fixed ? fixedCrops.get(i) : null});
+                return crops;
             }
 
             @Override
@@ -467,6 +518,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 if (closed || request != generation.get() || isCancelled()) return;
                 try {
                     pictures = get();
+                    pictureStatistics = statistics;
                     picture.fixedOrigin = new int[]{fx, fy};
                     frameSlider.setMaximum(Math.max(0, pictures.size() - 1));
                     frameSlider.setValue(0);
@@ -493,6 +545,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return out;
     }
 
+    /** Names the stretch the sliders set, in sky noise sigmas. */
+    private void updateStretchLabel() {
+        stretchLabel.setText(String.format(Locale.US, "sky −%.1fσ to +%.1fσ", blackSlider.getValue() / 10.0, whiteSlider.getValue() / 10.0));
+    }
+
     private void step(int delta) {
         if (pictures.isEmpty()) return;
         int n = pictures.size();
@@ -516,7 +573,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         selected.put(shown.id(), rule.apply(observations.get(shown.id())));
         forgetOrbit();
         observationsModel.fireTableDataChanged();
-        objectsModel.fireTableDataChanged();
+        refreshObjects();
         updateFit();
         refreshExport();
     }
@@ -547,6 +604,19 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             tracklets.add(MpcExport.tracklet(object, chosen, report.sessionStartMillis(), i));
         }
         var problems = new ArrayList<String>();
+        var lacking = lacking().stream().filter(id -> Boolean.TRUE.equals(exported.get(id))).toList();
+        if (!lacking.isEmpty()) {
+            problems.add(String.join(", ", lacking) + ": this report has no detection sizes and signal-to-noise, so the uncertainties "
+                    + "would count only the plate error. Detect again to export.");
+        }
+        for (var object : report.objects()) {
+            if (!Boolean.TRUE.equals(exported.get(object.id()))) continue;
+            var stacks = subStacks.getOrDefault(object.id(), List.of());
+            for (int k = 0; k < stacks.size(); k++) {
+                if (!stacks.get(k).clear()) problems.add(object.id() + " is weak in sub-stack " + (k + 1) + ": " + stacks.get(k).problem()
+                        + ". The MPC asks not to report marginal detections.");
+            }
+        }
         if (reduction.reduction() == null) problems.add(reduction.problem());
         if (stationProblem != null) problems.add(stationProblem);
         problems.addAll(AdesPsv.problems(context, tracklets));
@@ -760,8 +830,116 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
     }
 
+    /**
+     * Repaints the object rows without replacing them: a full table change would clear the selection, and with it the
+     * shown object and its observations.
+     */
+    private void refreshObjects() {
+        if (!report.objects().isEmpty()) objectsModel.fireTableRowsUpdated(0, report.objects().size() - 1);
+    }
+
+    /** The tracks whose measured positions lack the detection's size or signal-to-noise (reports before 2026.11-03). */
+    private List<String> lacking() {
+        return report.objects().stream().filter(ReportedObjects.ReportedObject::measured)
+                .filter(o -> o.positions().stream().anyMatch(p -> p.fwhm() == null || p.snr() == null))
+                .map(ReportedObjects.ReportedObject::id).toList();
+    }
+
+    /** The report's status, or Weak for a faint mover with a marginal sub-stack. */
+    private String status(ReportedObjects.ReportedObject object) {
+        var stacks = subStacks.get(object.id());
+        return stacks != null && stacks.stream().anyMatch(m -> !m.clear()) ? WEAK : object.status();
+    }
+
+    /** What the faint mover's sub-stacks showed, or how to measure them. */
+    private String subStackText(ReportedObjects.ReportedObject object) {
+        var stacks = subStacks.get(object.id());
+        if (stacks == null) {
+            return "<br>A faint mover's positions here are fitted, not measured. <b>Measure in sub-stacks</b> stacks its frames "
+                    + "in " + SUB_STACKS + " independent groups and measures it in each, as the MPC requires for stacked observations.";
+        }
+        var text = new StringBuilder("<br>Sub-stacks:");
+        for (int k = 0; k < stacks.size(); k++) {
+            var m = stacks.get(k);
+            text.append(String.format(Locale.US, "<br>%d · %d frames · %s UTC · SNR %.1f · %s", k + 1, m.frames(),
+                    UTC.format(Instant.ofEpochMilli(m.midpointMillis())), m.snr(), m.clear() ? "clear" : escape(m.problem())));
+        }
+        return text.toString();
+    }
+
+    /**
+     * Reads the faint mover's frames once, cutting one region around its whole path from each, and measures it in
+     * independent sub-stacks on a worker; the centroids become its observations, noted K.
+     */
+    private void measureSubStacks() {
+        var object = shown;
+        if (object == null || object.motion() == null || reduction.reduction() == null) return;
+        var motion = object.motion();
+        double fwhm = report.faintMoverFwhm() == null ? 3 : report.faintMoverFwhm();
+        int margin = (int) Math.ceil(Math.max(10, 5 * fwhm)) + 4;
+        var positions = object.positions();
+        int x0 = (int) Math.floor(positions.stream().mapToDouble(ReportedObjects.Position::x).min().orElse(0)) - margin;
+        int y0 = (int) Math.floor(positions.stream().mapToDouble(ReportedObjects.Position::y).min().orElse(0)) - margin;
+        int width = (int) Math.ceil(positions.stream().mapToDouble(ReportedObjects.Position::x).max().orElse(0)) + margin - x0;
+        int height = (int) Math.ceil(positions.stream().mapToDouble(ReportedObjects.Position::y).max().orElse(0)) + margin - y0;
+        if ((long) width * height * positions.size() * 2 > MAX_SUB_STACK_BYTES) {
+            problemsArea.setText(object.id() + "'s path is too long to stack here (" + width + " × " + height + " px over "
+                    + positions.size() + " frames).");
+            return;
+        }
+        measureButton.setEnabled(false);
+        problemsArea.setText("Measuring " + object.id() + " in " + SUB_STACKS + " sub-stacks…");
+        new SwingWorker<List<SubStackAstrometry.Measurement>, Void>() {
+            private final List<Integer> frameIndexes = new ArrayList<>();
+
+            @Override protected List<SubStackAstrometry.Measurement> doInBackground() throws Exception {
+                var cutouts = new ArrayList<SubStackAstrometry.Cutout>();
+                for (var p : positions) {
+                    if (closed) return List.of();
+                    int index = p.frameNumber() - 1;
+                    var file = files[index];
+                    short[][] frame;
+                    try (Fits fits = new Fits(new File(file.getFilePath()))) {
+                        Object kernel = FitsInput.getImageHDU(fits).getKernel();
+                        if (!(kernel instanceof short[][] pixels)) throw new java.io.IOException(file.getFileName() + " is not a 16-bit monochrome frame");
+                        frame = pixels;
+                    }
+                    long midpoint = file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2;
+                    cutouts.add(new SubStackAstrometry.Cutout(x0, y0, crop(frame, x0, y0, width, height), midpoint, file.getExposureDurationMillis()));
+                    frameIndexes.add(index);
+                }
+                return SubStackAstrometry.measure(cutouts, motion.x(), motion.y(), motion.referenceMillis(), motion.vxPerMinute(),
+                        motion.vyPerMinute(), SUB_STACKS, fwhm);
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                try {
+                    var stacks = get();
+                    var list = new ArrayList<MpcObservation>();
+                    for (var m : stacks) {
+                        int nearest = frameIndexes.get((m.firstCutout() + m.lastCutout()) / 2);
+                        var o = reduction.reduction().observeStack(nearest, m.midpointMillis(), m.exposureMillis(), m.x(), m.y(), fwhm, m.snr());
+                        if (o != null) list.add(o);
+                    }
+                    subStacks.put(object.id(), stacks);
+                    observations.put(object.id(), list);
+                    selected.put(object.id(), new TreeSet<>(java.util.stream.IntStream.range(0, list.size()).boxed().toList()));
+                    problemsArea.setText(" ");
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    problemsArea.setText(object.id() + " could not be measured: " + cause.getMessage());
+                }
+                refreshObjects();
+                if (shown == object) show(object);
+                refreshExport();
+            }
+        }.execute();
+    }
+
     static String statusText(String status) {
         return switch (status == null ? "" : status) {
+            case WEAK -> "Weak";
             case ReportedObjects.KNOWN -> "Known";
             case ReportedObjects.CHECK -> "Check";
             case ReportedObjects.NO_KNOWN_MATCH -> "No known match";
@@ -801,7 +979,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         @Override public Class<?> getColumnClass(int column) { return column == 0 ? Boolean.class : String.class; }
 
         @Override public boolean isCellEditable(int row, int column) {
-            return column == 0 && report.objects().get(row).measured() && !observations.get(report.objects().get(row).id()).isEmpty();
+            return column == 0 && !observations.get(report.objects().get(row).id()).isEmpty();
         }
 
         @Override public Object getValueAt(int row, int column) {
@@ -809,10 +987,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             return switch (column) {
                 case 0 -> exported.get(object.id());
                 case 1 -> object.id();
-                case 2 -> statusText(object.status());
+                case 2 -> statusText(status(object));
                 case 3 -> String.join(" or ", object.names());
                 default -> object.measured() ? selected.get(object.id()).size() + " of " + observations.get(object.id()).size()
-                        : "fitted only";
+                        : subStacks.containsKey(object.id()) ? subStacks.get(object.id()).size() + " sub-stacks" : "fitted only";
             };
         }
 
@@ -857,7 +1035,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             if (Boolean.TRUE.equals(value)) set.add(row); else set.remove(row);
             forgetOrbit();
             fireTableCellUpdated(row, column);
-            objectsModel.fireTableDataChanged();
+            refreshObjects();
             updateFit();
             refreshExport();
         }
@@ -941,7 +1119,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 if (pictures.isEmpty() || shown == null) return;
                 int i = Math.min(frameSlider.getValue(), pictures.size() - 1);
                 boolean fixed = starCentred.isSelected() && pictures.get(i)[1] != null;
-                BufferedImage image = pictures.get(i)[fixed ? 1 : 0];
+                var statistics = pictureStatistics[fixed ? 1 : 0];
+                if (statistics == null) return;
+                double[] levels = statistics.levels(blackSlider.getValue() / 10.0, whiteSlider.getValue() / 10.0);
+                BufferedImage image = DisplayImageRenderer.createDisplayImageAtLevels(pictures.get(i)[fixed ? 1 : 0], levels[0], levels[1]);
                 double scale = Math.min(getWidth() / (double) image.getWidth(), getHeight() / (double) image.getHeight());
                 int w = (int) (image.getWidth() * scale), h = (int) (image.getHeight() * scale);
                 int left = (getWidth() - w) / 2, top = (getHeight() - h) / 2;

@@ -32,9 +32,12 @@ public final class ReportedObjects {
      */
     public record Position(int frameNumber, double x, double y, Double fwhm, Double snr) { }
 
-    /** One track or faint mover with its status and positions. */
+    /** A faint mover's fitted straight motion: its place at a reference time (UTC ms) and its rate in pixels per minute. */
+    public record Motion(double x, double y, long referenceMillis, double vxPerMinute, double vyPerMinute) { }
+
+    /** One track or faint mover with its status, positions and, for a faint mover, its fitted motion (else null). */
     public record ReportedObject(String id, String kind, String status, List<String> names, String note,
-                                 List<Position> positions, Double speedArcsecPerHour, Double positionAngleDegrees) {
+                                 List<Position> positions, Double speedArcsecPerHour, Double positionAngleDegrees, Motion motion) {
         /** Whether the positions were measured frame by frame, rather than fitted along a path. */
         public boolean measured() { return TRACK.equals(kind); }
     }
@@ -42,8 +45,11 @@ public final class ReportedObjects {
     /** One frame of the report, as the report recorded it. */
     public record Frame(String fileName, int width, int height, long timestampMillis, long exposureMillis) { }
 
-    /** The report's frames, in its one-based order, and its objects: tracks first, then faint movers. */
-    public record Report(File folder, List<Frame> frames, List<ReportedObject> objects) {
+    /**
+     * The report's frames, in its one-based order, its objects (tracks first, then faint movers), and the stars' FWHM
+     * in pixels the faint-mover search used (null without that search).
+     */
+    public record Report(File folder, List<Frame> frames, List<ReportedObject> objects, Double faintMoverFwhm) {
         /** The start of the first exposure, UTC epoch milliseconds, or 0 when no frame has a time. */
         public long sessionStartMillis() {
             return frames.stream().mapToLong(Frame::timestampMillis).filter(t -> t > 0).min().orElse(0);
@@ -84,7 +90,7 @@ public final class ReportedObjects {
                 positions.add(new Position(integer(position, "frameNumber"), number(position, "x", Double.NaN), number(position, "y", Double.NaN),
                         optional(position, "fwhm"), optional(position, "snr")));
             }
-            objects.add(object(id, TRACK, identifications.get(id), positions));
+            objects.add(object(id, TRACK, identifications.get(id), positions, null));
         }
         for (JsonElement element : array(data, "faintMovers")) {
             JsonObject entry = element.getAsJsonObject();
@@ -95,21 +101,26 @@ public final class ReportedObjects {
                 positions.add(new Position(integer(position, "frameNumber"), number(position, "x", Double.NaN),
                         number(position, "y", Double.NaN), null, null));
             }
-            objects.add(object(id, FAINT_MOVER, identifications.get(id), positions));
+            var motion = new Motion(number(entry, "x", Double.NaN), number(entry, "y", Double.NaN),
+                    (long) number(entry, "referenceTimeMillis", 0), number(entry, "vxPixelsPerMinute", Double.NaN),
+                    number(entry, "vyPixelsPerMinute", Double.NaN));
+            objects.add(object(id, FAINT_MOVER, identifications.get(id), positions, motion));
         }
-        return new Report(folder, List.copyOf(frames), List.copyOf(objects));
+        JsonObject search = data.has("faintMoverSearch") && data.get("faintMoverSearch").isJsonObject()
+                ? data.getAsJsonObject("faintMoverSearch") : null;
+        return new Report(folder, List.copyOf(frames), List.copyOf(objects), search == null ? null : optional(search, "fwhmPixels"));
     }
 
     /** One object with the report's identification, or "not compared" when the report had no predictions. */
-    private static ReportedObject object(String id, String kind, JsonObject identification, List<Position> positions) {
+    private static ReportedObject object(String id, String kind, JsonObject identification, List<Position> positions, Motion motion) {
         if (identification == null) {
             return new ReportedObject(id, kind, NOT_COMPARED, List.of(), "This report has no asteroid predictions to compare with.",
-                    List.copyOf(positions), null, null);
+                    List.copyOf(positions), null, null, motion);
         }
         var names = new ArrayList<String>();
         for (JsonElement name : array(identification, "names")) names.add(name.getAsString());
         return new ReportedObject(id, kind, text(identification, "status"), List.copyOf(names), text(identification, "note"),
-                List.copyOf(positions), optional(identification, "speedArcsecPerHour"), optional(identification, "positionAngleDegrees"));
+                List.copyOf(positions), optional(identification, "speedArcsecPerHour"), optional(identification, "positionAngleDegrees"), motion);
     }
 
     private static JsonArray array(JsonObject object, String key) {

@@ -24,7 +24,9 @@ public class ReportedObjectsTest {
                                                                              {"frameNumber":2,"x":11.5,"y":21.25}]},
                          {"id":"T2","category":"Moving target","positions":[{"frameNumber":2,"x":50,"y":60}]},
                          {"id":"ST1","category":"Streak track","positions":[{"frameNumber":1,"x":1,"y":1}]}],
-             "faintMovers":[{"id":"FM1","fittedPositions":[{"frameNumber":1,"x":30.0,"y":40.0,"midpointMillis":61000}]}],
+             "faintMovers":[{"id":"FM1","x":31.5,"y":40.5,"referenceTimeMillis":61000,"vxPixelsPerMinute":0.4,"vyPixelsPerMinute":-0.2,
+                           "fittedPositions":[{"frameNumber":1,"x":30.0,"y":40.0,"midpointMillis":61000}]}],
+             "faintMoverSearch":{"fwhmPixels":3.2},
              "knownSolarSystem":{"identifications":[
                  {"id":"T1","kind":"track","status":"known","names":["649341 (2011 DK30)"],"note":"agrees",
                   "speedArcsecPerHour":31.7,"positionAngleDegrees":251.0},
@@ -53,6 +55,9 @@ public class ReportedObjectsTest {
         assertEquals(ReportedObjects.NO_KNOWN_MATCH, fm1.status());
         assertEquals(ReportedObjects.FAINT_MOVER, fm1.kind());
         assertEquals(30.0, fm1.positions().get(0).x(), 0);
+        assertEquals(new ReportedObjects.Motion(31.5, 40.5, 61000, 0.4, -0.2), fm1.motion());
+        assertNull("tracks have measured positions, not a fitted motion", t1.motion());
+        assertEquals(3.2, report.faintMoverFwhm(), 0);
     }
 
     /** A folder without report data is a clear error. */

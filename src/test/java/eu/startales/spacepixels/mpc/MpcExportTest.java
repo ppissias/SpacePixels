@@ -95,10 +95,10 @@ public class MpcExportTest {
         assertTrue(MpcExport.includedByDefault(object("no-known-match", List.of())));
         assertFalse(MpcExport.includedByDefault(object("check", List.of())));
         assertFalse(MpcExport.includedByDefault(new ReportedObjects.ReportedObject("FM1", ReportedObjects.FAINT_MOVER,
-                "no-known-match", List.of(), "", List.of(), null, null)));
+                "no-known-match", List.of(), "", List.of(), null, null, null)));
     }
 
     private static ReportedObjects.ReportedObject object(String status, List<String> names) {
-        return new ReportedObjects.ReportedObject("T1", ReportedObjects.TRACK, status, names, "", List.of(), null, null);
+        return new ReportedObjects.ReportedObject("T1", ReportedObjects.TRACK, status, names, "", List.of(), null, null, null);
     }
 }
