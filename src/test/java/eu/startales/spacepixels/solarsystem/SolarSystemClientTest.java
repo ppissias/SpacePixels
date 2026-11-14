@@ -409,6 +409,38 @@ public class SolarSystemClientTest {
         assertEquals("the fetch still ran", FetchStep.Status.SUCCEEDED, step(result.fetchSteps, "JPL SB-Ident", "Field search").status);
     }
 
+    /** A station comes from the site lines of a Horizons answer; an unknown code is an error, not a guessed place. */
+    @Test
+    public void readsAnObservatoryStationFromHorizons() throws Exception {
+        String result = "Center body name: Earth (399)                     {source: DE441}\\n"
+                + "Center-site name: Cerro Tololo-DECam\\n"
+                + "Center geodetic : 289.1936, -30.1695802, 2.21112  {E-lon(deg),Lat(deg),Alt(km)}\\n$$SOE\\n$$EOE\\n";
+        var station = SolarSystemClient.parseStation("W84", "{\"result\":\"" + result + "\"}");
+        assertEquals("Cerro Tololo-DECam", station.name());
+        assertEquals(-70.8064, station.longitudeDeg(), 1e-9);
+        assertEquals(-30.1695802, station.latitudeDeg(), 1e-9);
+        assertEquals(2211.12, station.altitudeMeters(), 1e-6);
+        try {
+            SolarSystemClient.parseStation("XXX", "{\"result\":\"No site matches. Use \\\"*@body\\\" to list.\"}");
+            fail("an unknown code has no station");
+        } catch (IOException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains("does not know observatory code XXX"));
+        }
+        try {
+            SolarSystemClient.parseStation("XXX", "{\"error\":\"No site matches. Use *@body to list.\"}");
+            fail("Horizons answers an unknown code with an error");
+        } catch (IOException expected) {
+            assertEquals("JPL Horizons does not know observatory code XXX.", expected.getMessage());
+        }
+        List<String> asked = new ArrayList<>();
+        var station2 = new SolarSystemClient((uri, timeout) -> {
+            asked.add(URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8));
+            return "{\"result\":\"" + result + "\"}";
+        }).station(" w84 ");
+        assertEquals("W84", station2.code());
+        assertTrue(asked.get(0), asked.get(0).contains("CENTER='W84@399'"));
+    }
+
     /** A field-search HTTP 404 records the address that was sent and asks nothing further. */
     @Test
     public void aFieldSearch404AsksNothingFurther() throws Exception {

@@ -585,6 +585,73 @@ public final class SolarSystemClient {
     }
 
     // ==========================================
+    // OBSERVATORY CODES (HORIZONS)
+    // ==========================================
+
+    /**
+     * An MPC observatory station as JPL Horizons knows it: its name and geodetic place (east longitude and latitude
+     * in degrees, altitude in metres).
+     */
+    public record Station(String code, String name, double longitudeDeg, double latitudeDeg, double altitudeMeters) { }
+
+    private static final Pattern CENTER_NAME = Pattern.compile("Center-site name:\\s*(.+)");
+    private static final Pattern CENTER_GEODETIC = Pattern.compile(
+            "Center geodetic\\s*:\\s*([-+.0-9]+)\\s*,\\s*([-+.0-9]+)\\s*,\\s*([-+.0-9]+)");
+
+    /**
+     * Where the station of an MPC observatory code is, from one small Horizons request. Throws when the code is
+     * unknown or Horizons cannot be reached.
+     *
+     * @throws InterruptedException when the thread is interrupted, which cancels the request
+     */
+    public Station station(String code) throws IOException, InterruptedException {
+        String trimmed = code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
+        if (!trimmed.matches("[A-Z0-9]{3}")) {
+            throw new IOException("\"" + code + "\" is not a three-character observatory code.");
+        }
+        Map<String, String> parameters = new LinkedHashMap<>();
+        parameters.put("format", "json");
+        parameters.put("COMMAND", quoted("10"));
+        parameters.put("OBJ_DATA", quoted("NO"));
+        parameters.put("MAKE_EPHEM", quoted("YES"));
+        parameters.put("EPHEM_TYPE", quoted("OBSERVER"));
+        parameters.put("CENTER", quoted(trimmed + "@399"));
+        parameters.put("START_TIME", quoted("2000-01-01 00:00"));
+        parameters.put("STOP_TIME", quoted("2000-01-01 01:00"));
+        parameters.put("STEP_SIZE", quoted("1 h"));
+        parameters.put("QUANTITIES", quoted("1"));
+        StringBuilder url = new StringBuilder(HORIZONS).append('?');
+        for (Map.Entry<String, String> parameter : parameters.entrySet()) {
+            url.append(url.charAt(url.length() - 1) == '?' ? "" : "&").append(parameter.getKey()).append('=')
+                    .append(URLEncoder.encode(parameter.getValue(), StandardCharsets.UTF_8));
+        }
+        return parseStation(trimmed, http.get(URI.create(url.toString()), HORIZONS_TIMEOUT));
+    }
+
+    /** The station in a Horizons answer for a code; an answer without a site means the code is unknown. */
+    static Station parseStation(String code, String answer) throws IOException {
+        JsonObject root;
+        try {
+            root = json(answer);
+        } catch (IOException error) {
+            // Horizons answers an unknown code with an error ("No site matches").
+            if (error.getMessage() != null && error.getMessage().contains("No site")) {
+                throw new IOException("JPL Horizons does not know observatory code " + code + ".");
+            }
+            throw error;
+        }
+        String result = root.has("result") ? root.get("result").getAsString() : "";
+        Matcher geodetic = CENTER_GEODETIC.matcher(result);
+        if (!geodetic.find()) {
+            throw new IOException("JPL Horizons does not know observatory code " + code + ".");
+        }
+        Matcher name = CENTER_NAME.matcher(result);
+        double longitude = Double.parseDouble(geodetic.group(1));
+        return new Station(code, name.find() ? name.group(1).trim() : code, longitude > 180 ? longitude - 360 : longitude,
+                Double.parseDouble(geodetic.group(2)), 1000 * Double.parseDouble(geodetic.group(3)));
+    }
+
+    // ==========================================
     // POSITIONS (HORIZONS)
     // ==========================================
 
