@@ -20,6 +20,7 @@ import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.mpc.AdesPsv;
 import eu.startales.spacepixels.mpc.AstrometricReduction;
 import eu.startales.spacepixels.mpc.FindOrb;
+import eu.startales.spacepixels.mpc.LightCurve;
 import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
 import eu.startales.spacepixels.mpc.MpcObservation;
@@ -27,6 +28,7 @@ import eu.startales.spacepixels.mpc.ReportedObjects;
 import io.github.ppissias.jtransient.core.SubStackAstrometry;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.session.ApplicationStorage;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.solarsystem.SolarSystemClient;
 import nom.tam.fits.Fits;
 
@@ -82,6 +84,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final ApplicationStorage storage;
     private final VisualizationSettings visualization;
     private final ObservingSite site;
+    private final WcsCoordinateTransformer header;
+    /** The session's Gaia stars, for comparison stars; empty without a sky catalogue. */
+    private final List<SkyCatalogue.Star> catalogueStars;
+    private final Map<String, LightCurve.Curve> curves = new HashMap<>();
+    private final LightCurvePlot curvePlot = new LightCurvePlot();
+    private final JLabel curveLabel = new JLabel(" ");
+    private final JButton curveButton = new JButton("Measure light curve");
+    private final JButton curveSaveButton = new JButton("Save CSV…");
 
     private final Map<String, Boolean> exported = new HashMap<>();
     private final Map<String, Set<Integer>> selected = new HashMap<>();
@@ -145,7 +155,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      */
     AsteroidsCometsWindow(Window owner, FitsFileInformation[] files, ReportedObjects.Report report, WcsCoordinateTransformer header,
                           PlateSolutionCorrection correction, ApplicationSettings settings, ApplicationStorage storage,
-                          VisualizationSettings visualization, ObservingSite site) {
+                          VisualizationSettings visualization, ObservingSite site, List<SkyCatalogue.Star> catalogueStars) {
         super("Asteroids & Comets · " + report.folder().getName());
         AppIcon.apply(this);
         this.files = files.clone();
@@ -155,6 +165,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         this.storage = storage;
         this.visualization = visualization;
         this.site = site;
+        this.header = header;
+        this.catalogueStars = List.copyOf(catalogueStars);
         for (var object : report.objects()) {
             exported.put(object.id(), MpcExport.includedByDefault(object));
             List<MpcObservation> reduced = reduction.reduction() == null || !object.measured()
@@ -166,7 +178,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
 
         setLayout(new BorderLayout(UiStyle.space(8), UiStyle.space(8)));
         add(header(), BorderLayout.NORTH);
-        JSplitPane centre = new JSplitPane(JSplitPane.VERTICAL_SPLIT, picturePanel(), observationsPanel());
+        JTabbedPane lower = new JTabbedPane();
+        lower.addTab("Observations", observationsPanel());
+        lower.addTab("Light curve", lightCurvePanel());
+        JSplitPane centre = new JSplitPane(JSplitPane.VERTICAL_SPLIT, picturePanel(), lower);
         centre.setResizeWeight(0.55);
         JSplitPane left = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, objectsPanel(), centre);
         left.setResizeWeight(0.3);
@@ -300,6 +315,180 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         panel.add(new JScrollPane(observationsTable), BorderLayout.CENTER);
         panel.add(buttons, BorderLayout.SOUTH);
         return panel;
+    }
+
+    /** The light curve of the shown object: measure, summary, plot and CSV. */
+    private JComponent lightCurvePanel() {
+        curveButton.setToolTipText("Measures the object's light in every frame with aperture photometry (1.5 FWHM, sky from 3 to "
+                + "5 FWHM), corrected with comparison stars from the sky catalogue when there are enough");
+        curveButton.addActionListener(e -> measureLightCurve());
+        curveSaveButton.addActionListener(e -> saveCurve());
+        curveSaveButton.setEnabled(false);
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        buttons.add(curveButton);
+        buttons.add(curveSaveButton);
+        curveLabel.setForeground(UiStyle.helpColor());
+        JPanel north = new JPanel(new BorderLayout());
+        north.add(buttons, BorderLayout.NORTH);
+        north.add(curveLabel, BorderLayout.CENTER);
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.add(north, BorderLayout.NORTH);
+        panel.add(curvePlot, BorderLayout.CENTER);
+        return panel;
+    }
+
+    /** The FWHM for the photometry: the faint-mover search's stellar FWHM, else the shown track's detections' (Gaussian). */
+    private double photometryFwhm(ReportedObjects.ReportedObject object) {
+        if (report.faintMoverFwhm() != null && report.faintMoverFwhm() > 0) return report.faintMoverFwhm();
+        double[] widths = object.positions().stream().filter(p -> p.fwhm() != null && p.fwhm() > 0)
+                .mapToDouble(ReportedObjects.Position::fwhm).sorted().toArray();
+        // Extraction widths read about sqrt(2) wider than a Gaussian FWHM.
+        return widths.length == 0 ? 3.0 : widths[widths.length / 2] / Math.sqrt(2);
+    }
+
+    /** Measures the shown object's light in each frame on a worker, with the comparison stars, and keeps the curve. */
+    private void measureLightCurve() {
+        var object = shown;
+        if (object == null || object.positions().isEmpty()) return;
+        double fwhm = photometryFwhm(object);
+        var positions = object.positions();
+        double[] box = {positions.stream().mapToDouble(ReportedObjects.Position::x).min().orElse(0),
+                positions.stream().mapToDouble(ReportedObjects.Position::y).min().orElse(0),
+                positions.stream().mapToDouble(ReportedObjects.Position::x).max().orElse(0),
+                positions.stream().mapToDouble(ReportedObjects.Position::y).max().orElse(0)};
+        var comparisons = LightCurve.comparisonStars(catalogueStars, header, files[0].getSizeWidth(), files[0].getSizeHeight(), box, fwhm);
+        double speed = pixelSpeed(object);
+        int margin = (int) Math.ceil(io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.ANNULUS_OUTER_FWHM * fwhm) + 3;
+        int cx = (int) Math.floor(box[0]) - margin, cy = (int) Math.floor(box[1]) - margin;
+        int cw = (int) Math.ceil(box[2]) + margin - cx, ch = (int) Math.ceil(box[3]) + margin - cy;
+        // The crops around the path stay in memory for the frames' median; a path too long for that is measured directly.
+        boolean onReference = (long) cw * ch * positions.size() * 2 <= MAX_SUB_STACK_BYTES;
+        curveButton.setEnabled(false);
+        curveLabel.setText("Measuring " + object.id() + " in " + positions.size() + " frames with " + comparisons.size() + " comparison stars…");
+        new SwingWorker<LightCurve.Curve, Void>() {
+            @Override protected LightCurve.Curve doInBackground() throws Exception {
+                var measurements = new ArrayList<io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.Measurement>();
+                var cutouts = new ArrayList<SubStackAstrometry.Cutout>();
+                double[][] comparisonFlux = new double[positions.size()][comparisons.size()];
+                double[] frameConcentration = new double[positions.size()];
+                double[] saturation = new double[positions.size()];
+                for (int k = 0; k < positions.size(); k++) {
+                    if (closed) return null;
+                    var p = positions.get(k);
+                    var file = files[p.frameNumber() - 1];
+                    short[][] frame;
+                    try (Fits fits = new Fits(new File(file.getFilePath()))) {
+                        Object kernel = FitsInput.getImageHDU(fits).getKernel();
+                        if (!(kernel instanceof short[][] pixels)) throw new java.io.IOException(file.getFileName() + " is not a 16-bit monochrome frame");
+                        frame = pixels;
+                    }
+                    long exposure = Math.max(0, file.getExposureDurationMillis());
+                    saturation[k] = io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.saturationThreshold(frame);
+                    if (onReference) {
+                        long midpoint = file.getObservationTimestamp() + exposure / 2;
+                        cutouts.add(new SubStackAstrometry.Cutout(cx, cy, crop(frame, cx, cy, cw, ch), midpoint, exposure));
+                    } else {
+                        measurements.add(io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.measure(frame, p.x(), p.y(), fwhm,
+                                exposure, speed * exposure / 60000.0, saturation[k]));
+                    }
+                    double[] starConcentration = new double[comparisons.size()];
+                    for (int s = 0; s < comparisons.size(); s++) {
+                        var star = io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.measure(frame,
+                                comparisons.get(s)[0], comparisons.get(s)[1], fwhm, exposure, 0, saturation[k]);
+                        // A saturated or otherwise flagged star tells nothing about the frame and is left out.
+                        comparisonFlux[k][s] = star.flags() == 0 ? star.flux() : Double.NaN;
+                        starConcentration[s] = star.flags() == 0 ? star.concentration() : Double.NaN;
+                    }
+                    frameConcentration[k] = LightCurve.median(starConcentration);
+                }
+                if (onReference) {
+                    float[][] reference = SubStackAstrometry.medianReference(cutouts);
+                    for (int k = 0; k < cutouts.size(); k++) {
+                        var p = positions.get(k);
+                        measurements.add(io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.measureOnReference(cutouts.get(k),
+                                reference, p.x(), p.y(), fwhm, speed * cutouts.get(k).exposureMillis() / 60000.0, saturation[k]));
+                    }
+                }
+                double[] offsets = comparisons.isEmpty() ? new double[positions.size()]
+                        : io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.ensembleOffsets(comparisonFlux);
+                if (comparisons.isEmpty()) java.util.Arrays.fill(offsets, Double.NaN);
+                // A frame where the object's shape departs from its usual one (blurred, blended, a cosmic ray) is flagged.
+                boolean[] contaminated = io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.contaminated(
+                        measurements.stream().mapToDouble(io.github.ppissias.jtransient.photometry.MovingObjectPhotometry.Measurement::concentration).toArray(),
+                        frameConcentration);
+                var points = new ArrayList<LightCurve.Point>();
+                for (int k = 0; k < positions.size(); k++) {
+                    var p = positions.get(k);
+                    var file = files[p.frameNumber() - 1];
+                    var m = measurements.get(k);
+                    points.add(new LightCurve.Point(p.frameNumber(), file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2,
+                            p.x(), p.y(), m.flux(), m.fluxError(), offsets[k],
+                            m.flags() | (contaminated[k] ? io.github.ppissias.jtransient.photometry.PhotometryFlags.CONTAMINATED : 0)));
+                }
+                return new LightCurve.Curve(object.id(), object.measured(), fwhm,
+                        measurements.isEmpty() ? 0 : measurements.getFirst().apertureRadius(), comparisons.size(), onReference, List.copyOf(points));
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                curveButton.setEnabled(true);
+                try {
+                    var curve = get();
+                    if (curve != null) curves.put(object.id(), curve);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    curveLabel.setText(object.id() + "'s light curve could not be measured: " + cause.getMessage());
+                    return;
+                }
+                if (shown == object) updateCurve();
+            }
+        }.execute();
+    }
+
+    /** The object's speed in pixels per minute: its fitted motion, or its first and last measured positions. */
+    private double pixelSpeed(ReportedObjects.ReportedObject object) {
+        if (object.motion() != null) return Math.hypot(object.motion().vxPerMinute(), object.motion().vyPerMinute());
+        var first = object.positions().getFirst();
+        var last = object.positions().getLast();
+        long t0 = files[first.frameNumber() - 1].getObservationTimestamp(), t1 = files[last.frameNumber() - 1].getObservationTimestamp();
+        return t1 > t0 ? Math.hypot(last.x() - first.x(), last.y() - first.y()) / ((t1 - t0) / 60000.0) : 0;
+    }
+
+    /** Shows the shown object's curve and its summary, or what measuring it would do. */
+    private void updateCurve() {
+        var curve = shown == null ? null : curves.get(shown.id());
+        curvePlot.curve = curve;
+        curvePlot.repaint();
+        curveSaveButton.setEnabled(curve != null);
+        if (shown == null) { curveLabel.setText(" "); return; }
+        if (curve == null) {
+            curveLabel.setText(UiStyle.htmlWrappedTo(560, "Measure light curve measures " + shown.id() + "'s light in each frame"
+                    + (shown.measured() ? "" : " at its fitted positions; a faint mover's single-frame values are noisy")
+                    + (catalogueStars.isEmpty() ? ". Without a sky catalogue the curve is not corrected for transparency." : ".")));
+            return;
+        }
+        var summary = LightCurve.summarise(curve);
+        curveLabel.setText(UiStyle.htmlWrappedTo(560, String.format(Locale.US, "%s · %d frames · %s · %s · aperture %.1f px · "
+                        + "median %.2f · amplitude (5–95 %%) %.2f mag · scatter %.2f mag. Relative magnitudes, not calibrated; "
+                        + "flagged points (hollow) are left out of the summary.", curve.id(), summary.points(),
+                curve.corrected() ? "corrected with " + curve.comparisonStars() + " comparison stars" : "uncorrected",
+                curve.onReference() ? "fixed stars subtracted" : "fixed stars not subtracted (path too long)",
+                curve.apertureRadius(), summary.median(), summary.amplitude(), summary.scatter())));
+    }
+
+    /** Writes the curve's CSV where the user chooses. */
+    private void saveCurve() {
+        var curve = shown == null ? null : curves.get(shown.id());
+        if (curve == null) return;
+        JFileChooser chooser = WindowSizing.fileChooser(report.folder());
+        chooser.setSelectedFile(new File(report.folder(), curve.id().toLowerCase(Locale.ROOT) + "_lightcurve.csv"));
+        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        try {
+            Files.writeString(chooser.getSelectedFile().toPath(), LightCurve.csv(curve), StandardCharsets.UTF_8);
+            curveLabel.setText("Saved " + chooser.getSelectedFile().getName() + ".");
+        } catch (Exception e) {
+            curveLabel.setText("The light curve was not saved: " + e.getMessage());
+        }
     }
 
     /** Identification, the submission details and the export. */
@@ -455,6 +644,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         observationsModel.fireTableDataChanged();
         updateFit();
         updateOrbit();
+        updateCurve();
         if (object == null) {
             identificationLabel.setText(" ");
             return;
@@ -1096,6 +1286,68 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 }
                 g.setColor(new Color(170, 175, 190));
                 g.drawString("Ecliptic, from the north · planets on mean circular orbits", 6, size - 6);
+            } finally {
+                g.dispose();
+            }
+        }
+    }
+
+    /**
+     * A light curve: relative magnitude against UTC, brighter upwards, with 1-sigma error bars; flagged points hollow;
+     * the median as a dashed line.
+     */
+    private static final class LightCurvePlot extends JComponent {
+        LightCurve.Curve curve;
+
+        LightCurvePlot() {
+            setPreferredSize(new Dimension(UiStyle.space(500), UiStyle.space(220)));
+        }
+
+        @Override
+        protected void paintComponent(Graphics graphics) {
+            if (curve == null) return;
+            var points = curve.points().stream().filter(p -> Double.isFinite(p.magnitude())).toList();
+            if (points.size() < 2) return;
+            Graphics2D g = (Graphics2D) graphics.create();
+            try {
+                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g.setFont(UiStyle.bodyFont().deriveFont(UiStyle.bodyFont().getSize2D() - 2));
+                int left = UiStyle.space(56), right = UiStyle.space(12), top = UiStyle.space(10), bottom = UiStyle.space(28);
+                int w = getWidth() - left - right, h = getHeight() - top - bottom;
+                if (w < 50 || h < 50) return;
+                long t0 = points.getFirst().midpointMillis(), t1 = points.getLast().midpointMillis();
+                var summary = LightCurve.summarise(curve);
+                double[] mags = points.stream().filter(LightCurve::counted).mapToDouble(LightCurve.Point::magnitude).sorted().toArray();
+                if (mags.length == 0) mags = points.stream().mapToDouble(LightCurve.Point::magnitude).sorted().toArray();
+                double low = mags[(int) (0.02 * (mags.length - 1))], high = mags[(int) Math.ceil(0.98 * (mags.length - 1))];
+                double pad = Math.max(0.05, (high - low) * 0.25);
+                double bright = low - pad, faint = high + pad;
+                g.setColor(new Color(16, 18, 24));
+                g.fillRect(left, top, w, h);
+                g.setColor(new Color(170, 175, 190));
+                g.drawString(String.format(Locale.US, "%.2f", bright), 4, top + 10);
+                g.drawString(String.format(Locale.US, "%.2f", faint), 4, top + h);
+                g.drawString(UTC.format(Instant.ofEpochMilli(t0)), left, top + h + UiStyle.space(16));
+                String end = UTC.format(Instant.ofEpochMilli(t1)) + " UTC";
+                g.drawString(end, left + w - g.getFontMetrics().stringWidth(end), top + h + UiStyle.space(16));
+                java.util.function.DoubleUnaryOperator yOf = m -> top + h * (m - bright) / (faint - bright);
+                java.util.function.LongToDoubleFunction xOf = t -> left + (t1 > t0 ? w * (t - t0) / (double) (t1 - t0) : w / 2.0);
+                if (Double.isFinite(summary.median())) {
+                    g.setColor(new Color(120, 125, 140));
+                    g.setStroke(new BasicStroke(1, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1, new float[]{4, 4}, 0));
+                    double y = yOf.applyAsDouble(summary.median());
+                    g.draw(new java.awt.geom.Line2D.Double(left, y, left + w, y));
+                }
+                g.setStroke(new BasicStroke(1));
+                for (var p : points) {
+                    double x = xOf.applyAsDouble(p.midpointMillis()), y = yOf.applyAsDouble(p.magnitude());
+                    double e = p.magnitudeError();
+                    g.setColor(new Color(80, 225, 210, 140));
+                    if (Double.isFinite(e)) g.draw(new java.awt.geom.Line2D.Double(x, yOf.applyAsDouble(p.magnitude() - e), x, yOf.applyAsDouble(p.magnitude() + e)));
+                    g.setColor(new Color(80, 225, 210));
+                    var dot = new Ellipse2D.Double(x - 2.5, y - 2.5, 5, 5);
+                    if (LightCurve.counted(p)) g.fill(dot); else g.draw(dot);
+                }
             } finally {
                 g.dispose();
             }

@@ -2142,6 +2142,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         var config = applicationSettings.getConfig();
         var site = eu.startales.spacepixels.fits.ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
         var visualization = detectionSettings.visualizationSettings();
+        var catalogue = skyCatalogue().get();
+        var catalogueStars = catalogue == null || catalogue.stars == null ? List.<eu.startales.spacepixels.skycatalog.SkyCatalogue.Star>of()
+                : List.copyOf(catalogue.stars);
         new SwingWorker<eu.startales.spacepixels.mpc.ReportedObjects.Report, Void>() {
             @Override protected eu.startales.spacepixels.mpc.ReportedObjects.Report doInBackground() throws Exception {
                 return eu.startales.spacepixels.mpc.ReportedObjects.load(chosen);
@@ -2168,7 +2171,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 }
                 var resolved = WcsSolutionResolver.resolveUncorrected(null, files);
                 var window = viewers.register(new AsteroidsCometsWindow(windowFrame, files, report,
-                        resolved == null ? null : resolved.getTransformer(), correction, applicationSettings, storage, visualization, site));
+                        resolved == null ? null : resolved.getTransformer(), correction, applicationSettings, storage, visualization, site,
+                        catalogueStars));
                 window.setVisible(true);
             }
         }.execute();
