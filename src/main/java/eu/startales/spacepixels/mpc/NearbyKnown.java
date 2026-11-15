@@ -98,6 +98,35 @@ public final class NearbyKnown {
     }
 
     /**
+     * The objects after Identify all: one without a known identification (not Known, and not a Check that names known
+     * objects) whose nearby known objects include one with agreeing motion becomes {@link ReportedObjects#POSSIBLE},
+     * named after the nearest such object, with a note saying so ({@code describe} words a match); the others are
+     * unchanged. {@code date} names the day of the search in the note.
+     */
+    public static List<ReportedObjects.ReportedObject> markPossible(List<ReportedObjects.ReportedObject> objects,
+                                                                    java.util.Map<String, List<Match>> byFinding, String date,
+                                                                    java.util.function.Function<Match, String> describe) {
+        var marked = new ArrayList<ReportedObjects.ReportedObject>();
+        for (var object : objects) {
+            var agreeing = byFinding.getOrDefault(object.id(), List.of()).stream().filter(Match::motionAgrees).toList();
+            boolean identified = ReportedObjects.KNOWN.equals(object.status())
+                    || ReportedObjects.CHECK.equals(object.status()) && !object.names().isEmpty();
+            if (agreeing.isEmpty() || identified) {
+                marked.add(object);
+                continue;
+            }
+            Match best = agreeing.getFirst();
+            String unusual = ReportedObjects.CHECK.equals(object.status()) && object.note() != null
+                    && object.note().toLowerCase(java.util.Locale.ROOT).contains("unusual") ? " The report found its motion unusual." : "";
+            marked.add(new ReportedObjects.ReportedObject(object.id(), object.kind(), ReportedObjects.POSSIBLE, List.of(best.name()),
+                    "Identify all (" + date + ", JPL and SkyBoT without a magnitude limit): " + describe.apply(best)
+                            + ". A looser match than Known: check it." + unusual,
+                    object.positions(), object.speedArcsecPerHour(), object.positionAngleDegrees(), object.motion()));
+        }
+        return marked;
+    }
+
+    /**
      * Notes, for each finding's matches, another finding that lies nearer to the same known object: two findings near
      * one object are often two pieces of its track. The map is by finding, in its order.
      */

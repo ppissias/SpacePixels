@@ -25,6 +25,11 @@ public final class ReportedObjects {
     public static final String TRACK = "track", FAINT_MOVER = "faint mover";
     /** The report's statuses, and the one used when the report had no predictions. */
     public static final String KNOWN = "known", CHECK = "check", NO_KNOWN_MATCH = "no-known-match", NOT_COMPARED = "not-compared";
+    /**
+     * Not a report status: set by Identify all in Asteroids &amp; Comets when a known object lies within 1′ with agreeing
+     * motion, a looser match than Known (see {@link NearbyKnown}).
+     */
+    public static final String POSSIBLE = "possible";
 
     /**
      * One position: a measured centroid of a track (with the detection's FWHM in pixels and signal-to-noise, null when

@@ -53,4 +53,32 @@ public class NearbyKnownTest {
         assertEquals("T2", noted.get("T7").getFirst().nearerFinding());
         assertEquals(0.4, noted.get("T7").getFirst().nearerOffsetArcsec(), 1e-9);
     }
+
+    /** Identify all marks an unidentified object Possible after its nearest agreeing known object; known ones stay. */
+    @Test
+    public void marksUnidentifiedObjectsPossible() {
+        var position = List.of(new ReportedObjects.Position(1, 10, 20, 3.0, 40.0));
+        var known = new ReportedObjects.ReportedObject("T1", ReportedObjects.TRACK, ReportedObjects.KNOWN, List.of("649341 (2011 DK30)"),
+                "agrees", position, null, null, null);
+        var unmatched = new ReportedObjects.ReportedObject("T2", ReportedObjects.TRACK, ReportedObjects.NO_KNOWN_MATCH, List.of(),
+                "No known object to V 23.0 agrees.", position, null, null, null);
+        var unusual = new ReportedObjects.ReportedObject("FM7", ReportedObjects.FAINT_MOVER, ReportedObjects.CHECK, List.of(),
+                "Its motion is unusual: faster.", position, null, null, null);
+        var lonely = new ReportedObjects.ReportedObject("T4", ReportedObjects.TRACK, ReportedObjects.NO_KNOWN_MATCH, List.of(),
+                "none", position, null, null, null);
+        var byFinding = new LinkedHashMap<String, List<NearbyKnown.Match>>();
+        byFinding.put("T1", List.of(new NearbyKnown.Match("649341 (2011 DK30)", 21.4, 0.2, 0.1, true, null, null)));
+        byFinding.put("T2", List.of(new NearbyKnown.Match("far one", 22.0, 50, 30, false, null, null),
+                new NearbyKnown.Match("800463 (2014 FM90)", 23.2, 55, 0.5, true, null, null)));
+        byFinding.put("FM7", List.of(new NearbyKnown.Match("2026 AB1", 24.0, 12, 2, true, null, null)));
+        byFinding.put("T4", List.of());
+        var marked = NearbyKnown.markPossible(List.of(known, unmatched, unusual, lonely), byFinding, "2026-11-15", m -> m.name());
+        assertTrue("a known object is left alone", marked.get(0) == known);
+        assertEquals(ReportedObjects.POSSIBLE, marked.get(1).status());
+        assertEquals("the agreeing one, not the nearer one that moves differently", List.of("800463 (2014 FM90)"), marked.get(1).names());
+        assertTrue(marked.get(1).note(), marked.get(1).note().startsWith("Identify all (2026-11-15") && marked.get(1).note().contains("Known: check it"));
+        assertEquals(ReportedObjects.POSSIBLE, marked.get(2).status());
+        assertTrue(marked.get(2).note().contains("motion unusual"));
+        assertTrue("nothing near: unchanged", marked.get(3) == lonely);
+    }
 }

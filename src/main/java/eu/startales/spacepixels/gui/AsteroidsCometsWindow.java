@@ -98,6 +98,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     /** Fainter Gaia stars fetched for comparison stars when the saved catalogue had too few usable ones; empty until then. */
     private volatile List<SkyCatalogue.Star> fetchedStars = List.of();
     private final JLabel compareLabel = new JLabel(" ");
+    /** Identifications made after the report, by object, as saved beside it. EDT only. */
+    private final Map<String, eu.startales.spacepixels.mpc.LaterIdentifications.Entry> later;
     private final JButton identifyAllButton = new JButton("Identify all…");
     /** Known objects within 1′ of each object from the last Identify all, by object; empty before it. EDT only. */
     private final Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> nearby = new HashMap<>();
@@ -180,7 +182,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         super("Asteroids & Comets · " + report.folder().getName());
         AppIcon.apply(this);
         this.files = files.clone();
-        this.report = report;
+        // Identifications made after the report (Compare again, Identify all) come back from the report folder.
+        this.later = new java.util.LinkedHashMap<>(eu.startales.spacepixels.mpc.LaterIdentifications.load(report.folder()));
+        this.report = later.isEmpty() ? report : report.withObjects(eu.startales.spacepixels.mpc.LaterIdentifications.apply(report.objects(), later));
+        if (!later.isEmpty()) {
+            compareLabel.setText(UiStyle.htmlWrappedTo(320, later.size() + " identification" + (later.size() == 1 ? "" : "s")
+                    + " made after the report (Compare again, Identify all) are shown, from "
+                    + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + " beside it."));
+        }
         this.reduction = AstrometricReduction.create(header, correction, this.files);
         this.settings = settings;
         this.storage = storage;
@@ -1184,10 +1193,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 replaced.add(object);
                 continue;
             }
-            // A check for unusual motion stays a check while nothing known agrees.
-            String status = ReportedObjects.NO_KNOWN_MATCH.equals(result.status()) && ReportedObjects.CHECK.equals(object.status())
-                    && object.note() != null && object.note().toLowerCase(Locale.ROOT).contains("unusual") ? ReportedObjects.CHECK : result.status();
-            if (status.equals(object.status()) && result.names().equals(object.names())) {
+            // A check for unusual motion stays a check, and a possible identification stays possible, while nothing known agrees.
+            boolean unusual = ReportedObjects.CHECK.equals(object.status()) && object.note() != null
+                    && object.note().toLowerCase(Locale.ROOT).contains("unusual");
+            String status = ReportedObjects.NO_KNOWN_MATCH.equals(result.status()) && (unusual || ReportedObjects.POSSIBLE.equals(object.status()))
+                    ? object.status() : result.status();
+            if (status.equals(object.status()) && (ReportedObjects.POSSIBLE.equals(status) || result.names().equals(object.names()))) {
                 replaced.add(object);
                 continue;
             }
@@ -1196,13 +1207,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     object.positions(), object.speedArcsecPerHour(), object.positionAngleDegrees(), object.motion());
             replaced.add(updated);
             exported.put(object.id(), MpcExport.includedByDefault(updated));
+            remember(updated, "Compare again");
             changes.add(object.id() + " " + statusText(object.status()) + " → " + statusText(status)
                     + (result.names().isEmpty() ? "" : " " + String.join(" or ", result.names())));
         }
         report = report.withObjects(replaced);
+        String saved = changes.isEmpty() ? "" : saveLater();
         compareLabel.setText(UiStyle.htmlWrappedTo(320, String.format(Locale.US, "Compared with the saved predictions to V %.1f (%d objects): ",
                 objects.magnitudeLimit, objects.bodies.size()) + (changes.isEmpty() ? "no identification changed."
-                : changes.size() + " changed: " + escape(String.join("; ", changes)) + ". The report keeps its own until the next detection.")));
+                : changes.size() + " changed: " + escape(String.join("; ", changes)) + ". " + saved)));
         refreshObjects();
         show(shown == null ? null : report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
         refreshExport();
@@ -1256,24 +1269,62 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     byFinding.put(object.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(place, known.objects()));
                 }
                 nearby.putAll(eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(byFinding));
-                for (var object : objects) {
-                    var agreeing = nearby.get(object.id()).stream().filter(eu.startales.spacepixels.mpc.NearbyKnown.Match::motionAgrees).toList();
+                for (var object : report.objects()) {
+                    var agreeing = nearby.getOrDefault(object.id(), List.of()).stream()
+                            .filter(eu.startales.spacepixels.mpc.NearbyKnown.Match::motionAgrees).toList();
                     if (agreeing.isEmpty()) empty++;
                     else found.add(object.id() + ": " + nearbyText(agreeing.getFirst()));
                 }
+                var before = report.objects();
+                var marked = eu.startales.spacepixels.mpc.NearbyKnown.markPossible(before, nearby,
+                        java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString(), AsteroidsCometsWindow::nearbyText);
+                var possible = new ArrayList<String>();
+                for (int k = 0; k < marked.size(); k++) {
+                    if (marked.get(k) == before.get(k)) continue;
+                    exported.put(marked.get(k).id(), MpcExport.includedByDefault(marked.get(k)));
+                    remember(marked.get(k), "Identify all");
+                    possible.add(marked.get(k).id());
+                }
+                report = report.withObjects(marked);
+                refreshObjects();
+                refreshExport();
+                // A short summary: each object's matches are in its identification.
                 String services = known.problems().isEmpty() ? "JPL and SkyBoT" : "partly (" + String.join("; ", known.problems()) + ")";
-                compareLabel.setText(UiStyle.htmlWrappedTo(320, escape(String.format(Locale.US,
-                        "Identify all asked %s for every known object, without a magnitude limit (%d in and around the field). ", services,
-                        known.objects().size()) + (found.isEmpty() ? "No object has a known one within 1′ with agreeing motion."
-                        : "Within 1′ with agreeing motion: " + String.join("; ", found) + ".") + (empty > 0 && !found.isEmpty()
-                        ? " " + empty + " others have none." : "") + " A possible identification to check, not an identity.")));
+                String summary = String.format(Locale.US, "Identify all (%s, no magnitude limit, %d known objects): ", services, known.objects().size())
+                        + (possible.isEmpty() ? "" : "Possible: " + String.join(", ", possible) + ". ")
+                        + (found.size() - possible.size() > 0 ? (found.size() - possible.size()) + " already identified agree. " : "")
+                        + empty + " with no known object within 1′.";
+                String saved = possible.isEmpty() ? "" : " " + saveLater();
+                compareLabel.setText(UiStyle.htmlWrappedTo(320, escape(summary) + saved));
                 if (shown != null) show(report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
             }
         }.execute();
     }
 
+    /** Records an object's identification made in this window, to save beside the report. */
+    private void remember(ReportedObjects.ReportedObject object, String source) {
+        var entry = new eu.startales.spacepixels.mpc.LaterIdentifications.Entry();
+        entry.id = object.id();
+        entry.status = object.status();
+        entry.names = new ArrayList<>(object.names());
+        entry.note = object.note();
+        entry.source = source;
+        entry.madeAtUtc = java.time.Instant.now().toString();
+        later.put(object.id(), entry);
+    }
+
+    /** Saves the later identifications beside the report and says so, or why not. */
+    private String saveLater() {
+        try {
+            eu.startales.spacepixels.mpc.LaterIdentifications.save(report.folder(), later);
+            return "Saved beside the report (" + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + ").";
+        } catch (java.io.IOException cannotSave) {
+            return "Not saved (" + escape(String.valueOf(cannotSave.getMessage())) + "): they last until this window closes.";
+        }
+    }
+
     /** One nearby known object in words: name, magnitude, distance and rate difference. */
-    private static String nearbyText(eu.startales.spacepixels.mpc.NearbyKnown.Match m) {
+    static String nearbyText(eu.startales.spacepixels.mpc.NearbyKnown.Match m) {
         return String.format(Locale.US, "%s%s, %.0f″ away, motion %s by %.1f″/h%s", m.name(),
                 m.magnitude() == null ? "" : String.format(Locale.US, " (V %.1f)", m.magnitude()), m.offsetArcsec(),
                 m.motionAgrees() ? "agreeing" : "differing", m.rateDifferenceArcsecPerHour(),
@@ -1379,6 +1430,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             case ReportedObjects.KNOWN -> "Known";
             case ReportedObjects.CHECK -> "Check";
             case ReportedObjects.NO_KNOWN_MATCH -> "No known match";
+            case ReportedObjects.POSSIBLE -> "Possible";
             default -> "Not compared";
         };
     }

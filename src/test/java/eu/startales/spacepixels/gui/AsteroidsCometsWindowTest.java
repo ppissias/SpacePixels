@@ -109,6 +109,7 @@ public class AsteroidsCometsWindowTest {
             String compared = onEdt(() -> labels(window).stream().map(JLabel::getText).filter(t -> t.contains("Compared with")).findFirst().orElse("none"));
             assertTrue(compared, compared.contains("1 changed: FM1 Check → Known 2026 AB1"));
             assertEquals("T1 keeps its identification", "Known", onEdt(() -> objects.getValueAt(0, 2)));
+            assertTrue("saved beside the report", new File(reportFolder, eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME).isFile());
             onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
 
             // A light curve, then the same curve in bins of 2.
@@ -120,6 +121,30 @@ public class AsteroidsCometsWindowTest {
             assertTrue(onEdt(curveLabel::getText), onEdt(curveLabel::getText).contains("2 bins of 2 frames"));
         } finally {
             onEdt(() -> { window.dispose(); return null; });
+        }
+
+        // Opened again, the window shows the identification made after the report.
+        var reopened = onEdt(() -> {
+            AsteroidsCometsWindow w;
+            try {
+                w = new AsteroidsCometsWindow(null, files, ReportedObjects.load(reportFolder), wcs, correction(wcs), settings, new ApplicationStorage(),
+                        VisualizationSettings.defaults(), new ObservingSite(-30, -70, 2000, ObservingSite.FROM_CONFIGURATION), null, () -> null);
+            } catch (java.io.IOException e) {
+                throw new RuntimeException(e);
+            }
+            w.setFocusableWindowState(false);
+            w.setSize(1500, 950);
+            w.setLocation(-4000, -4000);
+            w.setVisible(true);
+            return w;
+        });
+        try {
+            JTable objects = onEdt(() -> tables(reopened).getFirst());
+            assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
+            assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+            assertTrue(onEdt(() -> labels(reopened).stream().anyMatch(l -> l.getText().contains("made after the report"))));
+        } finally {
+            onEdt(() -> { reopened.dispose(); return null; });
         }
     }
 

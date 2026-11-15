@@ -138,6 +138,7 @@ public final class MpcExport {
 
     /** The objects the window offers to export by default: tracks that are known or match nothing known. */
     public static boolean includedByDefault(ReportedObjects.ReportedObject object) {
-        return object.measured() && (ReportedObjects.KNOWN.equals(object.status()) || ReportedObjects.NO_KNOWN_MATCH.equals(object.status()));
+        return object.measured() && (ReportedObjects.KNOWN.equals(object.status()) || ReportedObjects.NO_KNOWN_MATCH.equals(object.status())
+                || ReportedObjects.POSSIBLE.equals(object.status()));
     }
 }
