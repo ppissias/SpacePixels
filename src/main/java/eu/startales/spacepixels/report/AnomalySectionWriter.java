@@ -30,24 +30,106 @@ final class AnomalySectionWriter {
 
     private AnomalySectionWriter() { }
 
+    private static final int MOSAIC_COLUMNS = AnomalyOrder.MOSAIC_COLUMNS;
+    private static final int TILE = 128;
+    private static final int TILE_GAP = 2;
+    static final String MOSAIC_FILE = "anomaly_mosaic.png";
+
     static void writeSection(PrintWriter report, DetectionReportContext context) throws IOException {
         report.println("<h3 id='anomalies'>Single-Frame Anomalies</h3>");
         report.println("<p class='astro-note'>These candidates were detected in one exposure; their cause is unconfirmed. "
-                + "They may be flashes, satellite glints or image artifacts. Cards are ordered by frame. "
+                + "They may be flashes, satellite glints, cosmic-ray hits or image artifacts. The most interesting come first: "
+                + "the order is the integrated sigma weighted by the square root of the footprint's length, so long thin lines "
+                + "and worms rank beside bright compact events. "
                 + "Events associated with a confirmed streak are shown with that streak. "
                 + "An event where a moving-object track predicts its object, in a frame that track has no detection, "
                 + "is marked as likely part of that track.</p>");
-        int limit = context.settings.getMaxCategoryItems();
         int total = context.anomalies.size();
-        int count = (limit > 0 && total > limit) ? limit : total;
+        int count = context.anomalyCards;
+        int tiles = AnomalyOrder.mosaicTiles(total, count);
+        if (tiles > 0) writeMosaic(report, context, tiles, count);
         if (count < total) {
-            report.printf(Locale.US, "<p class='compact-note'>Showing the first %d of %d single-frame anomalies (limited by report configuration). All %d are recorded in the data.</p>%n", count, total, total);
+            report.printf(Locale.US, "<p class='compact-note'>Cards are drawn for the first %d of %d single-frame anomalies, as chosen for this report. "
+                    + "All %d are recorded in the report data and shown in the viewers.</p>%n", count, total, total);
         }
         for (int i = 0; i < count; i++) {
             AnomalyDetection anomaly = context.anomalies.get(i);
             context.progress.next();
             writeCard(report, context, anomaly, i + 1);
         }
+    }
+
+    /**
+     * One picture of the first {@code shown} anomalies in report order ({@link AnomalyOrder#mosaicTiles}), each tile
+     * centred on its event in its own frame, labelled with its ID and frame. A transparent grid over the picture links
+     * every tile whose card is drawn ({@code cards}) to that card.
+     */
+    private static void writeMosaic(PrintWriter report, DetectionReportContext context, int shown, int cards) throws IOException {
+        int rows = (shown + MOSAIC_COLUMNS - 1) / MOSAIC_COLUMNS;
+        int pitch = TILE + TILE_GAP;
+        BufferedImage mosaic = new BufferedImage(MOSAIC_COLUMNS * pitch, rows * pitch, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = mosaic.createGraphics();
+        g.setColor(new Color(32, 36, 42));
+        g.fillRect(0, 0, mosaic.getWidth(), mosaic.getHeight());
+        g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING, java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        g.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        for (int i = 0; i < shown; i++) {
+            DetectedObject point = context.anomalies.get(i).object;
+            if (point == null || point.sourceFrameIndex < 0 || point.sourceFrameIndex >= context.rawFrames.size()) continue;
+            BufferedImage tile = mosaicTile(context, point);
+            int x = (i % MOSAIC_COLUMNS) * pitch + TILE_GAP / 2, y = (i / MOSAIC_COLUMNS) * pitch + TILE_GAP / 2;
+            g.drawImage(tile, x, y, null);
+            String label = FindingCategory.ANOMALY.id(i + 1) + " · F" + (point.sourceFrameIndex + 1);
+            int width = g.getFontMetrics().stringWidth(label) + 8;
+            g.setColor(new Color(0, 0, 0, 170));
+            g.fillRect(x, y, width, 16);
+            g.setColor(EVENT_COLOR);
+            g.drawString(label, x + 4, y + 12);
+        }
+        g.dispose();
+        String file = ReportFiles.link(FindingCategory.ANOMALY, MOSAIC_FILE);
+        TrackVisualizationRenderer.saveLosslessPng(mosaic, context.file(file));
+        report.println("<figure class='anomaly-mosaic'><div class='anomaly-mosaic-picture'>");
+        report.println("<img loading='lazy' decoding='async' src='" + file + "' alt='The first " + shown
+                + " single-frame anomalies, one tile each' />");
+        report.printf(Locale.US, "<div class='anomaly-mosaic-links' style='grid-template-rows: repeat(%d, 1fr)'>%n", rows);
+        for (int i = 0; i < shown; i++) {
+            DetectedObject point = context.anomalies.get(i).object;
+            String id = FindingCategory.ANOMALY.id(i + 1);
+            String title = id + (point != null ? ", frame " + (point.sourceFrameIndex + 1) : "");
+            if (i < cards) {
+                report.println("<a href='#" + context.findingAnchor(FindingCategory.ANOMALY, i + 1) + "' title='" + title + "'></a>");
+            } else {
+                report.println("<span title='" + title + " (no card drawn)'></span>");
+            }
+        }
+        report.println("</div></div>");
+        report.println("<figcaption>The first " + shown + " single-frame anomalies in the order of this section. Each tile is "
+                + "centred on its event in its own frame, labelled with its ID and frame number, and stretched on its own. "
+                + (cards > 0 ? "Click a tile to go to its card. " : "")
+                + "<a href='" + file + "' target='_blank'>Open the mosaic</a></figcaption></figure>");
+    }
+
+    /**
+     * A {@value #TILE}-pixel tile of the event's frame centred on it: a crop at least 64 pixels wide and wide enough for
+     * the footprint's length, stretched on its own, magnified with whole pixels or reduced smoothly.
+     */
+    private static BufferedImage mosaicTile(DetectionReportContext context, DetectedObject point) {
+        double length = Double.isFinite(point.majorExtent) ? point.majorExtent : 0;
+        int side = Math.min(192, Math.max(64, 2 * (int) Math.ceil((length + 16) / 2)));
+        short[][] crop = TrackVisualizationRenderer.robustEdgeAwareCrop(context.rawFrames.get(point.sourceFrameIndex),
+                (int) Math.round(point.x), (int) Math.round(point.y), side, side);
+        double[] levels = DisplayImageRenderer.displayLevels(crop,
+                context.settings.getAutoStretchBlackSigma(), context.settings.getAutoStretchWhiteSigma());
+        BufferedImage source = TrackVisualizationRenderer.createDisplayImageAtLevels(crop, levels);
+        BufferedImage tile = new BufferedImage(TILE, TILE, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = tile.createGraphics();
+        g.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION, side <= TILE
+                ? java.awt.RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR
+                : java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.drawImage(source, 0, 0, TILE, TILE, null);
+        g.dispose();
+        return tile;
     }
 
     private static void writeCard(PrintWriter report, DetectionReportContext context,

@@ -33,6 +33,37 @@ public class AnomalyOrderTest {
         assertEquals(engineBefore, engine);
     }
 
+    /**
+     * A long thin event outranks a brighter compact one when its length makes up for it: the score is integrated
+     * sigma times the square root of the footprint length, and an unmeasured length counts as one pixel.
+     */
+    @Test
+    public void longFootprintsRankByIntegratedSigmaTimesRootLength() {
+        var compact = anomaly(0, 300, 200, 20);
+        compact.object.majorExtent = 6;
+        var worm = anomaly(1, 220, 30, 220);
+        worm.object.majorExtent = 64;
+        var faintBlob = anomaly(2, 44, 6, 220);
+        faintBlob.object.majorExtent = 32;
+        var unmeasuredLength = anomaly(3, 250, 40, 9);
+        unmeasuredLength.object.majorExtent = Double.NaN;
+
+        assertEquals(220 * 8, AnomalyOrder.score(worm), 1e-9);
+        assertEquals(250, AnomalyOrder.score(unmeasuredLength), 1e-9);
+        assertEquals(List.of(worm, compact, unmeasuredLength, faintBlob),
+                AnomalyOrder.sorted(List.of(faintBlob, unmeasuredLength, compact, worm)));
+    }
+
+    /** The mosaic shows up to 8 × 5 anomalies when there are more than one row or some have no card. */
+    @Test
+    public void mosaicTilesFollowTheCountsAndTheCards() {
+        assertEquals(0, AnomalyOrder.mosaicTiles(0, 0));
+        assertEquals(0, AnomalyOrder.mosaicTiles(8, 8));
+        assertEquals(8, AnomalyOrder.mosaicTiles(8, 3));
+        assertEquals(9, AnomalyOrder.mosaicTiles(9, 9));
+        assertEquals(40, AnomalyOrder.mosaicTiles(1200, 10));
+    }
+
     /** Equal measurements fall back to frame, then row, then column. */
     @Test
     public void breaksFullTiesByFrameAndPosition() {

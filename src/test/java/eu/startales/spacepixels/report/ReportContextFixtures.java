@@ -23,8 +23,14 @@ final class ReportContextFixtures {
     /** Captures explicit observer options and metadata through the production admission path. */
     static DetectionReportContext createWithOptions(DetectionRunOptions options, File directory, List<short[][]> frames,
             FitsFileInformation[] files, DetectionConfig config, PipelineResult result) {
+        return createWithOptions(options, directory, frames, files, config, result, null);
+    }
+
+    /** As {@link #createWithOptions}, with the report dialog's choices ({@code null}: everything). */
+    static DetectionReportContext createWithOptions(DetectionRunOptions options, File directory, List<short[][]> frames,
+            FitsFileInformation[] files, DetectionConfig config, PipelineResult result, ReportInclusion inclusion) {
         var request = new ReportRequest(result, frames, files, directory, config,
-                ReportRunContext.capture(options, files), null, null);
+                ReportRunContext.capture(options, files), inclusion, null);
         return DetectionReportContext.create(request, directory, new ReportProgress(null));
     }
 }

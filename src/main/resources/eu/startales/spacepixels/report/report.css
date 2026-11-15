@@ -37,6 +37,12 @@ img, canvas.animation-sheet-canvas { border: 1px solid var(--sp-border-strong); 
 a img:hover, a canvas.animation-sheet-canvas:hover { border-color: var(--sp-accent); cursor: pointer; }
 canvas.animation-sheet-canvas { display: block; margin: 0 auto; }
 .image-container { display: flex; gap: 20px; align-items: flex-start; margin-bottom: 15px; }
+.anomaly-mosaic { margin: 0 0 18px; max-width: 1040px; }
+.anomaly-mosaic-picture { position: relative; }
+.anomaly-mosaic-picture img { display: block; width: 100%; height: auto; }
+.anomaly-mosaic-links { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(8, 1fr); }
+.anomaly-mosaic-links a:hover, .anomaly-mosaic-links a:focus-visible { outline: 2px solid var(--sp-accent); outline-offset: -2px; }
+.anomaly-mosaic figcaption { color: var(--sp-text-soft); font-size: 0.8rem; margin-top: 6px; line-height: 1.5; }
 .anomaly-card { border-left-color: var(--sp-finding-a); }
 .anomaly-card .detection-title { margin-bottom: 3px; }
 .anomaly-subtitle { color: var(--sp-text-soft); font-size: 0.8125rem; margin-bottom: 14px; }

@@ -782,7 +782,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
-        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
+        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame,
+                configuration.visualizationSettings().getMaxCategoryItems());
         if (!reportPrompt.confirmReportPath(eu.startales.spacepixels.report.ReportPathWarnings.beforeDetection(
                 new File(owner.getFiles()[0].getFilePath()).getAbsoluteFile().getParentFile(), false))) return;
         DetectionTask detection = new DetectionTask(owner.getFiles(), settings,
@@ -969,7 +970,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 configuration.visualizationSettings(), selected.plan(),
                 selected.autoTuneProfile(), selected.autoTuneFrames(), selected.autoPrepare(), selected.keepNegative(), selected.availableFrames(),
                 sessions.current() == null ? null : sessions.current().runSnapshot());
-        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame);
+        GuiDetectionReportPrompt reportPrompt = new GuiDetectionReportPrompt(windowFrame,
+                configuration.visualizationSettings().getMaxCategoryItems());
         if (!reportPrompt.confirmReportPath(eu.startales.spacepixels.report.ReportPathWarnings.beforeDetection(
                 selected.directory(), true))) return;
         IterativeDetectionTask task = new IterativeDetectionTask(request, (summary, files, passSettings) ->

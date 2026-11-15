@@ -184,6 +184,59 @@ public class AnomalySectionWriterTest {
         assertFalse(render(context(7, 6, AnomalyType.PEAK_SIGMA, List.of(0, 1, 2, 3), 0, 3)).contains("track-link"));
     }
 
+    /** The mosaic holds the first anomalies in order; tiles link only to drawn cards, and every anomaly stays in the data. */
+    @Test public void mosaicShowsTheFirstAnomaliesAndCardsFollowTheChosenCount() throws Exception {
+        var context = manyAnomalies(12, ReportInclusion.all().withAnomalyCards(5));
+        String html = render(context);
+        File mosaic = new File(context.exportDir, ReportFiles.link(FindingCategory.ANOMALY, AnomalySectionWriter.MOSAIC_FILE));
+        var picture = ImageIO.read(mosaic);
+        assertEquals(8 * 130, picture.getWidth());
+        assertEquals(2 * 130, picture.getHeight());
+        assertEquals(5, html.split("class='detection-card anomaly-card'", -1).length - 1);
+        assertTrue(html.contains("Cards are drawn for the first 5 of 12 single-frame anomalies"));
+        String links = html.substring(html.indexOf("anomaly-mosaic-links"), html.indexOf("</div></div>", html.indexOf("anomaly-mosaic-links")));
+        assertEquals(5, links.split("<a href='#", -1).length - 1);
+        assertEquals(7, links.split("(no card drawn)", -1).length - 1);
+        assertTrue(links.indexOf("title='A1, frame 1'") < links.indexOf("title='A2, frame 2'"));
+        assertEquals(12, context.data.findings.stream().filter(f -> f.id().startsWith("A")).count());
+
+        var none = manyAnomalies(3, ReportInclusion.all().withAnomalyCards(0));
+        String noCards = render(none);
+        assertFalse(noCards.contains("class='detection-card anomaly-card'"));
+        assertTrue(noCards.contains("class='anomaly-mosaic'"));
+        assertFalse(noCards.contains("<a href='#"));
+
+        assertFalse(render(manyAnomalies(8, ReportInclusion.all())).contains("class='anomaly-mosaic'"));
+    }
+
+    /** {@code count} anomalies on a 3-frame session, strongest first, each in frame {@code index % 3}. */
+    private DetectionReportContext manyAnomalies(int count, ReportInclusion inclusion) throws Exception {
+        int frameCount = 3;
+        FitsFileInformation[] files = new FitsFileInformation[frameCount];
+        List<short[][]> frames = new ArrayList<>();
+        for (int i = 0; i < frameCount; i++) {
+            var h = new HashMap<String, String>();
+            h.put("DATE-OBS", Instant.ofEpochMilli(START + i * 120_000L).toString()); h.put("EXPTIME", "120");
+            files[i] = new FitsFileInformation(new File(temporary.getRoot(), "frame" + i + ".fit").toString(), "frame" + i + ".fit", true, 300, 200, h);
+            short[][] pixels = new short[200][300];
+            for (short[] row : pixels) Arrays.fill(row, (short) (1000 - 32768));
+            frames.add(pixels);
+        }
+        List<AnomalyDetection> anomalies = new ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            var point = new DetectedObject(20 + 20 * (i % 13), 30 + 50 * (i / 13), 5000, 9);
+            point.sourceFrameIndex = i % frameCount; point.sourceFilename = files[i % frameCount].getFileName();
+            point.pixelArea = 9; point.peakSigma = 20; point.integratedSigma = 100 - i; point.majorExtent = 4; point.fwhm = 3;
+            point.rawPixels = List.of(new Pixel((int) point.x, (int) point.y, 5000));
+            frames.get(i % frameCount)[(int) point.y][(int) point.x] = (short) (9000 - 32768);
+            anomalies.add(new AnomalyDetection(point, AnomalyType.PEAK_SIGMA));
+        }
+        return ReportContextFixtures.createWithOptions(eu.startales.spacepixels.config.DetectionRunOptions.defaults(), temporary.newFolder(),
+                frames, files, new DetectionConfig(),
+                PipelineResult.builder().masterStackData(frames.get(0)).masterVetoMask(new boolean[200][300]).anomalies(anomalies).build(),
+                inclusion);
+    }
+
     private String lookupUrl(String html) {
         var matcher = Pattern.compile("data-target='([^']+)'").matcher(html);
         assertTrue(matcher.find());

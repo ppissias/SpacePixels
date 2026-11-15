@@ -47,7 +47,7 @@ final class TargetVisualizationSectionWriter {
         int singleStreakDisplay = limitCount(context.singleStreaks.size(), limit);
         int streakTrackDisplay = limitCount(context.streakTracks.size(), limit);
         int movingTargetDisplay = limitCount(context.movingTargets.size(), limit);
-        int anomalyDisplay = limitCount(context.anomalies.size(), limit);
+        int anomalyDisplay = context.anomalyCards;
         context.progress.expect(singleStreakDisplay + streakTrackDisplay + movingTargetDisplay + anomalyDisplay);
 
         if (!context.singleStreaks.isEmpty()) {

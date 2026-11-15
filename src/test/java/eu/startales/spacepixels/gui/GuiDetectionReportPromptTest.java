@@ -117,6 +117,35 @@ public class GuiDetectionReportPromptTest {
     }
 
 
+    /** The anomaly-card count starts at the settings' limit, can go down to none, and reaches the report choice. */
+    @Test
+    public void anomalyCardCountIsChosenBesideTheAnomalies() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            assertEquals(50, GuiDetectionReportPrompt.anomalyCardSpinner(1200, 50).getValue());
+            assertEquals(30, GuiDetectionReportPrompt.anomalyCardSpinner(30, 50).getValue());
+            assertEquals(1200, GuiDetectionReportPrompt.anomalyCardSpinner(1200, 0).getValue());
+            assertEquals("· a mosaic shows the first 40", GuiDetectionReportPrompt.mosaicNote(1200, 10));
+            assertEquals("", GuiDetectionReportPrompt.mosaicNote(5, 5));
+
+            var summary = new DetectionSummary(82, 2, 1, 4, 60, 0, 0, 0, null, 0, 0, 0, 0, 0, 0);
+            var choice = new Choice(summary, new DetectionConfig());
+            JSpinner cards = choice.choice.anomalyCards;
+            assertNotNull(cards);
+            assertEquals(60, cards.getValue());
+            cards.setValue(12);
+            assertEquals(12, choice.inclusion().anomalyCards);
+            cards.setValue(0);
+            assertEquals(0, choice.inclusion().anomalyCards);
+            choice.checkbox("Single-frame anomalies").doClick();
+            assertFalse(cards.isEnabled());
+        });
+        assertEquals(ReportInclusion.SETTINGS_CARD_LIMIT, ReportInclusion.all().anomalyCards);
+        assertEquals(50, ReportInclusion.all().anomalyCardCount(1200, 50));
+        assertEquals(1200, ReportInclusion.all().anomalyCardCount(1200, 0));
+        assertEquals(10, ReportInclusion.all().withAnomalyCards(10).anomalyCardCount(1200, 50));
+        assertEquals(7, ReportInclusion.all().withAnomalyCards(100).anomalyCardCount(7, 50));
+    }
+
     /** Checks worker-to-EDT dispatch, accepted choices and unchanged detection settings. */
     @Test(timeout = 10_000)
     public void acceptedChoicesAreAppliedAfterTheEdtAnswers() {
@@ -267,7 +296,7 @@ public class GuiDetectionReportPromptTest {
 
         /** Inspects an already built dialog passed to the confirmation boundary. */
         Choice(JComponent panel) {
-            this(new GuiDetectionReportPrompt.ReportChoice(panel, null, null, null, null, null, null, null, null));
+            this(new GuiDetectionReportPrompt.ReportChoice(panel, null, null, null, null, null, null, null, null, null));
         }
 
         /** Retains the panel and its category grid for row-specific assertions. */

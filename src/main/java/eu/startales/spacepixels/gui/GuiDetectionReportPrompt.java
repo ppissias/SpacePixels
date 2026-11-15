@@ -27,6 +27,14 @@ public final class GuiDetectionReportPrompt {
     private static final Logger LOGGER = Logger.getLogger(GuiDetectionReportPrompt.class.getName());
     private final ToIntFunction<JComponent> confirmation;
     private final ToIntFunction<JComponent> preFlightConfirmation;
+    /** The report settings' per-category card limit (zero for none), the start of the anomaly-card choice. */
+    private int settingsCardLimit;
+
+    /** Attaches modal report questions to the initiating window; the report settings limit cards to {@code settingsCardLimit} (zero: no limit). */
+    public GuiDetectionReportPrompt(Component parent, int settingsCardLimit) {
+        this(parent);
+        this.settingsCardLimit = Math.max(0, settingsCardLimit);
+    }
 
     /** Attaches modal report questions to the initiating window. */
     public GuiDetectionReportPrompt(Component parent) {
@@ -186,6 +194,30 @@ public final class GuiDetectionReportPrompt {
             boxes[9] = faintMoversBox;
         }
         JCheckBox variableStarsBox = offerInReport(variableStarsOn, 1) ? includeBox() : null;
+        JSpinner anomalyCards = anomaliesBox == null ? null : anomalyCardSpinner(summary.anomalies, settingsCardLimit);
+        JComponent anomalyCardChoice = null;
+        if (anomalyCards != null) {
+            JPanel cards = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 4, 0));
+            cards.setOpaque(false);
+            JLabel head = new JLabel("cards for the first");
+            cards.add(head);
+            cards.add(anomalyCards);
+            JLabel tail = new JLabel(mosaicNote(summary.anomalies, ((Number) anomalyCards.getValue()).intValue()));
+            cards.add(tail);
+            anomalyCards.addChangeListener(event -> tail.setText(mosaicNote(summary.anomalies, ((Number) anomalyCards.getValue()).intValue())));
+            String tip = "Anomalies are ordered with the most interesting first: integrated sigma weighted by the length "
+                    + "of the footprint. Only the cards are limited; the report data and the viewers keep all "
+                    + summary.anomalies + ".";
+            cards.setToolTipText(tip);
+            anomalyCards.setToolTipText(tip);
+            JCheckBox box = anomaliesBox;
+            box.addItemListener(event -> {
+                anomalyCards.setEnabled(box.isSelected());
+                head.setEnabled(box.isSelected());
+                tail.setEnabled(box.isSelected());
+            });
+            anomalyCardChoice = cards;
+        }
 
         GridBagConstraints name = new GridBagConstraints();
         name.gridx = 0;
@@ -223,6 +255,12 @@ public final class GuiDetectionReportPrompt {
             if (boxes[index] != null) {
                 grid.add(boxes[index], choice);
                 anyChoice = true;
+            }
+            if (index == 3 && anomalyCardChoice != null) {
+                GridBagConstraints cards = (GridBagConstraints) choice.clone();
+                cards.gridx = 3;
+                cards.insets = new Insets(2, 8, 2, 0);
+                grid.add(anomalyCardChoice, cards);
             }
             row++;
         }
@@ -266,7 +304,26 @@ public final class GuiDetectionReportPrompt {
         panel.add(Box.createVerticalStrut(10));
         panel.add(aligned(label("Generate the report?", true)));
         return new ReportChoice(panel, anomaliesBox, slowMoversBox, localRescueBox, localActivityBox, commonMotionBox,
-                cameraFixedBox, variableStarsBox, faintMoversBox);
+                cameraFixedBox, variableStarsBox, faintMoversBox, anomalyCards);
+    }
+
+    /** What the report's anomaly mosaic will show, after the card count. */
+    static String mosaicNote(int anomalies, int cards) {
+        int tiles = eu.startales.spacepixels.report.AnomalyOrder.mosaicTiles(anomalies, cards);
+        return tiles > 0 ? "· a mosaic shows the first " + tiles : "";
+    }
+
+    /**
+     * The number of anomaly cards to draw, 0 to {@code anomalies}: it starts at the report settings' limit when that
+     * is smaller, else at all of them.
+     */
+    static JSpinner anomalyCardSpinner(int anomalies, int settingsLimit) {
+        int start = settingsLimit > 0 ? Math.min(settingsLimit, anomalies) : anomalies;
+        JSpinner spinner = new JSpinner(new SpinnerNumberModel(start, 0, anomalies, 10));
+        JSpinner.NumberEditor editor = new JSpinner.NumberEditor(spinner, "0");
+        editor.getTextField().setColumns(Math.max(3, Integer.toString(anomalies).length()));
+        spinner.setEditor(editor);
+        return spinner;
     }
 
     /** Counts classified results still selected for export; photometry is reported separately. */
@@ -392,10 +449,13 @@ public final class GuiDetectionReportPrompt {
         final JCheckBox cameraFixed;
         final JCheckBox variableStars;
         final JCheckBox faintMovers;
+        /** How many anomaly cards to draw, or null when anomalies are not offered. */
+        final JSpinner anomalyCards;
 
         /** Keeps the displayed controls until the user answers the dialog. */
         ReportChoice(JComponent panel, JCheckBox anomalies, JCheckBox slowMovers, JCheckBox localRescue,
-                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox cameraFixed, JCheckBox variableStars, JCheckBox faintMovers) {
+                     JCheckBox localActivity, JCheckBox commonMotion, JCheckBox cameraFixed, JCheckBox variableStars, JCheckBox faintMovers,
+                     JSpinner anomalyCards) {
             this.panel = panel;
             this.anomalies = anomalies;
             this.slowMovers = slowMovers;
@@ -405,11 +465,12 @@ public final class GuiDetectionReportPrompt {
             this.cameraFixed = cameraFixed;
             this.variableStars = variableStars;
             this.faintMovers = faintMovers;
+            this.anomalyCards = anomalyCards;
         }
 
         /** Reads report-only choices; absent controls retain their default inclusion. */
         ReportInclusion inclusion() {
-            return new ReportInclusion(
+            ReportInclusion inclusion = new ReportInclusion(
                     selected(anomalies),
                     selected(slowMovers),
                     selected(localRescue),
@@ -417,6 +478,13 @@ public final class GuiDetectionReportPrompt {
                     selected(commonMotion),
                     selected(cameraFixed),
                     selected(variableStars), selected(faintMovers));
+            if (anomalyCards == null) return inclusion;
+            try {
+                anomalyCards.commitEdit();
+            } catch (java.text.ParseException typedNonsense) {
+                // The spinner keeps its last valid value.
+            }
+            return inclusion.withAnomalyCards(((Number) anomalyCards.getValue()).intValue());
         }
 
         /** Treats an unavailable choice as included for compatibility. */

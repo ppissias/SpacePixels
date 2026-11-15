@@ -44,6 +44,8 @@ final class DetectionReportContext {
     final List<ResidualTransientAnalysis.LocalRescueCandidate> localRescueCandidates;
     final List<ResidualTransientAnalysis.LocalActivityCluster> localActivityClusters;
     final List<AnomalyDetection> anomalies;
+    /** How many anomaly cards to draw: the first ones of {@link #anomalies}, by the report dialog or the settings. */
+    final int anomalyCards;
     final List<Track> singleStreaks;
     final List<Track> streakTracks;
     final List<Track> movingTargets;
@@ -93,6 +95,7 @@ final class DetectionReportContext {
         this.anomalies = FindingCategory.ANOMALY.included(inclusion)
                 ? AnomalyOrder.sorted(result.anomalies)
                 : new ArrayList<>();
+        this.anomalyCards = inclusion.anomalyCardCount(anomalies.size(), settings.getMaxCategoryItems());
         this.pipelineTelemetry = result.telemetry;
         this.faintMoverCandidates = FindingCategory.FAINT_MOVER.included(inclusion) ? result.faintMoverCandidates : List.of();
         var faintTelemetry = pipelineTelemetry == null ? null : pipelineTelemetry.faintMoverSearchTelemetry;
