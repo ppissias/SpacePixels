@@ -8,6 +8,8 @@
  *
  */
 package eu.startales.spacepixels.report;
+
+import eu.startales.spacepixels.skycatalog.PhotometryStars;
 import eu.startales.spacepixels.util.Statistics;
 import io.github.ppissias.jtransient.model.DetectedObject;
 import eu.startales.spacepixels.util.DebugOutput;
@@ -70,14 +72,26 @@ final class FieldDepth {
     double sampleLimit;
     double patchArcmin;
     int patchCount;
+    /**
+     * The Gaia G at which a star stands 5 sigma above the sky on the middle kept frame
+     * ({@link PhotometryStars.Check#limitingMagnitude}), used when the patches cannot tell the depth: too few faint
+     * Gaia stars in them (a small field), or frames that go deeper than the patches' stars. NaN when not used.
+     */
+    double signalLimit = Double.NaN;
 
-    /** The median depth over the frames measured; NaN when none was. */
+    /** The median depth over the frames measured, else the signal limit; NaN when neither is known. */
     double median() {
         List<Double> values = new ArrayList<>();
         for (Frame frame : frames) {
             values.add(frame.depth);
         }
-        return Statistics.upperMedian(values);
+        double patches = Statistics.upperMedian(values);
+        return fromSignal() ? signalLimit : patches;
+    }
+
+    /** Whether the depth is the signal limit rather than the patches' share of stars found. */
+    boolean fromSignal() {
+        return Double.isFinite(signalLimit);
     }
 
     boolean isEmpty() {
@@ -85,6 +99,7 @@ final class FieldDepth {
     }
 
     boolean medianIsLowerLimit() {
+        if (fromSignal()) return false;
         List<Frame> measured = frames.stream().filter(f -> Double.isFinite(f.depth))
                 .sorted(java.util.Comparator.comparingDouble(f -> f.depth)).toList();
         return !measured.isEmpty() && measured.get(measured.size() / 2).deeperThanSample;
@@ -92,6 +107,13 @@ final class FieldDepth {
 
     String medianLabel() {
         return String.format(java.util.Locale.US, "G %s%.1f", medianIsLowerLimit() ? "≥ " : "", median());
+    }
+
+    /** How the depth was measured, for a tooltip or a note. */
+    String method() {
+        return fromSignal()
+                ? "Gaia G at which a star stands 5 sigma above the sky on a kept frame (the Gaia patches had too few faint stars, or the frames go deeper than they do)"
+                : "Gaia G magnitude where the share of stars found falls to half, in the median frame";
     }
 
     /** One patch on the frame: its Gaia stars in frame pixels, and the part of the frame it covers. */
@@ -108,12 +130,36 @@ final class FieldDepth {
      * empty when the measurement fails, so the report is still written.
      */
     static FieldDepth measure(DetectionReportContext context, PipelineTelemetry telemetry) {
+        FieldDepth result;
         try {
-            return measureFrames(context, telemetry);
+            result = measureFrames(context, telemetry);
         } catch (RuntimeException e) {
             LOGGER.log(Level.WARNING, "Failed to measure the field depth", e);
-            return new FieldDepth();
+            result = new FieldDepth();
         }
+        // The patches cannot tell: too few faint Gaia stars in a small field, or frames deeper than the patches' stars.
+        if (result.isEmpty() || result.medianIsLowerLimit()) {
+            try {
+                double limit = signalLimit(context);
+                if (Double.isFinite(limit) && (result.isEmpty() || limit > result.median())) result.signalLimit = limit;
+            } catch (RuntimeException e) {
+                LOGGER.log(Level.FINE, "No signal limit for the field depth", e);
+            }
+        }
+        return result;
+    }
+
+    /** The middle kept frame's 5-sigma Gaia G limit from the catalogue's stars, NaN without a catalogue or plate solution. */
+    private static double signalLimit(DetectionReportContext context) {
+        SkyCatalogue catalogue = SessionCatalogue.of(context).catalogue;
+        WcsCoordinateTransformer transformer = context.astrometryContext != null ? context.astrometryContext.getTransformer() : null;
+        if (catalogue == null || transformer == null || context.rawFrames == null || context.rawFrames.isEmpty()) return Double.NaN;
+        var kept = context.keptFrameIndices;
+        int index = kept.isEmpty() ? context.rawFrames.size() / 2 : kept.get(kept.size() / 2);
+        short[][] frame = context.rawFrames.get(index);
+        if (frame == null) return Double.NaN;
+        var check = PhotometryStars.check(frame, "", transformer, catalogue);
+        return check == null ? Double.NaN : check.limitingMagnitude;
     }
 
     private static FieldDepth measureFrames(DetectionReportContext context, PipelineTelemetry telemetry) {

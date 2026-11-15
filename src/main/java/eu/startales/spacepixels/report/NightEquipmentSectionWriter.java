@@ -308,7 +308,8 @@ final class NightEquipmentSectionWriter {
         }
         if (hasDepth) {
             text.append(Double.isNaN(ne.saturationMagnitude) && ne.calibrationStars == 0 ? "" : ", and ")
-                    .append("the detection reaches ").append(fieldDepth.medianLabel()).append(" (field depth)");
+                    .append(fieldDepth.fromSignal() ? "the frames reach " : "the detection reaches ").append(fieldDepth.medianLabel())
+                    .append(fieldDepth.fromSignal() ? " (5 sigma above the sky)" : " (field depth)");
         }
         text.append(".");
         if (!Double.isNaN(ne.saturationMagnitude) && hasDepth) {

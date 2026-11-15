@@ -259,7 +259,7 @@ final class PipelineDiagnosticsSectionWriter {
         report.println(compactCard(String.valueOf(pipelineTelemetry.totalRawObjectsExtracted), "Objects extracted"));
         report.println(compactCard(String.valueOf(summary.masterStarCount), "Stars in the master map"));
         if (fieldDepth != null && !fieldDepth.isEmpty()) {
-            report.println("<a class='metric-link open-details' href='#field-depth' title='Gaia G magnitude where the share of stars found falls to half, in the median frame. Per frame under Diagnostics.'>"
+            report.println("<a class='metric-link open-details' href='#field-depth' title='" + fieldDepth.method() + (fieldDepth.fromSignal() ? "" : ". Per frame under Diagnostics") + ".'>"
                     + compactCard(fieldDepth.medianLabel(), "Field depth") + "</a>");
         }
         if (nightEquipment != null && !nightEquipment.isEmpty()) {
@@ -503,6 +503,16 @@ final class PipelineDiagnosticsSectionWriter {
         }
         report.println("<div class='panel compact-diagnostics-panel' id='field-depth'>");
         report.println("<h2>Quality Control: Field Depth</h2>");
+        if (fieldDepth.fromSignal()) {
+            report.println("<p class='compact-note'>" + String.format(Locale.US, "The frames reach <strong>%s</strong>: the Gaia G at which a star "
+                    + "stands 5 sigma above the sky, measured on the catalogue's stars in a kept frame. The usual measure, the share of Gaia stars "
+                    + "the detection finds in small patches of the field, could not be made here: %s. It is a measure of the frames, not of "
+                    + "this run's detection settings, and it is not followed frame by frame.", fieldDepth.medianLabel(),
+                    fieldDepth.patchCount == 0 ? "the patches hold too few faint Gaia stars (a small field)"
+                            : "the frames go deeper than the patches' faintest stars") + "</p>");
+            report.println("</div>");
+            return;
+        }
         report.println("<p class='compact-note'>" + String.format(Locale.US,
                 "How faint the stars are that the detection finds, with the settings of this run: the Gaia G magnitude at which the share of "
                         + "Gaia stars found falls to half of the share among the brighter stars, in small patches of the field (%.0f&prime; each) away from large galaxies and nebulae. Median frame: <strong>%s</strong>%s. ",
