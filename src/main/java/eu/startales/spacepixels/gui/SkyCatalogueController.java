@@ -6,6 +6,7 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.fits.WcsSolutionResolver;
 import eu.startales.spacepixels.skycatalog.FetchStep;
+import eu.startales.spacepixels.skycatalog.PhotometryStars;
 import eu.startales.spacepixels.skycatalog.PlateCorrectionFitter;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
 import eu.startales.spacepixels.skycatalog.SkyCatalogueClient;
@@ -225,6 +226,10 @@ final class SkyCatalogueController implements AutoCloseable {
                 return;
             }
             boolean fitFollows = result != null && !result.stars.isEmpty();
+            if (fitFollows) {
+                post(request, () -> showStage(request, "Sky catalogue: checking the comparison stars for light curves"));
+                result.photometryCheck = photometryCheck(request.files, result);
+            }
             post(request, () -> catalogueFinished(request, result, null, fitFollows));
             if (!fitFollows) return;
             catalogue = result;
@@ -239,6 +244,27 @@ final class SkyCatalogueController implements AutoCloseable {
         } catch (IOException | RuntimeException failure) {
             LOGGER.log(Level.WARNING, "Plate solution check failed", failure);
             post(request, () -> correctionFinished(request, null, failure.getMessage()));
+        }
+    }
+
+    /**
+     * Measures the catalogue's stars on the session's middle frame ({@link PhotometryStars#check}), so a catalogue too
+     * shallow for the telescope is noticed at the fetch; null when the frame cannot be read.
+     */
+    private static PhotometryStars.Check photometryCheck(FitsFileInformation[] files, SkyCatalogue catalogue) {
+        if (files.length == 0) return null;
+        try {
+            var solution = WcsSolutionResolver.resolveUncorrected(null, files);
+            if (solution == null) return null;
+            FitsFileInformation file = files[files.length / 2];
+            try (nom.tam.fits.Fits fits = new nom.tam.fits.Fits(new java.io.File(file.getFilePath()))) {
+                Object kernel = eu.startales.spacepixels.fits.FitsInput.getImageHDU(fits).getKernel();
+                return kernel instanceof short[][] pixels
+                        ? PhotometryStars.check(pixels, file.getFileName(), solution.getTransformer(), catalogue) : null;
+            }
+        } catch (IOException | RuntimeException cannotCheck) {
+            LOGGER.log(Level.FINE, "Cannot check the comparison stars", cannotCheck);
+            return null;
         }
     }
 
@@ -288,7 +314,8 @@ final class SkyCatalogueController implements AutoCloseable {
                 }
             });
             session.getSkyCatalogue().set(result);
-            listener.message("Sky catalogue: " + result.summary() + (result.problems.isEmpty() ? "" : " (incomplete)"));
+            listener.message("Sky catalogue: " + result.summary() + (result.problems.isEmpty() ? "" : " (incomplete)")
+                    + (result.photometryCheck != null && !result.photometryCheck.enough() ? " · too few comparison stars for light curves" : ""));
         }
         if (!fitFollows) stop();
         changed();

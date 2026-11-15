@@ -44,6 +44,11 @@ public final class SkyCatalogue {
     public List<NamedStar> namedStars = new ArrayList<>();
     /** Faint Gaia stars of four small patches, one in each quarter of the field, to measure how deep the frames go. */
     public List<DepthSample> depthSamples = new ArrayList<>();
+    /**
+     * How many of these stars can serve as comparison stars for moving-object light curves, checked on a frame of the
+     * session after the fetch; null in a file written before the check existed or when the frame could not be read.
+     */
+    public PhotometryStars.Check photometryCheck;
     /** One line per source that could not be fetched; empty when all answered. The status warning still reads this. */
     public List<String> problems = new ArrayList<>();
     /**

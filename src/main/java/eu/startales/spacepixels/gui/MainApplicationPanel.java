@@ -1677,8 +1677,27 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         if (catalogue == null) {
             return skyCatalogueProblem() != null ? "⚠ no catalogue" : "no catalogue yet";
         }
-        return (catalogue.problems.isEmpty() && skyCatalogueProblem() == null ? "" : "⚠ ")
+        boolean fewComparisons = catalogue.photometryCheck != null && !catalogue.photometryCheck.enough();
+        return (catalogue.problems.isEmpty() && skyCatalogueProblem() == null && !fewComparisons ? "" : "⚠ ")
                 + String.format(Locale.US, "%,d stars", catalogue.stars.size());
+    }
+
+    /** Breaks HTML text at spaces into lines of about {@code width} characters, for tooltips. */
+    private static String breakLines(String text, int width) {
+        StringBuilder out = new StringBuilder();
+        int line = 0;
+        for (String word : text.split(" ")) {
+            if (line > 0 && line + word.length() > width) {
+                out.append("<br>");
+                line = 0;
+            } else if (line > 0) {
+                out.append(' ');
+                line++;
+            }
+            out.append(word);
+            line += word.length();
+        }
+        return out.toString();
     }
 
     private String skyCatalogueTooltip() {
@@ -1697,6 +1716,13 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             }
             if (!catalogue.hasStarIdentifiers()) {
                 text.append("<br><b>This saved catalogue has no Gaia identifiers.</b> Fetch it again to name unmatched variable candidates.");
+            }
+            if (catalogue.photometryCheck != null) {
+                String warning = catalogue.photometryCheck.warning();
+                text.append(warning == null
+                        ? String.format(Locale.US, "<br>%d catalogue stars can serve as comparison stars for light curves (checked on %s).",
+                        catalogue.photometryCheck.usable, escapeHtml(String.valueOf(catalogue.photometryCheck.frame)))
+                        : "<br><b>Comparison stars:</b> " + breakLines(escapeHtml(warning), 100));
             }
         } else {
             text.append("<br><br>").append(FETCH_SKY_CATALOGUE).append(" downloads the stars, deep-sky objects and variables of the field<br>"
@@ -2143,8 +2169,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         var site = eu.startales.spacepixels.fits.ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
         var visualization = detectionSettings.visualizationSettings();
         var catalogue = skyCatalogue().get();
-        var catalogueStars = catalogue == null || catalogue.stars == null ? List.<eu.startales.spacepixels.skycatalog.SkyCatalogue.Star>of()
-                : List.copyOf(catalogue.stars);
         new SwingWorker<eu.startales.spacepixels.mpc.ReportedObjects.Report, Void>() {
             @Override protected eu.startales.spacepixels.mpc.ReportedObjects.Report doInBackground() throws Exception {
                 return eu.startales.spacepixels.mpc.ReportedObjects.load(chosen);
@@ -2172,7 +2196,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 var resolved = WcsSolutionResolver.resolveUncorrected(null, files);
                 var window = viewers.register(new AsteroidsCometsWindow(windowFrame, files, report,
                         resolved == null ? null : resolved.getTransformer(), correction, applicationSettings, storage, visualization, site,
-                        catalogueStars));
+                        catalogue));
                 window.setVisible(true);
             }
         }.execute();
