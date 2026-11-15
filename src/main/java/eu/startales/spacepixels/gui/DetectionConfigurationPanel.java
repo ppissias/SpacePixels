@@ -1657,14 +1657,25 @@ public class DetectionConfigurationPanel extends JPanel {
                 + faintMoverRate(minimumRate, "px/min", true) : "FWHM/session<br>Session times unavailable")
                 + "<br>Minimum: 2 FWHM/session</html>");
         boolean belowSlowest = Double.isFinite(minimumRate) && !(maximumRate > minimumRate);
+        var limit = FaintMoverRuntimeEstimate.motionLimit(files, jTransientConfig, starSize);
+        boolean tooFast = !belowSlowest && limit != null && limit.exceeded();
         faintMoverMaxInfo.setText("<html>" + rateUnit + (Double.isFinite(faintMoverAngularScale)
                 ? "<br>" + faintMoverRate(maximumRate, "px/min", false) : "<br>No usable WCS")
-                + (belowSlowest ? "<br>Not above the slowest (est.): the run skips the search" : "") + "</html>");
+                + (belowSlowest ? "<br>Not above the slowest (est.): the run skips the search" : "")
+                + (tooFast ? "<br><font color='" + warningHex() + "'>Too fast for these frames (est.): the run skips the search. "
+                        + "Highest about " + faintMoverRate(limit.highestSpeedPixelsPerMinute() * maximumScale, rateUnit, false)
+                        + "</font>" : "") + "</html>");
         spinFaintMoverMinMotion.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MIN_DISPLACEMENT.help()
                 + " " + faintMoverMinInfo.getText().replaceAll("<[^>]*>", " "));
         spinFaintMoverMaxSpeed.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MAX_SPEED.help()
                 + " " + faintMoverMaxInfo.getText().replaceAll("<[^>]*>", " "));
         faintMoverEstimate.setText(faintMoverEstimateText(files, starSize));
+    }
+
+    /** The theme's warning colour as an HTML colour. */
+    private static String warningHex() {
+        Color color = UIManager.getColor("Actions.Yellow");
+        return String.format("#%06x", (color != null ? color : new Color(0xE0A030)).getRGB() & 0xFFFFFF);
     }
 
     /** The star size the session's last detection run or restored report measured, or NaN when none is known. */

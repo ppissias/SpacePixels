@@ -22,6 +22,23 @@ public final class FaintMoverRuntimeEstimate {
     private static final double FULL_ADD_SECONDS = 6e-11;
     private static final double BINNED_ADD_SECONDS = 7e-11;
     private static final double PREPARE_SECONDS = 1.5e-8;
+    /**
+     * The most first-pass trial motions the engine searches ({@code FaintMoverSearch.MAX_MOTIONS}); over it, a run skips
+     * the search and says so.
+     */
+    public static final int MAX_MOTIONS = 100_000;
+
+    /**
+     * The trial motions the fastest motion needs for these frames and the fastest motion that stays within
+     * {@link #MAX_MOTIONS}, in pixels per minute; estimated from the imported frames and the star size, so the kept
+     * frames and the measured seeing of a run can move the limit a little.
+     */
+    public record MotionLimit(double motions, double highestSpeedPixelsPerMinute) {
+        /** Whether the run will probably skip the search for too many trial motions. */
+        public boolean exceeded() {
+            return motions > MAX_MOTIONS;
+        }
+    }
 
     /**
      * Largest imported session's timing metadata; quality selection and measured seeing are not yet available.
@@ -85,6 +102,20 @@ public final class FaintMoverRuntimeEstimate {
     }
 
     /**
+     * The trial motions and the highest fastest motion for these frames (see {@link MotionLimit}); null when the
+     * frames give no usable session span or fewer than 8 frames.
+     */
+    public static MotionLimit motionLimit(FitsFileInformation[] files, DetectionConfig config, double measuredStarSize) {
+        var session = importedSession(files);
+        if (session.unavailableReason() != null || session.frames() < 8 || !session.hasSpan()) return null;
+        double fwhm = Double.isFinite(measuredStarSize) && measuredStarSize > 0 ? measuredStarSize : ASSUMED_FWHM_PIXELS;
+        double step = fwhm / session.halfSpanMinutes(), min = config.faintMoverMinDisplacementFwhm * fwhm / session.spanMinutes();
+        double max = config.faintMoverMaxSpeedPixelsPerMinute;
+        double motions = Math.PI * Math.max(0, max * max - min * min) / (step * step);
+        return new MotionLimit(motions, Math.sqrt(MAX_MOTIONS * step * step / Math.PI + min * min));
+    }
+
+    /**
      * Estimates the additional time of each search speed from headers and the star size: the size the last detection
      * run measured when given (finite and positive), otherwise {@link #ASSUMED_FWHM_PIXELS}. Quality selection is not
      * yet known.
@@ -112,6 +143,15 @@ public final class FaintMoverRuntimeEstimate {
                         .append(shape[0] > 1 && shape[1] < n ? ", " : "")
                         .append(shape[1] < n ? shape[1] + " of " + n + " frames" : "").append(" in the first pass)");
             }
+        }
+        if (motions > MAX_MOTIONS) {
+            double highest = Math.sqrt(MAX_MOTIONS * step * step / Math.PI + min * min);
+            return String.format(Locale.ROOT, "<b>The run will probably skip the search:</b> the fastest motion needs about "
+                            + "%,.0f trial motions for these frames, over the search's limit of %,d. Lower the fastest motion "
+                            + "to about %.2f px/min or less. Based on %d imported frames over %.2f min and %s.",
+                    motions, MAX_MOTIONS, highest, n, span,
+                    measured ? String.format(Locale.ROOT, "the star size of %.2f px the last detection run measured", fwhm)
+                            : "an assumed " + fwhm + " px star size (a detection run measures it)");
         }
         int selected = Math.max(0, Math.min(SPEED_NAMES.length - 1, config.faintMoverSearchSpeed));
         double margin = Math.ceil(maxSpeed * halfSpan) + 16;
