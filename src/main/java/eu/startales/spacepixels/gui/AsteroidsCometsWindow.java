@@ -105,6 +105,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JButton identifyAllButton = new JButton("Identify all…");
     /** The running Identify all, while its button reads Cancel; null otherwise. EDT only. */
     private SwingWorker<?, ?> identifyWorker;
+    /** The running light-curve and sub-stack measurements, while their buttons read Cancel; null otherwise. EDT only. */
+    private SwingWorker<?, ?> curveWorker, subStackWorker;
     /** The full result of the last Compare again or Identify all, which the ⓘ link shows; null before one. */
     private String comparisonDetails;
     private final JButton detailsLink = AccessibleControls.link("ⓘ", "Details of the last comparison", this::showComparisonDetails);
@@ -406,14 +408,18 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
 
     /** Measures the shown object's light in each frame on a worker, with the comparison stars, and keeps the curve. */
     private void measureLightCurve() {
+        if (curveWorker != null) {
+            curveWorker.cancel(true);
+            return;
+        }
         var object = shown;
         if (object == null || object.positions().isEmpty()) return;
         double fwhm = LightCurve.fwhm(report, object);
         var samples = LightCurve.samples(report, object);
         double speed = LightCurve.pixelsPerMinute(object, samples);
-        curveButton.setEnabled(false);
+        curveButton.setText("Cancel light curve");
         curveLabel.setText("Measuring " + object.id() + " in " + samples.size() + " frames…");
-        new SwingWorker<LightCurve.Curve, String>() {
+        curveWorker = new SwingWorker<LightCurve.Curve, String>() {
             @Override protected LightCurve.Curve doInBackground() throws Exception {
                 LightCurve.Frames frames = AsteroidsCometsWindow.this::readFrame;
                 double[] box = LightCurve.pathBox(samples);
@@ -445,7 +451,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 }
                 publish("Measuring " + object.id() + " in " + samples.size() + " frames with " + comparisons.size() + " comparison stars…");
                 return LightCurve.measure(object.id(), object.measured(), samples, frames, comparisons, fwhm, speed, MAX_SUB_STACK_BYTES,
-                        note, () -> closed);
+                        note, () -> closed || isCancelled());
             }
 
             @Override protected void process(List<String> chunks) {
@@ -453,8 +459,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
 
             @Override protected void done() {
+                if (curveWorker == this) curveWorker = null;
                 if (closed) return;
-                curveButton.setEnabled(true);
+                curveButton.setText("Measure light curve");
+                if (isCancelled()) {
+                    curveLabel.setText(object.id() + "'s light curve was cancelled.");
+                    return;
+                }
                 try {
                     var curve = get();
                     if (curve != null) curves.put(object.id(), curve);
@@ -465,7 +476,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 }
                 if (shown == object) updateCurve();
             }
-        }.execute();
+        };
+        curveWorker.execute();
     }
 
     /** One frame's pixels, read from its file. */
@@ -705,7 +717,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             return;
         }
         String names = object.names().isEmpty() ? "" : "<b>" + escape(String.join(" or ", object.names())) + "</b><br>";
-        measureButton.setEnabled(!object.measured() && object.motion() != null && reduction.reduction() != null);
+        measureButton.setEnabled(subStackWorker != null || !object.measured() && object.motion() != null && reduction.reduction() != null);
         String measure = object.measured() ? "" : subStackText(object);
         String reduced = reduction.reduction() == null ? "<br>" + escape(reduction.problem()) : "";
         var near = nearby.get(object.id());
@@ -1513,6 +1525,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      * independent sub-stacks on a worker; the centroids become its observations, noted K.
      */
     private void measureSubStacks() {
+        if (subStackWorker != null) {
+            subStackWorker.cancel(true);
+            return;
+        }
         var object = shown;
         if (object == null || object.motion() == null || reduction.reduction() == null) return;
         var motion = object.motion();
@@ -1528,15 +1544,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     + positions.size() + " frames).");
             return;
         }
-        measureButton.setEnabled(false);
+        measureButton.setText("Cancel sub-stacks");
         problemsArea.setText("Measuring " + object.id() + " in " + SUB_STACKS + " sub-stacks…");
-        new SwingWorker<List<SubStackAstrometry.Measurement>, Void>() {
+        subStackWorker = new SwingWorker<List<SubStackAstrometry.Measurement>, Void>() {
             private final List<Integer> frameIndexes = new ArrayList<>();
 
             @Override protected List<SubStackAstrometry.Measurement> doInBackground() throws Exception {
                 var cutouts = new ArrayList<SubStackAstrometry.Cutout>();
                 for (var p : positions) {
-                    if (closed) return List.of();
+                    if (closed || isCancelled()) return List.of();
                     int index = p.frameNumber() - 1;
                     var file = files[index];
                     short[][] frame;
@@ -1554,7 +1570,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
 
             @Override protected void done() {
+                if (subStackWorker == this) subStackWorker = null;
                 if (closed) return;
+                measureButton.setText("Measure in sub-stacks");
+                if (isCancelled()) {
+                    problemsArea.setText("Measuring " + object.id() + " in sub-stacks was cancelled.");
+                    if (shown != null) show(shown);
+                    return;
+                }
                 try {
                     var stacks = get();
                     var list = new ArrayList<MpcObservation>();
@@ -1575,7 +1598,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 if (shown == object) show(object);
                 refreshExport();
             }
-        }.execute();
+        };
+        subStackWorker.execute();
     }
 
     static String statusText(String status) {
@@ -1606,8 +1630,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             playTimer.stop();
             if (worker != null) worker.cancel(true);
             worker = null;
-            if (identifyWorker != null) identifyWorker.cancel(true);
-            identifyWorker = null;
+            for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker}) if (running != null) running.cancel(true);
+            identifyWorker = curveWorker = subStackWorker = null;
             pictures = List.of();
         }
         super.dispose();
