@@ -101,6 +101,36 @@ public final class FaintMoverRuntimeEstimate {
         return new ImportedSession(n, span, halfSpan, null, minutes);
     }
 
+    /** Trail length per frame, in star widths, up to which the search scores movers as points without losing much. */
+    public static final double POINT_TRAIL_FWHM = 2.0;
+
+    /**
+     * How long the fastest motion trails in one frame: the median exposure in minutes, the star size used, the trail in
+     * pixels, and the speeds in pixels per minute at which a frame trails {@link #POINT_TRAIL_FWHM} star widths.
+     */
+    public record Trail(double exposureMinutes, double starSizePixels, double trailPixels, double pointSpeedPixelsPerMinute) {
+        /** The trail in star widths. */
+        public double trailStarWidths() {
+            return trailPixels / starSizePixels;
+        }
+
+        /** Whether the fastest motion trails longer than {@link #POINT_TRAIL_FWHM} star widths. */
+        public boolean beyondPoint() {
+            return trailStarWidths() > POINT_TRAIL_FWHM + 1e-9;
+        }
+    }
+
+    /** The trail of the fastest motion in these frames; null without exposure times. */
+    public static Trail trail(FitsFileInformation[] files, DetectionConfig config, double measuredStarSize) {
+        if (files == null) return null;
+        double[] exposures = Arrays.stream(files).filter(java.util.Objects::nonNull)
+                .mapToDouble(f -> f.getExposureDurationMillis() / 60000.0).filter(m -> m > 0).sorted().toArray();
+        if (exposures.length == 0) return null;
+        double exposure = exposures[exposures.length / 2];
+        double fwhm = Double.isFinite(measuredStarSize) && measuredStarSize > 0 ? measuredStarSize : ASSUMED_FWHM_PIXELS;
+        return new Trail(exposure, fwhm, config.faintMoverMaxSpeedPixelsPerMinute * exposure, POINT_TRAIL_FWHM * fwhm / exposure);
+    }
+
     /**
      * The trial motions and the highest fastest motion for these frames (see {@link MotionLimit}); null when the
      * frames give no usable session span or fewer than 8 frames.

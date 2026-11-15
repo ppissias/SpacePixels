@@ -21,7 +21,7 @@ public class FaintMoverMotionLimitTest {
         Instant start = Instant.parse("2022-08-24T23:00:00Z");
         for (int i = 0; i < files.length; i++) {
             String time = start.plusMillis(Math.round(i * 283.0 / 114 * 60000)).toString().replace("Z", "");
-            files[i] = new FitsFileInformation("f" + i + ".fit", "f" + i + ".fit", true, 2048, 4096, Map.of("DATE-OBS", time, "EXPTIME", "60"));
+            files[i] = new FitsFileInformation("f" + i + ".fit", "f" + i + ".fit", true, 2048, 4096, Map.of("DATE-OBS", time, "EXPTIME", "120"));
         }
         return files;
     }
@@ -49,5 +49,20 @@ public class FaintMoverMotionLimitTest {
         assertFalse(limit.exceeded());
         assertFalse(FaintMoverRuntimeEstimate.describe(session(), config, 4.14).contains("skip"));
         assertNull(FaintMoverRuntimeEstimate.motionLimit(new FitsFileInformation[0], config, 4.14));
+    }
+
+    @Test
+    public void theFastestMotionsTrailIsShownInStarWidths() {
+        var config = new DetectionConfig();
+        config.faintMoverMaxSpeedPixelsPerMinute = 7.6242;
+        var trail = FaintMoverRuntimeEstimate.trail(session(), config, 4.14);
+        assertEquals(2.0, trail.exposureMinutes(), 1e-9);
+        assertEquals(15.25, trail.trailPixels(), 0.01);
+        assertEquals(3.68, trail.trailStarWidths(), 0.01);
+        assertTrue(trail.beyondPoint());
+        assertEquals("2 star widths in 2 min", 4.14, trail.pointSpeedPixelsPerMinute(), 1e-9);
+        config.faintMoverMaxSpeedPixelsPerMinute = 3.81211;
+        assertFalse(FaintMoverRuntimeEstimate.trail(session(), config, 4.14).beyondPoint());
+        assertNull(FaintMoverRuntimeEstimate.trail(new FitsFileInformation[0], config, 4.14));
     }
 }

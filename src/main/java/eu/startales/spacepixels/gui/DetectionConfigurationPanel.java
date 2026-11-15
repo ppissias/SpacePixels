@@ -1659,17 +1659,33 @@ public class DetectionConfigurationPanel extends JPanel {
         boolean belowSlowest = Double.isFinite(minimumRate) && !(maximumRate > minimumRate);
         var limit = FaintMoverRuntimeEstimate.motionLimit(files, jTransientConfig, starSize);
         boolean tooFast = !belowSlowest && limit != null && limit.exceeded();
+        var trail = FaintMoverRuntimeEstimate.trail(files, jTransientConfig, starSize);
         faintMoverMaxInfo.setText("<html>" + rateUnit + (Double.isFinite(faintMoverAngularScale)
                 ? "<br>" + faintMoverRate(maximumRate, "px/min", false) : "<br>No usable WCS")
                 + (belowSlowest ? "<br>Not above the slowest (est.): the run skips the search" : "")
-                + (tooFast ? "<br><font color='" + warningHex() + "'>Too fast for these frames (est.): the run skips the search. "
-                        + "Highest about " + faintMoverRate(limit.highestSpeedPixelsPerMinute() * maximumScale, rateUnit, false)
-                        + "</font>" : "") + "</html>");
+                + (tooFast ? "<br><font color='" + warningHex() + "'>Over the search limit (est.): the run skips the search. "
+                        + "Highest ≈ " + shortRate(limit.highestSpeedPixelsPerMinute() * maximumScale, rateUnit) + "</font>" : "")
+                + (trail == null ? "" : String.format(java.util.Locale.ROOT, "<br>Trail %.0f px = %.1f star widths per %s frame",
+                        trail.trailPixels(), trail.trailStarWidths(), exposureText(trail.exposureMinutes())))
+                + (trail != null && trail.beyondPoint() ? "<br><font color='" + warningHex() + "'>Point search: above "
+                        + shortRate(trail.pointSpeedPixelsPerMinute() * maximumScale, rateUnit)
+                        + String.format(java.util.Locale.ROOT, " (%.0f star widths) much of a trail's light is lost</font>",
+                        FaintMoverRuntimeEstimate.POINT_TRAIL_FWHM) : "") + "</html>");
         spinFaintMoverMinMotion.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MIN_DISPLACEMENT.help()
                 + " " + faintMoverMinInfo.getText().replaceAll("<[^>]*>", " "));
         spinFaintMoverMaxSpeed.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MAX_SPEED.help()
                 + " " + faintMoverMaxInfo.getText().replaceAll("<[^>]*>", " "));
         faintMoverEstimate.setText(faintMoverEstimateText(files, starSize));
+    }
+
+    /** A rate to two decimals, "0.83 arcsec/min", or three significant digits below 0.1. */
+    private static String shortRate(double value, String unit) {
+        return String.format(java.util.Locale.ROOT, value >= 0.1 ? "%.2f %s" : "%.3g %s", value, unit);
+    }
+
+    /** An exposure as "120 s" or "5.0 min". */
+    private static String exposureText(double minutes) {
+        return minutes < 5 ? String.format(java.util.Locale.ROOT, "%.0f s", minutes * 60) : String.format(java.util.Locale.ROOT, "%.1f min", minutes);
     }
 
     /** The theme's warning colour as an HTML colour. */
