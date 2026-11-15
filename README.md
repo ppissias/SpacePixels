@@ -338,6 +338,10 @@ These open additional checks or information in a browser:
 - [CelesTrak](https://celestrak.org/) & [N2YO](https://www.n2yo.com/): Catalogue and satellite-information links for returned NORAD identities.
 - [Stellarium Web](https://stellarium-web.org/): Sky views centred on report findings. Local Stellarium control is described in Software & Utilities.
 
+#### NSF NOIRLab (DECam data)
+
+SpacePixels was tested and improved with public data obtained with the Dark Energy Camera (DECam), which was constructed by the Dark Energy Survey (DES) collaboration, on the Víctor M. Blanco 4-meter Telescope at NSF Cerro Tololo Inter-American Observatory, NSF NOIRLab, and distributed by the [NSF NOIRLab Astro Data Archive](https://astroarchive.noirlab.edu/). NSF NOIRLab is managed by the Association of Universities for Research in Astronomy (AURA) under a cooperative agreement with the U.S. National Science Foundation. [NOIRLab acknowledgement guidance](https://noirlab.edu/science/about/scientific-acknowledgments).
+
 ### Software & Utilities
 
 #### Astronomical Software & Utilities
