@@ -560,8 +560,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.add(title("Before you report"));
-        panel.add(new WrappingHelpLabel("Report under your own observatory code, or for archive data such as DECam under the "
-                + "telescope's, after contacting its reviewer. Report known objects first; never single positions or marginal detections.", 320));
+        panel.add(new WrappingHelpLabel("Report under your own observatory code, or for archive data under the telescope's, "
+                + "after contacting its reviewer. Report known objects first; never single positions or marginal detections.", 320));
         JButton guide = new JButton("MPC reporting guide");
         guide.setToolTipText(REPORTING_GUIDE);
         guide.addActionListener(e -> browse(REPORTING_GUIDE));

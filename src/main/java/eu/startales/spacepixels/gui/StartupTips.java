@@ -24,6 +24,9 @@ final class StartupTips {
     private static final String FAINT_MOVERS = "faint-movers-experimental";
     private static final String IDENTIFYING = "5-identifying-objects";
     private static final String STAR_MASK = "star-mask-explorer";
+    private static final String ASTEROIDS_WINDOW = "asteroids--comets";
+    private static final String LIGHT_CURVES = "light-curves-of-moving-objects";
+    private static final String ORBITS = "orbits-with-find_orb";
 
     static final List<Tip> ALL = List.of(
             new Tip("After a detection, you can draw what it found on the frames themselves in <b>Preview Frame</b> and "
@@ -58,6 +61,18 @@ final class StartupTips {
             new Tip("After <b>Fetch Asteroids and Comets</b>, the next report has an <b>Asteroids &amp; comets</b> "
                     + "section. It marks each track and faint mover Known, Check or No known match against the predictions, "
                     + "shows how far the known ones are from their predicted positions, and lists the known objects in the field.", KNOWN_OBJECTS),
+            new Tip("After a detection, open <b>Asteroids &amp; Comets…</b> under the last report in <b>4 Detect</b>. It lists the "
+                    + "report's tracks and faint movers with their identifications, measures their positions against Gaia DR3 stars, "
+                    + "and writes an ADES file you can check and submit to the Minor Planet Center yourself.", ASTEROIDS_WINDOW),
+            new Tip("In <b>Asteroids &amp; Comets</b>, <b>Identify all…</b> asks JPL and SkyBoT for every known asteroid and comet "
+                    + "near each of your objects, without a magnitude limit, as MPChecker would. <b>Compare again</b> re-identifies "
+                    + "the objects after a new <b>Fetch Asteroids and Comets</b>, without detecting again.", ASTEROIDS_WINDOW),
+            new Tip("The <b>Light curve</b> tab of <b>Asteroids &amp; Comets</b> measures a moving object's brightness in every "
+                    + "frame, with the fixed stars subtracted and comparison stars correcting for clouds and haze. Bins of 2 or 4 "
+                    + "frames help with faint objects; the report draws a curve on every track and faint-mover card too.", LIGHT_CURVES),
+            new Tip("With Bill Gray's Find_Orb on your computer, <b>Compute orbit</b> in <b>Asteroids &amp; Comets</b> fits a "
+                    + "preliminary orbit to an object's observations and draws it from above the ecliptic. One night gives a very "
+                    + "uncertain orbit, but it shows roughly where the object belongs.", ORBITS),
             new Tip("Double-click a frame in the main window's list to show it in <b>Preview Frame</b> and see what the "
                     + "detector picks up in it.", PREVIEW),
             new Tip("In <b>Preview Frame</b> you can try <b>Detection Sigma</b> and the other per-frame settings on the frame "
