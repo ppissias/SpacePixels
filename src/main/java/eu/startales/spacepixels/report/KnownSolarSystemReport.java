@@ -144,39 +144,51 @@ final class KnownSolarSystemReport {
         double[] where = place == null ? null : new double[]{place.getRaDegrees(), place.getDecDegrees(), fit.originMillis()};
         Double arc = points.size() < 2 ? null : (points.stream().mapToLong(ReportTrackMotion.Point::midpointMillis).max().orElseThrow()
                 - points.stream().mapToLong(ReportTrackMotion.Point::midpointMillis).min().orElseThrow()) / 3_600_000.0;
-        var agreeing = new ArrayList<String>();
-        var shiftOnly = new ArrayList<Comparison>();
-        var shiftNames = new ArrayList<String>();
-        Comparison known = null;
+        var named = new ArrayList<java.util.Map.Entry<String, Comparison>>();
         for (var body : bodies) for (var m : body.trackComparisons()) {
-            if (!m.trackId().equals(id)) continue;
-            if (m.positionAgreement()) { agreeing.add(body.name()); known = m; }
-            else { shiftOnly.add(m); shiftNames.add(body.name()); }
+            if (m.trackId().equals(id)) named.add(java.util.Map.entry(body.name(), m));
         }
-        String status, note;
+        var verdict = trackVerdict(named, limit);
         List<Offset> offsets = List.of();
-        if (agreeing.size() == 1) {
-            status = KNOWN;
-            note = "Position and motion agree with the prediction in every measured frame.";
+        if (verdict.known() != null) {
             var list = new ArrayList<Offset>();
-            for (var r : known.residuals()) {
+            for (var r : verdict.known().residuals()) {
                 var o = offset(wcs, r.frameNumber(), r.midpointMillis(), r.observedX(), r.observedY(), r.predictedX(), r.predictedY());
                 if (o != null) list.add(o);
             }
             offsets = List.copyOf(list);
-        } else if (agreeing.size() > 1) {
-            status = CHECK;
-            note = "Agrees with " + agreeing.size() + " known objects: the identification is ambiguous.";
-        } else if (!shiftOnly.isEmpty()) {
-            status = CHECK;
-            note = String.format(Locale.US, "Agrees with %s only if the frame times are shifted by %+.0f s: check the clock "
-                    + "and the observing site.", String.join(" or ", shiftNames), shiftOnly.getFirst().suggestedTimeOffsetSeconds());
-            agreeing.addAll(shiftNames);
-        } else {
-            status = NO_KNOWN_MATCH;
-            note = noMatchNote(limit);
         }
-        return identification(id, "track", status, agreeing, note, points.size(), arc, motion, offsets, where);
+        return identification(id, "track", verdict.status(), verdict.names(), verdict.note(), points.size(), arc, motion, offsets, where);
+    }
+
+    /** A track's status, names and note, and the comparison of a known object (else null). */
+    record Verdict(String status, List<String> names, String note, Comparison known) { }
+
+    /**
+     * A track's verdict from its comparisons with the predicted objects (name and comparison): one agreeing object,
+     * several, a clock shift only, or none; {@code limit} is the predictions' depth for the no-match note.
+     */
+    static Verdict trackVerdict(List<java.util.Map.Entry<String, Comparison>> comparisons, Double limit) {
+        var agreeing = new ArrayList<String>();
+        var shiftOnly = new ArrayList<Comparison>();
+        var shiftNames = new ArrayList<String>();
+        Comparison known = null;
+        for (var entry : comparisons) {
+            if (entry.getValue().positionAgreement()) { agreeing.add(entry.getKey()); known = entry.getValue(); }
+            else { shiftOnly.add(entry.getValue()); shiftNames.add(entry.getKey()); }
+        }
+        if (agreeing.size() == 1) {
+            return new Verdict(KNOWN, List.copyOf(agreeing), "Position and motion agree with the prediction in every measured frame.", known);
+        }
+        if (agreeing.size() > 1) {
+            return new Verdict(CHECK, List.copyOf(agreeing), "Agrees with " + agreeing.size() + " known objects: the identification is ambiguous.", null);
+        }
+        if (!shiftOnly.isEmpty()) {
+            return new Verdict(CHECK, List.copyOf(shiftNames), String.format(Locale.US, "Agrees with %s only if the frame times are "
+                    + "shifted by %+.0f s: check the clock and the observing site.", String.join(" or ", shiftNames),
+                    shiftOnly.getFirst().suggestedTimeOffsetSeconds()), null);
+        }
+        return new Verdict(NO_KNOWN_MATCH, List.of(), noMatchNote(limit), null);
     }
 
     /** A faint mover's status from its fitted-path comparisons with the predictions. */
@@ -241,7 +253,7 @@ final class KnownSolarSystemReport {
     }
 
     /** Names the depth of the search that found nothing, so absence is not read as completeness. */
-    private static String noMatchNote(Double limit) {
+    static String noMatchNote(Double limit) {
         return limit == null ? "No predicted object agrees with its position and motion."
                 : String.format(Locale.US, "No known object to V %.1f agrees with its position and motion.", limit);
     }

@@ -159,16 +159,26 @@ final class FaintMoverPresentation {
     static List<Match> compare(FaintMoverCandidate c, WcsCoordinateTransformer wcs, SolarSystemObjects objects,
                                double fwhm, List<Position> positions, double fieldDiagonalPixels,
                                long sessionStart, long sessionEnd) {
-        if (!canCompare(c, wcs, objects, sessionStart, sessionEnd) || positions.size() < 2
+        if (!canCompare(c, wcs, objects, sessionStart, sessionEnd)) return List.of();
+        return compare(c.x, c.y, c.referenceTimeMillis, c.vx, c.vy, wcs, objects, fwhm, positions, fieldDiagonalPixels);
+    }
+
+    /**
+     * The same comparison from a candidate's saved values: its place at {@code referenceMillis}, its motion in pixels
+     * per minute, and its fitted positions.
+     */
+    static List<Match> compare(double x, double y, long referenceMillis, double vx, double vy, WcsCoordinateTransformer wcs,
+                               SolarSystemObjects objects, double fwhm, List<Position> positions, double fieldDiagonalPixels) {
+        if (wcs == null || objects == null || objects.bodies == null || positions.size() < 2
                 || !Double.isFinite(fwhm) || fwhm <= 0) return List.of();
         var matches = new ArrayList<Match>();
         for (var body : objects.bodies) {
             if (body == null || body.samples == null || body.samples.isEmpty()) continue;
-            var p = KnownSolarSystemReport.position(body, c.referenceTimeMillis);
+            var p = KnownSolarSystemReport.position(body, referenceMillis);
             if (p == null) continue;
             var pixel = wcs.skyToPixel(p.ra(), p.dec());
             if (!finitePixel(pixel)) continue;
-            double offset = Math.hypot(pixel[0] - c.x, pixel[1] - c.y);
+            double offset = Math.hypot(pixel[0] - x, pixel[1] - y);
             if (offset > 2 * fwhm) continue;
             var predicted = new ArrayList<ReportTrackMotion.Point>();
             var residuals = new ArrayList<Residual>();
@@ -190,7 +200,7 @@ final class FaintMoverPresentation {
             if (!compatible) continue;
             var fit = ReportTrackMotion.fit(predicted);
             if (fit == null) continue;
-            double motion = Math.hypot(fit.vx() - c.vx, fit.vy() - c.vy);
+            double motion = Math.hypot(fit.vx() - vx, fit.vy() - vy);
             if (motion <= 0.1) matches.add(new Match(body.name == null ? "Unnamed catalogue object" : body.name,
                     p.magnitude() == null ? null : finite(p.magnitude()), offset, motion,
                     residuals.size(), Math.sqrt(squares / residuals.size()), maximum, 2 * fwhm, 0.1, List.copyOf(residuals)));

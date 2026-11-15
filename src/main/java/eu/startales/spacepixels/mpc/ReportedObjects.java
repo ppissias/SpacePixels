@@ -50,6 +50,25 @@ public final class ReportedObjects {
      * in pixels the faint-mover search used (null without that search).
      */
     public record Report(File folder, List<Frame> frames, List<ReportedObject> objects, Double faintMoverFwhm) {
+        /** The same report with other objects, for identifications made after it was written. */
+        public Report withObjects(List<ReportedObject> replaced) {
+            return new Report(folder, frames, List.copyOf(replaced), faintMoverFwhm);
+        }
+
+        /**
+         * The run's star jitter in pixels from its saved detection settings, which the report's identification allows
+         * (at least one pixel); one pixel when the settings are not there.
+         */
+        public double reviewFloorPixels() {
+            try {
+                var config = JsonParser.parseString(Files.readString(new File(folder, "detection_config.json").toPath(), StandardCharsets.UTF_8))
+                        .getAsJsonObject();
+                return Math.max(1, number(config, "maxStarJitter", 1));
+            } catch (IOException | RuntimeException unavailable) {
+                return 1;
+            }
+        }
+
         /** The start of the first exposure, UTC epoch milliseconds, or 0 when no frame has a time. */
         public long sessionStartMillis() {
             return frames.stream().mapToLong(Frame::timestampMillis).filter(t -> t > 0).min().orElse(0);

@@ -83,7 +83,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private static final DateTimeFormatter UTC = DateTimeFormatter.ofPattern("HH:mm:ss", Locale.US).withZone(ZoneOffset.UTC);
 
     private final FitsFileInformation[] files;
-    private final ReportedObjects.Report report;
+    /** The report's objects; replaced when Compare again changes an identification. EDT only. */
+    private ReportedObjects.Report report;
+    /** The session's current saved asteroid and comet predictions, which may be newer than the report's. */
+    private final java.util.function.Supplier<eu.startales.spacepixels.solarsystem.SolarSystemObjects> predictions;
     private final AstrometricReduction.Result reduction;
     private final ApplicationSettings settings;
     private final ApplicationStorage storage;
@@ -94,6 +97,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final SkyCatalogue catalogue;
     /** Fainter Gaia stars fetched for comparison stars when the saved catalogue had too few usable ones; empty until then. */
     private volatile List<SkyCatalogue.Star> fetchedStars = List.of();
+    private final JLabel compareLabel = new JLabel(" ");
     private final JComboBox<String> binChoice = new JComboBox<>(new String[]{"Single frames", "Bins of 2", "Bins of 4"});
     private final Map<String, LightCurve.Curve> curves = new HashMap<>();
     private final LightCurvePlot curvePlot = new LightCurvePlot();
@@ -164,10 +168,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      * @param header     the header plate solution of the frames, or null
      * @param correction the session's plate correction, or null
      * @param catalogue  the session's sky catalogue, or null
+     * @param predictions the session's current saved asteroid and comet predictions (null when none)
      */
     AsteroidsCometsWindow(Window owner, FitsFileInformation[] files, ReportedObjects.Report report, WcsCoordinateTransformer header,
                           PlateSolutionCorrection correction, ApplicationSettings settings, ApplicationStorage storage,
-                          VisualizationSettings visualization, ObservingSite site, SkyCatalogue catalogue) {
+                          VisualizationSettings visualization, ObservingSite site, SkyCatalogue catalogue,
+                          java.util.function.Supplier<eu.startales.spacepixels.solarsystem.SolarSystemObjects> predictions) {
         super("Asteroids & Comets · " + report.folder().getName());
         AppIcon.apply(this);
         this.files = files.clone();
@@ -179,6 +185,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         this.site = site;
         this.header = header;
         this.catalogue = catalogue;
+        this.predictions = predictions == null ? () -> null : predictions;
         for (var object : report.objects()) {
             exported.put(object.id(), MpcExport.includedByDefault(object));
             List<MpcObservation> reduced = reduction.reduction() == null || !object.measured()
@@ -518,8 +525,18 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JButton mpchecker = new JButton("MPChecker…");
         mpchecker.setToolTipText("Copies the date, position and code of the middle selected observation and opens the MPC's MPChecker");
         mpchecker.addActionListener(e -> openMpchecker());
-        mpchecker.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(mpchecker);
+        JButton compare = new JButton("Compare again");
+        compare.setToolTipText("Compares every object with the session's saved asteroid and comet predictions again, by the "
+                + "report's rules: after Fetch Asteroids and Comets, without detecting again. Nothing is sent.");
+        compare.addActionListener(e -> compareAgain());
+        JPanel identifyButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        identifyButtons.add(mpchecker);
+        identifyButtons.add(compare);
+        identifyButtons.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(identifyButtons);
+        compareLabel.setForeground(UiStyle.helpColor());
+        compareLabel.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(compareLabel);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Orbit · Find_Orb"));
         JButton findOrb = new JButton("Compute orbit");
@@ -1115,6 +1132,63 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return report.objects().stream().filter(ReportedObjects.ReportedObject::measured)
                 .filter(o -> o.positions().stream().anyMatch(p -> p.fwhm() == null || p.snr() == null))
                 .map(ReportedObjects.ReportedObject::id).toList();
+    }
+
+    /**
+     * Compares every object with the session's current predictions by the report's rules and keeps the new
+     * identifications in this window; the report itself is unchanged until the next detection.
+     */
+    private void compareAgain() {
+        var objects = predictions.get();
+        if (objects == null || objects.bodies == null) {
+            compareLabel.setText(UiStyle.htmlWrappedTo(320, "No saved predictions: Fetch Asteroids and Comets (2 Astrometry) first."));
+            return;
+        }
+        if (header == null) {
+            compareLabel.setText(UiStyle.htmlWrappedTo(320, "The frames have no plate solution to compare positions with."));
+            return;
+        }
+        double diagonal = report.frames().isEmpty() ? 0 : Math.hypot(report.frames().getFirst().width(), report.frames().getFirst().height());
+        double floor = report.reviewFloorPixels();
+        double fwhm = report.faintMoverFwhm() == null ? Double.NaN : report.faintMoverFwhm();
+        var replaced = new ArrayList<ReportedObjects.ReportedObject>();
+        var changes = new ArrayList<String>();
+        for (var object : report.objects()) {
+            var points = new ArrayList<eu.startales.spacepixels.report.PredictionMatch.Point>();
+            for (var sample : LightCurve.samples(report, object)) {
+                points.add(new eu.startales.spacepixels.report.PredictionMatch.Point(sample.frameNumber(), sample.midpointMillis(), sample.x(), sample.y()));
+            }
+            var motion = object.motion();
+            var result = object.measured()
+                    ? eu.startales.spacepixels.report.PredictionMatch.track(points, objects, header, floor, diagonal)
+                    : motion == null ? null : eu.startales.spacepixels.report.PredictionMatch.faintMover(motion.x(), motion.y(),
+                    motion.referenceMillis(), motion.vxPerMinute(), motion.vyPerMinute(), points, objects, header, fwhm, diagonal);
+            if (result == null || (result.status().equals(object.status()) && result.names().equals(object.names()))) {
+                replaced.add(object);
+                continue;
+            }
+            // A check for unusual motion stays a check while nothing known agrees.
+            String status = ReportedObjects.NO_KNOWN_MATCH.equals(result.status()) && ReportedObjects.CHECK.equals(object.status())
+                    && object.note() != null && object.note().toLowerCase(Locale.ROOT).contains("unusual") ? ReportedObjects.CHECK : result.status();
+            if (status.equals(object.status()) && result.names().equals(object.names())) {
+                replaced.add(object);
+                continue;
+            }
+            var updated = new ReportedObjects.ReportedObject(object.id(), object.kind(), status, result.names(),
+                    result.note() + " (compared again with the predictions fetched " + (objects.fetchedAtUtc == null ? "later" : objects.fetchedAtUtc.substring(0, 10)) + ")",
+                    object.positions(), object.speedArcsecPerHour(), object.positionAngleDegrees(), object.motion());
+            replaced.add(updated);
+            exported.put(object.id(), MpcExport.includedByDefault(updated));
+            changes.add(object.id() + " " + statusText(object.status()) + " → " + statusText(status)
+                    + (result.names().isEmpty() ? "" : " " + String.join(" or ", result.names())));
+        }
+        report = report.withObjects(replaced);
+        compareLabel.setText(UiStyle.htmlWrappedTo(320, String.format(Locale.US, "Compared with the saved predictions to V %.1f (%d objects): ",
+                objects.magnitudeLimit, objects.bodies.size()) + (changes.isEmpty() ? "no identification changed."
+                : changes.size() + " changed: " + escape(String.join("; ", changes)) + ". The report keeps its own until the next detection.")));
+        refreshObjects();
+        show(shown == null ? null : report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
+        refreshExport();
     }
 
     /** The report's status, or Weak for a faint mover with a marginal sub-stack. */

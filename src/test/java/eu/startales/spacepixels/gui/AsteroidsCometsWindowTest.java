@@ -60,7 +60,8 @@ public class AsteroidsCometsWindowTest {
         var settings = ApplicationSettings.inMemory(config);
         var window = onEdt(() -> {
             var w = new AsteroidsCometsWindow(null, files, report, wcs, correction(wcs), settings, new ApplicationStorage(),
-                    VisualizationSettings.defaults(), new ObservingSite(-30, -70, 2000, ObservingSite.FROM_CONFIGURATION), null);
+                    VisualizationSettings.defaults(), new ObservingSite(-30, -70, 2000, ObservingSite.FROM_CONFIGURATION), null,
+                    () -> predictions(wcs, files[0].getObservationTimestamp()));
             w.setFocusableWindowState(false);
             w.setSize(1500, 950);
             w.setLocation(-4000, -4000);
@@ -100,6 +101,15 @@ public class AsteroidsCometsWindowTest {
             onEdt(() -> { email.setText("someone@example.org"); button(window, "Save details").doClick(); return null; });
             waitFor("the saved e-mail", () -> "someone@example.org".equals(settings.getConfig().mpcEmail));
             assertFalse(onEdt(psv::getText).contains("someone@example.org"));
+
+            // Compare again with predictions that now include FM1's object: it becomes Known in the window.
+            onEdt(() -> { button(window, "Compare again").doClick(); return null; });
+            assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
+            assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+            String compared = onEdt(() -> labels(window).stream().map(JLabel::getText).filter(t -> t.contains("Compared with")).findFirst().orElse("none"));
+            assertTrue(compared, compared.contains("1 changed: FM1 Check → Known 2026 AB1"));
+            assertEquals("T1 keeps its identification", "Known", onEdt(() -> objects.getValueAt(0, 2)));
+            onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
 
             // A light curve, then the same curve in bins of 2.
             onEdt(() -> { button(window, "Measure light curve").doClick(); return null; });
@@ -188,13 +198,43 @@ public class AsteroidsCometsWindowTest {
         String json = "{\"inputFrames\":[" + frames + "],"
                 + "\"findings\":[{\"id\":\"T1\",\"positions\":[" + t1 + "]}],"
                 + "\"faintMovers\":[{\"id\":\"FM1\",\"x\":60,\"y\":30,\"referenceTimeMillis\":" + files[0].getObservationTimestamp()
-                + ",\"vxPixelsPerMinute\":0,\"vyPixelsPerMinute\":180,\"fittedPositions\":[" + fm1 + "]}],"
+                + ",\"vxPixelsPerMinute\":0,\"vyPixelsPerMinute\":1.5,\"fittedPositions\":[" + fm1 + "]}],"
                 + "\"faintMoverSearch\":{\"fwhmPixels\":2.5},"
                 + "\"knownSolarSystem\":{\"identifications\":["
                 + "{\"id\":\"T1\",\"status\":\"known\",\"names\":[\"649341 (2011 DK30)\"],\"note\":\"Position and motion agree.\"},"
                 + "{\"id\":\"FM1\",\"status\":\"check\",\"names\":[],\"note\":\"No known object agrees.\",\"unusualMotion\":\"faster than a main-belt asteroid: possibly near Earth\"}]}}";
         Files.writeString(new File(folder, "report-data.json").toPath(), json, StandardCharsets.UTF_8);
         return folder;
+    }
+
+    /**
+     * Saved predictions with T1's object (2 pixels per minute along y = 40 from x = 30) and one on FM1's path (1.5
+     * pixels per minute down from (60, 30)), from {@code start}.
+     */
+    private static eu.startales.spacepixels.solarsystem.SolarSystemObjects predictions(WcsCoordinateTransformer wcs, long start) {
+        var objects = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+        objects.magnitudeLimit = 25;
+        objects.startMillis = start - 300_000;
+        objects.endMillis = start + 900_000;
+        objects.bodies = new ArrayList<>(List.of(body(wcs, start, "649341 (2011 DK30)", 30, 40, 2, 0), body(wcs, start, "2026 AB1", 60, 30, 0, 1.5)));
+        objects.fetchedAtUtc = "2026-11-15T00:00:00Z";
+        return objects;
+    }
+
+    /** A predicted object at (x, y) at {@code start}, moving (vx, vy) pixels per minute, sampled every minute. */
+    private static eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body body(WcsCoordinateTransformer wcs, long start, String name,
+                                                                                    double x, double y, double vx, double vy) {
+        var body = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
+        body.name = name;
+        for (int minute = -5; minute <= 15; minute++) {
+            var sky = wcs.pixelToSky(x + vx * minute, y + vy * minute);
+            var sample = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Sample();
+            sample.timeMillis = start + minute * 60_000L;
+            sample.ra = sky.getRaDegrees();
+            sample.dec = sky.getDecDegrees();
+            body.samples.add(sample);
+        }
+        return body;
     }
 
     /** A checked plate correction for this solution, so positions are reduced. */

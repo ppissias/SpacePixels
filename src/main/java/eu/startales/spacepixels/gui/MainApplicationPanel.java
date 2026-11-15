@@ -2197,7 +2197,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 var resolved = WcsSolutionResolver.resolveUncorrected(null, files);
                 var window = viewers.register(new AsteroidsCometsWindow(windowFrame, files, report,
                         resolved == null ? null : resolved.getTransformer(), correction, applicationSettings, storage, visualization, site,
-                        catalogue));
+                        catalogue, () -> skyCatalogue().getSolarSystem()));
                 window.setVisible(true);
             }
         }.execute();
