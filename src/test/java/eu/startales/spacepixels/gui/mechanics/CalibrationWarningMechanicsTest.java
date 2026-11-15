@@ -34,7 +34,10 @@ public class CalibrationWarningMechanicsTest extends MechanicsTestCase {
                 application().getJobCoordinator().current() == null && application().getSession() != original));
         var imported = GuiActionRunner.execute(() -> application().getSession());
         window().button(VisibleText.button("Detect Moving Targets")).click();
-        var preflight = warning("Pre-Detection Quality Warning");
+        // The pre-detection dialog also carries the report-path warning, so the title alone does not identify it.
+        var preflight = warning("Pre-Detection Warning");
+        assertTrue("the calibration warning, not the report-path one", GuiActionRunner.execute(() ->
+                text(preflight.target()).contains("High Hot-Pixel Density")));
         assertSame("The quality question belongs to the initiating window", application().getFrame(),
                 GuiActionRunner.execute(() -> preflight.target().getOwner()));
         preflight.button(VisibleText.button("Cancel Detection (Recommended)")).requireVisible();
@@ -44,6 +47,16 @@ public class CalibrationWarningMechanicsTest extends MechanicsTestCase {
         assertSame(imported, GuiActionRunner.execute(() -> application().getSession()));
         assertEquals(0, suspect.toFile().listFiles(file -> file.isDirectory()
                 && file.getName().startsWith("detections_")).length);
+    }
+
+    /** The text of every label in the window, joined; read on the EDT. */
+    private static String text(java.awt.Container root) {
+        StringBuilder text = new StringBuilder();
+        for (java.awt.Component c : root.getComponents()) {
+            if (c instanceof javax.swing.JLabel label && label.getText() != null) text.append(label.getText()).append(' ');
+            if (c instanceof java.awt.Container child) text.append(text(child));
+        }
+        return text.toString();
     }
 
     /** Finds the showing warning by its actual window title, independently of component names. */
