@@ -154,6 +154,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JTextField detector = new JTextField(10);
     private final JComboBox<String> mode = new JComboBox<>(new String[]{"CCD", "CMOS"});
     private final JTextField comment = new JTextField(16);
+    private final JTextField email = new JTextField(16);
+    private final JButton schemaButton = new JButton("Check schema");
+    private final JButton mpcTestButton = new JButton("Test with the MPC…");
 
     /**
      * @param files      the session's frames, which must be the report's
@@ -548,6 +551,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         detector.setText(config.mpcDetector);
         mode.setSelectedItem("CMO".equals(config.mpcMode) ? "CMOS" : "CCD");
         comment.setText(config.mpcComment);
+        email.setText(config.mpcEmail);
+        email.setToolTipText("Where the MPC sends its replies. Sent only when you test the file with the MPC; never written into the file.");
         JPanel form = new JPanel(new GridBagLayout());
         GridBagConstraints c = new GridBagConstraints();
         c.anchor = GridBagConstraints.WEST;
@@ -569,6 +574,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         row(form, c, "Detector", detector);
         row(form, c, "Detector type", mode);
         row(form, c, "Comment", comment);
+        row(form, c, "E-mail for MPC replies", email);
         JButton saveDetails = new JButton("Save details");
         saveDetails.addActionListener(e -> saveDetails());
         row(form, c, "", saveDetails);
@@ -600,6 +606,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel exportButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         exportButtons.add(copyButton);
         exportButtons.add(saveButton);
+        schemaButton.setToolTipText("Checks the file against the ADES submission schema (submit.xsd), fetched once from the IAU's ADES repository");
+        schemaButton.addActionListener(e -> checkSchema());
+        mpcTestButton.setToolTipText("Sends the file and your e-mail address to the MPC's test service, which checks it like a "
+                + "submission but does not process it");
+        mpcTestButton.addActionListener(e -> testWithMpc());
+        exportButtons.add(schemaButton);
+        exportButtons.add(mpcTestButton);
         exportButtons.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(exportButtons);
         JLabel note = new JLabel(UiStyle.htmlWrappedTo(320, "SpacePixels never sends observations to the MPC. Check the "
@@ -808,6 +821,84 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         psvArea.setCaretPosition(0);
         copyButton.setEnabled(ready);
         saveButton.setEnabled(ready);
+        schemaButton.setEnabled(ready);
+        mpcTestButton.setEnabled(ready);
+    }
+
+    /** Checks the shown file against the ADES schema on a worker, fetching the schema on first use. */
+    private void checkSchema() {
+        String psv = psvArea.getText();
+        if (psv.isBlank()) return;
+        schemaButton.setEnabled(false);
+        problemsArea.setText("Checking the file against the ADES submission schema…");
+        new SwingWorker<java.util.List<String>, Void>() {
+            @Override protected java.util.List<String> doInBackground() throws Exception {
+                var folder = eu.startales.spacepixels.mpc.AdesValidation.schemaFolder(java.nio.file.Path.of(System.getProperty("user.home")));
+                return eu.startales.spacepixels.mpc.AdesValidation.validate(psv, folder);
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                schemaButton.setEnabled(!psvArea.getText().isBlank());
+                try {
+                    var problems = get();
+                    problemsArea.setText(problems.isEmpty()
+                            ? "The file passes the ADES submission schema. The MPC's test service checks more; Test with the MPC tries it there."
+                            : "The ADES submission schema rejects the file:\n" + String.join("\n", problems));
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    problemsArea.setText("The schema check could not run: " + cause.getMessage());
+                }
+            }
+        }.execute();
+    }
+
+    /** After the user agrees, sends the shown file and the e-mail address to the MPC's test service and shows its answer. */
+    private void testWithMpc() {
+        String psv = psvArea.getText();
+        String address = email.getText().trim();
+        if (psv.isBlank()) return;
+        if (!address.matches("[^@\\s]+@[^@\\s]+\\.[^@\\s]+")) {
+            problemsArea.setText("Enter the e-mail address for the MPC's replies first.");
+            return;
+        }
+        int answer = JOptionPane.showConfirmDialog(this, UiStyle.htmlWrappedTo(420,
+                        "This sends the file shown, with the names in it, and your e-mail address " + escapeHtml(address)
+                                + " to the Minor Planet Center's test service (" + eu.startales.spacepixels.mpc.MpcTestSubmission.TEST_URL
+                                + "). The MPC checks it as it would a submission but does not process it: nothing is reported."),
+                "Test with the MPC", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (answer != JOptionPane.OK_OPTION) return;
+        mpcTestButton.setEnabled(false);
+        problemsArea.setText("Sending the file to the MPC's test service…");
+        new SwingWorker<eu.startales.spacepixels.mpc.MpcTestSubmission.Reply, Void>() {
+            @Override protected eu.startales.spacepixels.mpc.MpcTestSubmission.Reply doInBackground() throws Exception {
+                return eu.startales.spacepixels.mpc.MpcTestSubmission.send(psv, "SpacePixels test", address, null);
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                mpcTestButton.setEnabled(!psvArea.getText().isBlank());
+                try {
+                    var reply = get();
+                    problemsArea.setText((reply.received() ? "The MPC's test service answered:\n" : "The MPC's test service refused the request (HTTP "
+                            + reply.status() + "):\n") + plainText(reply.text()));
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    problemsArea.setText("The MPC's test service could not be reached: " + cause.getMessage());
+                }
+            }
+        }.execute();
+    }
+
+    /** An HTML answer as plain text, at most a few hundred characters. */
+    private static String plainText(String text) {
+        String plain = text.replaceAll("(?s)<(script|style)[^>]*>.*?</\\1>", " ").replaceAll("<[^>]+>", " ")
+                .replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replaceAll("\\s+", " ").strip();
+        return plain.length() > 800 ? plain.substring(0, 800) + "…" : plain;
+    }
+
+    private static String escapeHtml(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     /** Copies the details as typed into a settings copy. */
@@ -820,6 +911,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         config.mpcDetector = detector.getText().trim();
         config.mpcMode = "CMOS".equals(mode.getSelectedItem()) ? "CMO" : "CCD";
         config.mpcComment = comment.getText().trim();
+        config.mpcEmail = email.getText().trim();
     }
 
     /** Keeps the details in the application settings, written on the settings queue. */

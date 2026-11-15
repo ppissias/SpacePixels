@@ -25,6 +25,7 @@ public class AppConfig {
         copy.mpcDetector = mpcDetector;
         copy.mpcMode = mpcMode;
         copy.mpcComment = mpcComment;
+        copy.mpcEmail = mpcEmail;
         copy.findOrbExecutable = findOrbExecutable;
         return copy;
     }
@@ -58,6 +59,8 @@ public class AppConfig {
     public String mpcDetector = "";
     public String mpcMode = "CCD";
     public String mpcComment = "";
+    /** The e-mail address for the MPC's replies, sent only with a test the user starts; never written into the file. */
+    public String mpcEmail = "";
     /** Bill Gray's command-line Find_Orb (fo64.exe on Windows), in the folder of the console Find_Orb; empty when not installed. */
     public String findOrbExecutable = "";
     /** Faintest Gaia G magnitude fetched by Fetch Sky Catalogue. */
