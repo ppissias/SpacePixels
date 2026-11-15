@@ -1070,8 +1070,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 mpcTestButton.setEnabled(!psvArea.getText().isBlank());
                 try {
                     var reply = get();
-                    problemsArea.setText((reply.received() ? "The MPC's test service answered:\n" : "The MPC's test service refused the request (HTTP "
-                            + reply.status() + "):\n") + plainText(reply.text()));
+                    String id = reply.submissionId();
+                    String head = !reply.received() ? "The MPC's test service refused the request (HTTP " + reply.status() + "):\n"
+                            : id != null ? "Received by the MPC's test service: submission ID " + id + ". This answer is the "
+                            + "confirmation: the MPC documents no e-mail for test batches, which it checks but never processes "
+                            + "(a real submission is acknowledged by e-mail). Its answer:\n"
+                            : "The MPC's test service answered (HTTP " + reply.status() + ") without a submission ID, so the "
+                            + "batch may not have been received:\n";
+                    problemsArea.setText(head + plainText(reply.text()));
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     problemsArea.setText("The MPC's test service could not be reached: " + cause.getMessage());

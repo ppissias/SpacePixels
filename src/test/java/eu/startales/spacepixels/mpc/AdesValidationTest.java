@@ -75,4 +75,15 @@ public class AdesValidationTest {
         assertTrue(body, body.contains("name=\"source\"\r\n\r\n# version=2022\n\r\n--B--\r\n"));
         assertThrows(IllegalArgumentException.class, () -> MpcTestSubmission.fields("x", "a", "not an address", null));
     }
+
+    /** The test service's only confirmation is the submission ID in its answer, plain or inside HTML. */
+    @Test
+    public void testServiceAnswerGivesTheSubmissionId() {
+        assertEquals("2026-11-15T05:07:48.070_00000y22",
+                new MpcTestSubmission.Reply(200, "Submission ID is 2026-11-15T05:07:48.070_00000y22").submissionId());
+        assertEquals("2026-11-15T05:07:48.070_00000y22",
+                new MpcTestSubmission.Reply(200, "<html><body><p>Submission ID: 2026-11-15T05:07:48.070_00000y22</p></body></html>").submissionId());
+        assertEquals(null, new MpcTestSubmission.Reply(200, "Error: no data").submissionId());
+        assertEquals(null, new MpcTestSubmission.Reply(500, null).submissionId());
+    }
 }

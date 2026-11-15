@@ -27,7 +27,21 @@ public final class MpcTestSubmission {
     public record Reply(int status, String text) {
         /** Whether the service accepted the request (HTTP 2xx); the text still says what the checks found. */
         public boolean received() { return status >= 200 && status < 300; }
+
+        /**
+         * The submission ID the MPC gave the batch (its "CurlID", such as {@code 2026-11-15T05:07:48.070_00000y22}),
+         * or null when the answer holds none. The test service confirms receipt with this ID; the MPC documents no
+         * e-mail for test batches, which are never processed (a real submission is acknowledged by e-mail).
+         */
+        public String submissionId() {
+            var matcher = SUBMISSION_ID.matcher(text == null ? "" : text);
+            return matcher.find() ? matcher.group(1) : null;
+        }
     }
+
+    /** "Submission ID is …" in the MPC's answer, possibly inside HTML. */
+    private static final java.util.regex.Pattern SUBMISSION_ID =
+            java.util.regex.Pattern.compile("(?i)submission\\s+ID\\s*(?:is|:)?\\s*([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+_[0-9A-Za-z]+)");
 
     private MpcTestSubmission() { }
 
