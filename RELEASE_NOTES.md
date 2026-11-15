@@ -4,60 +4,127 @@
 ## Contents
 
 - [2026.11-03](#202611-03)
-  - [Changed](#changed)
+  - [Highlights](#highlights)
+  - [Asteroids, comets and the Minor Planet Center](#asteroids-comets-and-the-minor-planet-center)
+  - [Known asteroids and comets in the report](#known-asteroids-and-comets-in-the-report)
+  - [Detection and the faint-mover search](#detection-and-the-faint-mover-search)
+  - [Import, plate solving and preparation](#import-plate-solving-and-preparation)
+  - [Astrometry settings and the main window](#astrometry-settings-and-the-main-window)
+  - [Fixes](#fixes)
+  - [Acknowledgements](#acknowledgements)
   - [Upgrading and API changes](#upgrading-and-api-changes)
 - [2026.11-01](#202611-01)
   - [Added](#added)
-  - [Changed](#changed-1)
+  - [Changed](#changed)
 - [2026.10-04](#202610-04)
-  - [Changed](#changed-2)
+  - [Changed](#changed-1)
   - [Removed](#removed)
   - [Build and release checks](#build-and-release-checks)
   - [Upgrading and API changes](#upgrading-and-api-changes-1)
 - [2026.10-03](#202610-03)
-  - [Highlights](#highlights)
+  - [Highlights](#highlights-1)
   - [Detection changes](#detection-changes)
   - [Import](#import)
   - [The settings tab and the application](#the-settings-tab-and-the-application)
-  - [Fixes](#fixes)
+  - [Fixes](#fixes-1)
   - [Upgrading and API changes](#upgrading-and-api-changes-2)
 - [2026.10-02](#202610-02)
-  - [Highlights](#highlights-1)
+  - [Highlights](#highlights-2)
   - [Detection changes](#detection-changes-1)
   - [Variable-star photometry](#variable-star-photometry)
   - [The report and application](#the-report-and-application)
-  - [Fixes](#fixes-1)
+  - [Fixes](#fixes-2)
   - [Upgrading and API changes](#upgrading-and-api-changes-3)
 - [2026.10-01](#202610-01)
-  - [Highlights](#highlights-2)
+  - [Highlights](#highlights-3)
   - [The report](#the-report)
   - [The application](#the-application)
   - [Detection changes](#detection-changes-2)
-  - [Fixes](#fixes-2)
+  - [Fixes](#fixes-3)
   - [Upgrading](#upgrading)
   - [Under the hood](#under-the-hood)
 <!-- root-toc:end -->
 
 ## 2026.11-03
 
-### Changed
+This release takes a moving object from detection to a report for the Minor Planet Center. A new **Asteroids & Comets** window reduces the detections to MPC observations, writes and checks the ADES file, fits a preliminary orbit with Find_Orb and measures light curves. Known objects are identified more completely, and the report now gives every moving object a status and a light curve. Detection engine: **JTransient 1.1.0**. Plate solving: **JPlateSolve 1.0.3**.
+
+### Highlights
+
+- **Asteroids & Comets window.** From the last report, list its moving objects, check and select their observations, and save an ADES file for the MPC. The file can be checked against the ADES schema and with the MPC's test service; SpacePixels never submits observations itself.
+- **Preliminary orbits with Find_Orb.** With Bill Gray's Find_Orb installed, an object's orbit is fitted on your computer in a second and drawn from above the ecliptic; without it, the observations are copied for the online Find_Orb.
+- **Light curves of moving objects**, in the window and on every track and faint-mover card of the report, with comparison stars checked when the sky catalogue is fetched.
+- **Known objects found more completely.** IMCCE's SkyBoT is searched beside JPL, predictions go as deep as the frames reach (to V 25), and **Compare again** and **Identify all** identify a report's objects with newer predictions or with everything known near them, as MPChecker does.
+- **Excluded areas** leave chosen rectangles of the frames out of detection, and a **Search speed** setting makes the faint-mover search 3.5 to 7 times faster on wide-star sessions.
+- **Named observing sites**, and a line in the Astrometry step that shows what the session already holds from earlier fetches.
+
+### Asteroids, comets and the Minor Planet Center
+
+- **The Asteroids & Comets window.** **Asteroids & Comets…** under the last report in the Detect step opens a window on that report's moving objects (for an iterative run, on a chosen pass). It lists the tracks and faint movers with their status, shows the selected object frame by frame centred on the object or on the stars, and lists its observations reduced against the Gaia-checked plate solution, with their offsets from straight-line motion. Six observations spread over the arc are ticked by default. A known numbered object is reported by its number and an unnumbered one by its provisional designation; anything else gets a tracklet ID of seven characters, as the MPC asks. The submission details (submitter, observers, measurers, telescope, aperture, detector, ADES mode and a comment) are kept in the application settings, and the window checks with JPL that the observatory code's station lies near the observing site. The ADES PSV file is shown with anything that would make it unacceptable, such as a missing detail or an object with a single observation, and can be copied or saved. See [Asteroids & Comets](MANUAL.md#asteroids--comets).
+- **Observation uncertainties.** Each observation is the detection's centroid through the frame's plate solution and its Gaia-fitted correction, at the exposure midpoint. Its uncertainty combines the centroid error from the detection's size and signal-to-noise with the plate fit's star residuals. A plate solution whose correction was never fitted is refused. On a DECam session, three known asteroids reduced to within 0.07–0.17″ RMS of their JPL predictions.
+- **Before you report, and MPChecker.** The window explains in two sentences who may report and under which code, with a link to the MPC's reporting guide. **MPChecker** copies the date, position and code of the middle selected observation and opens the MPC's form.
+- **Checking the ADES file.** **Check schema** validates the file against the ADES submission schema, which is downloaded once from the IAU's ADES repository into `spacepixels_ades_schema` in your home folder. **Test with the MPC** sends the file and your e-mail address, after you confirm, to the MPC's test service, which checks it like a submission without processing it. The e-mail address is kept in the settings and never written into the file.
+- **Orbits with Find_Orb.** **Compute orbit** fits a preliminary orbit to the selected observations (at least three) with Bill Gray's [Find_Orb](https://www.projectpluto.com/find_orb.htm). Choose **Find_Orb program…** to use a local Find_Orb (`fo64.exe` on Windows; `fo` built from source elsewhere, untested): the fit runs on your computer, and a small **Orbit** window shows the elements with their uncertainties, the residuals, the probability of a near-Earth orbit and the Earth MOID, draws the orbit and saves the picture. Without it, the observations (station and positions, no names) are copied and the online Find_Orb opens to paste them. See [Orbits with Find_Orb](MANUAL.md#orbits-with-find_orb).
+- **Faint movers measured in sub-stacks.** **Measure in sub-stacks** measures a faint mover in three independent sub-stacks along its path, which gives it observations for the MPC; a marginal sub-stack marks it Weak and blocks its export.
+- **Light curves.** The **Light curve** tab measures the shown object in every frame, on the frames' median where the cut-outs fit in memory so that fixed stars cancel. Comparison stars are chosen by measurement on a frame of the session: unsaturated, unflagged stars with a signal-to-noise of at least 20, at most 30 of them. With fewer than 10, the window fetches Gaia stars to G 20 once (fields up to one square degree). Points whose shape departs from the object's usual one are marked as contaminated and left out of the summary (median, amplitude, scatter). Bins of 2 or 4 frames can be shown, and the curve saves as CSV. See [Light curves of moving objects](MANUAL.md#light-curves-of-moving-objects).
+- **Compare again and Identify all.** **Compare again** identifies the report's objects with the session's current predictions by the report's own rules, so a fetch made after the report identifies its objects without detecting again. **Identify all** searches JPL and SkyBoT once, without a magnitude limit, for the known objects within 1′ of each finding, as MPChecker lists them. An object with no known identification whose motion agrees with a nearby known object becomes **Possible**, named after it; it is still exported under its tracklet ID. What both change is saved beside the report as `later_identifications.json` and applied when the window opens the report again; the report's own files are not changed.
+- **Cancel.** Identify all, the light curve and the sub-stack measurement can be cancelled while they run, and closing the window stops them.
+- **Tips.** Four new "Did you know?" tips introduce the window, Identify all and Compare again, light curves and Find_Orb.
+
+### Known asteroids and comets in the report
+
+- **An Asteroids and comets section.** The report's known-object section gives every moving-object track and faint mover a status: **Known** (agrees with one predicted object), **Check** (several, only with shifted frame times, or unusual motion), **No known match** (naming the prediction depth) or **Not compared**. For a known object it shows the observed-minus-computed offsets: mean, RMS and a per-frame plot. The predicted-object table follows as before.
+- **Unusual motion.** Each object's sky motion is compared with that of a main-belt asteroid seen in the same direction at the same time. Much faster suggests a near-Earth object, much slower a more distant one, and a direction far off a high inclination; an object with no known match and unusual motion becomes Check, and a known one keeps its identification with a note.
+- **SkyBoT beside JPL.** **Fetch Asteroids and Comets** also asks IMCCE's SkyBoT for the objects in the field. The objects only SkyBoT lists are added, and JPL Horizons computes their paths; if SkyBoT does not answer, the fetch goes on with JPL alone. On a DECam field this found an object of V 23.2 that JPL's search had not listed.
+- **Predictions as deep as the frames.** After **Fetch Sky Catalogue**, the frames' limiting magnitude is measured, and **Fetch Asteroids and Comets** asks for objects to the deeper of the setting and that limit plus one magnitude. **Asteroid and Comet Depth** now goes to V 25 (was 23). A report whose predictions stop well above its field depth says that faint known objects may be missing.
+- **A site that cannot see the field.** The fetch checks that the field is above the horizon for the observing site during the session. When it is not, most often because coordinates were typed without their signs, the fetch and the report say that the predictions are for another place.
+- **Light curves on every card.** Every moving-object track and faint mover in the report gets a light curve below its animation, measured with the same code as the window, with bins of 2 or 4 and a CSV in `light_curves/`. Comparison stars come from the saved sky catalogue; nothing is fetched while the report is written.
+- **Field depth on small or deep fields.** When the four Gaia patches hold too few stars, as on a small field at high galactic latitude, the field depth is now the Gaia G at which a star stands 5 sigma above the sky, instead of "unavailable". The report says which measure was used.
+
+### Detection and the faint-mover search
 
 - **Faster faint-mover search, with a Search speed setting.** On the Faint Movers page, **Search speed** chooses how much cheaper the search's first pass may be: **Normal**, **Fast** (the default, which adds 2 × 2 pixels for wide stars and consecutive frames close in time) or **Faster** (which does so for narrower stars and wider time steps too and can miss more candidates close to the limits). Every candidate is still scored and checked on all frames at full resolution. The page estimates the time of each speed, from the star size the last detection run measured when there is one. The report says which speed was used, and `report-data.json` adds `searchSpeed`, `coarseBin` and `coarseFrames`. On wide-star sessions of 100–170 frames, Fast ran 3.5 to 7 times faster than before with the same candidates, apart from about one in 50–100 close to a limit; sessions with narrow stars and spaced frames keep their results and run up to about twice as fast. Faster was 9 to 13 times faster and, on one session with narrow stars, missed a real candidate close to the limits.
-
-- **Auto-Tune uses the frames detection uses.** Auto-Tune now measures only on frames that quality control would keep; before, it left out blank frames only and could tune on frames that detection rejects. For a session with more frames than the Auto-Tune frame limit, the sample is chosen among the kept frames. Sessions without rejected frames tune as before; on the others the tuned values move slightly.
-
+- **Warnings about the fastest motion.** The search skips a run whose first pass would need more than 100,000 trial motions, which grow with the square of the fastest motion and of the session's length. The Faint Movers page now warns before the run and gives the highest fastest motion that fits the imported frames. It also shows the trail the fastest motion leaves in one frame and warns above 2 star widths, where the search, which scores point-like movers, misses much of a trail's light.
 - **Excluded areas.** In Preview Frame, **Excluded areas** › **Draw areas** marks rectangles of the aligned frames that detection leaves out in every frame, such as blurred edges or a bad column. They are saved in the dataset folder (`excluded_areas.json`) and used by the next detection, also by headless runs of that folder. Detection treats them as having no data: nothing is found inside them, and they do not count in the sky and noise measurements. The report draws them in light red on its pictures, says how much of the frame detection used and lists them in `report-data.json`. **Run quality control**, Auto-Tune, Preview Frame's detection, **Test Star Mask** and **Manual Transient Inspection** leave them out too; changing them marks a quality result stale, and the Overview says when the Auto-Tune run on show was measured with other areas.
-
+- **Auto-Tune uses the frames detection uses.** Auto-Tune now measures only on frames that quality control would keep; before, it left out blank frames only and could tune on frames that detection rejects. For a session with more frames than the Auto-Tune frame limit, the sample is chosen among the kept frames. Sessions without rejected frames tune as before; on the others the tuned values move slightly.
 - **Faint-mover review for long paths.** The report showed no source or residual blink for a faint mover whose path did not fit in 256 × 256 pixels, or for a session of more than 128 frames ("Review limited to 128 frames and 256 pixels per side"). Such a path is now reviewed in a 71 × 71 pixel cutout that follows it from frame to frame; shorter paths keep their fixed rectangle. On a 115-frame DECam session, none of the 12 faint movers had a review before.
-
-- **Asteroid paths no longer jump off the frame (fix).** On the time step where an asteroid rises, transits or sets for the observing site, JPL Horizons writes one field fewer before the position, and SpacePixels read that step's Dec as its R.A. and its magnitude as its Dec. The predicted path then ran to a point far outside the field and back, drawn as two dashed lines from the object to the edge of the frame. The columns are now read from the end of each row. Predictions saved before this fix keep the wrong steps; fetch them again.
-
 - **Single-frame anomalies, most significant first.** Anomalies are numbered by integrated sigma (the signal-to-noise of the whole footprint), then peak sigma, then size, instead of by frame. The report, its data files and the viewers use the same numbers; before, the viewers numbered anomalies in the engine's order, so their A3 could be another anomaly than the report's.
+
+### Import, plate solving and preparation
+
+- **Floating-point frames in detector counts.** Floating-point FITS frames that hold detector counts, as the Zwicky Transient Facility writes them, are now converted like integer data instead of asking to clip or compress every pixel. When most pixels are outside the accepted range, the outlier question offers **Preserve all values** first.
+- **More time and site keywords.** Without `DATE-OBS`, the exposure start comes from `DATE-BEG`, `MJD-OBS`, `MJD-BEG`, `SHUTOPEN` or `OBSMJD`. `OBSLAT`/`OBSLON` and `OBSGEO-H` are read as the site, and preparation keeps the time and site cards that Siril drops.
+- **The FITS headers' site comes first.** A site in the FITS headers describes the frames, so JPL lookups and **Fetch Asteroids and Comets** now use it before a configured IAU code.
+- **TPV plate solutions.** Frames solved with the TPV projection (`RA---TPV`, as many survey pipelines write) are read, as well as TAN and TAN-SIP. A frame counts as solved only when its projection can be used.
+- **Plate-solve hints.** Preparation keeps the input's image-centre position and pixel scale as hints for solving the registered frames, in both solvers. When several frames look misaligned on import, SpacePixels offers one Siril realignment.
+- **Long report paths on Windows.** Before detection and after an export, SpacePixels warns when report files could exceed Windows' 260-character path limit.
+
+### Astrometry settings and the main window
+
+- **Named observing sites.** Astrometry Config keeps several named sites, each with an IAU code, latitude, longitude and altitude. Choosing one under **Site** puts it in use at once; **New**, **Delete** and **Site Name** add, remove and rename sites, and **Save** keeps them. Your existing site becomes the first, named *My site*. Predictions record the name of the site they were fetched for.
+- **What the asteroid fetch will use.** The readout beside **Fetch Asteroids and Comets** shows the site the fetch really uses (the FITS headers', else a compatible IAU code, else the settings' coordinates, with the site's name) and marks the depth *frames' depth* when the fetch goes deeper than the setting. An optional site altitude is accepted for predictions.
+- **What the session already holds.** Below the readout, a *Saved:* line gives the depth of the session's sky catalogue, the depth and site of its asteroid and comet predictions, and when each was fetched. It marks *next fetch deeper* or *other site now* when fetching again would give something different.
+- **Comparison stars checked after the catalogue fetch.** **Fetch Sky Catalogue** now measures the catalogue's stars on the session's middle frame. With fewer than 10 usable stars, the Astrometry status says why (saturated or too faint) and, when they are saturated, suggests raising **Star Depth**.
+
+### Fixes
+
+- **Asteroid paths no longer jump off the frame.** On the time step where an asteroid rises, transits or sets for the observing site, JPL Horizons writes one field fewer before the position, and SpacePixels read that step's Dec as its R.A. and its magnitude as its Dec. The predicted path then ran to a point far outside the field and back, drawn as two dashed lines from the object to the edge of the frame. The columns are now read from the end of each row. Predictions saved before this fix keep the wrong steps; fetch them again.
+
+### Acknowledgements
+
+- Find_Orb by Bill Gray (Project Pluto) is credited in **Credits & Acknowledgements** and the README.
+- DECam data from the NSF NOIRLab Astro Data Archive, used to test and improve SpacePixels, are credited there too.
 
 ### Upgrading and API changes
 
+- **Libraries.** SpacePixels 2026.11-03 needs **JTransient 1.1.0** and **JPlateSolve 1.0.3**; JPlateSolve 1.0.3 adds the plate-solve hints.
+- **Settings.** `spacepixels_app.json` gains the MPC submission details and e-mail address, the Find_Orb program, and the named observing sites (`observingSites`, `observingSite`). A file from an earlier version keeps working; its site becomes the first named site when it is loaded, and the site in use does not change.
+- **Report data.** `report-data.json` adds `knownSolarSystem.identifications` (each object's status and offsets, with `motionNote` and `unusualMotion`) and `siteProblem`, and each measured finding position carries the detection's `fwhm` and `snr`. Reports written before this release lack these sizes; the Asteroids & Comets window opens them with a note and does not export their tracks, whose uncertainties would count only the plate error.
+- **New files beside a report:** `light_curves/*.csv` and, after Compare again or Identify all, `later_identifications.json`.
+- **Saved predictions.** Fetch again the asteroid and comet predictions saved before this release: they may hold the wrong Horizons steps described under Fixes, and they lack SkyBoT's objects and the deeper limit.
 - **`SkySnapshot` and `SessionMetadata` have a new last component, `excludedAreas`.** The previous constructors remain and mean no excluded areas. A `SessionMetadataStore` implementation must add `saveExcludedAreas`.
 - **`ImageScaling.Summary` has a new component, `floatsInAdu`.** It is the record's last component and is true when the scan read the sequence's floating-point frames as ADU (detector counts) rather than values from 0 to 1. Code that reads the summary from `ImageScaling.OutlierException.summary()` needs no change; code that constructs a `Summary` must pass the new argument and be recompiled.
+- **`SolarSystemQuery.observer` is public.** It applies the asteroid fetch's choice of observing site: the FITS headers', else a compatible IAU code, else the configured coordinates.
 
 ## 2026.11-01
 
