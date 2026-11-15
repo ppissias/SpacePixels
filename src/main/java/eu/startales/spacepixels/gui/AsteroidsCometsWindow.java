@@ -24,6 +24,7 @@ import eu.startales.spacepixels.mpc.LightCurve;
 import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
 import eu.startales.spacepixels.mpc.MpcObservation;
+import eu.startales.spacepixels.mpc.MpcRecords;
 import eu.startales.spacepixels.mpc.NightLinks;
 import eu.startales.spacepixels.mpc.ReportedObjects;
 import io.github.ppissias.jtransient.core.SubStackAstrometry;
@@ -143,6 +144,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JButton unlinkButton = new JButton("Unlink");
     /** The running read of the linked nights; null otherwise. EDT only. */
     private SwingWorker<?, ?> nightsWorker;
+    /** What the user recorded about each object and the MPC, as saved beside the report; EDT only. */
+    private final Map<String, MpcRecords.Entry> records;
+    /** Objects whose linked nights are left out of the file (This night only); EDT only. */
+    private final Set<String> thisNightOnly = new java.util.HashSet<>();
+    private final JCheckBox thisNightOnlyBox = new JCheckBox("This night only");
+    private final JTextField designationField = new JTextField(10);
+    private final JButton designationSave = new JButton("Save");
+    private final JCheckBox submittedBox = new JCheckBox("Submitted from this night");
+    private final WrappingHelpLabel recordLabel = new WrappingHelpLabel(" ", 320);
     /** UTC date of a night, by the start of its first exposure. */
     private static final DateTimeFormatter NIGHT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US).withZone(ZoneOffset.UTC);
     /** Each measured faint mover's sub-stacks, in time order. */
@@ -219,6 +229,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     + " made after the report (Compare again, Identify all) are shown, from "
                     + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + " beside it.");
         }
+        this.records = new java.util.LinkedHashMap<>(MpcRecords.load(report.folder()));
         this.reduction = AstrometricReduction.create(header, correction, this.files);
         this.settings = settings;
         this.storage = storage;
@@ -228,7 +239,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         this.catalogue = catalogue;
         this.predictions = predictions == null ? () -> null : predictions;
         for (var object : report.objects()) {
-            exported.put(object.id(), MpcExport.includedByDefault(object));
+            // A night already submitted is not offered again by default.
+            var record = records.get(object.id());
+            exported.put(object.id(), MpcExport.includedByDefault(object) && (record == null || record.submittedUtc == null));
             List<MpcObservation> reduced = reduction.reduction() == null || !object.measured()
                     ? List.of() : reduction.reduction().reducePositions(object.positions());
             observations.put(object.id(), reduced);
@@ -610,6 +623,33 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         nightButtons.add(unlinkButton);
         nightButtons.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(nightButtons);
+        thisNightOnlyBox.setToolTipText("Puts only this night's observations in the file, without the linked nights");
+        thisNightOnlyBox.setAlignmentX(LEFT_ALIGNMENT);
+        thisNightOnlyBox.addActionListener(e -> {
+            if (shown == null) return;
+            if (thisNightOnlyBox.isSelected()) thisNightOnly.add(shown.id()); else thisNightOnly.remove(shown.id());
+            refreshExport();
+        });
+        panel.add(thisNightOnlyBox);
+        panel.add(Box.createVerticalStrut(UiStyle.space(10)));
+        panel.add(title("At the MPC"));
+        JPanel designationRow = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        designationRow.add(new JLabel("MPC designation"));
+        designationField.setToolTipText("The designation the MPC gave this object: a provisional designation, a number, or "
+                + "the temporary designation on the NEO Confirmation Page. The file then names the object by it, on every linked night.");
+        designationField.addActionListener(e -> saveDesignation());
+        designationRow.add(designationField);
+        designationSave.addActionListener(e -> saveDesignation());
+        designationRow.add(designationSave);
+        designationRow.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(designationRow);
+        submittedBox.setToolTipText("Tick after you have submitted this night's observations of this object to the MPC. "
+                + "It is not offered for export again by default, and is left out when a linked night is exported.");
+        submittedBox.setAlignmentX(LEFT_ALIGNMENT);
+        submittedBox.addActionListener(e -> saveSubmitted());
+        panel.add(submittedBox);
+        recordLabel.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(recordLabel);
         updateNights();
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Orbit · Find_Orb"));
@@ -892,15 +932,39 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             if (!Boolean.TRUE.equals(exported.get(object.id()))) continue;
             var chosen = chosenObservations(object);
             var others = nightsOf(object.id());
+            var record = records.get(object.id());
+            if (record != null && record.submittedUtc != null) {
+                notes.add(object.id() + " of this night was marked submitted on " + record.submittedUtc + ": sending it again duplicates it.");
+            }
+            String designation = designation(object.id());
+            if (designation != null) {
+                // A designation from the MPC names the object on every night; each night is then sent on its own.
+                var designated = MpcRecords.tracklet(designation, chosen);
+                if (designated == null) {
+                    problems.add(object.id() + ": " + MpcRecords.problem(designation));
+                    continue;
+                }
+                notes.add(object.id() + " is reported as " + designation + ", its designation from the MPC.");
+                tracklets.add(designated);
+                continue;
+            }
             var named = namedObject(object, others);
             if (named != object) notes.add(object.id() + " is reported as " + named.names().getFirst() + ", the identification of its linked night.");
             var tracklet = MpcExport.tracklet(named, chosen, report.sessionStartMillis(), i);
-            if (tracklet.permID() == null && tracklet.provID() == null && !others.isEmpty()) {
+            var unsent = others.stream().filter(o -> !o.submitted()).toList();
+            boolean unidentified = tracklet.permID() == null && tracklet.provID() == null;
+            for (var other : others) {
+                if (unidentified && other.submitted() && !thisNightOnly.contains(object.id())) {
+                    notes.add(object.id() + ": " + other.name() + " was marked submitted on " + other.record().submittedUtc
+                            + " and is left out; the MPC links separately sent nights itself.");
+                }
+            }
+            if (tracklet.permID() == null && tracklet.provID() == null && !unsent.isEmpty() && !thisNightOnly.contains(object.id())) {
                 // The MPC: the nights of one object share a temporary designation only within one message.
                 var all = new ArrayList<>(chosen);
                 String trkSub = tracklet.trkSub();
                 long first = report.sessionStartMillis();
-                for (var other : others) {
+                for (var other : unsent) {
                     all.addAll(NightLinks.defaultSelection(other.observations()));
                     long start = other.night().report().sessionStartMillis();
                     if (start > 0 && start < first) {
@@ -917,7 +981,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 if (site != null) problems.add(site);
                 all.sort(java.util.Comparator.comparingLong(MpcObservation::midpointMillis));
                 tracklet = new AdesPsv.Tracklet(null, null, trkSub, all);
-                notes.add(object.id() + ": " + (others.size() + 1) + " nights in one tracklet, " + trkSub
+                notes.add(object.id() + ": " + (unsent.size() + 1) + " nights in one tracklet, " + trkSub
                         + ". The MPC gives the nights of one unidentified object one designation only within one submission.");
             }
             tracklets.add(tracklet);
@@ -1722,8 +1786,17 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         subStackWorker.execute();
     }
 
-    /** One other night of an object: the night, the object there and its measured positions as observations. */
-    private record OtherNight(NightLinks.Night night, ReportedObjects.ReportedObject object, List<MpcObservation> observations) {
+    /**
+     * One other night of an object: the night, the object there, its measured positions as observations, and what the
+     * user recorded about it and the MPC on that night (null when nothing).
+     */
+    private record OtherNight(NightLinks.Night night, ReportedObjects.ReportedObject object, List<MpcObservation> observations,
+                              MpcRecords.Entry record) {
+        /** Whether that night's observations were marked submitted. */
+        boolean submitted() {
+            return record != null && record.submittedUtc != null;
+        }
+
         /** The night's UTC date, as the start of its first exposure gives it. */
         String name() {
             return NIGHT.format(Instant.ofEpochMilli(night.report().sessionStartMillis()));
@@ -1805,7 +1878,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                             var night = openNight(ref.folder(), latitude, longitude, altitude);
                             var object = night.object(ref.objectId());
                             if (object == null) problems.add(ref.objectId() + " is not in " + ref.folder().getName() + ".");
-                            else nights.add(new OtherNight(night, object, night.observations(object)));
+                            else nights.add(new OtherNight(night, object, night.observations(object),
+                                    MpcRecords.load(ref.folder()).get(ref.objectId())));
                         } catch (Exception e) {
                             problems.add(ref.folder().getName() + " cannot be read: " + message(e));
                         }
@@ -1836,6 +1910,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
 
     /** Shows the shown object's other nights, or what linking one does. */
     private void updateNights() {
+        updateRecord();
         var object = shown;
         linkButton.setEnabled(object != null && !observations.get(object.id()).isEmpty());
         unlinkButton.setEnabled(object != null && otherNights.containsKey(object.id()));
@@ -1860,6 +1935,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         for (String problem : linked.problems()) text.append("<br>").append(escape(problem));
         String site = siteProblem(object.id());
         if (site != null) text.append("<br>").append(escape(site));
+        for (var other : linked.nights()) {
+            if (other.submitted()) text.append("<br>").append(other.name()).append(" was marked submitted on ").append(other.record().submittedUtc).append(".");
+        }
         nightsLabel.setHtml(text.toString());
     }
 
@@ -1980,6 +2058,106 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             if (shown == object) updateOrbit();
             otherNights.remove(object.id());
             readOtherNights();
+        });
+    }
+
+    /**
+     * The designation the MPC gave an object, as the user entered it on this night or, else, on a linked night (the
+     * earliest that has one); null when there is none.
+     */
+    private String designation(String id) {
+        var own = records.get(id);
+        if (own != null && MpcRecords.tidy(own.designation) != null) return MpcRecords.tidy(own.designation);
+        for (var other : nightsOf(id)) {
+            if (other.record() != null && MpcRecords.tidy(other.record().designation) != null) return MpcRecords.tidy(other.record().designation);
+        }
+        return null;
+    }
+
+    /** Shows the shown object's MPC designation and submitted mark, and where a designation from another night comes from. */
+    private void updateRecord() {
+        var object = shown;
+        designationField.setEnabled(object != null);
+        designationSave.setEnabled(object != null);
+        submittedBox.setEnabled(object != null && !observations.get(object.id()).isEmpty());
+        thisNightOnlyBox.setEnabled(object != null && !nightsOf(object.id()).isEmpty());
+        thisNightOnlyBox.setSelected(object != null && thisNightOnly.contains(object.id()));
+        if (object == null) {
+            designationField.setText("");
+            submittedBox.setSelected(false);
+            recordLabel.setText(" ");
+            return;
+        }
+        var own = records.get(object.id());
+        designationField.setText(own == null || own.designation == null ? "" : own.designation);
+        submittedBox.setSelected(own != null && own.submittedUtc != null);
+        var text = new StringBuilder();
+        if (own != null && own.submittedUtc != null) text.append("Marked submitted on ").append(own.submittedUtc).append(". ");
+        String designation = designation(object.id());
+        if (designation != null && (own == null || MpcRecords.tidy(own.designation) == null)) {
+            text.append("Reported as ").append(escape(designation)).append(", the designation entered on a linked night. ");
+        }
+        if (text.isEmpty()) {
+            text.append("When the MPC designates the object, or lists it on the NEO Confirmation Page, enter that designation: "
+                    + "later nights are then reported by it. Tick Submitted once you have sent this night.");
+        }
+        recordLabel.setHtml(text.toString().trim());
+    }
+
+    /** Saves the typed designation of the shown object beside the report, or clears it when the field is empty. */
+    private void saveDesignation() {
+        var object = shown;
+        if (object == null) return;
+        String typed = MpcRecords.tidy(designationField.getText());
+        String problem = MpcRecords.problem(typed);
+        if (problem != null) {
+            recordLabel.setHtml(escape(problem));
+            return;
+        }
+        var entry = records.computeIfAbsent(object.id(), id -> {
+            var created = new MpcRecords.Entry();
+            created.id = id;
+            return created;
+        });
+        entry.designation = typed;
+        saveRecords();
+    }
+
+    /** Marks, or unmarks, this night's observations of the shown object as submitted, with today's UTC date. */
+    private void saveSubmitted() {
+        var object = shown;
+        if (object == null) return;
+        var entry = records.computeIfAbsent(object.id(), id -> {
+            var created = new MpcRecords.Entry();
+            created.id = id;
+            return created;
+        });
+        entry.submittedUtc = submittedBox.isSelected() ? java.time.LocalDate.now(ZoneOffset.UTC).toString() : null;
+        if (submittedBox.isSelected()) {
+            exported.put(object.id(), false);
+            refreshObjects();
+        }
+        saveRecords();
+    }
+
+    /** Writes the records beside the report on a worker, then shows them and rebuilds the file. */
+    private void saveRecords() {
+        File folder = report.folder();
+        var snapshot = new java.util.LinkedHashMap<String, MpcRecords.Entry>();
+        for (var entry : records.entrySet()) {
+            var copy = new MpcRecords.Entry();
+            copy.id = entry.getValue().id;
+            copy.designation = entry.getValue().designation;
+            copy.submittedUtc = entry.getValue().submittedUtc;
+            snapshot.put(entry.getKey(), copy);
+        }
+        writeOnWorker(() -> {
+            MpcRecords.save(folder, snapshot);
+            return null;
+        }, problem -> {
+            updateRecord();
+            if (problem != null) recordLabel.setHtml(escape("Not saved: " + problem));
+            refreshExport();
         });
     }
 
