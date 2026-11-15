@@ -72,6 +72,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     static final String MPCHECKER = "https://minorplanetcenter.net/cgi-bin/checkmp.cgi";
     /** Bill Gray's online Find_Orb. */
     static final String FIND_ORB = "https://www.projectpluto.com/fo.htm";
+    /** Bill Gray's page for the downloadable Find_Orb (Windows builds, and how to build it elsewhere). */
+    static final String FIND_ORB_DOWNLOAD = "https://www.projectpluto.com/find_orb.htm";
     /** The status of a faint mover with a marginal sub-stack. */
     static final String WEAK = "weak";
     /** The most cut-out pixels a sub-stack measurement may read, in bytes. */
@@ -97,16 +99,24 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final SkyCatalogue catalogue;
     /** Fainter Gaia stars fetched for comparison stars when the saved catalogue had too few usable ones; empty until then. */
     private volatile List<SkyCatalogue.Star> fetchedStars = List.of();
-    private final JLabel compareLabel = new JLabel(" ");
+    private final WrappingHelpLabel compareLabel = new WrappingHelpLabel(" ", 320);
     /** Identifications made after the report, by object, as saved beside it. EDT only. */
     private final Map<String, eu.startales.spacepixels.mpc.LaterIdentifications.Entry> later;
     private final JButton identifyAllButton = new JButton("Identify all…");
+    /** The running Identify all, while its button reads Cancel; null otherwise. EDT only. */
+    private SwingWorker<?, ?> identifyWorker;
+    /** The full result of the last Compare again or Identify all, which the ⓘ link shows; null before one. */
+    private String comparisonDetails;
+    private final JButton detailsLink = AccessibleControls.link("ⓘ", "Details of the last comparison", this::showComparisonDetails);
+    private final JButton showOrbitButton = new JButton("Show orbit");
+    /** The open orbit window, or null. */
+    private JDialog orbitWindow;
     /** Known objects within 1′ of each object from the last Identify all, by object; empty before it. EDT only. */
     private final Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> nearby = new HashMap<>();
     private final JComboBox<String> binChoice = new JComboBox<>(new String[]{"Single frames", "Bins of 2", "Bins of 4"});
     private final Map<String, LightCurve.Curve> curves = new HashMap<>();
     private final LightCurvePlot curvePlot = new LightCurvePlot();
-    private final JLabel curveLabel = new JLabel(" ");
+    private final WrappingHelpLabel curveLabel = new WrappingHelpLabel(" ", 560);
     private final JButton curveButton = new JButton("Measure light curve");
     private final JButton curveSaveButton = new JButton("Save CSV…");
 
@@ -120,8 +130,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JButton measureButton = new JButton("Measure in sub-stacks");
     /** Sub-stacks a faint mover is measured in; the MPC asks for at least two per night, preferably three to five. */
     static final int SUB_STACKS = 3;
-    private final JLabel orbitLabel = new JLabel(" ");
-    private final OrbitDiagram orbitDiagram = new OrbitDiagram();
+    private final WrappingHelpLabel orbitLabel = new WrappingHelpLabel(" ", 320);
     private final AtomicInteger generation = new AtomicInteger();
     private SwingWorker<List<short[][][]>, Void> worker;
     private boolean closed;
@@ -140,8 +149,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JLabel pictureLabel = new JLabel(" ");
     private final JLabel stretchLabel = new JLabel(" ");
     private final JLabel fitLabel = new JLabel(" ");
-    private final JLabel identificationLabel = new JLabel(" ");
-    private final JLabel stationLabel = new JLabel(" ");
+    private final WrappingHelpLabel identificationLabel = new WrappingHelpLabel(" ", 320);
+    private final WrappingHelpLabel stationLabel = new WrappingHelpLabel(" ", 260);
     private final JTextArea problemsArea = new JTextArea(4, 30);
     private final JTextArea psvArea = new JTextArea(12, 30);
     private final JButton copyButton = new JButton("Copy");
@@ -186,9 +195,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         this.later = new java.util.LinkedHashMap<>(eu.startales.spacepixels.mpc.LaterIdentifications.load(report.folder()));
         this.report = later.isEmpty() ? report : report.withObjects(eu.startales.spacepixels.mpc.LaterIdentifications.apply(report.objects(), later));
         if (!later.isEmpty()) {
-            compareLabel.setText(UiStyle.htmlWrappedTo(320, later.size() + " identification" + (later.size() == 1 ? "" : "s")
+            compareLabel.setHtml(later.size() + " identification" + (later.size() == 1 ? "" : "s")
                     + " made after the report (Compare again, Identify all) are shown, from "
-                    + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + " beside it."));
+                    + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + " beside it.");
         }
         this.reduction = AstrometricReduction.create(header, correction, this.files);
         this.settings = settings;
@@ -268,6 +277,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel identifyButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         identifyButtons.add(compare);
         identifyButtons.add(identifyAllButton);
+        detailsLink.setVisible(false);
+        identifyButtons.add(detailsLink);
         identifyButtons.setAlignmentX(LEFT_ALIGNMENT);
         compareLabel.setForeground(UiStyle.helpColor());
         compareLabel.setAlignmentX(LEFT_ALIGNMENT);
@@ -489,10 +500,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         curveSaveButton.setEnabled(curve != null);
         if (shown == null) { curveLabel.setText(" "); return; }
         if (curve == null) {
-            curveLabel.setText(UiStyle.htmlWrappedTo(560, "Measure light curve measures " + shown.id() + "'s light in each frame"
+            curveLabel.setHtml("Measure light curve measures " + shown.id() + "'s light in each frame"
                     + (shown.measured() ? "" : " at its fitted positions; a faint mover's single-frame values are noisy")
                     + (catalogue == null ? ". Without a sky catalogue the curve is not corrected for transparency." : ".")
-                    + catalogueWarning()));
+                    + catalogueWarning());
             return;
         }
         int size = binSize();
@@ -502,14 +513,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             stars += String.format(Locale.US, " (only %d usable comparison stars, %d needed for a reliable correction)",
                     curve.comparisonStars(), PhotometryStars.MIN_USABLE);
         }
-        curveLabel.setText(UiStyle.htmlWrappedTo(560, String.format(Locale.US, "%s · %d %s · %s%s · %s · aperture %.1f px · "
+        curveLabel.setHtml(String.format(Locale.US, "%s · %d %s · %s%s · %s · aperture %.1f px · "
                         + "median %s · amplitude (5–95 %%) %s mag · scatter %s mag. Relative magnitudes, not calibrated; "
                         + "flagged points (hollow) are left out of the summary%s.", curve.id(), summary.points(),
                 size > 1 ? "bins of " + size + " frames" : "frames", stars,
                 curve.comparisonNote() == null ? "" : " · " + curve.comparisonNote(),
                 curve.onReference() ? "fixed stars subtracted" : "fixed stars not subtracted (path too long)",
                 curve.apertureRadius(), magnitude(summary.median()), magnitude(summary.amplitude()), magnitude(summary.scatter()),
-                size > 1 ? " and the bins" : "")));
+                size > 1 ? " and the bins" : ""));
     }
 
     /** A magnitude to two decimals, or a dash when there is none. */
@@ -524,12 +535,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JFileChooser chooser = WindowSizing.fileChooser(report.folder());
         chooser.setSelectedFile(new File(report.folder(), curve.id().toLowerCase(Locale.ROOT) + "_lightcurve.csv"));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        try {
-            Files.writeString(chooser.getSelectedFile().toPath(), LightCurve.csv(curve, binSize()), StandardCharsets.UTF_8);
-            curveLabel.setText("Saved " + chooser.getSelectedFile().getName() + ".");
-        } catch (Exception e) {
-            curveLabel.setText("The light curve was not saved: " + e.getMessage());
-        }
+        File target = chooser.getSelectedFile();
+        String text = LightCurve.csv(curve, binSize());
+        writeOnWorker(() -> Files.writeString(target.toPath(), text, StandardCharsets.UTF_8), problem -> curveLabel.setText(problem == null
+                ? "Saved " + target.getName() + "." : "The light curve was not saved: " + problem));
     }
 
     /** Identification, the submission details and the export. */
@@ -537,15 +546,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.add(title("Before you report"));
-        JLabel guidance = new JLabel(UiStyle.htmlWrappedTo(320, "Anyone may report to the MPC, under an observatory code. "
-                + "<b>Your own observations</b> need your own code: apply for one by reporting at least ten numbered "
-                + "near-Earth asteroids on two nights each under code XXX. <b>Archival data</b> (such as DECam, W84) uses the "
-                + "telescope's code; contact the archive's member of the MPC's SARC list first. Report known objects first, "
-                + "to show your astrometry is good; check a possible new object with MPChecker; never send single "
-                + "positions or marginal detections."));
-        guidance.setForeground(UiStyle.helpColor());
-        guidance.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(guidance);
+        panel.add(new WrappingHelpLabel("Report under your own observatory code, or for archive data such as DECam under the "
+                + "telescope's, after contacting its reviewer. Report known objects first; never single positions or marginal detections.", 320));
         JButton guide = new JButton("MPC reporting guide");
         guide.setToolTipText(REPORTING_GUIDE);
         guide.addActionListener(e -> browse(REPORTING_GUIDE));
@@ -553,7 +555,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         panel.add(guide);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Identification"));
-        identificationLabel.setAlignmentX(LEFT_ALIGNMENT);
+        identificationLabel.setForeground(UIManager.getColor("Label.foreground"));
         panel.add(identificationLabel);
         JButton mpchecker = new JButton("MPChecker…");
         mpchecker.setToolTipText("Copies the date, position and code of the middle selected observation and opens the MPC's MPChecker");
@@ -567,18 +569,23 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 + "it, copies them (station code and positions, no names) and opens the online Find_Orb to paste them");
         findOrb.addActionListener(e -> openFindOrb());
         JButton chooseFindOrb = new JButton("Find_Orb program…");
-        chooseFindOrb.setToolTipText("Choose fo64.exe in the folder of the console Find_Orb (projectpluto.com)");
+        chooseFindOrb.setToolTipText("Choose fo64.exe (Windows) or fo (Linux, BSD, macOS) in the folder of the console Find_Orb");
         chooseFindOrb.addActionListener(e -> chooseFindOrb());
+        showOrbitButton.setToolTipText("Opens the fitted orbit, drawn from above the ecliptic, with its elements");
+        showOrbitButton.addActionListener(e -> showOrbitWindow());
         JPanel orbitButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         orbitButtons.add(findOrb);
         orbitButtons.add(chooseFindOrb);
+        orbitButtons.add(showOrbitButton);
         orbitButtons.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(orbitButtons);
-        orbitLabel.setForeground(UiStyle.helpColor());
-        orbitLabel.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(orbitLabel);
-        orbitDiagram.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(orbitDiagram);
+        panel.add(new WrappingHelpLabel("Find_Orb runs on this computer when installed. Windows: download the console Find_Orb "
+                + "and fo64.exe into one folder. Linux, BSD and macOS: build fo from Bill Gray's source code.", 320));
+        JButton getFindOrb = AccessibleControls.link("Get Find_Orb", "Open the Find_Orb download page", () -> browse(FIND_ORB_DOWNLOAD));
+        getFindOrb.setToolTipText(FIND_ORB_DOWNLOAD);
+        getFindOrb.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(getFindOrb);
         updateOrbit();
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Details for the MPC"));
@@ -604,7 +611,6 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         check.addActionListener(e -> checkStation(config.observatoryCode));
         check.setEnabled(!code.startsWith("not set"));
         row(form, c, "", check);
-        stationLabel.setForeground(UiStyle.helpColor());
         row(form, c, "", stationLabel);
         row(form, c, "Submitter", submitter);
         row(form, c, "Observers", observers);
@@ -655,10 +661,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         exportButtons.add(mpcTestButton);
         exportButtons.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(exportButtons);
-        JLabel note = new JLabel(UiStyle.htmlWrappedTo(320, "SpacePixels never sends observations to the MPC. Check the "
-                + "file, then submit it yourself as the MPC describes."));
-        note.setForeground(UiStyle.helpColor());
-        panel.add(note);
+        panel.add(new WrappingHelpLabel("SpacePixels never sends observations to the MPC. Check the file, then submit it "
+                + "yourself as the MPC describes.", 320));
         panel.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(4), UiStyle.space(8), UiStyle.space(10)));
         return panel;
     }
@@ -707,8 +711,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         var near = nearby.get(object.id());
         String nearText = near == null ? "" : near.isEmpty() ? "<br>Identify all: no known object within 1′."
                 : "<br>Identify all, within 1′: " + escape(String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList())) + ".";
-        identificationLabel.setText(UiStyle.htmlWrappedTo(320, object.id() + " · " + statusText(status(object)) + "<br>" + names
-                + escape(object.note() == null ? "" : object.note()) + nearText + measure + reduced));
+        identificationLabel.setHtml(object.id() + " · " + statusText(status(object)) + "<br>" + names
+                + escape(object.note() == null ? "" : object.note()) + nearText + measure + reduced);
         loadPictures(object);
     }
 
@@ -984,12 +988,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     var station = get();
                     stationProblem = AdesPsv.stationProblem(station, site);
                     stationText = station.code() + " · " + station.name();
-                    stationLabel.setText(UiStyle.htmlWrappedTo(260, escape(stationText) + (stationProblem == null
-                            ? site == null ? " · no observing site to compare" : " · agrees with the observing site" : " · does not agree")));
+                    stationLabel.setHtml(escape(stationText) + (stationProblem == null
+                            ? site == null ? " · no observing site to compare" : " · agrees with the observing site" : " · does not agree"));
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     stationProblem = null;
-                    stationLabel.setText(UiStyle.htmlWrappedTo(260, escape(cause.getMessage())));
+                    stationLabel.setHtml(escape(cause.getMessage()));
                 }
                 refreshExport();
             }
@@ -1064,7 +1068,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     orbits.remove(object.id());
                     orbitProblems.put(object.id(), cause.getMessage());
                 }
-                if (shown == object) updateOrbit();
+                if (shown == object) {
+                    updateOrbit();
+                    if (orbits.containsKey(object.id())) showOrbitWindow();
+                }
             }
         }.execute();
     }
@@ -1080,31 +1087,45 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     /** Lets the user point to fo64.exe; kept in the settings with the other details. */
     private void chooseFindOrb() {
         JFileChooser chooser = WindowSizing.fileChooser(null);
-        chooser.setDialogTitle("Choose fo64.exe in the console Find_Orb folder");
+        chooser.setDialogTitle("Choose fo64.exe (Windows) or fo in the console Find_Orb folder");
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         settings.getConfig().findOrbExecutable = chooser.getSelectedFile().getAbsolutePath();
         saveDetails();
         updateOrbit();
     }
 
-    /** Shows the shown object's fitted orbit, why it could not be fitted, or how to fit one. */
+    /** Shows a summary of the shown object's fitted orbit, why it could not be fitted, or how to fit one. */
     private void updateOrbit() {
         var orbit = shown == null ? null : orbits.get(shown.id());
-        orbitDiagram.orbit = orbit;
-        orbitDiagram.repaint();
+        showOrbitButton.setEnabled(orbit != null);
+        if (orbitWindow != null) {
+            if (orbit == null) {
+                orbitWindow.dispose();
+                orbitWindow = null;
+            } else {
+                fillOrbitWindow(orbitWindow, shown.id(), orbit);
+            }
+        }
         if (shown == null) { orbitLabel.setText(" "); return; }
         if (orbit == null) {
             String problem = orbitProblems.get(shown.id());
             String program = settings.getConfig().findOrbExecutable;
-            orbitLabel.setText(UiStyle.htmlWrappedTo(320, escape(problem != null ? problem : program == null || program.isBlank()
+            orbitLabel.setHtml(escape(problem != null ? problem : program == null || program.isBlank()
                     ? "Find_Orb is not set up here: Compute orbit copies the observations for the online Find_Orb."
-                    : "Compute orbit fits the selected observations of " + shown.id() + ".")));
+                    : "Compute orbit fits the selected observations of " + shown.id() + "."));
             return;
         }
+        orbitLabel.setHtml(String.format(Locale.US, "<b>Preliminary orbit</b> · a %s AU · e %s · i %s° · residual RMS %s.",
+                withSigma(orbit.a(), orbit.aSigma(), 3), withSigma(orbit.e(), orbit.eSigma(), 3), withSigma(orbit.i(), orbit.iSigma(), 1),
+                orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec())));
+    }
+
+    /** The full description of a fitted orbit, as HTML. */
+    private String orbitText(FindOrb.Orbit orbit) {
         long used = orbit.residuals().stream().filter(FindOrb.Residual::used).count();
-        double span = observations.get(shown.id()).isEmpty() ? 0 : orbit.residuals().size() < 2 ? 0
+        double span = orbit.residuals().size() < 2 ? 0
                 : (Instant.parse(orbit.residuals().getLast().isoTime()).toEpochMilli() - Instant.parse(orbit.residuals().getFirst().isoTime()).toEpochMilli()) / 3_600_000.0;
-        orbitLabel.setText(UiStyle.htmlWrappedTo(320, String.format(Locale.US, "<b>Preliminary</b> · %d of %d observations used over %.1f h"
+        return String.format(Locale.US, "<b>Preliminary</b> · %d of %d observations used over %.1f h"
                         + " · epoch %s<br>a %s AU · e %s · i %s°<br>q %s AU · node %s° · peri %s°<br>Residual RMS %s · P(NEO) %s · Earth MOID %s"
                         + "<br>An orbit from a short arc is uncertain (±1σ shown); a good fit does not prove the object is real.",
                 used, orbit.residuals().size(), span, orbit.epochIso() == null ? "?" : orbit.epochIso().substring(0, 10),
@@ -1113,7 +1134,101 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 withSigma(orbit.argumentOfPerihelion(), orbit.perihelionSigma(), 1),
                 orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec()),
                 orbit.neoProbability() == null ? "?" : String.format(Locale.US, "%.0f %%", orbit.neoProbability()),
-                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f AU", orbit.earthMoid()))));
+                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f AU", orbit.earthMoid()));
+    }
+
+    /**
+     * Opens, or brings forward, a small window with the shown object's fitted orbit drawn from above the ecliptic, its
+     * elements, and Save picture. It follows the shown object and closes when its orbit is dropped.
+     */
+    private void showOrbitWindow() {
+        var orbit = shown == null ? null : orbits.get(shown.id());
+        if (orbit == null) return;
+        if (orbitWindow == null) {
+            orbitWindow = new JDialog(this, "Orbit", false);
+            orbitWindow.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+            orbitWindow.addWindowListener(new java.awt.event.WindowAdapter() {
+                @Override public void windowClosed(java.awt.event.WindowEvent e) {
+                    if (e.getWindow() == orbitWindow) orbitWindow = null;
+                }
+            });
+            fillOrbitWindow(orbitWindow, shown.id(), orbit);
+            orbitWindow.pack();
+            orbitWindow.setLocationRelativeTo(this);
+        } else {
+            fillOrbitWindow(orbitWindow, shown.id(), orbit);
+        }
+        orbitWindow.setVisible(true);
+        orbitWindow.toFront();
+    }
+
+    /** Puts one orbit's elements, drawing and Save picture into the orbit window. */
+    private void fillOrbitWindow(JDialog window, String id, FindOrb.Orbit orbit) {
+        window.setTitle("Orbit · " + id);
+        var diagram = new OrbitDiagram();
+        diagram.orbit = orbit;
+        var text = new WrappingHelpLabel(orbitText(orbit), 320);
+        text.setForeground(UIManager.getColor("Label.foreground"));
+        JButton savePicture = new JButton("Save picture…");
+        savePicture.addActionListener(e -> saveOrbitPicture(id, diagram));
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        buttons.add(savePicture);
+        JPanel content = new JPanel(new BorderLayout(0, UiStyle.space(6)));
+        content.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(8), UiStyle.space(8), UiStyle.space(8), UiStyle.space(8)));
+        content.add(text, BorderLayout.NORTH);
+        content.add(diagram, BorderLayout.CENTER);
+        content.add(buttons, BorderLayout.SOUTH);
+        window.setContentPane(content);
+        window.revalidate();
+        window.repaint();
+    }
+
+    /** Saves the orbit drawing as a PNG where the user chooses, the file written on a worker. */
+    private void saveOrbitPicture(String id, OrbitDiagram diagram) {
+        int size = Math.max(UiStyle.space(300), Math.min(diagram.getWidth(), diagram.getHeight()));
+        BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            diagram.setSize(size, size);
+            diagram.paint(g);
+        } finally {
+            g.dispose();
+        }
+        JFileChooser chooser = WindowSizing.fileChooser(report.folder());
+        chooser.setSelectedFile(new File(report.folder(), id.toLowerCase(Locale.ROOT) + "_orbit.png"));
+        if (chooser.showSaveDialog(orbitWindow == null ? this : orbitWindow) != JFileChooser.APPROVE_OPTION) return;
+        File target = chooser.getSelectedFile();
+        writeOnWorker(() -> javax.imageio.ImageIO.write(image, "png", target), problem -> orbitLabel.setHtml(escape(problem == null
+                ? "Saved " + target.getName() + "." : "The picture was not saved: " + problem)));
+    }
+
+    /** An action that writes a file and may fail. */
+    private interface FileWrite {
+        Object write() throws Exception;
+    }
+
+    /**
+     * Writes a file on a worker, never on the event thread, and then tells {@code done} on the event thread: null when
+     * it was written, else why not.
+     */
+    private void writeOnWorker(FileWrite write, java.util.function.Consumer<String> done) {
+        new SwingWorker<Void, Void>() {
+            @Override protected Void doInBackground() throws Exception {
+                write.write();
+                return null;
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                try {
+                    get();
+                    done.accept(null);
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    done.accept(String.valueOf(cause.getMessage()));
+                }
+            }
+        }.execute();
     }
 
     /** "2.36 ± 1.09", or the value alone when Find_Orb gave no uncertainty. */
@@ -1137,12 +1252,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JFileChooser chooser = WindowSizing.fileChooser(report.folder());
         chooser.setSelectedFile(new File(report.folder(), "mpc_observations.psv"));
         if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) return;
-        try {
-            Files.writeString(chooser.getSelectedFile().toPath(), psvArea.getText(), StandardCharsets.UTF_8);
-            problemsArea.setText("Saved " + chooser.getSelectedFile().getName() + ".");
-        } catch (Exception e) {
-            problemsArea.setText("The file was not saved: " + e.getMessage());
-        }
+        File target = chooser.getSelectedFile();
+        String text = psvArea.getText();
+        writeOnWorker(() -> Files.writeString(target.toPath(), text, StandardCharsets.UTF_8), problem -> problemsArea.setText(problem == null
+                ? "Saved " + target.getName() + "." : "The file was not saved: " + problem));
     }
 
     /**
@@ -1167,11 +1280,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private void compareAgain() {
         var objects = predictions.get();
         if (objects == null || objects.bodies == null) {
-            compareLabel.setText(UiStyle.htmlWrappedTo(320, "No saved predictions: Fetch Asteroids and Comets (2 Astrometry) first."));
+            compareLabel.setHtml("No saved predictions: Fetch Asteroids and Comets (2 Astrometry) first.");
             return;
         }
         if (header == null) {
-            compareLabel.setText(UiStyle.htmlWrappedTo(320, "The frames have no plate solution to compare positions with."));
+            compareLabel.setHtml("The frames have no plate solution to compare positions with.");
             return;
         }
         double diagonal = report.frames().isEmpty() ? 0 : Math.hypot(report.frames().getFirst().width(), report.frames().getFirst().height());
@@ -1212,10 +1325,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     + (result.names().isEmpty() ? "" : " " + String.join(" or ", result.names())));
         }
         report = report.withObjects(replaced);
-        String saved = changes.isEmpty() ? "" : saveLater();
-        compareLabel.setText(UiStyle.htmlWrappedTo(320, String.format(Locale.US, "Compared with the saved predictions to V %.1f (%d objects): ",
-                objects.magnitudeLimit, objects.bodies.size()) + (changes.isEmpty() ? "no identification changed."
-                : changes.size() + " changed: " + escape(String.join("; ", changes)) + ". " + saved)));
+        if (!changes.isEmpty()) saveLater();
+        String head = String.format(Locale.US, "Compared with the saved predictions to V %.1f (%d objects): ", objects.magnitudeLimit, objects.bodies.size());
+        if (changes.isEmpty()) {
+            showComparison(head + "no identification changed.", null);
+        } else {
+            showComparison(head + (changes.size() <= 2 ? String.join("; ", changes) + "." : changes.size() + " changed.")
+                    + " Saved.", head + "\n\n" + String.join("\n", changes));
+        }
         refreshObjects();
         show(shown == null ? null : report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
         refreshExport();
@@ -1226,38 +1343,47 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      * and lists those within 1′ of each object with their rate difference. The identifications are not changed.
      */
     private void identifyAll() {
+        if (identifyWorker != null) {
+            identifyWorker.cancel(true);
+            return;
+        }
         if (header == null || report.frames().isEmpty()) {
-            compareLabel.setText(UiStyle.htmlWrappedTo(320, "The frames have no plate solution to search around."));
+            compareLabel.setHtml("The frames have no plate solution to search around.");
             return;
         }
         long first = report.frames().stream().mapToLong(ReportedObjects.Frame::timestampMillis).filter(t -> t > 0).min().orElse(0);
         long last = report.frames().stream().filter(f -> f.timestampMillis() > 0)
                 .mapToLong(f -> f.timestampMillis() + Math.max(0, f.exposureMillis())).max().orElse(0);
         if (first <= 0) {
-            compareLabel.setText(UiStyle.htmlWrappedTo(320, "The frames have no times to search at."));
+            compareLabel.setHtml("The frames have no times to search at.");
             return;
         }
         long epoch = first + (last - first) / 2;
         var field = eu.startales.spacepixels.skycatalog.SkyField.of(header, report.frames().getFirst().width(), report.frames().getFirst().height());
         String code = settings.getConfig().observatoryCode;
         var objects = report.objects();
-        identifyAllButton.setEnabled(false);
+        identifyAllButton.setText("Cancel Identify all");
         compareLabel.setText("Asking JPL and SkyBoT for every known object in the field…");
-        new SwingWorker<eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects, Void>() {
+        identifyWorker = new SwingWorker<eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects, Void>() {
             @Override protected eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects doInBackground() throws Exception {
                 return new eu.startales.spacepixels.solarsystem.SolarSystemClient().knownInField(field, epoch, code, site,
                         eu.startales.spacepixels.mpc.NearbyKnown.RADIUS_ARCSEC / 3600 * 2);
             }
 
             @Override protected void done() {
+                if (identifyWorker == this) identifyWorker = null;
                 if (closed) return;
-                identifyAllButton.setEnabled(true);
+                identifyAllButton.setText("Identify all…");
+                if (isCancelled()) {
+                    compareLabel.setText("Identify all was cancelled.");
+                    return;
+                }
                 eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects known;
                 try {
                     known = get();
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
-                    compareLabel.setText(UiStyle.htmlWrappedTo(320, "Identify all could not ask the services: " + escape(String.valueOf(cause.getMessage()))));
+                    compareLabel.setHtml("Identify all could not ask the services: " + escape(String.valueOf(cause.getMessage())));
                     return;
                 }
                 nearby.clear();
@@ -1289,16 +1415,23 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 refreshObjects();
                 refreshExport();
                 // A short summary: each object's matches are in its identification.
-                String services = known.problems().isEmpty() ? "JPL and SkyBoT" : "partly (" + String.join("; ", known.problems()) + ")";
-                String summary = String.format(Locale.US, "Identify all (%s, no magnitude limit, %d known objects): ", services, known.objects().size())
-                        + (possible.isEmpty() ? "" : "Possible: " + String.join(", ", possible) + ". ")
-                        + (found.size() - possible.size() > 0 ? (found.size() - possible.size()) + " already identified agree. " : "")
-                        + empty + " with no known object within 1′.";
-                String saved = possible.isEmpty() ? "" : " " + saveLater();
-                compareLabel.setText(UiStyle.htmlWrappedTo(320, escape(summary) + saved));
+                String summary = String.format(Locale.US, "Identify all (%d known objects%s): ", known.objects().size(),
+                        known.problems().isEmpty() ? "" : "; " + String.join("; ", known.problems()))
+                        + (possible.isEmpty() ? "" : "Possible " + String.join(", ", possible) + "; ")
+                        + (found.size() - possible.size() > 0 ? (found.size() - possible.size()) + " known agree; " : "")
+                        + empty + " with none within 1′.";
+                if (!possible.isEmpty()) saveLater();
+                var details = new StringBuilder(summary).append("\n\nKnown objects within 1′ of each object at mid-session:\n");
+                for (var object : report.objects()) {
+                    var near = nearby.getOrDefault(object.id(), List.of());
+                    details.append("\n").append(object.id()).append(" (").append(statusText(object.status())).append("): ")
+                            .append(near.isEmpty() ? "none" : String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList()));
+                }
+                showComparison(summary + (possible.isEmpty() ? "" : " Saved."), details.toString());
                 if (shown != null) show(report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
             }
-        }.execute();
+        };
+        identifyWorker.execute();
     }
 
     /** Records an object's identification made in this window, to save beside the report. */
@@ -1314,13 +1447,34 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     }
 
     /** Saves the later identifications beside the report and says so, or why not. */
-    private String saveLater() {
-        try {
-            eu.startales.spacepixels.mpc.LaterIdentifications.save(report.folder(), later);
-            return "Saved beside the report (" + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + ").";
-        } catch (java.io.IOException cannotSave) {
-            return "Not saved (" + escape(String.valueOf(cannotSave.getMessage())) + "): they last until this window closes.";
-        }
+    private void saveLater() {
+        var copy = new java.util.LinkedHashMap<>(later);
+        File folder = report.folder();
+        writeOnWorker(() -> {
+            eu.startales.spacepixels.mpc.LaterIdentifications.save(folder, copy);
+            return null;
+        }, problem -> {
+            if (problem != null) compareLabel.setHtml(escape("The identifications were not saved beside the report (" + problem
+                    + "): they last until this window closes."));
+        });
+    }
+
+    /** Shows the full result of the last Compare again or Identify all. */
+    private void showComparisonDetails() {
+        if (comparisonDetails == null) return;
+        JTextArea text = new JTextArea(comparisonDetails, Math.min(24, comparisonDetails.split("\n").length + 1), 70);
+        text.setEditable(false);
+        text.setLineWrap(true);
+        text.setWrapStyleWord(true);
+        text.setCaretPosition(0);
+        JOptionPane.showMessageDialog(this, new JScrollPane(text), "Identification details", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    /** Shows a short result line and keeps the full text behind the ⓘ link. */
+    private void showComparison(String summary, String details) {
+        comparisonDetails = details;
+        detailsLink.setVisible(details != null);
+        compareLabel.setHtml(escape(summary));
     }
 
     /** One nearby known object in words: name, magnitude, distance and rate difference. */
@@ -1452,6 +1606,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             playTimer.stop();
             if (worker != null) worker.cancel(true);
             worker = null;
+            if (identifyWorker != null) identifyWorker.cancel(true);
+            identifyWorker = null;
             pictures = List.of();
         }
         super.dispose();

@@ -20,6 +20,12 @@ final class WrappingHelpLabel extends JLabel {
         setAlignmentX(LEFT_ALIGNMENT);
     }
 
+    /** Replaces the text with new inline HTML; the height follows on the next layout. */
+    void setHtml(String html) {
+        setText("<html>" + html + "</html>");
+        revalidate();
+    }
+
     /** Sets the next measured column width in scaled pixels; no fixed text height is retained. */
     void wrapAt(int width) {
         wrapWidth = Math.max(1, width);

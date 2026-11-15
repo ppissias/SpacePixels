@@ -107,7 +107,7 @@ public class AsteroidsCometsWindowTest {
             assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
             assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
             String compared = onEdt(() -> labels(window).stream().map(JLabel::getText).filter(t -> t.contains("Compared with")).findFirst().orElse("none"));
-            assertTrue(compared, compared.contains("1 changed: FM1 Check → Known 2026 AB1"));
+            assertTrue(compared, compared.contains("FM1 Check → Known 2026 AB1") && compared.contains("Saved."));
             assertEquals("T1 keeps its identification", "Known", onEdt(() -> objects.getValueAt(0, 2)));
             assertTrue("saved beside the report", new File(reportFolder, eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME).isFile());
             onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
