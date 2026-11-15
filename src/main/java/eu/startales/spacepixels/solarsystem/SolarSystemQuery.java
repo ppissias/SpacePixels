@@ -61,7 +61,7 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
      * The site in the FITS headers, which describes these frames; else the configured observatory code; else the
      * configured site. Throws with a sentence for the user when there is none.
      */
-    static Observer observer(FitsFileInformation[] files, AppConfig config) {
+    public static Observer observer(FitsFileInformation[] files, AppConfig config) {
         ObservingSite headerSite = ObservingSite.fromHeaders(files, config.siteAltitude);
         if (headerSite != null) {
             return new Observer(null, headerSite, "site from the FITS header");

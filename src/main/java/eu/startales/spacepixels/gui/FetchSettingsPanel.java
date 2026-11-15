@@ -1,6 +1,10 @@
 package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.AppConfig;
+import eu.startales.spacepixels.fits.FitsFileInformation;
+import eu.startales.spacepixels.fits.ObservingSite;
+import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.solarsystem.SolarSystemQuery;
 import javax.swing.*;
 import java.awt.*;
 import java.util.Locale;
@@ -38,22 +42,72 @@ final class FetchSettingsPanel extends JPanel {
         add(edit, c);
     }
 
-    /** Displays current valid application values, including unsaved site edits; retains no mutable settings. */
-    void showSettings(AppConfig config) {
-        Double altitude = eu.startales.spacepixels.fits.ObservingSite.parseAltitude(config.siteAltitude);
-        String height = altitude == null ? "" : String.format(Locale.US, " · <b>%.0f m</b>", altitude);
-        solar.wrapAt(UiStyle.space(altitude == null ? 180 : 220));
+    /**
+     * Shows what the next fetches will use: the sky catalogue's depth, and for the asteroids and comets the depth (the
+     * setting, or deeper when the session's frames reach fainter) and the observer chosen as the fetch chooses it
+     * ({@link SolarSystemQuery#observer}: the FITS headers' site first, then a compatible IAU code, then the
+     * Astrometry Config site). Without a session it shows the settings. Retains no mutable settings.
+     *
+     * @param files     the session's frames, empty without a session
+     * @param catalogue the session's sky catalogue, or null
+     */
+    void showSettings(AppConfig config, FitsFileInformation[] files, SkyCatalogue catalogue) {
+        double setting = config.solarSystemMagnitude();
+        var check = catalogue == null ? null : catalogue.photometryCheck;
+        double frames = check == null ? Double.NaN : check.solarSystemDepth(AppConfig.MAX_SOLAR_SYSTEM_MAGNITUDE);
+        boolean deeper = frames > setting;
+        String depth = deeper ? String.format(Locale.US, "V ≤ <b>%.1f</b> · frames' depth", frames)
+                : String.format(Locale.US, "V ≤ <b>%.1f</b>", setting);
         sky.setText(String.format(Locale.US, "<html>Gaia G ≤ <b>%.1f</b></html>", config.skyCatalogueStarMagnitude()));
-        solar.setText(String.format(Locale.US, "<html>V ≤ <b>%.1f</b> · IAU <b>%s</b>%s"
-                + "<br>Lat / Lon: <b>%s / %s</b></html>",
-                config.solarSystemMagnitude(), value(config.observatoryCode), height, coordinate(config.siteLat), coordinate(config.siteLong)));
-        solar.setToolTipText("<html>Settings used by the next Fetch Asteroids and Comets.<br>"
-                + "Default latitude: " + value(config.siteLat) + "<br>Default longitude: " + value(config.siteLong)
-                + "<br>Default altitude (m): " + value(config.siteAltitude)
+        String site;
+        String source;
+        if (files == null || files.length == 0) {
+            site = siteText(config.observatoryCode, coordinate(config.siteLat), coordinate(config.siteLong), ObservingSite.parseAltitude(config.siteAltitude));
+            source = "Without frames, the settings are shown.";
+        } else {
+            SolarSystemQuery.Observer observer;
+            try {
+                observer = SolarSystemQuery.observer(files, config);
+            } catch (IllegalArgumentException missing) {
+                observer = null;
+            }
+            if (observer == null) {
+                site = "Site: <b>none</b>, set one in Astrometry Config";
+                source = "Neither the FITS headers nor the settings give an observing site.";
+            } else if (observer.site() != null && ObservingSite.FROM_HEADER.equals(observer.site().source())) {
+                site = "FITS header: <b>" + degrees(observer.site().latitudeDeg()) + " / " + degrees(observer.site().longitudeDeg())
+                        + "</b> · <b>" + String.format(Locale.US, "%.0f m", observer.site().altitudeMeters()) + "</b>";
+                source = "The FITS headers give the observing site, so it is used rather than the settings.";
+            } else if (observer.site() == null) {
+                site = "IAU <b>" + value(observer.observatoryCode()) + "</b>";
+                source = "The IAU observatory code from Astrometry Config is used; the FITS headers give no site.";
+            } else {
+                site = "Settings: <b>" + degrees(observer.site().latitudeDeg()) + " / " + degrees(observer.site().longitudeDeg())
+                        + "</b> · <b>" + String.format(Locale.US, "%.0f m", observer.site().altitudeMeters()) + "</b>";
+                source = "The site from Astrometry Config is used; the FITS headers give none and no compatible IAU code is set.";
+            }
+        }
+        solar.wrapAt(UiStyle.space(240));
+        solar.setText("<html>" + depth + "<br>" + site + "</html>");
+        solar.setToolTipText("<html>What the next Fetch Asteroids and Comets uses.<br>" + source
+                + (deeper ? String.format(Locale.US, "<br>The frames reach Gaia G %.1f, so the depth goes beyond the setting (V %.1f).",
+                check.limitingMagnitude, setting) : "")
                 + "<br>The observing site comes from the FITS headers first, then a compatible IAU code,<br>"
-                + "then these default coordinates. North and east are positive.<br>"
-                + "A FITS elevation overrides the altitude default; otherwise an unset altitude means 0 m.<br>"
-                + "The readout rounds coordinates to two decimals and altitude to metres; fetches use full precision.</html>");
+                + "then the default coordinates. North and east are positive.<br>"
+                + "Settings: IAU " + value(config.observatoryCode) + " · latitude " + value(config.siteLat) + " · longitude "
+                + value(config.siteLong) + " · altitude (m) " + value(config.siteAltitude)
+                + "<br>The readout rounds coordinates to two decimals and altitude to metres; fetches use full precision.</html>");
+    }
+
+    /** The settings' site in the readout's words. */
+    private static String siteText(String code, String latitude, String longitude, Double altitude) {
+        return "IAU <b>" + value(code) + "</b>" + (altitude == null ? "" : String.format(Locale.US, " · <b>%.0f m</b>", altitude))
+                + "<br>Lat / Lon: <b>" + latitude + " / " + longitude + "</b>";
+    }
+
+    /** A coordinate in degrees to two decimals. */
+    private static String degrees(double value) {
+        return String.format(Locale.US, "%.2f°", value);
     }
 
     /** Shortens only the display, using the settings editor's coordinate parsing and keeping exact values in its tooltip. */

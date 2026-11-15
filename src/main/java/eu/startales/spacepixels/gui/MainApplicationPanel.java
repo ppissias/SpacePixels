@@ -1140,7 +1140,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Updates the status line of every group, and the commands with their disabled-button reasons. */
     @Override
     public void refreshWorkflowStatus() {
-        fetchSettings.showSettings(applicationSettings.getConfig());
+        ProcessingSession current = sessions.current();
+        fetchSettings.showSettings(applicationSettings.getConfig(), current == null ? new FitsFileInformation[0] : current.getFiles(),
+                skyCatalogue().get());
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         colourNotice.setVisible(frames > 0 && containsColorImages);
         refreshFrameList(frames);
