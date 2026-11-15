@@ -105,7 +105,7 @@ dependencies {
     api('io.github.ppissias.jtransient:jtransient:1.1.0', excludeUnusedAnnotationJars())
     implementation('gov.nasa.gsfc.heasarc:nom-tam-fits:1.23.0', excludeUnusedAnnotationJars())
     implementation('com.google.code.gson:gson:2.14.0', excludeUnusedAnnotationJars())
-    implementation('io.github.ppissias.jplatesolve:jplatesolve:1.0.2', excludeUnusedAnnotationJars())
+    implementation('io.github.ppissias.jplatesolve:jplatesolve:1.0.3', excludeUnusedAnnotationJars())
     desktopImplementation 'com.formdev:flatlaf:3.7.2'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'tokyo.northside:assertj-swing-junit:4.0.0-beta-3'
