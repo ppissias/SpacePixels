@@ -39,7 +39,10 @@ public final class SolarSystemObjects {
     public long endMillis;
     /** The faintest predicted V magnitude asked for (the total magnitude for comets). */
     public double magnitudeLimit;
-    /** "IAU code J95", or where the site coordinates came from; never the coordinates themselves. */
+    /**
+     * "IAU code J95", or where the site coordinates came from, with the name of the Astrometry Config site when one
+     * was used ("IAU code J95, site Home"); never the coordinates themselves.
+     */
     public String observer;
     /** The services and their API versions, for example "JPL SB-Ident API 1.1, JPL Horizons API 1.2". */
     public String source;

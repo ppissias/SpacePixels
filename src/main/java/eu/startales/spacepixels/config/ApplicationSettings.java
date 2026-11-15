@@ -14,6 +14,8 @@ public final class ApplicationSettings {
     private ApplicationSettings(File file, AppConfig config) {
         this.file = file;
         this.config = Objects.requireNonNull(config);
+        // A file from before named sites gets its site as the first one; the site in use does not change.
+        ObservingSites.ensure(config);
     }
 
     public static ApplicationSettings loadDefault() {

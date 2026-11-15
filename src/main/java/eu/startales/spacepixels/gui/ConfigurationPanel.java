@@ -11,6 +11,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.config.ObservingSites;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.platesolve.AstrometryNetAccount;
 import eu.startales.spacepixels.fits.FitsFileInformation;
@@ -69,6 +70,12 @@ public class ConfigurationPanel extends JPanel {
     private final JLabel astrometryStatus = statusLabel();
     /** The running login check; null when none runs. */
     private SwingWorker<Void, Void> astrometryCheck;
+    private final DefaultComboBoxModel<String> siteNames = new DefaultComboBoxModel<>();
+    private final JComboBox<String> siteCombo = new JComboBox<>(siteNames);
+    private final JButton newSiteButton = new JButton("New");
+    private final JButton deleteSiteButton = new JButton("Delete");
+    private final JTextField siteNameField = new JTextField(14);
+    private final JLabel siteNameStatus = statusLabel();
     private final JTextField observatoryCodeTextField = new JTextField();
     private final JTextField latTextField = new JTextField();
     private final JTextField longTextField = new JTextField();
@@ -94,6 +101,8 @@ public class ConfigurationPanel extends JPanel {
     private String savedLat = "";
     private String savedLong = "";
     private String savedAltitude = "";
+    private List<ObservingSites.Site> savedSites = List.of();
+    private String savedSiteName = "";
     private String savedAstap = "";
     private boolean savedAstrometryUseOwnKey;
     private String savedAstrometryApiKey = "";
@@ -206,6 +215,27 @@ public class ConfigurationPanel extends JPanel {
 
         JPanel observingSite = section("Observing Site (for object identification)");
 
+        siteCombo.setToolTipText("The observing site in use. Choosing another puts it in use at once; Save keeps the choice for the next start.");
+        newSiteButton.setToolTipText("Add a site with empty values and put it in use.");
+        deleteSiteButton.setToolTipText("Remove the selected site. Save keeps the change.");
+        siteCombo.setPrototypeDisplayValue("Observatory name long");
+        JPanel siteChoice = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        siteChoice.setOpaque(false);
+        siteChoice.add(siteCombo);
+        siteChoice.add(newSiteButton);
+        siteChoice.add(deleteSiteButton);
+        observingSite.add(createConfigRow(
+                "Site",
+                "The observing site in use, chosen from your saved sites: each has a name, an IAU observatory code, a latitude, "
+                        + "a longitude and an altitude. Choosing a site puts it in use at once, as typing in the fields does. "
+                        + "<b>New</b> adds an empty site to fill in; <b>Delete</b> removes the selected one. "
+                        + "<b>Save</b> keeps the sites and the choice for the next start.",
+                siteChoice));
+        observingSite.add(createConfigRow(
+                "Site Name",
+                "The name of the selected site, shown in the list above. Each site needs its own name.",
+                fieldWithStatus(siteNameField, siteNameStatus)));
+
         observingSite.add(createConfigRow(
                 "IAU Observatory Code",
                 "Optional 3-character observatory code for SkyBoT and other topocentric services. If not set, SpacePixels will fall back to geocenter-based lookups where supported.<br>When the FITS headers hold a site, that site describes the frames and is used instead wherever a lookup accepts coordinates (JPL and the asteroid and comet fetch). SkyBoT accepts only codes and always uses this one.<br><b>Format:</b> MPC/IAU code such as <code>J95</code>.<br><b>Note:</b> <code>500</code> is only a SkyBoT geocenter fallback and is not valid for JPL Small-Body Identification.",
@@ -239,9 +269,9 @@ public class ConfigurationPanel extends JPanel {
         fillSiteButton.addActionListener(e -> fillSiteFromHeader());
 
         JButton revertButton = new JButton("Revert");
-        revertButton.setToolTipText("Return the site fields to the last saved values.");
+        revertButton.setToolTipText("Return the sites and the chosen site to the last saved values.");
         revertButton.addActionListener(e -> revertSite());
-        saveButton.setToolTipText("Keep the site values for the next start.");
+        saveButton.setToolTipText("Keep the sites, the chosen site and the other settings for the next start.");
         saveButton.addActionListener(e -> saveSite());
 
         footerMessageLabel.setForeground(UiStyle.helpColor());
@@ -281,10 +311,32 @@ public class ConfigurationPanel extends JPanel {
                 astrometryAccountChanged();
             }
         });
-        onEdit(observatoryCodeTextField, text -> validateObservatoryCode(text), value -> config().observatoryCode = value);
-        onEdit(latTextField, text -> validateCoordinate(text, 90, "latitude"), value -> config().siteLat = value);
-        onEdit(longTextField, text -> validateCoordinate(text, 180, "longitude"), value -> config().siteLong = value);
-        onEdit(altitudeTextField, ConfigurationPanel::validateAltitude, value -> config().siteAltitude = value);
+        onEdit(observatoryCodeTextField, text -> validateObservatoryCode(text), value -> {
+            config().observatoryCode = value;
+            ObservingSites.selected(config()).observatoryCode = value;
+        });
+        onEdit(latTextField, text -> validateCoordinate(text, 90, "latitude"), value -> {
+            config().siteLat = value;
+            ObservingSites.selected(config()).siteLat = value;
+        });
+        onEdit(longTextField, text -> validateCoordinate(text, 180, "longitude"), value -> {
+            config().siteLong = value;
+            ObservingSites.selected(config()).siteLong = value;
+        });
+        onEdit(altitudeTextField, ConfigurationPanel::validateAltitude, value -> {
+            config().siteAltitude = value;
+            ObservingSites.selected(config()).siteAltitude = value;
+        });
+        siteCombo.addActionListener(e -> {
+            if (!loading && applicationSettings != null && siteCombo.getSelectedItem() != null) chooseSite((String) siteCombo.getSelectedItem());
+        });
+        newSiteButton.addActionListener(e -> addSite());
+        deleteSiteButton.addActionListener(e -> deleteSite());
+        siteNameField.getDocument().addDocumentListener(new DocumentListener() {
+            @Override public void insertUpdate(DocumentEvent e) { siteNameEdited(); }
+            @Override public void removeUpdate(DocumentEvent e) { siteNameEdited(); }
+            @Override public void changedUpdate(DocumentEvent e) { siteNameEdited(); }
+        });
     }
 
     public void refreshComponents() {
@@ -301,13 +353,13 @@ public class ConfigurationPanel extends JPanel {
             astrometryAnonymousButton.setSelected(!config.astrometryNetUseOwnKey);
             astrometryKeyField.setText(nullToEmpty(config.astrometryNetApiKey));
             astrometryKeyField.setEnabled(config.astrometryNetUseOwnKey);
-            observatoryCodeTextField.setText(nullToEmpty(config.observatoryCode));
-            latTextField.setText(nullToEmpty(config.siteLat));
-            longTextField.setText(nullToEmpty(config.siteLong));
-            altitudeTextField.setText(nullToEmpty(config.siteAltitude));
+            ObservingSites.ensure(config);
+            fillSite();
         } finally {
             loading = false;
         }
+        savedSites = ObservingSites.copyOf(config.observingSites);
+        savedSiteName = nullToEmpty(config.observingSite);
         savedObservatoryCode = nullToEmpty(config.observatoryCode);
         savedLat = nullToEmpty(config.siteLat);
         savedLong = nullToEmpty(config.siteLong);
@@ -360,6 +412,8 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void validateAll() {
+        showStatus(siteNameStatus, applicationSettings == null ? null
+                : ObservingSites.nameProblem(config(), siteNameField.getText()), " ");
         showStatus(observatoryCodeStatus, validateObservatoryCode(observatoryCodeTextField.getText().trim()),
                 observatoryCodeNote(observatoryCodeTextField.getText().trim()));
         showStatus(latStatus, validateCoordinate(latTextField.getText().trim(), 90, "latitude"), headerNote(LATITUDE_KEYS, latTextField.getText().trim()));
@@ -533,6 +587,8 @@ public class ConfigurationPanel extends JPanel {
                 savedLat = nullToEmpty(snapshot.siteLat);
                 savedLong = nullToEmpty(snapshot.siteLong);
                 savedAltitude = nullToEmpty(snapshot.siteAltitude);
+                savedSites = ObservingSites.copyOf(snapshot.observingSites);
+                savedSiteName = nullToEmpty(snapshot.observingSite);
                 savedAstap = nullToEmpty(snapshot.astapExecutablePath);
                 savedAstrometryUseOwnKey = snapshot.astrometryNetUseOwnKey;
                 savedAstrometryApiKey = nullToEmpty(snapshot.astrometryNetApiKey);
@@ -558,18 +614,105 @@ public class ConfigurationPanel extends JPanel {
     }
 
     private void revertSite() {
-        observatoryCodeTextField.setText(savedObservatoryCode);
-        latTextField.setText(savedLat);
-        longTextField.setText(savedLong);
-        altitudeTextField.setText(savedAltitude);
+        AppConfig config = config();
+        config.observingSites = ObservingSites.copyOf(savedSites);
+        config.observatoryCode = savedObservatoryCode;
+        config.siteLat = savedLat;
+        config.siteLong = savedLong;
+        config.siteAltitude = savedAltitude;
+        config.observingSite = savedSiteName;
+        ObservingSites.ensure(config);
+        showSite();
         footerMessageLabel.setText("Reverted to the saved values.");
+    }
+
+    // ==========================================
+    // NAMED SITES
+    // ==========================================
+
+    /** Fills the site list and the fields from the configuration; the caller sets {@link #loading}. */
+    private void fillSite() {
+        AppConfig config = config();
+        siteNames.removeAllElements();
+        for (ObservingSites.Site site : config.observingSites) siteNames.addElement(site.name);
+        siteNames.setSelectedItem(config.observingSite);
+        siteNameField.setText(nullToEmpty(config.observingSite));
+        observatoryCodeTextField.setText(nullToEmpty(config.observatoryCode));
+        latTextField.setText(nullToEmpty(config.siteLat));
+        longTextField.setText(nullToEmpty(config.siteLong));
+        altitudeTextField.setText(nullToEmpty(config.siteAltitude));
+        deleteSiteButton.setEnabled(config.observingSites.size() > 1);
+    }
+
+    /** Shows the configuration's selected site and tells the readout, after a choice, an addition, a removal or Revert. */
+    private void showSite() {
+        loading = true;
+        try {
+            fillSite();
+        } finally {
+            loading = false;
+        }
+        validateAll();
+        updateSavedState();
+        fetchSettingsChanged.run();
+    }
+
+    private void chooseSite(String name) {
+        if (name.equals(config().observingSite)) return;
+        if (!ObservingSites.select(config(), name)) return;
+        showSite();
+        footerMessageLabel.setText("Using the site " + name + ".");
+    }
+
+    private void addSite() {
+        if (applicationSettings == null) return;
+        ObservingSites.Site site = ObservingSites.add(config());
+        showSite();
+        footerMessageLabel.setText("Added " + site.name + ": name it and enter its details, then Save.");
+        siteNameField.requestFocusInWindow();
+        siteNameField.selectAll();
+    }
+
+    private void deleteSite() {
+        if (applicationSettings == null || config().observingSites.size() < 2) return;
+        String name = config().observingSite;
+        int answer = JOptionPane.showConfirmDialog(this, "Delete the site " + name + "?", "Delete site",
+                JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE);
+        if (answer != JOptionPane.OK_OPTION || !ObservingSites.remove(config(), name)) return;
+        showSite();
+        footerMessageLabel.setText("Deleted " + name + ". Save keeps the change; Revert brings it back.");
+    }
+
+    /** A valid name renames the selected site at once and in the list; an invalid one keeps the last valid name. */
+    private void siteNameEdited() {
+        if (loading || applicationSettings == null) return;
+        String name = siteNameField.getText().trim();
+        if (ObservingSites.nameProblem(config(), name) == null && !name.equals(config().observingSite)) {
+            ObservingSites.rename(config(), name);
+            loading = true;
+            try {
+                int index = siteCombo.getSelectedIndex();
+                if (index >= 0) {
+                    siteNames.removeElementAt(index);
+                    siteNames.insertElementAt(name, index);
+                    siteNames.setSelectedItem(name);
+                }
+            } finally {
+                loading = false;
+            }
+            fetchSettingsChanged.run();
+            footerMessageLabel.setText(" ");
+        }
+        validateAll();
+        updateSavedState();
     }
 
     private void updateSavedState() {
         boolean fieldsMatchConfig = observatoryCodeTextField.getText().trim().equals(nullToEmpty(config().observatoryCode))
                 && latTextField.getText().trim().equals(nullToEmpty(config().siteLat))
                 && longTextField.getText().trim().equals(nullToEmpty(config().siteLong))
-                && altitudeTextField.getText().trim().equals(nullToEmpty(config().siteAltitude));
+                && altitudeTextField.getText().trim().equals(nullToEmpty(config().siteAltitude))
+                && siteNameField.getText().trim().equals(nullToEmpty(config().observingSite));
         if (!fieldsMatchConfig) {
             footerStateLabel.setForeground(warningColor());
             footerStateLabel.setText("● Fix the marked field; the last valid value stays in use");
@@ -587,6 +730,8 @@ public class ConfigurationPanel extends JPanel {
                 || !nullToEmpty(config().siteLat).equals(savedLat)
                 || !nullToEmpty(config().siteLong).equals(savedLong)
                 || !nullToEmpty(config().siteAltitude).equals(savedAltitude)
+                || !ObservingSites.copyOf(config().observingSites).equals(savedSites)
+                || !nullToEmpty(config().observingSite).equals(savedSiteName)
                 || !nullToEmpty(config().astapExecutablePath).equals(savedAstap)
                 || config().astrometryNetUseOwnKey != savedAstrometryUseOwnKey
                 || !nullToEmpty(config().astrometryNetApiKey).equals(savedAstrometryApiKey)

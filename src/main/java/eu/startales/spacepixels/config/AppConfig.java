@@ -13,6 +13,8 @@ public class AppConfig {
         copy.siteLat = siteLat;
         copy.siteLong = siteLong;
         copy.siteAltitude = siteAltitude;
+        copy.observingSites = ObservingSites.copyOf(observingSites);
+        copy.observingSite = observingSite;
         copy.pixelSize = pixelSize;
         copy.focalLength = focalLength;
         copy.skyCatalogueStarMagnitude = skyCatalogueStarMagnitude;
@@ -44,6 +46,13 @@ public class AppConfig {
     public String siteLong = "";
     /** Optional fallback height above the WGS84 ellipsoid in metres; blank retains the 0 m assumption. */
     public String siteAltitude = "";
+    /**
+     * The named observing sites of Astrometry Config. The selected one, {@link #observingSite}, holds the same values
+     * as the four fields above, which are the site in use; {@link ObservingSites} keeps them in step.
+     */
+    public java.util.List<ObservingSites.Site> observingSites = new java.util.ArrayList<>();
+    /** The name of the selected site in {@link #observingSites}. */
+    public String observingSite = "";
     public String pixelSize = "";
     public String focalLength = "";
     /*

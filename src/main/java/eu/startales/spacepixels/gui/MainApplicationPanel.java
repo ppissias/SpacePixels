@@ -1142,7 +1142,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     public void refreshWorkflowStatus() {
         ProcessingSession current = sessions.current();
         fetchSettings.showSettings(applicationSettings.getConfig(), current == null ? new FitsFileInformation[0] : current.getFiles(),
-                skyCatalogue().get());
+                skyCatalogue().get(), skyCatalogue().getSolarSystem());
         int frames = table == null || table.getModel() == null ? 0 : table.getRowCount();
         colourNotice.setVisible(frames > 0 && containsColorImages);
         refreshFrameList(frames);

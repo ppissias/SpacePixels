@@ -68,14 +68,20 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
         }
         String code = JplSbIdentUrlBuilder.normalizeObservatoryCode(config.observatoryCode);
         if (JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(code)) {
-            return new Observer(code, null, "IAU code " + code);
+            return new Observer(code, null, "IAU code " + code + siteName(config, ", site "));
         }
         ObservingSite site = ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
         if (site == null) {
             throw new IllegalArgumentException("No observing site: the FITS headers have none. Enter the IAU observatory "
                     + "code, or the site latitude and longitude, in the Astrometry Config tab.");
         }
-        return new Observer(null, site, "site from the Astrometry Config tab");
+        return new Observer(null, site, "site" + siteName(config, " ") + " from the Astrometry Config tab");
+    }
+
+    /** The name of the Astrometry Config site in use after the prefix, or nothing when it has none. */
+    private static String siteName(AppConfig config, String prefix) {
+        String name = config.observingSite == null ? "" : config.observingSite.trim();
+        return name.isEmpty() ? "" : prefix + name;
     }
 
     /**

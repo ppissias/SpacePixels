@@ -11,6 +11,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** The fetch readout shows what the next fetch uses: the FITS site first, then the IAU code, then the settings, and the depth. */
@@ -65,5 +67,61 @@ public class FetchSettingsPanelTest {
         catalogue.photometryCheck.limitingMagnitude = 23.8;
         panel.showSettings(config, new FitsFileInformation[]{frame(true)}, catalogue);
         assertTrue(readout(panel), readout(panel).contains("V ≤ <b>25.0</b> · frames' depth"));
+    }
+
+    private static JLabel savedLine(FetchSettingsPanel panel) {
+        var labels = new ArrayList<JLabel>();
+        collect(panel, labels);
+        return labels.stream().filter(l -> l.getText() != null && l.getText().contains("Saved:")).findFirst().orElse(null);
+    }
+
+    /** The line below shows what the session holds and marks where the next fetch would differ. */
+    @Test
+    public void showsWhatTheSessionHoldsFromEarlierFetches() {
+        var panel = new FetchSettingsPanel(new JButton("Sky"), new JButton("Solar"), () -> { });
+        var config = new AppConfig();
+        config.observatoryCode = "J95";
+        config.observingSite = "Home";
+        var catalogue = new SkyCatalogue();
+        catalogue.fetchedAtUtc = "2025-11-14T21:03:00Z";
+        catalogue.starMagnitudeLimit = 15;
+        var objects = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+        objects.fetchedAtUtc = "2025-11-15T08:10:00Z";
+        objects.magnitudeLimit = 19;
+        objects.observer = "site from the FITS header";
+
+        panel.showSettings(config, new FitsFileInformation[]{frame(false)}, catalogue, objects);
+        String text = savedLine(panel).getText();
+        assertTrue(text, text.contains("<b>15.0</b> (14&nbsp;Nov&nbsp;2025&nbsp;21:03&nbsp;UTC)"));
+        assertTrue(text, text.contains("<b>19.0</b>, FITS-header site (15&nbsp;Nov&nbsp;2025&nbsp;08:10&nbsp;UTC)"));
+        assertTrue("the next fetch uses the IAU code, not the header site", text.contains("other site now"));
+        assertFalse(text, text.contains("next fetch deeper"));
+        assertTrue(readout(panel), readout(panel).contains("IAU <b>J95</b> (Home)"));
+
+        config.solarSystemMagnitude = 21;
+        objects.observer = "IAU code J95";
+        panel.showSettings(config, new FitsFileInformation[]{frame(false)}, catalogue, objects);
+        text = savedLine(panel).getText();
+        assertTrue(text, text.contains("next fetch deeper") && !text.contains("other site now"));
+
+        panel.showSettings(config, new FitsFileInformation[]{frame(false)}, null, null);
+        assertTrue(savedLine(panel).getText().contains("no sky catalogue") && savedLine(panel).getText().contains("no asteroids"));
+        panel.showSettings(config, new FitsFileInformation[0], null, null);
+        assertFalse("hidden without frames", savedLine(panel).isVisible());
+    }
+
+    @Test
+    public void savedObserversInAFewWords() {
+        assertEquals("FITS-header site", FetchSettingsPanel.shortObserver("site from the FITS header"));
+        assertEquals("IAU J95", FetchSettingsPanel.shortObserver("IAU code J95"));
+        assertEquals("IAU J95 (Home)", FetchSettingsPanel.shortObserver("IAU code J95, site Home"));
+        assertEquals("site Home", FetchSettingsPanel.shortObserver("site Home from the Astrometry Config tab"));
+        assertEquals("settings' site", FetchSettingsPanel.shortObserver("site from the Astrometry Config tab"));
+        assertTrue(FetchSettingsPanel.sameSite("IAU code J95", "IAU code J95, site Home"));
+        assertEquals("an earlier version saved the bare code", "IAU W84", FetchSettingsPanel.shortObserver("W84"));
+        assertTrue(FetchSettingsPanel.sameSite("W84", "IAU code W84, site Away"));
+        assertFalse(FetchSettingsPanel.sameSite("IAU code J95, site Home", "IAU code W84, site Away"));
+        assertFalse(FetchSettingsPanel.sameSite("site Home from the Astrometry Config tab", "site Away from the Astrometry Config tab"));
+        assertTrue("an old file names no site", FetchSettingsPanel.sameSite("site from the Astrometry Config tab", "site Away from the Astrometry Config tab"));
     }
 }
