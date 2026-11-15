@@ -24,6 +24,7 @@ import eu.startales.spacepixels.mpc.LightCurve;
 import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
 import eu.startales.spacepixels.mpc.MpcObservation;
+import eu.startales.spacepixels.mpc.NightLinks;
 import eu.startales.spacepixels.mpc.ReportedObjects;
 import io.github.ppissias.jtransient.core.SubStackAstrometry;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
@@ -127,6 +128,23 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final Map<String, List<MpcObservation>> observations = new HashMap<>();
     private final Map<String, FindOrb.Orbit> orbits = new HashMap<>();
     private final Map<String, String> orbitProblems = new HashMap<>();
+    /** The orbit from this night alone, by object, when the orbit in {@link #orbits} also uses linked nights. */
+    private final Map<String, FindOrb.Orbit> singleNightOrbits = new HashMap<>();
+    /** How many nights each orbit in {@link #orbits} was fitted to. */
+    private final Map<String, Integer> orbitNights = new HashMap<>();
+    /** This report as one night of a link: its objects, reduction and observing site. */
+    private final NightLinks.Night thisNight;
+    /** Each linked object's other nights, by object; an object without links is absent. EDT only. */
+    private final Map<String, OtherNights> otherNights = new HashMap<>();
+    /** Reports opened as other nights, by folder, kept while the window is open; filled on workers. */
+    private final Map<String, NightLinks.Night> openedNights = new java.util.concurrent.ConcurrentHashMap<>();
+    private final WrappingHelpLabel nightsLabel = new WrappingHelpLabel(" ", 320);
+    private final JButton linkButton = new JButton("Link another night…");
+    private final JButton unlinkButton = new JButton("Unlink");
+    /** The running read of the linked nights; null otherwise. EDT only. */
+    private SwingWorker<?, ?> nightsWorker;
+    /** UTC date of a night, by the start of its first exposure. */
+    private static final DateTimeFormatter NIGHT = DateTimeFormatter.ofPattern("d MMM yyyy", Locale.US).withZone(ZoneOffset.UTC);
     /** Each measured faint mover's sub-stacks, in time order. */
     private final Map<String, List<SubStackAstrometry.Measurement>> subStacks = new HashMap<>();
     private final JButton measureButton = new JButton("Measure in sub-stacks");
@@ -216,7 +234,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             observations.put(object.id(), reduced);
             selected.put(object.id(), new TreeSet<>(MpcExport.spreadSelection(reduced.size(), MpcExport.DEFAULT_SELECTION)));
         }
-        playTimer = new Timer(Math.max(50, visualization.getGifBlinkSpeedMs()), e -> step(1));
+        this.thisNight = new NightLinks.Night(this.report, reduction, site);
+        playTimer =new Timer(Math.max(50, visualization.getGifBlinkSpeedMs()), e -> step(1));
 
         setLayout(new BorderLayout(UiStyle.space(8), UiStyle.space(8)));
         add(header(), BorderLayout.NORTH);
@@ -241,6 +260,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         });
         if (!report.objects().isEmpty()) objectsTable.setRowSelectionInterval(0, 0);
         refreshExport();
+        readOtherNights();
     }
 
     /** The steps and where the report came from. */
@@ -577,6 +597,21 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         mpchecker.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(mpchecker);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
+        panel.add(title("Other nights"));
+        nightsLabel.setForeground(UIManager.getColor("Label.foreground"));
+        panel.add(nightsLabel);
+        linkButton.setToolTipText("Choose the report of another night and the object there that is this one; the link is kept "
+                + "beside both reports (" + NightLinks.FILE_NAME + ")");
+        linkButton.addActionListener(e -> linkAnotherNight());
+        unlinkButton.setToolTipText("Removes this object's links to other nights, here and beside the other reports");
+        unlinkButton.addActionListener(e -> unlinkNights());
+        JPanel nightButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        nightButtons.add(linkButton);
+        nightButtons.add(unlinkButton);
+        nightButtons.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(nightButtons);
+        updateNights();
+        panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Orbit · Find_Orb"));
         JButton findOrb = new JButton("Compute orbit");
         findOrb.setToolTipText("Fits a preliminary orbit to the selected observations with Find_Orb on this computer; without "
@@ -714,6 +749,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         updateFit();
         updateOrbit();
         updateCurve();
+        updateNights();
         if (object == null) {
             identificationLabel.setText(" ");
             return;
@@ -849,15 +885,43 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         readDetails(details);
         AdesPsv.Context context = MpcExport.context(details);
         var tracklets = new ArrayList<AdesPsv.Tracklet>();
+        var problems = new ArrayList<String>();
+        var notes = new ArrayList<String>();
         for (int i = 0; i < report.objects().size(); i++) {
             var object = report.objects().get(i);
             if (!Boolean.TRUE.equals(exported.get(object.id()))) continue;
-            var list = observations.get(object.id());
-            var chosen = new ArrayList<MpcObservation>();
-            for (int index : selected.get(object.id())) if (index < list.size()) chosen.add(list.get(index));
-            tracklets.add(MpcExport.tracklet(object, chosen, report.sessionStartMillis(), i));
+            var chosen = chosenObservations(object);
+            var others = nightsOf(object.id());
+            var named = namedObject(object, others);
+            if (named != object) notes.add(object.id() + " is reported as " + named.names().getFirst() + ", the identification of its linked night.");
+            var tracklet = MpcExport.tracklet(named, chosen, report.sessionStartMillis(), i);
+            if (tracklet.permID() == null && tracklet.provID() == null && !others.isEmpty()) {
+                // The MPC: the nights of one object share a temporary designation only within one message.
+                var all = new ArrayList<>(chosen);
+                String trkSub = tracklet.trkSub();
+                long first = report.sessionStartMillis();
+                for (var other : others) {
+                    all.addAll(NightLinks.defaultSelection(other.observations()));
+                    long start = other.night().report().sessionStartMillis();
+                    if (start > 0 && start < first) {
+                        first = start;
+                        trkSub = other.night().trkSub(other.object());
+                    }
+                    if (other.night().lacksMeasurements(other.object())) {
+                        problems.add(object.id() + ": the report of " + other.name() + " has no detection sizes and signal-to-noise. "
+                                + "Detect that night again to export the nights together.");
+                    }
+                    if (other.observations().isEmpty()) problems.add(object.id() + ": " + other.name() + " has no measured positions of " + other.object().id() + ".");
+                }
+                String site = siteProblem(object.id());
+                if (site != null) problems.add(site);
+                all.sort(java.util.Comparator.comparingLong(MpcObservation::midpointMillis));
+                tracklet = new AdesPsv.Tracklet(null, null, trkSub, all);
+                notes.add(object.id() + ": " + (others.size() + 1) + " nights in one tracklet, " + trkSub
+                        + ". The MPC gives the nights of one unidentified object one designation only within one submission.");
+            }
+            tracklets.add(tracklet);
         }
-        var problems = new ArrayList<String>();
         var lacking = lacking().stream().filter(id -> Boolean.TRUE.equals(exported.get(id))).toList();
         if (!lacking.isEmpty()) {
             problems.add(String.join(", ", lacking) + ": this report has no detection sizes and signal-to-noise, so the uncertainties "
@@ -876,6 +940,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         problems.addAll(AdesPsv.problems(context, tracklets));
         problemsArea.setText(problems.isEmpty() ? "Ready: " + tracklets.size() + " object" + (tracklets.size() == 1 ? "" : "s")
                 + " with " + tracklets.stream().mapToInt(t -> t.observations().size()).sum() + " observations."
+                + (notes.isEmpty() ? "" : "\n" + String.join("\n", notes))
                 : String.join("\n", problems));
         boolean ready = problems.isEmpty();
         psvArea.setText(ready ? AdesPsv.write(context, tracklets) : "");
@@ -1040,10 +1105,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      */
     private void openFindOrb() {
         if (shown == null) return;
-        var list = observations.get(shown.id());
-        var chosen = new ArrayList<MpcObservation>();
-        for (int index : selected.get(shown.id())) if (index < list.size()) chosen.add(list.get(index));
-        if (chosen.size() < 3) {
+        var chosen = chosenObservations(shown);
+        var others = nightsOf(shown.id());
+        String site = others.isEmpty() ? null : siteProblem(shown.id());
+        var all = new ArrayList<>(chosen);
+        if (site == null) for (var other : others) all.addAll(NightLinks.defaultSelection(other.observations()));
+        all.sort(java.util.Comparator.comparingLong(MpcObservation::midpointMillis));
+        int nights = site == null ? 1 + (int) others.stream().filter(o -> !o.observations().isEmpty()).count() : 1;
+        if (all.size() < 3) {
             problemsArea.setText("An orbit needs at least three selected observations of " + shown.id() + ".");
             return;
         }
@@ -1055,31 +1124,50 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             return;
         }
         int sequence = report.objects().indexOf(shown);
-        String text = AdesPsv.writeObservations(context, List.of(MpcExport.tracklet(shown, chosen, report.sessionStartMillis(), sequence)));
+        String text = AdesPsv.writeObservations(context, List.of(MpcExport.tracklet(shown, all, report.sessionStartMillis(), sequence)));
+        // With other nights, this night alone is fitted too, to show what they add.
+        String single = nights > 1 && chosen.size() >= 3
+                ? AdesPsv.writeObservations(context, List.of(MpcExport.tracklet(shown, chosen, report.sessionStartMillis(), sequence))) : null;
+        if (site != null) problemsArea.setText(site + " The orbit uses this night only.");
         File program = details.findOrbExecutable == null || details.findOrbExecutable.isBlank() ? null : new File(details.findOrbExecutable);
         if (program == null || !program.isFile()) {
             Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
-            problemsArea.setText("Copied " + chosen.size() + " observations of " + shown.id() + " for Find_Orb: paste them into "
-                    + "its box and choose Compute. (With Find_Orb on this computer, choose Find_Orb program… to fit here.)");
+            problemsArea.setText("Copied " + all.size() + " observations of " + shown.id() + (nights > 1 ? " from " + nights + " nights" : "")
+                    + " for Find_Orb: paste them into its box and choose Compute. (With Find_Orb on this computer, choose Find_Orb "
+                    + "program… to fit here.)");
             browse(FIND_ORB);
             return;
         }
-        var times = chosen.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
+        var times = all.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
+        var singleTimes = chosen.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
         var object = shown;
-        orbitLabel.setText("Fitting " + object.id() + " with Find_Orb…");
-        new SwingWorker<FindOrb.Orbit, Void>() {
-            @Override protected FindOrb.Orbit doInBackground() throws Exception {
-                return FindOrb.fit(program, text, times);
+        orbitLabel.setText("Fitting " + object.id() + (nights > 1 ? " on " + nights + " nights" : "") + " with Find_Orb…");
+        new SwingWorker<FindOrb.Orbit[], Void>() {
+            @Override protected FindOrb.Orbit[] doInBackground() throws Exception {
+                FindOrb.Orbit fit = FindOrb.fit(program, text, times);
+                FindOrb.Orbit alone = null;
+                if (single != null) {
+                    try {
+                        alone = FindOrb.fit(program, single, singleTimes);
+                    } catch (java.io.IOException noSingleNightOrbit) {
+                        // The comparison is optional: the orbit of all nights stands without it.
+                    }
+                }
+                return new FindOrb.Orbit[]{fit, alone};
             }
 
             @Override protected void done() {
                 if (closed) return;
                 try {
-                    orbits.put(object.id(), get());
+                    var fits = get();
+                    orbits.put(object.id(), fits[0]);
+                    orbitNights.put(object.id(), nights);
+                    if (fits[1] == null) singleNightOrbits.remove(object.id()); else singleNightOrbits.put(object.id(), fits[1]);
                     orbitProblems.remove(object.id());
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     orbits.remove(object.id());
+                    singleNightOrbits.remove(object.id());
                     orbitProblems.put(object.id(), cause.getMessage());
                 }
                 if (shown == object) {
@@ -1093,9 +1181,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     /** A fit belongs to the observations it was made from: a changed selection drops it. */
     private void forgetOrbit() {
         if (shown == null) return;
-        orbits.remove(shown.id());
-        orbitProblems.remove(shown.id());
+        forgetOrbit(shown.id());
         updateOrbit();
+    }
+
+    private void forgetOrbit(String id) {
+        orbits.remove(id);
+        singleNightOrbits.remove(id);
+        orbitNights.remove(id);
+        orbitProblems.remove(id);
     }
 
     /** Lets the user point to fo64.exe; kept in the settings with the other details. */
@@ -1129,26 +1223,49 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     : "Compute orbit fits the selected observations of " + shown.id() + "."));
             return;
         }
-        orbitLabel.setHtml(String.format(Locale.US, "<b>Preliminary orbit</b> · a %s AU · e %s · i %s° · residual RMS %s.",
+        int nights = orbitNights.getOrDefault(shown.id(), 1);
+        var alone = singleNightOrbits.get(shown.id());
+        orbitLabel.setHtml(String.format(Locale.US, "<b>Preliminary orbit%s</b> · a %s AU · e %s · i %s° · residual RMS %s.%s",
+                nights > 1 ? " from " + nights + " nights" : "",
                 withSigma(orbit.a(), orbit.aSigma(), 3), withSigma(orbit.e(), orbit.eSigma(), 3), withSigma(orbit.i(), orbit.iSigma(), 1),
-                orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec())));
+                orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec()),
+                alone == null ? "" : "<br>This night alone: " + elements(alone) + "."));
     }
 
-    /** The full description of a fitted orbit, as HTML. */
-    private String orbitText(FindOrb.Orbit orbit) {
+    /** "a 3.09 ± 1.31 AU · e 0.348 ± 0.131 · i 7.3 ± 6.0°". */
+    private static String elements(FindOrb.Orbit orbit) {
+        return "a " + withSigma(orbit.a(), orbit.aSigma(), 3) + " AU · e " + withSigma(orbit.e(), orbit.eSigma(), 3)
+                + " · i " + withSigma(orbit.i(), orbit.iSigma(), 1) + "°";
+    }
+
+    /** The time the residuals span, in hours. */
+    private static double spanHours(FindOrb.Orbit orbit) {
+        return orbit.residuals().size() < 2 ? 0 : (Instant.parse(orbit.residuals().getLast().isoTime()).toEpochMilli()
+                - Instant.parse(orbit.residuals().getFirst().isoTime()).toEpochMilli()) / 3_600_000.0;
+    }
+
+    /**
+     * The full description of a fitted orbit, as HTML; with the orbit of this night alone ({@code alone}, else null)
+     * when the fit also used {@code nights - 1} linked nights.
+     */
+    private String orbitText(FindOrb.Orbit orbit, FindOrb.Orbit alone, int nights) {
         long used = orbit.residuals().stream().filter(FindOrb.Residual::used).count();
-        double span = orbit.residuals().size() < 2 ? 0
-                : (Instant.parse(orbit.residuals().getLast().isoTime()).toEpochMilli() - Instant.parse(orbit.residuals().getFirst().isoTime()).toEpochMilli()) / 3_600_000.0;
-        return String.format(Locale.US, "<b>Preliminary</b> · %d of %d observations used over %.1f h"
+        double span = spanHours(orbit);
+        String arc = span >= 48 ? String.format(Locale.US, "%.1f days", span / 24) : String.format(Locale.US, "%.1f h", span);
+        String comparison = alone == null ? "" : "<br><br><b>This night alone</b> (dashed) · " + elements(alone)
+                + String.format(Locale.US, "<br>%d observations over %.1f h. The ± values show what one night leaves open; a few nights still leave much of the orbit open.",
+                alone.residuals().size(), spanHours(alone));
+        return String.format(Locale.US, "<b>Preliminary</b> · %d of %d observations used%s over %s"
                         + " · epoch %s<br>a %s AU · e %s · i %s°<br>q %s AU · node %s° · peri %s°<br>Residual RMS %s · P(NEO) %s · Earth MOID %s"
-                        + "<br>An orbit from a short arc is uncertain (±1σ shown); a good fit does not prove the object is real.",
-                used, orbit.residuals().size(), span, orbit.epochIso() == null ? "?" : orbit.epochIso().substring(0, 10),
+                        + "<br>An orbit from a short arc is uncertain (±1σ shown); a good fit does not prove the object is real.%s",
+                used, orbit.residuals().size(), nights > 1 ? " from " + nights + " nights" : "", arc,
+                orbit.epochIso() == null ? "?" : orbit.epochIso().substring(0, 10),
                 withSigma(orbit.a(), orbit.aSigma(), 3), withSigma(orbit.e(), orbit.eSigma(), 3), withSigma(orbit.i(), orbit.iSigma(), 1),
                 withSigma(orbit.q(), orbit.qSigma(), 3), withSigma(orbit.ascendingNode(), orbit.nodeSigma(), 1),
                 withSigma(orbit.argumentOfPerihelion(), orbit.perihelionSigma(), 1),
                 orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec()),
                 orbit.neoProbability() == null ? "?" : String.format(Locale.US, "%.0f %%", orbit.neoProbability()),
-                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f AU", orbit.earthMoid()));
+                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f AU", orbit.earthMoid()), comparison);
     }
 
     /**
@@ -1181,7 +1298,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         window.setTitle("Orbit · " + id);
         var diagram = new OrbitDiagram();
         diagram.orbit = orbit;
-        var text = new WrappingHelpLabel(orbitText(orbit), 320);
+        diagram.alone = singleNightOrbits.get(id);
+        var text = new WrappingHelpLabel(orbitText(orbit, diagram.alone, orbitNights.getOrDefault(id, 1)), 320);
         text.setForeground(UIManager.getColor("Label.foreground"));
         JButton savePicture = new JButton("Save picture…");
         savePicture.addActionListener(e -> saveOrbitPicture(id, diagram));
@@ -1604,6 +1722,273 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         subStackWorker.execute();
     }
 
+    /** One other night of an object: the night, the object there and its measured positions as observations. */
+    private record OtherNight(NightLinks.Night night, ReportedObjects.ReportedObject object, List<MpcObservation> observations) {
+        /** The night's UTC date, as the start of its first exposure gives it. */
+        String name() {
+            return NIGHT.format(Instant.ofEpochMilli(night.report().sessionStartMillis()));
+        }
+    }
+
+    /** An object's other nights, in time order, and why some linked nights could not be read. */
+    private record OtherNights(List<OtherNight> nights, List<String> problems) { }
+
+    /** The selected observations of an object on this night, in time order. */
+    private List<MpcObservation> chosenObservations(ReportedObjects.ReportedObject object) {
+        var list = observations.get(object.id());
+        var chosen = new ArrayList<MpcObservation>();
+        for (int index : selected.get(object.id())) if (index < list.size()) chosen.add(list.get(index));
+        return chosen;
+    }
+
+    /** The object's other nights as read; empty without links or before they are read. */
+    private List<OtherNight> nightsOf(String id) {
+        var linked = otherNights.get(id);
+        return linked == null ? List.of() : linked.nights();
+    }
+
+    /**
+     * The object whose identification names this one in the file: itself when it is Known by one name, else a linked
+     * night's object that is, so an object identified on one night is reported by its designation on all.
+     */
+    private static ReportedObjects.ReportedObject namedObject(ReportedObjects.ReportedObject object, List<OtherNight> others) {
+        if (ReportedObjects.KNOWN.equals(object.status()) && object.names().size() == 1) return object;
+        for (var other : others) {
+            var o = other.object();
+            if (ReportedObjects.KNOWN.equals(o.status()) && o.names().size() == 1) return o;
+        }
+        return object;
+    }
+
+    /** Why the object's linked nights cannot share one observatory code with this night; null when they can. */
+    private String siteProblem(String id) {
+        for (var other : nightsOf(id)) {
+            if (!NightLinks.sameSite(site, other.night().site())) {
+                return id + ": " + other.name() + " was observed from another site (" + other.night().site().describe()
+                        + "). One file and one orbit fit here use one observatory code.";
+            }
+        }
+        return null;
+    }
+
+    /** A report opened as another night, read once while the window is open. Called on workers. */
+    private NightLinks.Night openNight(File folder, String latitude, String longitude, String altitude) throws Exception {
+        String key = folder.getAbsoluteFile().toPath().normalize().toString();
+        var night = openedNights.get(key);
+        if (night == null) {
+            night = NightLinks.open(folder, latitude, longitude, altitude);
+            openedNights.put(key, night);
+        }
+        return night;
+    }
+
+    /** Reads every linked object's other nights on a worker, then shows them and rebuilds the file. */
+    private void readOtherNights() {
+        if (nightsWorker != null) nightsWorker.cancel(true);
+        File folder = report.folder();
+        var ids = report.objects().stream().map(ReportedObjects.ReportedObject::id).toList();
+        AppConfig config = settings.getConfig();
+        String latitude = config.siteLat, longitude = config.siteLong, altitude = config.siteAltitude;
+        nightsWorker = new SwingWorker<Map<String, OtherNights>, Void>() {
+            @Override protected Map<String, OtherNights> doInBackground() {
+                var linkedIds = new java.util.HashSet<String>();
+                for (var link : NightLinks.load(folder)) linkedIds.add(link.object);
+                var result = new HashMap<String, OtherNights>();
+                for (String id : ids) {
+                    if (!linkedIds.contains(id) || isCancelled()) continue;
+                    var linked = NightLinks.linked(folder, id);
+                    var nights = new ArrayList<OtherNight>();
+                    var problems = new ArrayList<String>();
+                    for (String path : linked.missing()) problems.add("A linked report is no longer at " + path + ".");
+                    for (var ref : linked.nights()) {
+                        try {
+                            var night = openNight(ref.folder(), latitude, longitude, altitude);
+                            var object = night.object(ref.objectId());
+                            if (object == null) problems.add(ref.objectId() + " is not in " + ref.folder().getName() + ".");
+                            else nights.add(new OtherNight(night, object, night.observations(object)));
+                        } catch (Exception e) {
+                            problems.add(ref.folder().getName() + " cannot be read: " + message(e));
+                        }
+                    }
+                    nights.sort(java.util.Comparator.comparingLong(n -> n.night().report().sessionStartMillis()));
+                    result.put(id, new OtherNights(List.copyOf(nights), List.copyOf(problems)));
+                }
+                return result;
+            }
+
+            @Override protected void done() {
+                if (nightsWorker == this) nightsWorker = null;
+                if (closed || isCancelled()) return;
+                try {
+                    otherNights.clear();
+                    otherNights.putAll(get());
+                } catch (Exception e) {
+                    nightsLabel.setHtml(escape("The linked nights could not be read: " + message(e)));
+                    return;
+                }
+                refreshObjects();
+                updateNights();
+                refreshExport();
+            }
+        };
+        nightsWorker.execute();
+    }
+
+    /** Shows the shown object's other nights, or what linking one does. */
+    private void updateNights() {
+        var object = shown;
+        linkButton.setEnabled(object != null && !observations.get(object.id()).isEmpty());
+        unlinkButton.setEnabled(object != null && otherNights.containsKey(object.id()));
+        if (object == null) {
+            nightsLabel.setText(" ");
+            return;
+        }
+        var linked = otherNights.get(object.id());
+        if (linked == null) {
+            nightsLabel.setHtml("Seen on another night as well? Link it: Compute orbit then fits all the nights, and an "
+                    + "unidentified object's nights go into one file under one tracklet ID, as the MPC asks.");
+            return;
+        }
+        var text = new StringBuilder("This night: ").append(NIGHT.format(Instant.ofEpochMilli(report.sessionStartMillis())));
+        for (var other : linked.nights()) {
+            text.append("<br><b>").append(other.name()).append("</b> · ").append(escape(other.object().id())).append(" · ")
+                    .append(statusText(other.object().status()));
+            if (!other.object().names().isEmpty()) text.append(" · ").append(escape(String.join(" or ", other.object().names())));
+            text.append(" · ").append(other.observations().size()).append(" observations");
+            if (other.night().reduction().reduction() == null) text.append(" · ").append(escape(other.night().reduction().problem()));
+        }
+        for (String problem : linked.problems()) text.append("<br>").append(escape(problem));
+        String site = siteProblem(object.id());
+        if (site != null) text.append("<br>").append(escape(site));
+        nightsLabel.setHtml(text.toString());
+    }
+
+    /**
+     * Asks for another night's report folder, reads it on a worker, and asks which of its objects is the shown one,
+     * suggesting the one with the same identification or the one nearest where this night's motion leads.
+     */
+    private void linkAnotherNight() {
+        var object = shown;
+        if (object == null || observations.get(object.id()).isEmpty()) return;
+        File session = report.folder().getAbsoluteFile().getParentFile();
+        JFileChooser chooser = WindowSizing.fileChooser(session != null && session.getParentFile() != null ? session.getParentFile() : session);
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle("Choose the report folder (detections_…) of the other night");
+        if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
+        File chosen = chooser.getSelectedFile();
+        AppConfig config = settings.getConfig();
+        String latitude = config.siteLat, longitude = config.siteLong, altitude = config.siteAltitude;
+        linkButton.setEnabled(false);
+        nightsLabel.setHtml(escape("Reading " + chosen.getName() + "…"));
+        new SwingWorker<NightLinks.Night, Void>() {
+            @Override protected NightLinks.Night doInBackground() throws Exception {
+                return openNight(chosen, latitude, longitude, altitude);
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                NightLinks.Night other;
+                try {
+                    other = get();
+                } catch (Exception e) {
+                    updateNights();
+                    nightsLabel.setHtml(escape(chosen.getName() + " cannot be read: " + message(e)));
+                    return;
+                }
+                updateNights();
+                if (other.report().sessionStartMillis() == report.sessionStartMillis()) {
+                    nightsLabel.setHtml(escape("That report is of this night. Choose the report of another night."));
+                    return;
+                }
+                if (shown == object) chooseLinkedObject(object, other);
+            }
+        }.execute();
+    }
+
+    /** Lets the user pick the other night's object that is this one, then writes the link beside both reports. */
+    private void chooseLinkedObject(ReportedObjects.ReportedObject object, NightLinks.Night other) {
+        String otherName = NIGHT.format(Instant.ofEpochMilli(other.report().sessionStartMillis()));
+        var own = observations.get(object.id());
+        var candidates = other.report().objects().stream().filter(o -> !other.observations(o).isEmpty()).toList();
+        if (candidates.isEmpty()) {
+            nightsLabel.setHtml(escape("The report of " + otherName + " has no measured object to link: only tracks, with positions "
+                    + "measured frame by frame, can be linked from another night."));
+            return;
+        }
+        var labels = new String[candidates.size()];
+        int suggested = -1;
+        double nearest = Double.MAX_VALUE;
+        for (int k = 0; k < candidates.size(); k++) {
+            var candidate = candidates.get(k);
+            var list = other.observations(candidate);
+            Double miss = NightLinks.extrapolationMissArcmin(own, list);
+            labels[k] = candidate.id() + " · " + statusText(candidate.status())
+                    + (candidate.names().isEmpty() ? "" : " · " + String.join(" or ", candidate.names()))
+                    + " · " + list.size() + " observations"
+                    + (miss == null ? "" : String.format(Locale.US, " · %.1f′ from where this night's motion leads", miss));
+            boolean sameName = !object.names().isEmpty() && candidate.names().stream().anyMatch(object.names()::contains);
+            if (sameName) {
+                suggested = k;
+                nearest = -1;
+            } else if (miss != null && miss < nearest) {
+                nearest = miss;
+                suggested = k;
+            }
+        }
+        JComboBox<String> choice = new JComboBox<>(labels);
+        if (suggested >= 0) choice.setSelectedIndex(suggested);
+        JPanel content = new JPanel(new BorderLayout(0, UiStyle.space(8)));
+        content.add(new JLabel(UiStyle.htmlWrappedTo(460, "Which object of " + escapeHtml(otherName) + " ("
+                + escapeHtml(other.report().folder().getName()) + ") is " + escapeHtml(object.id()) + "?<br>Link only when you are "
+                + "sure: an unidentified object's linked nights are reported together under one tracklet ID. Where this night's "
+                + "straight motion leads is a hint; over days an asteroid's path bends by a few arcminutes.")), BorderLayout.NORTH);
+        content.add(choice, BorderLayout.CENTER);
+        if (JOptionPane.showConfirmDialog(this, content, "Link another night", JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.PLAIN_MESSAGE) != JOptionPane.OK_OPTION) return;
+        var target = candidates.get(choice.getSelectedIndex());
+        writeOnWorker(() -> {
+            NightLinks.link(thisNight, object.id(), other, target.id());
+            return null;
+        }, problem -> {
+            if (problem != null) {
+                nightsLabel.setHtml(escape("The link was not saved: " + problem));
+                return;
+            }
+            forgetOrbit(object.id());
+            if (shown == object) updateOrbit();
+            readOtherNights();
+        });
+    }
+
+    /** After the user agrees, removes the shown object's links here and beside the other reports. */
+    private void unlinkNights() {
+        var object = shown;
+        if (object == null || !otherNights.containsKey(object.id())) return;
+        if (JOptionPane.showConfirmDialog(this, UiStyle.htmlWrappedTo(420, "Remove the links of " + escapeHtml(object.id())
+                        + " to other nights? They are removed here and beside the other reports."),
+                "Unlink", JOptionPane.OK_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE) != JOptionPane.OK_OPTION) return;
+        File folder = report.folder();
+        writeOnWorker(() -> {
+            NightLinks.unlink(folder, object.id());
+            return null;
+        }, problem -> {
+            if (problem != null) {
+                nightsLabel.setHtml(escape("The links were not removed: " + problem));
+                return;
+            }
+            forgetOrbit(object.id());
+            if (shown == object) updateOrbit();
+            otherNights.remove(object.id());
+            readOtherNights();
+        });
+    }
+
+    /** An exception's cause's message. */
+    private static String message(Exception e) {
+        Throwable cause = e.getCause() == null ? e : e.getCause();
+        return String.valueOf(cause.getMessage());
+    }
+
     static String statusText(String status) {
         return switch (status == null ? "" : status) {
             case WEAK -> "Weak";
@@ -1632,8 +2017,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             playTimer.stop();
             if (worker != null) worker.cancel(true);
             worker = null;
-            for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker}) if (running != null) running.cancel(true);
-            identifyWorker = curveWorker = subStackWorker = null;
+            for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker, nightsWorker}) if (running != null) running.cancel(true);
+            identifyWorker = curveWorker = subStackWorker = nightsWorker = null;
             pictures = List.of();
         }
         super.dispose();
@@ -1659,8 +2044,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 case 1 -> object.id();
                 case 2 -> statusText(status(object));
                 case 3 -> String.join(" or ", object.names());
-                default -> object.measured() ? selected.get(object.id()).size() + " of " + observations.get(object.id()).size()
-                        : subStacks.containsKey(object.id()) ? subStacks.get(object.id()).size() + " sub-stacks" : "fitted only";
+                default -> (object.measured() ? selected.get(object.id()).size() + " of " + observations.get(object.id()).size()
+                        : subStacks.containsKey(object.id()) ? subStacks.get(object.id()).size() + " sub-stacks" : "fitted only")
+                        + (nightsOf(object.id()).isEmpty() ? "" : " · +" + nightsOf(object.id()).size()
+                        + (nightsOf(object.id()).size() == 1 ? " night" : " nights"));
             };
         }
 
@@ -1718,6 +2105,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      */
     private static final class OrbitDiagram extends JComponent {
         FindOrb.Orbit orbit;
+        /** The orbit from this night alone, drawn dashed under {@link #orbit}; null when there is none. */
+        FindOrb.Orbit alone;
 
         OrbitDiagram() {
             setPreferredSize(new Dimension(UiStyle.space(300), UiStyle.space(300)));
@@ -1749,16 +2138,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 }
                 g.setColor(new Color(255, 210, 90));
                 g.fill(new Ellipse2D.Double(cx - 4, cy - 4, 8, 8));
-                double[][] path = OrbitGeometry.path(orbit, 240, extent * 1.5);
-                var line = new java.awt.geom.Path2D.Double();
-                for (int k = 0; k < path.length; k++) {
-                    double x = cx + path[k][0] * scale, y = cy - path[k][1] * scale;
-                    if (k == 0) line.moveTo(x, y); else line.lineTo(x, y);
+                if (alone != null) {
+                    g.setColor(new Color(200, 160, 230));
+                    g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f, new float[]{5f, 4f}, 0f));
+                    g.draw(line(alone, extent, scale, cx, cy));
                 }
-                if (orbit.bound()) line.closePath();
                 g.setColor(new Color(80, 225, 210));
                 g.setStroke(new BasicStroke(1.5f));
-                g.draw(line);
+                g.draw(line(orbit, extent, scale, cx, cy));
                 double[] object = OrbitGeometry.atEpoch(orbit);
                 if (object != null) {
                     double ox = cx + object[0] * scale, oy = cy - object[1] * scale;
@@ -1766,9 +2153,22 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 }
                 g.setColor(new Color(170, 175, 190));
                 g.drawString("Ecliptic, from the north · planets on mean circular orbits", 6, size - 6);
+                if (alone != null) g.drawString("Solid: all nights · dashed: this night alone", 6, size - 6 - g.getFontMetrics().getHeight());
             } finally {
                 g.dispose();
             }
+        }
+
+        /** An orbit's path on the drawing: the whole ellipse, or the near part of an unbound orbit. */
+        private static java.awt.geom.Path2D line(FindOrb.Orbit orbit, double extent, double scale, double cx, double cy) {
+            double[][] path = OrbitGeometry.path(orbit, 240, extent * 1.5);
+            var line = new java.awt.geom.Path2D.Double();
+            for (int k = 0; k < path.length; k++) {
+                double x = cx + path[k][0] * scale, y = cy - path[k][1] * scale;
+                if (k == 0) line.moveTo(x, y); else line.lineTo(x, y);
+            }
+            if (orbit.bound()) line.closePath();
+            return line;
         }
     }
 
