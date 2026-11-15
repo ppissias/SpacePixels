@@ -119,7 +119,11 @@ public final class ReportedObjects {
         }
         var names = new ArrayList<String>();
         for (JsonElement name : array(identification, "names")) names.add(name.getAsString());
-        return new ReportedObject(id, kind, text(identification, "status"), List.copyOf(names), text(identification, "note"),
+        String note = text(identification, "note");
+        String unusual = text(identification, "unusualMotion");
+        // An unmatched object's note already says it; a known one's motion is worth saying too.
+        if (unusual != null && note != null && !note.contains(unusual)) note = note + " Unusual motion: " + unusual + ".";
+        return new ReportedObject(id, kind, text(identification, "status"), List.copyOf(names), note,
                 List.copyOf(positions), optional(identification, "speedArcsecPerHour"), optional(identification, "positionAngleDegrees"), motion);
     }
 

@@ -1,5 +1,7 @@
 package eu.startales.spacepixels.report;
 
+import eu.startales.spacepixels.mpc.MainBeltMotion;
+
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.util.SkyMath;
@@ -38,10 +40,13 @@ final class KnownSolarSystemReport {
      * object), "check" (agreeing with several, or only with shifted frame times), "no-known-match", or "not-compared"
      * (the predictions do not cover it). The O−C is the measured position minus the prediction for a known track, and
      * the fitted path minus the prediction for a known faint mover; absent otherwise. Agreement is not proof of identity.
+     * {@code motionNote} compares the motion with a main-belt asteroid's at that place and time ({@link MainBeltMotion}),
+     * and {@code unusualMotion} says briefly why it is unusual, or is null; an unmatched object with unusual motion is
+     * "check". Both are null without a position, time or motion.
      */
     record Identification(String id, String kind, String status, List<String> names, String note, int frames,
                           Double arcHours, Double speedArcsecPerHour, Double positionAngleDegrees, Double meanRaArcsec,
-                          Double meanDecArcsec, Double rmsArcsec, List<Offset> offsets) { }
+                          Double meanDecArcsec, Double rmsArcsec, List<Offset> offsets, String motionNote, String unusualMotion) { }
     /**
      * Buffer-free offline provenance, coverage and comparisons from the admitted run's catalogue/WCS snapshot.
      * {@code siteProblem} says why the run's observing site cannot have seen the field, or is null.
@@ -135,6 +140,8 @@ final class KnownSolarSystemReport {
         var points = ReportTrackMotion.points(track.points, c.fitsFiles);
         var fit = points.size() >= 2 ? ReportTrackMotion.fit(points) : null;
         double[] motion = fit == null ? null : skyMotion(wcs, fit.x(), fit.y(), fit.vx(), fit.vy());
+        var place = fit == null ? null : wcs.pixelToSky(fit.x(), fit.y());
+        double[] where = place == null ? null : new double[]{place.getRaDegrees(), place.getDecDegrees(), fit.originMillis()};
         Double arc = points.size() < 2 ? null : (points.stream().mapToLong(ReportTrackMotion.Point::midpointMillis).max().orElseThrow()
                 - points.stream().mapToLong(ReportTrackMotion.Point::midpointMillis).min().orElseThrow()) / 3_600_000.0;
         var agreeing = new ArrayList<String>();
@@ -169,7 +176,7 @@ final class KnownSolarSystemReport {
             status = NO_KNOWN_MATCH;
             note = noMatchNote(limit);
         }
-        return identification(id, "track", status, agreeing, note, points.size(), arc, motion, offsets);
+        return identification(id, "track", status, agreeing, note, points.size(), arc, motion, offsets, where);
     }
 
     /** A faint mover's status from its fitted-path comparisons with the predictions. */
@@ -201,12 +208,27 @@ final class KnownSolarSystemReport {
             status = NO_KNOWN_MATCH;
             note = noMatchNote(limit);
         }
-        return identification(entry.id(), "faint mover", status, names, note, entry.fittedPositions().size(), arc, motion, offsets);
+        double[] where = sky.raDegrees() == null || sky.decDegrees() == null ? null
+                : new double[]{sky.raDegrees(), sky.decDegrees(), entry.referenceTimeMillis()};
+        return identification(entry.id(), "faint mover", status, names, note, entry.fittedPositions().size(), arc, motion, offsets, where);
     }
 
-    /** Completes an identification with its mean and RMS O−C. */
+    /**
+     * Completes an identification with its mean and RMS O−C and the main-belt motion check; {@code where} is the
+     * object's RA, Dec (degrees) and UTC milliseconds, or null.
+     */
     private static Identification identification(String id, String kind, String status, List<String> names, String note,
-                                                 int frames, Double arc, double[] motion, List<Offset> offsets) {
+                                                 int frames, Double arc, double[] motion, List<Offset> offsets, double[] where) {
+        String motionNote = null, unusual = null;
+        if (where != null && motion != null && Double.isFinite(motion[0]) && Double.isFinite(where[0]) && Double.isFinite(where[1])) {
+            var assessment = MainBeltMotion.assess(where[0], where[1], (long) where[2], motion[0], motion[1]);
+            motionNote = assessment.note();
+            unusual = assessment.reason();
+            if (assessment.unusual() && NO_KNOWN_MATCH.equals(status)) {
+                status = CHECK;
+                note = note + " Its motion is unusual: " + assessment.reason() + ".";
+            }
+        }
         Double meanRa = null, meanDec = null, rms = null;
         if (!offsets.isEmpty()) {
             double ra = 0, dec = 0, squares = 0;
@@ -215,7 +237,7 @@ final class KnownSolarSystemReport {
         }
         return new Identification(id, kind, status, List.copyOf(names), note, frames, arc,
                 motion == null || !Double.isFinite(motion[0]) ? null : motion[0],
-                motion == null || !Double.isFinite(motion[1]) ? null : motion[1], meanRa, meanDec, rms, offsets);
+                motion == null || !Double.isFinite(motion[1]) ? null : motion[1], meanRa, meanDec, rms, offsets, motionNote, unusual);
     }
 
     /** Names the depth of the search that found nothing, so absence is not read as completeness. */
@@ -421,8 +443,10 @@ final class KnownSolarSystemReport {
         out.print("<section id='known-solar-system'><h2>Asteroids and comets</h2>");
         out.print("<p>Each moving-object track and faint mover is compared with the known asteroids and comets predicted "
                 + "for this field. <strong>Known</strong> means its position and motion agree with one predicted object; "
-                + "<strong>Check</strong> means it agrees with several, or only with shifted frame times; <strong>No known match</strong> "
-                + "means no predicted object agrees. Agreement supports an identification but does not prove it.</p>");
+                + "<strong>Check</strong> means it agrees with several, or only with shifted frame times, or that nothing known agrees "
+                + "and it moves unusually for a main-belt asteroid (much faster, much slower or in another direction); "
+                + "<strong>No known match</strong> means no predicted object agrees. Agreement supports an identification but does "
+                + "not prove it, and the motion check is a screen of one night's motion, not an orbit.</p>");
         if (s.siteProblem() != null) out.print("<div class='asteroid-site-alert' role='alert'><strong>Observing site:</strong> "
                 + escape(s.siteProblem()) + " The predictions and the matches below were computed for that site.</div>");
         out.printf(Locale.US, "<p>Saved predictions: %s; fetched %s; magnitude limit %s. %s</p>",
@@ -513,7 +537,7 @@ final class KnownSolarSystemReport {
                     row.arcHours() == null ? "" : String.format(Locale.US, "<span class='known-object-meta'>%.2f h</span>", row.arcHours()));
             out.print("<td>" + (row.speedArcsecPerHour() == null ? "N/A" : String.format(Locale.US, "%.1f″/h", row.speedArcsecPerHour())
                     + (row.positionAngleDegrees() == null ? "" : String.format(Locale.US, "<span class='known-object-meta'>PA %.0f°</span>", row.positionAngleDegrees())))
-                    + "</td><td>");
+                    + motionCell(row) + "</td><td>");
             if (row.rmsArcsec() == null) out.print("<span class='known-object-meta'>—</span>");
             else {
                 out.printf(Locale.US, "Mean %+.2f″ RA, %+.2f″ Dec<span class='known-object-meta'>RMS %.2f″ over %d %s</span>",
@@ -527,6 +551,24 @@ final class KnownSolarSystemReport {
         out.print("<p>O−C is the position minus the prediction, in arcseconds (RA scaled by cos Dec), through this run's plate "
                 + "solution. A mean offset well beyond the scatter in every known object points to the plate solution, the "
                 + "frame times or the observing site rather than the objects.</p>");
+        out.printf(Locale.US, "<p>Motion check: each motion is compared with a main-belt asteroid on a circular orbit between %.1f "
+                        + "and %.1f AU seen in the same direction at the same time. Faster than %.1f times its fastest rate suggests a "
+                        + "near-Earth object; slower than %.1f times its slowest, a more distant one (not judged near a stationary point, "
+                        + "where every main-belt asteroid slows and turns); a direction more than %.0f° off its direction (more for slow "
+                        + "rates, allowing inclinations to %.0f°), a high inclination or a near-Earth object. Eccentric and more inclined "
+                        + "orbits, a short arc and the motion's own error widen the range, so this is a screen, not a classification. "
+                        + "Hover over a motion for the expected values. A known object keeps its identification; only an orbit from "
+                        + "more nights tells what an object is.</p>",
+                MainBeltMotion.INNER_AU, MainBeltMotion.OUTER_AU, MainBeltMotion.FAST_FACTOR, MainBeltMotion.SLOW_FACTOR,
+                MainBeltMotion.MIN_DIRECTION_TOLERANCE_DEG, MainBeltMotion.INCLINATION_DEG);
+    }
+
+    /** The motion check under a row's motion: usual or unusual for the main belt, with the full note on hover. */
+    private static String motionCell(Identification row) {
+        if (row.motionNote() == null) return "";
+        return "<span class='known-object-meta' title='" + escape(row.motionNote()) + "'>"
+                + (row.unusualMotion() == null ? "Usual for the main belt" : "<span class='known-object-warning'>Unusual: "
+                + escape(row.unusualMotion()) + "</span>") + "</span>";
     }
 
     /** A small time plot of one row's O−C: RA filled, Dec hollow, on a symmetric scale of at least one arcsecond. */
