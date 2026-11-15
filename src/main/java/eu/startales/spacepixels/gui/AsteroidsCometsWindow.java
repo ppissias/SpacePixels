@@ -248,8 +248,29 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         objectsTable.setFillsViewportHeight(true);
         objectsTable.getColumnModel().getColumn(0).setMaxWidth(UiStyle.space(60));
         objectsTable.getColumnModel().getColumn(1).setMaxWidth(UiStyle.space(60));
+        JButton compare = new JButton("Compare again");
+        compare.setToolTipText("Compares every object with the session's saved asteroid and comet predictions again, by the "
+                + "report's rules: after Fetch Asteroids and Comets, without detecting again. Nothing is sent.");
+        compare.addActionListener(e -> compareAgain());
+        identifyAllButton.setToolTipText("Asks JPL and SkyBoT for every known asteroid and comet in the field at mid-session, "
+                + "without a magnitude limit, and lists those within 1′ of each object, as MPChecker would. Sends the field, the time "
+                + "and the observatory code.");
+        identifyAllButton.addActionListener(e -> identifyAll());
+        JPanel identifyButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        identifyButtons.add(compare);
+        identifyButtons.add(identifyAllButton);
+        identifyButtons.setAlignmentX(LEFT_ALIGNMENT);
+        compareLabel.setForeground(UiStyle.helpColor());
+        compareLabel.setAlignmentX(LEFT_ALIGNMENT);
+        JLabel heading = title("Objects · " + report.objects().size());
+        heading.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel north = new JPanel();
+        north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
+        north.add(heading);
+        north.add(identifyButtons);
+        north.add(compareLabel);
         JPanel panel = new JPanel(new BorderLayout());
-        panel.add(title("Objects · " + report.objects().size()), BorderLayout.NORTH);
+        panel.add(north, BorderLayout.NORTH);
         panel.add(new JScrollPane(objectsTable), BorderLayout.CENTER);
         // Wide enough for the five columns; the split panes would otherwise squeeze the list to a strip.
         panel.setMinimumSize(new Dimension(UiStyle.space(340), UiStyle.space(200)));
@@ -528,23 +549,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JButton mpchecker = new JButton("MPChecker…");
         mpchecker.setToolTipText("Copies the date, position and code of the middle selected observation and opens the MPC's MPChecker");
         mpchecker.addActionListener(e -> openMpchecker());
-        JButton compare = new JButton("Compare again");
-        compare.setToolTipText("Compares every object with the session's saved asteroid and comet predictions again, by the "
-                + "report's rules: after Fetch Asteroids and Comets, without detecting again. Nothing is sent.");
-        compare.addActionListener(e -> compareAgain());
-        identifyAllButton.setToolTipText("Asks JPL and SkyBoT for every known asteroid and comet in the field at mid-session, "
-                + "without a magnitude limit, and lists those within 1′ of each object, as MPChecker would. Sends the field, the time "
-                + "and the observatory code.");
-        identifyAllButton.addActionListener(e -> identifyAll());
-        JPanel identifyButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
-        identifyButtons.add(mpchecker);
-        identifyButtons.add(compare);
-        identifyButtons.add(identifyAllButton);
-        identifyButtons.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(identifyButtons);
-        compareLabel.setForeground(UiStyle.helpColor());
-        compareLabel.setAlignmentX(LEFT_ALIGNMENT);
-        panel.add(compareLabel);
+        mpchecker.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(mpchecker);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Orbit · Find_Orb"));
         JButton findOrb = new JButton("Compute orbit");
