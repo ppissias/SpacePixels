@@ -60,6 +60,8 @@ public final class ReportExporter {
         File exportDir = reportContext.exportDir;
         ReportProgress progress = reportContext.progress;
         reportContext.data.writeJson(exportDir);
+        progress.step(2, 3, "measuring light curves");
+        reportContext.lightCurves = ReportLightCurves.measure(reportContext);
         ReportAssets.writeReportFiles(exportDir);
         DetectionReportDocumentWriter.writeCustomStyle(reportContext.settings.getReportStyleFile(), exportDir);
         if (reportContext.enhancedStack != null) {

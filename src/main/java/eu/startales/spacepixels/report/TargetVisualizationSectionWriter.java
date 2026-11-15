@@ -353,6 +353,7 @@ final class TargetVisualizationSectionWriter {
                     + cleanNarrowFileName + "' download='" + ReportFiles.name(cleanNarrowFileName) + "' target='_blank'>Narrow</a> <a class='id-link' href='"
                     + cleanWideFileName + "' download='" + ReportFiles.name(cleanWideFileName) + "' target='_blank'>Wide</a>");
             report.println("</div>");
+            context.lightCurves.write(report, FindingCategory.MOVING_TARGET.id(counter));
 
             report.println("<div style='margin-bottom: 20px;'>");
             report.println("<strong style='color: var(--sp-text);'>Pixel Evolution (Tight Crops):</strong>");

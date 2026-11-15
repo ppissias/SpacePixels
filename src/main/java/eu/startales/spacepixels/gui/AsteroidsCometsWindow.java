@@ -350,27 +350,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return panel;
     }
 
-    /** The FWHM for the photometry: the faint-mover search's stellar FWHM, else the shown track's detections' (Gaussian). */
-    private double photometryFwhm(ReportedObjects.ReportedObject object) {
-        if (report.faintMoverFwhm() != null && report.faintMoverFwhm() > 0) return report.faintMoverFwhm();
-        double[] widths = object.positions().stream().filter(p -> p.fwhm() != null && p.fwhm() > 0)
-                .mapToDouble(ReportedObjects.Position::fwhm).sorted().toArray();
-        // Extraction widths read about sqrt(2) wider than a Gaussian FWHM.
-        return widths.length == 0 ? 3.0 : widths[widths.length / 2] / Math.sqrt(2);
-    }
-
     /** Measures the shown object's light in each frame on a worker, with the comparison stars, and keeps the curve. */
     private void measureLightCurve() {
         var object = shown;
         if (object == null || object.positions().isEmpty()) return;
-        double fwhm = photometryFwhm(object);
-        var samples = new ArrayList<LightCurve.Sample>();
-        for (var p : object.positions()) {
-            var file = files[p.frameNumber() - 1];
-            long exposure = Math.max(0, file.getExposureDurationMillis());
-            samples.add(new LightCurve.Sample(p.frameNumber(), file.getObservationTimestamp() + exposure / 2, exposure, p.x(), p.y()));
-        }
-        double speed = pixelSpeed(object);
+        double fwhm = LightCurve.fwhm(report, object);
+        var samples = LightCurve.samples(report, object);
+        double speed = LightCurve.pixelsPerMinute(object, samples);
         curveButton.setEnabled(false);
         curveLabel.setText("Measuring " + object.id() + " in " + samples.size() + " frames…");
         new SwingWorker<LightCurve.Curve, String>() {
@@ -451,15 +437,6 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return warning == null ? "" : " " + warning;
     }
 
-    /** The object's speed in pixels per minute: its fitted motion, or its first and last measured positions. */
-    private double pixelSpeed(ReportedObjects.ReportedObject object) {
-        if (object.motion() != null) return Math.hypot(object.motion().vxPerMinute(), object.motion().vyPerMinute());
-        var first = object.positions().getFirst();
-        var last = object.positions().getLast();
-        long t0 = files[first.frameNumber() - 1].getObservationTimestamp(), t1 = files[last.frameNumber() - 1].getObservationTimestamp();
-        return t1 > t0 ? Math.hypot(last.x() - first.x(), last.y() - first.y()) / ((t1 - t0) / 60000.0) : 0;
-    }
-
     /** Shows the shown object's curve and its summary, or what measuring it would do. */
     private void updateCurve() {
         var curve = shown == null ? null : curves.get(shown.id());
@@ -483,13 +460,18 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     curve.comparisonStars(), PhotometryStars.MIN_USABLE);
         }
         curveLabel.setText(UiStyle.htmlWrappedTo(560, String.format(Locale.US, "%s · %d %s · %s%s · %s · aperture %.1f px · "
-                        + "median %.2f · amplitude (5–95 %%) %.2f mag · scatter %.2f mag. Relative magnitudes, not calibrated; "
+                        + "median %s · amplitude (5–95 %%) %s mag · scatter %s mag. Relative magnitudes, not calibrated; "
                         + "flagged points (hollow) are left out of the summary%s.", curve.id(), summary.points(),
                 size > 1 ? "bins of " + size + " frames" : "frames", stars,
                 curve.comparisonNote() == null ? "" : " · " + curve.comparisonNote(),
                 curve.onReference() ? "fixed stars subtracted" : "fixed stars not subtracted (path too long)",
-                curve.apertureRadius(), summary.median(), summary.amplitude(), summary.scatter(),
+                curve.apertureRadius(), magnitude(summary.median()), magnitude(summary.amplitude()), magnitude(summary.scatter()),
                 size > 1 ? " and the bins" : "")));
+    }
+
+    /** A magnitude to two decimals, or a dash when there is none. */
+    private static String magnitude(double value) {
+        return Double.isFinite(value) ? String.format(Locale.US, "%.2f", value) : "–";
     }
 
     /** Writes the curve's CSV where the user chooses. */

@@ -116,6 +116,9 @@ public class LightCurveTest {
         assertEquals(2 * Math.sqrt(2) / 2, bins.get(0).fluxError(), 1e-9);
         assertEquals(30_000L, bins.get(0).midpointMillis());
         assertEquals(1, LightCurve.bin(curve, 4).size());
+        var few = LightCurve.summarise(bins);
+        assertEquals("three bins: a median", 3, few.points());
+        assertTrue("but no amplitude or scatter from three values", Double.isNaN(few.amplitude()) && Double.isNaN(few.scatter()));
         assertEquals(7, LightCurve.bin(curve, 1).size());
         String csv = LightCurve.csv(curve, 2);
         assertTrue(csv, csv.contains("bins of 2 frames") && csv.contains(",bin,bin_relative_mag,bin_mag_error"));

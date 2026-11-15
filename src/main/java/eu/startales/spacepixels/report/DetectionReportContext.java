@@ -208,6 +208,9 @@ final class DetectionReportContext {
         }
     }
 
+    /** The moving objects' light curves, measured once the report data is written; empty until then. */
+    ReportLightCurves lightCurves = ReportLightCurves.none();
+
     /** Original indices of the frames combined into {@link #enhancedStack}, in order; empty without one. */
     final List<Integer> keptFrameIndices;
 

@@ -76,8 +76,14 @@ public final class LightCurve {
         public double magnitudeError() { return flux > 0 ? 1.0857 * fluxError / flux : Double.NaN; }
     }
 
-    /** The median, the spread between the 5th and 95th percentiles (the amplitude) and the robust scatter, in magnitudes. */
+    /**
+     * The median, the spread between the 5th and 95th percentiles (the amplitude) and the robust scatter, in magnitudes;
+     * the median needs three values, the amplitude and scatter {@value #MIN_SPREAD_POINTS}.
+     */
     public record Summary(int points, double median, double amplitude, double scatter) { }
+
+    /** Fewest values for an amplitude and a scatter: from fewer, the percentiles and the MAD say nothing. */
+    public static final int MIN_SPREAD_POINTS = 5;
 
     /** One frame to measure: its number, exposure midpoint and length (UTC milliseconds), and the object's registered position. */
     public record Sample(int frameNumber, long midpointMillis, long exposureMillis, double x, double y) { }
@@ -97,12 +103,55 @@ public final class LightCurve {
      */
     public static List<double[]> comparisonStars(short[][] frame, WcsCoordinateTransformer wcs, List<SkyCatalogue.Star> candidates,
                                                  double[] pathBox, double fwhm) {
+        return PhotometryStars.choose(measureCandidates(frame, wcs, candidates, fwhm), pathBox, CLEARANCE_FWHM * fwhm);
+    }
+
+    /** Distance of comparison stars from the frame edges and from an object's path, in FWHM. */
+    public static final double CLEARANCE_FWHM = 6;
+
+    /**
+     * The candidate stars measured on one aligned frame, those at least {@value #CLEARANCE_FWHM} FWHM (and clear of the
+     * sky annulus) inside its edges, for {@link PhotometryStars#choose}; empty without a plate solution.
+     */
+    public static List<PhotometryStars.Measured> measureCandidates(short[][] frame, WcsCoordinateTransformer wcs,
+                                                                   List<SkyCatalogue.Star> candidates, double fwhm) {
         if (wcs == null || candidates.isEmpty()) return List.of();
         double saturation = MovingObjectPhotometry.saturationThreshold(frame);
-        double margin = Math.max(6, MovingObjectPhotometry.ANNULUS_OUTER_FWHM + 1) * fwhm;
-        var measured = PhotometryStars.measure(frame, PhotometryStars.onFrame(candidates, wcs, frame[0].length, frame.length, margin),
+        double margin = Math.max(CLEARANCE_FWHM, MovingObjectPhotometry.ANNULUS_OUTER_FWHM + 1) * fwhm;
+        return PhotometryStars.measure(frame, PhotometryStars.onFrame(candidates, wcs, frame[0].length, frame.length, margin),
                 fwhm, saturation);
-        return PhotometryStars.choose(measured, pathBox, 6 * fwhm);
+    }
+
+    /**
+     * The FWHM in pixels for an object's photometry: the faint-mover search's stellar FWHM, else the median of the
+     * track's detection widths divided by √2 (extraction widths read about that much wider than a Gaussian FWHM), else
+     * 3 pixels.
+     */
+    public static double fwhm(ReportedObjects.Report report, ReportedObjects.ReportedObject object) {
+        if (report.faintMoverFwhm() != null && report.faintMoverFwhm() > 0) return report.faintMoverFwhm();
+        double[] widths = object.positions().stream().filter(p -> p.fwhm() != null && p.fwhm() > 0)
+                .mapToDouble(ReportedObjects.Position::fwhm).sorted().toArray();
+        return widths.length == 0 ? 3.0 : widths[widths.length / 2] / Math.sqrt(2);
+    }
+
+    /** The object's positions as samples, with each frame's exposure midpoint and length from the report. */
+    public static List<Sample> samples(ReportedObjects.Report report, ReportedObjects.ReportedObject object) {
+        var samples = new ArrayList<Sample>();
+        for (var p : object.positions()) {
+            var frame = report.frames().get(p.frameNumber() - 1);
+            long exposure = Math.max(0, frame.exposureMillis());
+            samples.add(new Sample(p.frameNumber(), frame.timestampMillis() + exposure / 2, exposure, p.x(), p.y()));
+        }
+        return samples;
+    }
+
+    /** The object's speed in pixels per minute: its fitted motion, or its first and last positions. */
+    public static double pixelsPerMinute(ReportedObjects.ReportedObject object, List<Sample> samples) {
+        if (object.motion() != null) return Math.hypot(object.motion().vxPerMinute(), object.motion().vyPerMinute());
+        if (samples.size() < 2) return 0;
+        Sample first = samples.getFirst(), last = samples.getLast();
+        long span = last.midpointMillis() - first.midpointMillis();
+        return span > 0 ? Math.hypot(last.x() - first.x(), last.y() - first.y()) / (span / 60000.0) : 0;
     }
 
     /**
@@ -223,12 +272,12 @@ public final class LightCurve {
         return bins;
     }
 
-    /** The curve's summary over its counted points with a magnitude; NaN values when there are fewer than three. */
+    /** The curve's summary over its counted points with a magnitude; NaN values when there are too few. */
     public static Summary summarise(Curve curve) {
         return summarise(curve.points().stream().filter(LightCurve::counted).mapToDouble(Point::magnitude).toArray());
     }
 
-    /** The summary of bins with a magnitude; NaN values when there are fewer than three. */
+    /** The summary of bins with a magnitude; NaN values when there are too few. */
     public static Summary summarise(List<Bin> bins) {
         return summarise(bins.stream().mapToDouble(Bin::magnitude).toArray());
     }
@@ -237,6 +286,7 @@ public final class LightCurve {
         double[] values = Arrays.stream(magnitudes).filter(Double::isFinite).sorted().toArray();
         if (values.length < 3) return new Summary(values.length, Double.NaN, Double.NaN, Double.NaN);
         double median = quantile(values, 0.5);
+        if (values.length < MIN_SPREAD_POINTS) return new Summary(values.length, median, Double.NaN, Double.NaN);
         double[] deviations = Arrays.stream(values).map(v -> Math.abs(v - median)).sorted().toArray();
         return new Summary(values.length, median, quantile(values, 0.95) - quantile(values, 0.05), 1.4826 * quantile(deviations, 0.5));
     }

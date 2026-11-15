@@ -104,6 +104,7 @@ final class FaintMoverSectionWriter {
                         out.println("</details>");
                     }
                     if (entry.blink() != null) writeBlink(c, entry);
+                    c.lightCurves.write(out, entry.id());
                     FaintMoverReviewWriter.write(out, c, entry, candidate);
                     out.print(DetectionReportAstrometry.buildFaintMoverIdentificationHtml(c.astrometryContext, entry));
                     out.println("</div>");
