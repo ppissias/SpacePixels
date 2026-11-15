@@ -403,6 +403,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(north, BorderLayout.NORTH);
         panel.add(curvePlot, BorderLayout.CENTER);
+        // Clear of the split pane's handle, which would cover the start of the text.
+        panel.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(8), 0, 0));
         return panel;
     }
 
