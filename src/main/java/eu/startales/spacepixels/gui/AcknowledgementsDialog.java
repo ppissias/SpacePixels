@@ -131,6 +131,8 @@ final class AcknowledgementsDialog extends JDialog {
                 + "<b>Duncan Warren</b>, <b>TheStarsabove at Cloudynights</b>,  "
                 + "<a href='https://github.com/chvvkumar'><b>Kumar</b></a> and <b>Austral Kiwi at Cloudynights</b> "
                 + "for providing some of the test data used by SpacePixels.</p>"
+                + "<p>DECam data from the <a href='https://astroarchive.noirlab.edu/'>NSF NOIRLab Astro Data Archive</a> were used to test "
+                + "and improve SpacePixels.</p>"
                 + "<p class='muted'>If you have sub-exposure sequences of moving objects (asteroids, comets), optical transients, "
                 + "or variable stars that you would like to contribute for testing and algorithm development, please reach out via "
                 + "the <a href='https://github.com/ppissias/SpacePixels'>SpacePixels GitHub repository</a> or email me at petrospis@gmail.com.</p>";
