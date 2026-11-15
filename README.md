@@ -100,6 +100,8 @@ Many thanks to [Kumar](https://github.com/chvvkumar) for providing plenty of dat
 
 Many thanks to Austral Kiwi at Cloudynights for providing data.
 
+DECam data from the [NSF NOIRLab Astro Data Archive](https://astroarchive.noirlab.edu/) were used to test and improve SpacePixels.
+
 **Check out sample reports.**
 
 <a href="https://startales.eu/various_files/detections_20261107_141108/detection_report.html" target="_blank">SpacePixels Report (Demonstrating digital tracking - 10 faint asteroids detected) - version 2026.11-01</a><br/>
