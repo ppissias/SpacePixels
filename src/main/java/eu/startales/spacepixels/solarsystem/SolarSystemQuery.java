@@ -30,6 +30,11 @@ public record SolarSystemQuery(WcsCoordinateTransformer transformer, int width, 
     public record Observer(String observatoryCode, ObservingSite site, String description) {
     }
 
+    /** The same query to another depth. */
+    public SolarSystemQuery withMagnitudeLimit(double limit) {
+        return new SolarSystemQuery(transformer, width, height, startMillis, endMillis, limit, observer);
+    }
+
     /**
      * The query for these frames with the application settings: the plate solution from the FITS headers, and the
      * observer chosen by {@link #observer}.

@@ -29,12 +29,16 @@ public class PhotometryStarsTest {
         assertTrue(check.enough());
         assertNull(check.warning());
         assertEquals(3.0, check.fwhm, 0.3);
+        assertTrue("a limiting magnitude from the clear stars", check.limitingMagnitude > 15 && check.limitingMagnitude < 25);
+        assertEquals(Math.min(25, Math.ceil((check.limitingMagnitude + 1) * 2) / 2), check.solarSystemDepth(25), 1e-9);
+        assertEquals(Math.min(18, check.solarSystemDepth(25)), check.solarSystemDepth(18), 1e-9);
 
         var saturated = PhotometryStars.check(LightCurveTestAccess.frame(bright, 1, 3), "frame_000010.fit", wcs, catalogue);
         assertEquals(12, saturated.saturated);
         assertEquals(0, saturated.usable);
         assertFalse(saturated.enough());
         assertTrue("no profile to measure", Double.isNaN(saturated.fwhm));
+        assertTrue("no unsaturated star, no limit", Double.isNaN(saturated.limitingMagnitude) && Double.isNaN(saturated.solarSystemDepth(25)));
         String warning = saturated.warning();
         assertTrue(warning, warning.startsWith("Only 0 of the 12 catalogue stars") && warning.contains("12 saturated")
                 && warning.contains("Raise Star Depth (now G 15.0, up to 18)"));

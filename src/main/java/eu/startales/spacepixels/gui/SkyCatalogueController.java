@@ -251,7 +251,7 @@ final class SkyCatalogueController implements AutoCloseable {
      * Measures the catalogue's stars on the session's middle frame ({@link PhotometryStars#check}), so a catalogue too
      * shallow for the telescope is noticed at the fetch; null when the frame cannot be read.
      */
-    private static PhotometryStars.Check photometryCheck(FitsFileInformation[] files, SkyCatalogue catalogue) {
+    static PhotometryStars.Check photometryCheck(FitsFileInformation[] files, SkyCatalogue catalogue) {
         if (files.length == 0) return null;
         try {
             var solution = WcsSolutionResolver.resolveUncorrected(null, files);

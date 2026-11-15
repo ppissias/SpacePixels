@@ -37,6 +37,12 @@ public final class PhotometryStars {
     static final int FWHM_SAMPLE = 400;
     /** FWHM assumed when no star's profile can be measured (all saturated or all faint), in pixels. */
     static final double FALLBACK_FWHM = 3.0;
+    /** Signal-to-noise that defines the frames' limiting magnitude. */
+    public static final double LIMIT_SNR = 5;
+    /** Fewest stars for a limiting magnitude. */
+    public static final int MIN_LIMIT_STARS = 10;
+    /** Magnitudes below the frames' limit that asteroids and comets are fetched to. */
+    public static final double DEPTH_MARGIN = 1.0;
     /** Distance from the frame edges, in FWHM, inside which no star is used. */
     static final double EDGE_FWHM = 6;
 
@@ -65,6 +71,23 @@ public final class PhotometryStars {
         public int usable;
         public double faintestSaturatedG;
         public double depth;
+        /**
+         * The Gaia G at which a star reaches a signal-to-noise of {@value #LIMIT_SNR} against the sky on the frame: the
+         * engine's flux error is the sky's alone, so G + 2.5 log SNR is the same for every unsaturated star, and its
+         * median over them gives the limit; NaN with fewer than {@value #MIN_LIMIT_STARS} such stars, or 0 in a file
+         * written before it existed.
+         */
+        public double limitingMagnitude = Double.NaN;
+
+        /**
+         * The depth to fetch asteroids and comets to: {@value #DEPTH_MARGIN} magnitudes below the frames' limit (for the
+         * colour of asteroids and the faint-mover search, which reaches below single frames), in steps of 0.5, at most
+         * {@code maxDepth}; NaN when the limit is unknown.
+         */
+        public double solarSystemDepth(double maxDepth) {
+            if (!(limitingMagnitude > 0)) return Double.NaN;
+            return Math.min(maxDepth, Math.ceil((limitingMagnitude + DEPTH_MARGIN) * 2) / 2);
+        }
 
         /** Whether the session has enough comparison stars for light curves. */
         public boolean enough() { return usable >= MIN_USABLE; }
@@ -168,8 +191,10 @@ public final class PhotometryStars {
         check.frame = frameName;
         check.fwhm = measuredFwhm;
         check.depth = catalogue.starMagnitudeLimit;
+        var limits = new ArrayList<Double>();
         for (Measured m : measure(frame, onFrame(candidates(catalogue), wcs, width, height, margin), fwhm, saturation)) {
             check.onFrame++;
+            if (m.flags() == 0 && m.snr() >= LIMIT_SNR) limits.add(m.g() + 2.5 * Math.log10(m.snr()));
             if (m.saturated()) {
                 check.saturated++;
                 check.faintestSaturatedG = Math.max(check.faintestSaturatedG, m.g());
@@ -180,6 +205,10 @@ public final class PhotometryStars {
             } else {
                 check.usable++;
             }
+        }
+        if (limits.size() >= MIN_LIMIT_STARS) {
+            limits.sort(Double::compare);
+            check.limitingMagnitude = limits.get(limits.size() / 2) - 2.5 * Math.log10(LIMIT_SNR);
         }
         return check;
     }

@@ -1618,7 +1618,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     .append(objects.observer == null ? "" : ", for the " + escapeHtml(objects.observer))
                     .append(objects.fetchedAtUtc == null ? "" : ", fetched " + fetchedText(objects.fetchedAtUtc));
             double depth = applicationSettings.getConfig().solarSystemMagnitude();
-            if (Math.abs(depth - objects.magnitudeLimit) > 0.01) {
+            // A fetch can go deeper than the setting, as deep as the frames reach; only a deeper setting asks for a new fetch.
+            if (depth > objects.magnitudeLimit + 0.01) {
                 text.append(String.format(Locale.US, "<br><i>The depth is now set to V %.1f: fetch again to use it.</i>", depth));
             }
         } else {

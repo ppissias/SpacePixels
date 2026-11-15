@@ -452,6 +452,14 @@ final class KnownSolarSystemReport {
         out.printf(Locale.US, "<p>Saved predictions: %s; fetched %s; magnitude limit %s. %s</p>",
                 escape(s.source()), escape(s.fetchedAtUtc()), s.magnitudeLimit() == null ? "unknown" : String.format(Locale.US, "%.2f", s.magnitudeLimit()),
                 s.problems().isEmpty() ? "Fetch reported complete." : "Fetch problems: " + escape(String.join("; ", s.problems())));
+        if (depth != null && !depth.isEmpty() && s.magnitudeLimit() != null
+                && s.magnitudeLimit() < depth.median() + eu.startales.spacepixels.skycatalog.PhotometryStars.DEPTH_MARGIN - 0.5) {
+            out.printf(Locale.US, "<div class='asteroid-site-alert' role='note'><strong>Predictions shallower than the frames:</strong> "
+                            + "they stop at V %.1f, while the frames reach %s. Known objects fainter than V %.1f are missing, so a finding "
+                            + "can show No known match although it is known. Fetch Asteroids and Comets again (it now goes as deep as the "
+                            + "frames) and detect again, or use Compare again in Asteroids &amp; Comets.</div>",
+                    s.magnitudeLimit(), escape(depth.medianLabel()), s.magnitudeLimit());
+        }
         writeIdentifications(out, c, s.identifications());
         out.print("<h3>Predicted objects in the field</h3>");
         out.print("<p>Predicted magnitudes are V for asteroids or total comet magnitudes. Field depth: "

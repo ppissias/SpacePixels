@@ -46,15 +46,23 @@ final class SolarSystemController implements AutoCloseable {
         SolarSystemObjects fetch(SolarSystemQuery query, SolarSystemClient.Progress progress) throws InterruptedException;
     }
 
-    /** Identity and captured query of one request. */
+    /**
+     * Identity and captured query of one request, with the session's frames and sky catalogue for the depth the
+     * frames reach (either may be missing).
+     */
     private static final class Request {
         final SolarSystemQuery query;
+        final eu.startales.spacepixels.fits.FitsFileInformation[] files;
+        final eu.startales.spacepixels.skycatalog.SkyCatalogue catalogue;
         FutureTask<Void> future;
         /** Steps published by the fetch in progress. The worker writes it; the EDT reads it. */
         volatile List<FetchStep> steps = List.of();
 
-        Request(SolarSystemQuery query) {
+        Request(SolarSystemQuery query, eu.startales.spacepixels.fits.FitsFileInformation[] files,
+                eu.startales.spacepixels.skycatalog.SkyCatalogue catalogue) {
             this.query = query;
+            this.files = files;
+            this.catalogue = catalogue;
         }
     }
 
@@ -115,7 +123,7 @@ final class SolarSystemController implements AutoCloseable {
     /** Admits a request on the EDT; its identity invalidates all older queued callbacks. */
     private void start(SolarSystemQuery query) {
         if (closed.get() || session.isClosed()) throw new IllegalStateException("Asteroid and comet workflow is closed.");
-        Request request = new Request(query);
+        Request request = new Request(query, session.getFiles(), session.getSkyCatalogue() == null ? null : session.getSkyCatalogue().get());
         request.future = new FutureTask<>(() -> { run(request); return null; }) {
             /** Keeps memory failures on the worker for the application's fatal handler, even after cancellation. */
             @Override protected void setException(Throwable failure) {
@@ -149,11 +157,38 @@ final class SolarSystemController implements AutoCloseable {
         executor.execute(request.future);
     }
 
+    /**
+     * The depth to fetch to: the setting, or deeper when the frames reach fainter (their limit from the catalogue's
+     * stars plus {@link eu.startales.spacepixels.skycatalog.PhotometryStars#DEPTH_MARGIN}, at most the allowed depth),
+     * with a step that says so; the catalogue's saved check is used, or made now for an older catalogue.
+     */
+    static DepthChoice depth(SolarSystemQuery query, eu.startales.spacepixels.fits.FitsFileInformation[] files,
+                             eu.startales.spacepixels.skycatalog.SkyCatalogue catalogue) {
+        if (catalogue == null || catalogue.stars == null || catalogue.stars.isEmpty()) return new DepthChoice(query, null);
+        var check = catalogue.photometryCheck != null && catalogue.photometryCheck.limitingMagnitude > 0
+                ? catalogue.photometryCheck : SkyCatalogueController.photometryCheck(files, catalogue);
+        double frames = check == null ? Double.NaN : check.solarSystemDepth(eu.startales.spacepixels.config.AppConfig.MAX_SOLAR_SYSTEM_MAGNITUDE);
+        if (!(frames > query.magnitudeLimit())) return new DepthChoice(query, null);
+        String why = String.format(java.util.Locale.US, "The frames reach G %.1f, so objects to V %.1f are asked for; the setting is V %.1f.",
+                check.limitingMagnitude, frames, query.magnitudeLimit());
+        return new DepthChoice(query.withMagnitudeLimit(frames), FetchStep.of("SpacePixels", "Depth from the frames",
+                FetchStep.Status.SUCCEEDED, String.format(java.util.Locale.US, "V %.1f", frames), why, null, null));
+    }
+
+    /** The query to fetch and, when the frames made it deeper, the step that says so. */
+    record DepthChoice(SolarSystemQuery query, FetchStep step) { }
+
     /** Runs the fetch off the EDT, publishing only guarded callbacks. */
     private void run(Request request) {
         SolarSystemObjects result;
         try {
-            result = work.get().fetch(request.query, new SolarSystemClient.Progress() {
+            post(request, () -> showStage(request, "Asteroids and comets: how deep the frames go"));
+            DepthChoice depth = depth(request.query, request.files, request.catalogue);
+            if (depth.step() != null) {
+                post(request, () -> listener.message(String.format(java.util.Locale.US,
+                        "Asking for the asteroids and comets of the field to V %.1f, as deep as the frames go…", depth.query().magnitudeLimit())));
+            }
+            result = work.get().fetch(depth.query(), new SolarSystemClient.Progress() {
                 /** Shows the current question on the EDT. */
                 @Override public void stage(String text) {
                     post(request, () -> showStage(request, "Asteroids and comets: " + text));
@@ -165,11 +200,13 @@ final class SolarSystemController implements AutoCloseable {
                     post(request, SolarSystemController.this::changed);
                 }
             });
+            if (depth.step() != null && result != null && result.fetchSteps != null) result.fetchSteps.add(0, depth.step());
         } catch (InterruptedException interrupted) {
             post(request, () -> cancelled(request));
             return;
         }
-        post(request, () -> finished(request, result, null));
+        SolarSystemObjects fetched = result;
+        post(request, () -> finished(request, fetched, null));
     }
 
     /** Queues delivery without trusting cancellation to retract callbacks already on the EDT. */
