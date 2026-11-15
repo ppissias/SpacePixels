@@ -778,7 +778,7 @@ Reports with saved predictions include an **Asteroids and comets** section. Its 
 - **No known match**: no predicted object agrees. The note names the depth of the predictions, such as *V* 24.0: a fainter or unknown object can still be there.
 - **Not compared**: the predictions do not cover the session.
 
-When the saved predictions stop well above how deep the frames go, an orange note at the top of the section says so: known objects fainter than the predictions are missing, so a finding can show **No known match** although it is known. Fetch the asteroids and comets again, then detect again or use **Compare again** in the Asteroids & Comets window.
+When the saved predictions stop well above how deep the frames go, a note at the top of the section says so: known objects fainter than the predictions are missing, so a finding can show **No known match** although it is known. Fetch the asteroids and comets again, then detect again or use **Compare again** in the Asteroids & Comets window.
 
 For a known object the table shows the **O−C**, the detected position minus the predicted one, in arcseconds (RA scaled by cos Dec): the mean offset, the scatter (RMS) and a small plot of every frame, RA filled and Dec hollow. For a faint mover these are fitted positions, not separate measurements. When the plate solution, the frame times and the observing site are right, the known objects scatter around zero; on a DECam session the three known asteroids were 0.05–0.20″ off on average, with 0.09–0.22″ scatter. A mean offset well beyond its scatter in every known object points to one of the three rather than to the objects. When the observing site cannot have seen the field during the session, a red note at the top of the section says so.
 
