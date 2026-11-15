@@ -98,6 +98,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     /** Fainter Gaia stars fetched for comparison stars when the saved catalogue had too few usable ones; empty until then. */
     private volatile List<SkyCatalogue.Star> fetchedStars = List.of();
     private final JLabel compareLabel = new JLabel(" ");
+    private final JButton identifyAllButton = new JButton("Identify all…");
+    /** Known objects within 1′ of each object from the last Identify all, by object; empty before it. EDT only. */
+    private final Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> nearby = new HashMap<>();
     private final JComboBox<String> binChoice = new JComboBox<>(new String[]{"Single frames", "Bins of 2", "Bins of 4"});
     private final Map<String, LightCurve.Curve> curves = new HashMap<>();
     private final LightCurvePlot curvePlot = new LightCurvePlot();
@@ -529,9 +532,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         compare.setToolTipText("Compares every object with the session's saved asteroid and comet predictions again, by the "
                 + "report's rules: after Fetch Asteroids and Comets, without detecting again. Nothing is sent.");
         compare.addActionListener(e -> compareAgain());
+        identifyAllButton.setToolTipText("Asks JPL and SkyBoT for every known asteroid and comet in the field at mid-session, "
+                + "without a magnitude limit, and lists those within 1′ of each object, as MPChecker would. Sends the field, the time "
+                + "and the observatory code.");
+        identifyAllButton.addActionListener(e -> identifyAll());
         JPanel identifyButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         identifyButtons.add(mpchecker);
         identifyButtons.add(compare);
+        identifyButtons.add(identifyAllButton);
         identifyButtons.setAlignmentX(LEFT_ALIGNMENT);
         panel.add(identifyButtons);
         compareLabel.setForeground(UiStyle.helpColor());
@@ -681,8 +689,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         measureButton.setEnabled(!object.measured() && object.motion() != null && reduction.reduction() != null);
         String measure = object.measured() ? "" : subStackText(object);
         String reduced = reduction.reduction() == null ? "<br>" + escape(reduction.problem()) : "";
+        var near = nearby.get(object.id());
+        String nearText = near == null ? "" : near.isEmpty() ? "<br>Identify all: no known object within 1′."
+                : "<br>Identify all, within 1′: " + escape(String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList())) + ".";
         identificationLabel.setText(UiStyle.htmlWrappedTo(320, object.id() + " · " + statusText(status(object)) + "<br>" + names
-                + escape(object.note() == null ? "" : object.note()) + measure + reduced));
+                + escape(object.note() == null ? "" : object.note()) + nearText + measure + reduced));
         loadPictures(object);
     }
 
@@ -1189,6 +1200,79 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         refreshObjects();
         show(shown == null ? null : report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
         refreshExport();
+    }
+
+    /**
+     * Asks JPL and SkyBoT, on a worker, for every known object in the field at mid-session without a magnitude limit,
+     * and lists those within 1′ of each object with their rate difference. The identifications are not changed.
+     */
+    private void identifyAll() {
+        if (header == null || report.frames().isEmpty()) {
+            compareLabel.setText(UiStyle.htmlWrappedTo(320, "The frames have no plate solution to search around."));
+            return;
+        }
+        long first = report.frames().stream().mapToLong(ReportedObjects.Frame::timestampMillis).filter(t -> t > 0).min().orElse(0);
+        long last = report.frames().stream().filter(f -> f.timestampMillis() > 0)
+                .mapToLong(f -> f.timestampMillis() + Math.max(0, f.exposureMillis())).max().orElse(0);
+        if (first <= 0) {
+            compareLabel.setText(UiStyle.htmlWrappedTo(320, "The frames have no times to search at."));
+            return;
+        }
+        long epoch = first + (last - first) / 2;
+        var field = eu.startales.spacepixels.skycatalog.SkyField.of(header, report.frames().getFirst().width(), report.frames().getFirst().height());
+        String code = settings.getConfig().observatoryCode;
+        var objects = report.objects();
+        identifyAllButton.setEnabled(false);
+        compareLabel.setText("Asking JPL and SkyBoT for every known object in the field…");
+        new SwingWorker<eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects, Void>() {
+            @Override protected eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects doInBackground() throws Exception {
+                return new eu.startales.spacepixels.solarsystem.SolarSystemClient().knownInField(field, epoch, code, site,
+                        eu.startales.spacepixels.mpc.NearbyKnown.RADIUS_ARCSEC / 3600 * 2);
+            }
+
+            @Override protected void done() {
+                if (closed) return;
+                identifyAllButton.setEnabled(true);
+                eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects known;
+                try {
+                    known = get();
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    compareLabel.setText(UiStyle.htmlWrappedTo(320, "Identify all could not ask the services: " + escape(String.valueOf(cause.getMessage()))));
+                    return;
+                }
+                nearby.clear();
+                var found = new ArrayList<String>();
+                int empty = 0;
+                var byFinding = new java.util.LinkedHashMap<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>>();
+                for (var object : objects) {
+                    var place = eu.startales.spacepixels.mpc.NearbyKnown.place(LightCurve.samples(report, object), object.motion(), epoch, header);
+                    byFinding.put(object.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(place, known.objects()));
+                }
+                nearby.putAll(eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(byFinding));
+                for (var object : objects) {
+                    var agreeing = nearby.get(object.id()).stream().filter(eu.startales.spacepixels.mpc.NearbyKnown.Match::motionAgrees).toList();
+                    if (agreeing.isEmpty()) empty++;
+                    else found.add(object.id() + ": " + nearbyText(agreeing.getFirst()));
+                }
+                String services = known.problems().isEmpty() ? "JPL and SkyBoT" : "partly (" + String.join("; ", known.problems()) + ")";
+                compareLabel.setText(UiStyle.htmlWrappedTo(320, escape(String.format(Locale.US,
+                        "Identify all asked %s for every known object, without a magnitude limit (%d in and around the field). ", services,
+                        known.objects().size()) + (found.isEmpty() ? "No object has a known one within 1′ with agreeing motion."
+                        : "Within 1′ with agreeing motion: " + String.join("; ", found) + ".") + (empty > 0 && !found.isEmpty()
+                        ? " " + empty + " others have none." : "") + " A possible identification to check, not an identity.")));
+                if (shown != null) show(report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
+            }
+        }.execute();
+    }
+
+    /** One nearby known object in words: name, magnitude, distance and rate difference. */
+    private static String nearbyText(eu.startales.spacepixels.mpc.NearbyKnown.Match m) {
+        return String.format(Locale.US, "%s%s, %.0f″ away, motion %s by %.1f″/h%s", m.name(),
+                m.magnitude() == null ? "" : String.format(Locale.US, " (V %.1f)", m.magnitude()), m.offsetArcsec(),
+                m.motionAgrees() ? "agreeing" : "differing", m.rateDifferenceArcsecPerHour(),
+                m.nearerFinding() == null ? "" : String.format(Locale.US, " (%s is nearer, %.0f″: perhaps a piece of its track)",
+                        m.nearerFinding(), m.nearerOffsetArcsec()));
     }
 
     /** The report's status, or Weak for a faint mover with a marginal sub-stack. */

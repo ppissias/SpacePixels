@@ -384,6 +384,57 @@ public final class SolarSystemClient {
     }
 
     // ==========================================
+    // IDENTIFY ALL (NO MAGNITUDE LIMIT)
+    // ==========================================
+
+    /** A known object near the field at one time: name, position (degrees), V magnitude and rates on the sky ("/h). */
+    public record Known(String name, boolean comet, double ra, double dec, Double magnitude,
+                        double raRateArcsecPerHour, double decRateArcsecPerHour) { }
+
+    /** Every known object found, the problems of a service that failed, and the questions asked. */
+    public record FieldObjects(List<Known> objects, List<String> problems, List<String> addresses) { }
+
+    /**
+     * Every known asteroid and comet in the field widened by {@code marginDeg}, at {@code epochMillis}, without a
+     * magnitude limit, as MPChecker lists them: JPL SB-Ident and IMCCE SkyBoT, each object once. The observer is the
+     * observatory code, or else the site (JPL) and the geocentre (SkyBoT). A service that fails is a problem, not a
+     * failure, while the other answers.
+     */
+    public FieldObjects knownInField(SkyField field, long epochMillis, String observatoryCode, ObservingSite site, double marginDeg)
+            throws InterruptedException {
+        Map<String, Known> found = new LinkedHashMap<>();
+        List<String> problems = new ArrayList<>();
+        List<String> addresses = new ArrayList<>();
+        double[] box = searchBox(field, marginDeg);
+        String jpl = JplSbIdentUrlBuilder.buildField(observatoryCode, site == null ? null : site.latitudeDeg(),
+                site == null ? null : site.longitudeDeg(), site == null ? null : site.altitudeMeters(), epochMillis,
+                box[0], box[1], box[2], box[3], null, null);
+        try {
+            addresses.add(jpl);
+            for (Candidate c : loadField(jpl, epochMillis).candidates()) found.putIfAbsent(designationKey(c.name()), known(c));
+        } catch (IOException problem) {
+            problems.add("JPL SB-Ident: " + problem.getMessage());
+        }
+        String code = observatoryCode == null || observatoryCode.isBlank() ? GEOCENTRE : observatoryCode.trim();
+        var query = new SolarSystemQuery(null, 0, 0, epochMillis, epochMillis, Double.POSITIVE_INFINITY,
+                new SolarSystemQuery.Observer(code, null, ""));
+        String skybot = skybotUrl(query, field, epochMillis, marginDeg);
+        try {
+            addresses.add(skybot);
+            for (Candidate c : parseSkybot(http.get(URI.create(skybot), SKYBOT_TIMEOUT), epochMillis, Double.POSITIVE_INFINITY)) {
+                found.putIfAbsent(designationKey(c.name()), known(c));
+            }
+        } catch (IOException problem) {
+            problems.add("IMCCE SkyBoT: " + problem.getMessage());
+        }
+        return new FieldObjects(List.copyOf(found.values()), List.copyOf(problems), List.copyOf(addresses));
+    }
+
+    private static Known known(Candidate c) {
+        return new Known(c.name(), c.comet(), c.ra(), c.dec(), c.magnitude(), c.raRateArcsecPerHour(), c.decRateArcsecPerHour());
+    }
+
+    // ==========================================
     // FIELD SEARCH (SB-IDENT)
     // ==========================================
 
