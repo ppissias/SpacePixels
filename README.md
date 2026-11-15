@@ -360,6 +360,8 @@ These optional tools are installed separately and used when configured:
 
 **Stellarium** by the Stellarium Team — Report buttons send sky position, time, observer location and field of view to the local planetarium's Remote Control plugin ([Stellarium](https://stellarium.org/)).
 
+**Find_Orb** by Bill Gray (Project Pluto) — Orbit determination software. In the Asteroids & Comets window, the command-line Find_Orb fits a preliminary orbit to an object's selected observations when it is installed; otherwise the observations are copied for the online Find_Orb ([Find_Orb](https://www.projectpluto.com/find_orb.htm)). Find_Orb is not part of SpacePixels and is installed separately.
+
 #### Open Source Software & Libraries
 
 SpacePixels is built with the following open-source Java libraries and components:

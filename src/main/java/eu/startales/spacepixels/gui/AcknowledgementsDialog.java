@@ -218,6 +218,7 @@ final class AcknowledgementsDialog extends JDialog {
                         "<b>Siril</b> by the Siril Development Team &mdash; The command-line backend for observing-session preparation: calibration, demosaicing, registration and optional reference stacking, according to the selected recipe (<a href='https://siril.org/'>Siril</a>).")
                 + logoCard("stellarium.png", 40, 40,
                         "<b>Stellarium</b> by the Stellarium Team &mdash; Report buttons send sky position, time, observer location and field of view to the local planetarium's Remote Control plugin (<a href='https://stellarium.org/'>Stellarium</a>).")
+                + "<p><b>Find_Orb</b> by Bill Gray (Project Pluto) &mdash; Orbit determination software. In the Asteroids &amp; Comets window, the command-line Find_Orb fits a preliminary orbit to an object's selected observations when it is installed; otherwise the observations are copied for the online Find_Orb (<a href='https://www.projectpluto.com/find_orb.htm'>Find_Orb</a>). Find_Orb is not part of SpacePixels and is installed separately.</p>"
                 + "<hr style='border: 0; border-top: 1px solid #666666; margin: 14px 0 10px 0;'>"
                 + "<h3>Open Source Software & Libraries</h3>"
                 + "<p>SpacePixels is built with the following open-source Java libraries and components:</p>"
