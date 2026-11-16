@@ -24,37 +24,50 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * Solves one frame with ASTAP or Astrometry.net. The result is the solver's answer, which says itself whether the
- * frame was solved; an error before the solver answers fails the job with its reason.
+ * Solves one frame with ASTAP, Astrometry.net or the local solver. The result is the solver's answer, which says
+ * itself whether the frame was solved; an error before the solver answers fails the job with its reason.
  */
 public class PlateSolveTask implements Job<PlateSolveResult> {
     private final PlateSolveService solver;
     private final String filePath;
-    private final boolean useAstap;
-    private final boolean useAstrometryNet;
+    private final PlateSolveService.Solver choice;
 
     /** Solves with the session's solver, captured when the job is created; null fails when it runs. */
-    public PlateSolveTask(PlateSolveService solver, String filePath, boolean useAstap, boolean useAstrometryNet) {
+    public PlateSolveTask(PlateSolveService solver, String filePath, PlateSolveService.Solver choice) {
         this.solver = solver;
         this.filePath = filePath;
-        this.useAstap = useAstap;
-        this.useAstrometryNet = useAstrometryNet;
+        this.choice = choice;
     }
 
     @Override
     public JobOutcome<PlateSolveResult> run(JobContext context) throws Exception {
         if (context.isCancelled()) return JobOutcome.cancelled();
         AtomicReference<PlateSolveOperation.Progress> progress = new AtomicReference<>();
-        PlateSolveOperation operation = solver.startSolve(filePath, useAstap, useAstrometryNet, progress::set);
-        if (useAstap || !useAstrometryNet) {
+        PlateSolveOperation operation = solver.startSolve(filePath, choice, choice == PlateSolveService.Solver.LOCAL_SOLVER
+                ? latest -> progress.set(localWording(latest)) : progress::set);
+        if (choice == PlateSolveService.Solver.ASTAP) {
             return awaitSolve(operation, context, progress);
         }
+        JobOutcome<PlateSolveResult> outcome;
         try {
-            return awaitSolve(operation, context, progress);
+            outcome = awaitSolve(operation, context, progress);
         } catch (Exception failure) {
             // A lost connection often has no message, and a refused login depends on the account: say which.
-            throw new IOException(solver.astrometryNetFailure(failure), failure);
+            throw new IOException(solver.solveFailure(choice, failure), failure);
         }
+        if (choice == PlateSolveService.Solver.LOCAL_SOLVER && outcome instanceof JobOutcome.Completed<PlateSolveResult> solved) {
+            return JobOutcome.completed(solver.keepLocalSolverSolution(solved.result()));
+        }
+        return outcome;
+    }
+
+    /** JPlateSolve names Astrometry.net in its progress; a local solver is named as such. */
+    static PlateSolveOperation.Progress localWording(PlateSolveOperation.Progress progress) {
+        if (progress == null || progress.message() == null) return progress;
+        String message = progress.message().replace("Astrometry.net is", "The local solver is")
+                .replace("Astrometry.net", "the local solver");
+        if (!message.isEmpty()) message = Character.toUpperCase(message.charAt(0)) + message.substring(1);
+        return new PlateSolveOperation.Progress(progress.phase(), progress.elapsed(), message);
     }
 
     static JobOutcome<PlateSolveResult> awaitSolve(PlateSolveOperation operation, JobContext context,

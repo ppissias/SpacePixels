@@ -42,6 +42,10 @@ public class ConfigurationPanel extends JPanel {
     /** Wide enough for a normal Astrometry.net API key. A longer key scrolls inside the field. */
     private static final int API_KEY_COLUMNS = 18;
 
+    /** Wide enough for an address such as http://localhost:5000/. */
+    private static final int LOCAL_SOLVER_ADDRESS_COLUMNS = 18;
+    /** Watney Astrometry, a free solver whose solver API offers the Astrometry.net web API. */
+    static final String WATNEY_URL = "https://github.com/Jusas/WatneyAstrometry";
     /** ASTAP download page, offered when no star database is found. */
     static final String ASTAP_DOWNLOAD_URL = "https://www.hnsky.org/astap.htm";
     /** FITS keywords the report reads for the site, in the same order (one list, owned by ObservingSite). */
@@ -70,6 +74,14 @@ public class ConfigurationPanel extends JPanel {
     private final JLabel astrometryStatus = statusLabel();
     /** The running login check; null when none runs. */
     private SwingWorker<Void, Void> astrometryCheck;
+    private final JTextField localSolverAddressField = new JTextField();
+    private final JPasswordField localSolverKeyField = new JPasswordField();
+    private final JButton localSolverCheckButton = new JButton("Check");
+    private final JLabel localSolverStatus = statusLabel();
+    private final JButton watneyLink = AccessibleControls.link("Watney Astrometry (free download)",
+            "Download Watney Astrometry", () -> openBrowser(WATNEY_URL));
+    /** The running local solver check; null when none runs. */
+    private SwingWorker<Void, Void> localSolverCheck;
     private final DefaultComboBoxModel<String> siteNames = new DefaultComboBoxModel<>();
     private final JComboBox<String> siteCombo = new JComboBox<>(siteNames);
     private final JButton newSiteButton = new JButton("New");
@@ -106,6 +118,8 @@ public class ConfigurationPanel extends JPanel {
     private String savedAstap = "";
     private boolean savedAstrometryUseOwnKey;
     private String savedAstrometryApiKey = "";
+    private String savedLocalSolverAddress = "";
+    private String savedLocalSolverApiKey = "";
     private double savedStarDepth;
     private double savedSolarDepth;
     private long saveVersion;
@@ -187,6 +201,32 @@ public class ConfigurationPanel extends JPanel {
                         + "dashboard. SpacePixels keeps it in plain text in <code>spacepixels_app.json</code> in your home "
                         + "folder. <b>Check</b> logs in without uploading anything.",
                 rightColumn(astrometryChoiceRow, rightColumn(astrometryKeyRow, astrometryStatus))));
+
+        localSolverAddressField.setColumns(LOCAL_SOLVER_ADDRESS_COLUMNS);
+        localSolverKeyField.setColumns(API_KEY_COLUMNS);
+        localSolverCheckButton.setToolTipText("Log in to the local solver. No frame is sent.");
+        watneyLink.setToolTipText(WATNEY_URL);
+        JPanel localAddressRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        localAddressRow.add(new JLabel("Address"));
+        localAddressRow.add(Box.createHorizontalStrut(6));
+        localAddressRow.add(localSolverAddressField);
+        JPanel localKeyRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
+        localKeyRow.add(new JLabel("API key"));
+        localKeyRow.add(Box.createHorizontalStrut(6));
+        localKeyRow.add(localSolverKeyField);
+        localKeyRow.add(Box.createHorizontalStrut(6));
+        localKeyRow.add(localSolverCheckButton);
+        plateSolving.add(createConfigRow(
+                "Local Solver (Astrometry.net API)",
+                "A plate solver on this computer or your network that answers like Astrometry.net, used by <b>Plate Solve "
+                        + "Selected</b> with the <b>Astrometry.net (local)</b> option, which is offered once an address is set. "
+                        + "Enter its address, such as <code>http://localhost:5000/</code>, and its API key if it asks for one. "
+                        + "<b>Watney Astrometry</b> is one such solver: it is free and solves in seconds; run its solver API "
+                        + "(<code>watney-api</code>), which has the key in <code>apikeys.yml</code>. Frames are sent as a copy "
+                        + "without your site location or observer name. <b>Check</b> logs in without sending a frame.",
+                rightColumn(localAddressRow, rightColumn(localKeyRow, verticalStack(localSolverStatus, watneyLink)))));
+        localSolverAddressField.getAccessibleContext().setAccessibleName("Local solver address");
+        localSolverKeyField.getAccessibleContext().setAccessibleName("Local solver API key");
         mainContent.add(plateSolving);
 
         JPanel skyCatalogue = section("Sky Catalogue (Annotate)");
@@ -295,6 +335,14 @@ public class ConfigurationPanel extends JPanel {
         astrometryAnonymousButton.addActionListener(e -> astrometryAccountChanged());
         astrometryOwnKeyButton.addActionListener(e -> astrometryAccountChanged());
         astrometryCheckButton.addActionListener(e -> checkAstrometryNet());
+        localSolverCheckButton.addActionListener(e -> checkLocalSolver());
+        for (javax.swing.text.JTextComponent field : List.of(localSolverAddressField, localSolverKeyField)) {
+            field.getDocument().addDocumentListener(new DocumentListener() {
+                @Override public void insertUpdate(DocumentEvent e) { localSolverChanged(); }
+                @Override public void removeUpdate(DocumentEvent e) { localSolverChanged(); }
+                @Override public void changedUpdate(DocumentEvent e) { localSolverChanged(); }
+            });
+        }
         astrometryKeyField.getDocument().addDocumentListener(new DocumentListener() {
             @Override
             public void insertUpdate(DocumentEvent e) {
@@ -353,6 +401,8 @@ public class ConfigurationPanel extends JPanel {
             astrometryAnonymousButton.setSelected(!config.astrometryNetUseOwnKey);
             astrometryKeyField.setText(nullToEmpty(config.astrometryNetApiKey));
             astrometryKeyField.setEnabled(config.astrometryNetUseOwnKey);
+            localSolverAddressField.setText(nullToEmpty(config.localSolverAddress));
+            localSolverKeyField.setText(nullToEmpty(config.localSolverApiKey));
             ObservingSites.ensure(config);
             fillSite();
         } finally {
@@ -367,11 +417,14 @@ public class ConfigurationPanel extends JPanel {
         savedAstap = nullToEmpty(config.astapExecutablePath);
         savedAstrometryUseOwnKey = config.astrometryNetUseOwnKey;
         savedAstrometryApiKey = nullToEmpty(config.astrometryNetApiKey);
+        savedLocalSolverAddress = nullToEmpty(config.localSolverAddress);
+        savedLocalSolverApiKey = nullToEmpty(config.localSolverApiKey);
         savedStarDepth = config.skyCatalogueStarMagnitude();
         savedSolarDepth = config.solarSystemMagnitude();
         validateAll();
         checkAstap();
         showAstrometryAccountNote();
+        showLocalSolverNote();
         updateSavedState();
         fetchSettingsChanged.run();
     }
@@ -592,6 +645,8 @@ public class ConfigurationPanel extends JPanel {
                 savedAstap = nullToEmpty(snapshot.astapExecutablePath);
                 savedAstrometryUseOwnKey = snapshot.astrometryNetUseOwnKey;
                 savedAstrometryApiKey = nullToEmpty(snapshot.astrometryNetApiKey);
+                savedLocalSolverAddress = nullToEmpty(snapshot.localSolverAddress);
+                savedLocalSolverApiKey = nullToEmpty(snapshot.localSolverApiKey);
                 savedStarDepth = snapshot.skyCatalogueStarMagnitude();
                 savedSolarDepth = snapshot.solarSystemMagnitude();
             }
@@ -735,6 +790,8 @@ public class ConfigurationPanel extends JPanel {
                 || !nullToEmpty(config().astapExecutablePath).equals(savedAstap)
                 || config().astrometryNetUseOwnKey != savedAstrometryUseOwnKey
                 || !nullToEmpty(config().astrometryNetApiKey).equals(savedAstrometryApiKey)
+                || !nullToEmpty(config().localSolverAddress).equals(savedLocalSolverAddress)
+                || !nullToEmpty(config().localSolverApiKey).equals(savedLocalSolverApiKey)
                 || config().skyCatalogueStarMagnitude() != savedStarDepth
                 || config().solarSystemMagnitude() != savedSolarDepth;
     }
@@ -836,6 +893,85 @@ public class ConfigurationPanel extends JPanel {
         astrometryCheck.execute();
     }
 
+    // ==========================================
+    // LOCAL SOLVER (ASTROMETRY.NET API)
+    // ==========================================
+
+    /** Applies the address and the key at once and keeps them for the next start, like the account. */
+    private void localSolverChanged() {
+        if (loading) {
+            return;
+        }
+        AppConfig config = config();
+        config.localSolverAddress = localSolverAddressField.getText().trim();
+        config.localSolverApiKey = new String(localSolverKeyField.getPassword()).trim();
+        showLocalSolverNote();
+        updateSavedState();
+        fetchSettingsChanged.run();
+        saveDefaults(false);
+    }
+
+    private void showLocalSolverNote() {
+        String typed = localSolverAddressField.getText();
+        var solver = AstrometryNetAccount.localSolverAddress(typed);
+        localSolverCheckButton.setEnabled(solver != null && localSolverCheck == null);
+        if (typed == null || typed.isBlank()) {
+            showStatus(localSolverStatus, null, wrapStatus("Not set. The Astrometry.net (local) option is offered once an address is entered."));
+        } else if (solver == null) {
+            showStatus(localSolverStatus, wrapStatus(AstrometryNetAccount.localSolverAddressProblem(typed)), null);
+        } else {
+            showStatus(localSolverStatus, null, wrapStatus("Local solves go to " + solver + "."));
+        }
+    }
+
+    /** Logs in to the local solver on a worker thread. No frame is sent. */
+    private void checkLocalSolver() {
+        if (closing.getAsBoolean() || localSolverCheck != null) {
+            return;
+        }
+        AppConfig solver = config().copy();
+        var checked = AstrometryNetAccount.localSolver(solver);
+        if (checked == null) {
+            showLocalSolverNote();
+            return;
+        }
+        localSolverCheckButton.setEnabled(false);
+        showStatus(localSolverStatus, null, wrapStatus("Checking with " + checked.address() + "…"));
+        localSolverCheck = new SwingWorker<>() {
+            @Override
+            protected Void doInBackground() throws Exception {
+                AstrometryNetAccount.checkLocalLogin(solver);
+                return null;
+            }
+
+            @Override
+            protected void done() {
+                if (localSolverCheck != this || closing.getAsBoolean()) {
+                    return;
+                }
+                localSolverCheck = null;
+                if (!checked.equals(AstrometryNetAccount.localSolver(config()))) {
+                    // The address or the key changed during the check, so this answer is about the previous one.
+                    showLocalSolverNote();
+                    return;
+                }
+                localSolverCheckButton.setEnabled(true);
+                try {
+                    get();
+                    showStatus(localSolverStatus, null, wrapStatus("✓ The local solver at " + checked.address() + " accepted the login"));
+                } catch (CancellationException ignored) {
+                    showLocalSolverNote();
+                } catch (ExecutionException e) {
+                    Throwable failure = e.getCause() != null ? e.getCause() : e;
+                    showStatus(localSolverStatus, wrapStatus(failure.getMessage() != null ? failure.getMessage() : failure.toString()), null);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        };
+        localSolverCheck.execute();
+    }
+
     /** A login failure can be a long sentence, so the status wraps at the width of the account controls. */
     private void showAstrometryStatus(String problem, String note) {
         showStatus(astrometryStatus, problem == null ? null : wrapStatus(problem), note == null ? null : wrapStatus(note));
@@ -900,6 +1036,11 @@ public class ConfigurationPanel extends JPanel {
         astrometryCheck = null;
         if (check != null) {
             check.cancel(true);
+        }
+        SwingWorker<Void, Void> local = localSolverCheck;
+        localSolverCheck = null;
+        if (local != null) {
+            local.cancel(true);
         }
     }
 

@@ -217,7 +217,7 @@ public class PlateSolveServiceAstrometryNetAccountTest {
         });
         File frame = FitsUploadCopyTest.frameWithSite(folder.newFile("frame.fit"));
         try {
-            service.startSolve(frame.getPath(), false, true, null);
+            service.startSolve(frame.getPath(), PlateSolveService.Solver.ASTROMETRY_NET, null);
             fail("the start failure must reach the caller");
         } catch (IllegalStateException expected) {
             assertFalse(clients.get(0).uploaded.exists());
@@ -231,7 +231,7 @@ public class PlateSolveServiceAstrometryNetAccountTest {
     }
 
     private static void solve(PlateSolveService service, File frame) throws Exception {
-        PlateSolveOperation operation = service.startSolve(frame.getPath(), false, true, null);
+        PlateSolveOperation operation = service.startSolve(frame.getPath(), PlateSolveService.Solver.ASTROMETRY_NET, null);
         assertEquals(PlateSolveOperation.Status.SUCCEEDED,
                 operation.completion().toCompletableFuture().get(5, TimeUnit.SECONDS).status());
     }

@@ -23,7 +23,9 @@ import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.DetectionRunOptions;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.fits.StretchAlgorithm;
+import eu.startales.spacepixels.platesolve.AstrometryNetAccount;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
+import eu.startales.spacepixels.platesolve.PlateSolveService;
 import eu.startales.spacepixels.report.SessionReports;
 import eu.startales.spacepixels.fits.WcsSolutionResolver;
 import eu.startales.spacepixels.skycatalog.FetchStep;
@@ -211,6 +213,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             iterativeAction, qualityControlAction, chooseFolderAction, prepareRawAction);
     private final JRadioButton astapSolveRadio = new JRadioButton("ASTAP");
     private final JRadioButton astrometryNetSolveRadio = new JRadioButton("Astrometry.net (online)");
+    private final JRadioButton localSolverSolveRadio = new JRadioButton("Astrometry.net (local)");
 
     // Workflow-strip status lines, built only from what is already known (headers, selection, solved flags)
     private final JLabel prepareStatus = new JLabel();
@@ -400,7 +403,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         ButtonGroup solverGroup = new ButtonGroup();
         solverGroup.add(astapSolveRadio);
         solverGroup.add(astrometryNetSolveRadio);
+        solverGroup.add(localSolverSolveRadio);
         astapSolveRadio.setSelected(true);
+        refreshLocalSolverChoice();
 
         // As tall as Detect Moving Targets beside it, without its accent colours.
         autoTuneButton.putClientProperty("FlatLaf.style", "font: +2; margin: 5,10,5,14; iconTextGap: 6");
@@ -410,7 +415,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                 buttonRow(importButton),
                 buttonRow(convertMonoButton));
         JPanel astrometryGroup = new WorkflowStep(workflowSteps, 2, "Astrometry", true, correctionStatusRow(),
-                buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio),
+                buttonRow(new JLabel("Solver:"), astapSolveRadio, astrometryNetSolveRadio, localSolverSolveRadio),
                 buttonRow(solveButton),
                 fetchSettings);
         JPanel inspectGroup = new WorkflowStep(workflowSteps, 3, "Inspect", true, inspectStatus,
@@ -1012,9 +1017,25 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         ProcessingSession owner = sessions.current();
         if (owner == null) return;
-        startJob(JobKind.PLATE_SOLVE, owner, new PlateSolveTask(owner.getPlateSolveService(), selectedFile.getFilePath(),
-                        astapSolveRadio.isSelected(), astrometryNetSolveRadio.isSelected()),
+        PlateSolveService.Solver solver = astrometryNetSolveRadio.isSelected() ? PlateSolveService.Solver.ASTROMETRY_NET
+                : localSolverSolveRadio.isSelected() ? PlateSolveService.Solver.LOCAL_SOLVER : PlateSolveService.Solver.ASTAP;
+        startJob(JobKind.PLATE_SOLVE, owner, new PlateSolveTask(owner.getPlateSolveService(), selectedFile.getFilePath(), solver),
                 (handle, outcome) -> showSolveOutcome(selectedFile, outcome));
+    }
+
+    /**
+     * The local solver option is offered once its address is set on the Astrometry Config tab; when the address is
+     * cleared while it is chosen, ASTAP is chosen instead.
+     */
+    private void refreshLocalSolverChoice() {
+        AstrometryNetAccount.LocalSolver local = applicationSettings == null ? null
+                : AstrometryNetAccount.localSolver(applicationSettings.getConfig());
+        localSolverSolveRadio.setEnabled(local != null);
+        localSolverSolveRadio.setToolTipText(local != null
+                ? "Solve with the local solver at " + local.address() + " (set in the Astrometry Config tab)."
+                : "A solver on this computer that offers the Astrometry.net web API, such as Watney Astrometry. "
+                        + "Set its address in the Astrometry Config tab first.");
+        if (local == null && localSolverSolveRadio.isSelected()) astapSolveRadio.setSelected(true);
     }
 
     private void resizeTableColumns(JTable table) {
@@ -1142,6 +1163,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Updates the status line of every group, and the commands with their disabled-button reasons. */
     @Override
     public void refreshWorkflowStatus() {
+        refreshLocalSolverChoice();
         ProcessingSession current = sessions.current();
         fetchSettings.showSettings(applicationSettings.getConfig(), current == null ? new FitsFileInformation[0] : current.getFiles(),
                 skyCatalogue().get(), skyCatalogue().getSolarSystem());

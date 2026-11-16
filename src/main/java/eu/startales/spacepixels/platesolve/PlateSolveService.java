@@ -71,11 +71,27 @@ public final class PlateSolveService implements AutoCloseable {
             "AP_DMAX",
             "BP_DMAX");
 
+    /** The plate solvers that Plate Solve Selected offers. */
+    public enum Solver {
+        ASTAP,
+        /** The online service, nova.astrometry.net. */
+        ASTROMETRY_NET,
+        /** A solver that offers the Astrometry.net web API at the address set on the Astrometry Config tab. */
+        LOCAL_SOLVER
+    }
+
+    /** The provenance written into the header for a frame solved by the local solver. */
+    static final String LOCAL_SOLVER_SOURCE = "local solver (Astrometry.net API)";
+
     private final AppConfig appConfig;
     private final Function<String, AstrometryDotNet> astrometryNetClients;
+    private final Function<AstrometryNetAccount.LocalSolver, AstrometryDotNet> localSolverClients;
     /** The Astrometry.net client for {@link #astrometryNetClientKey}, made at the first online solve. */
     private AstrometryDotNet astrometryNetInterface;
     private String astrometryNetClientKey;
+    /** The local solver's client for {@link #localSolverClientFor}, made at the first local solve. */
+    private AstrometryDotNet localSolverClient;
+    private AstrometryNetAccount.LocalSolver localSolverClientFor;
 
     /**
      * Solves with the application's live settings: the ASTAP path and the Astrometry.net key are read when a solve
@@ -87,20 +103,33 @@ public final class PlateSolveService implements AutoCloseable {
 
     /** {@code astrometryNetClients} makes a client for a key; "" is an anonymous login. */
     public PlateSolveService(AppConfig appConfig, Function<String, AstrometryDotNet> astrometryNetClients) {
+        this(appConfig, astrometryNetClients, AstrometryNetAccount::newLocalClient);
+    }
+
+    /** {@code localSolverClients} makes a client for the local solver. */
+    public PlateSolveService(AppConfig appConfig, Function<String, AstrometryDotNet> astrometryNetClients,
+                             Function<AstrometryNetAccount.LocalSolver, AstrometryDotNet> localSolverClients) {
         this.appConfig = appConfig;
         this.astrometryNetClients = astrometryNetClients;
+        this.localSolverClients = localSolverClients;
     }
 
     /**
-     * Starts solving one frame with ASTAP, or with Astrometry.net on a copy without the observing site and the
-     * observer, reporting phases to {@code progress}. The returned operation can be cancelled and joined.
+     * Starts solving one frame with ASTAP, or with Astrometry.net or the local solver on a copy without the observing
+     * site and the observer, reporting phases to {@code progress}. The returned operation can be cancelled and joined.
      */
-    public PlateSolveOperation startSolve(String path, boolean astap, boolean astrometry,
+    public PlateSolveOperation startSolve(String path, Solver solver,
                                           Consumer<PlateSolveOperation.Progress> progress) throws IOException {
-        if (!astap && !astrometry) throw new IOException("No plate solver was chosen.");
+        if (solver == null) throw new IOException("No plate solver was chosen.");
+        boolean astap = solver == Solver.ASTAP;
         String executable = appConfig.astapExecutablePath;
         if (astap && (executable == null || executable.isBlank() || !new File(executable).isFile())) {
             throw new IOException("ASTAP executable path is not correct:" + executable);
+        }
+        AstrometryNetAccount.LocalSolver local = null;
+        if (solver == Solver.LOCAL_SOLVER) {
+            local = AstrometryNetAccount.localSolver(appConfig);
+            if (local == null) throw new IOException("Set the local solver's address on the Astrometry Config tab first.");
         }
         io.github.ppissias.jplatesolve.SolveHints hints;
         try (Fits fits = new Fits(new File(path))) {
@@ -113,11 +142,12 @@ public final class PlateSolveService implements AutoCloseable {
         if (astap) {
             return ASTAPInterface.startSolve(new File(executable), path, null, progress, hints);
         }
-        if (astrometry) {
-            // Anonymous uploads share one account: send a copy without the site and the observer.
+        {
+            // Anonymous uploads share one account: send a copy without the site and the observer (to a local solver too).
             File upload = FitsUploadCopy.create(new File(path));
             try {
-                AstrometryDotNet client = astrometryNetClient(appConfig.astrometryNetApiKeyInUse());
+                AstrometryDotNet client = local != null ? localSolverClient(local)
+                        : astrometryNetClient(appConfig.astrometryNetApiKeyInUse());
                 PlateSolveOperation operation = hints == null ? client.startBlindSolve(upload, progress)
                         : client.startSolve(upload, hints, progress);
                 operation.completion().whenComplete((outcome, failure) -> deleteUploadCopy(upload));
@@ -127,7 +157,6 @@ public final class PlateSolveService implements AutoCloseable {
                 throw failure;
             }
         }
-        throw new IOException("No plate solver was chosen.");
     }
 
     private static void deleteUploadCopy(File upload) {
@@ -141,11 +170,57 @@ public final class PlateSolveService implements AutoCloseable {
     /** The client for this key. A client made for another key is closed and replaced. */
     public synchronized AstrometryDotNet astrometryNetClient(String apiKey) {
         if (astrometryNetInterface == null || !apiKey.equals(astrometryNetClientKey)) {
-            close();
+            closeOnlineClient();
             astrometryNetInterface = astrometryNetClients.apply(apiKey);
             astrometryNetClientKey = apiKey;
         }
         return astrometryNetInterface;
+    }
+
+    /** The client for this local solver. A client made for another address or key is closed and replaced. */
+    synchronized AstrometryDotNet localSolverClient(AstrometryNetAccount.LocalSolver solver) {
+        if (localSolverClient == null || !solver.equals(localSolverClientFor)) {
+            closeLocalClient();
+            localSolverClient = localSolverClients.apply(solver);
+            localSolverClientFor = solver;
+        }
+        return localSolverClient;
+    }
+
+    /** What to tell the user when a solve with this solver fails before it answers. */
+    public String solveFailure(Solver solver, Throwable failure) {
+        return solver == Solver.LOCAL_SOLVER
+                ? AstrometryNetAccount.localFailureMessage(failure, AstrometryNetAccount.localSolver(appConfig))
+                : astrometryNetFailure(failure);
+    }
+
+    /**
+     * A local solver's solution with its WCS file fetched at once into a temporary file, which the result then names
+     * (and {@link #cleanupSolveArtifacts} deletes): a local solver keeps its jobs only for a while (Watney ten
+     * minutes by default), and a local address means nothing in a header later. The links to the solver's own pages
+     * are left out. A failed solve is returned as it is.
+     *
+     * @throws IOException when the solver gave no WCS file that can be read
+     */
+    public PlateSolveResult keepLocalSolverSolution(PlateSolveResult result) throws IOException {
+        if (result == null || !result.isSuccess() || result.getSolveInformation() == null) return result;
+        Map<String, String> information = new HashMap<>(result.getSolveInformation());
+        String link = normalizeExternalUrl(information.get("wcs_link"));
+        if (link == null) throw new IOException("The local solver solved the frame but gave no WCS file.");
+        File wcs = Files.createTempFile("spacepixels-local-wcs-", ".wcs").toFile();
+        try {
+            downloadFile(new URL(link), wcs.getAbsolutePath());
+            if (readWcsHeaderCards(wcs).isEmpty()) throw new IOException("the file holds no WCS");
+        } catch (Exception failure) {
+            Files.deleteIfExists(wcs.toPath());
+            throw new IOException("The local solver solved the frame, but its WCS file could not be read: "
+                    + (failure.getMessage() != null ? failure.getMessage() : failure.getClass().getSimpleName()), failure);
+        }
+        information.put("wcs_link", wcs.toURI().toString());
+        information.put("source", LOCAL_SOLVER_SOURCE);
+        information.remove("annotated_image_link");
+        information.remove("status_page_link");
+        return new PlateSolveResult(true, result.getFailureReason(), result.getWarning(), information);
     }
 
     /**
@@ -156,12 +231,29 @@ public final class PlateSolveService implements AutoCloseable {
         return AstrometryNetAccount.failureMessage(failure, !appConfig.astrometryNetApiKeyInUse().isEmpty());
     }
 
-    /** Closes the Astrometry.net client, if one was made; JPlateSolve cancels and joins its solves. */
+    /** Closes the Astrometry.net and local solver clients, if made; JPlateSolve cancels and joins their solves. */
     @Override
     public synchronized void close() {
+        try {
+            closeOnlineClient();
+        } finally {
+            closeLocalClient();
+        }
+    }
+
+    private synchronized void closeOnlineClient() {
         AstrometryDotNet client = astrometryNetInterface;
         astrometryNetInterface = null;
         astrometryNetClientKey = null;
+        if (client != null) {
+            client.close();
+        }
+    }
+
+    private synchronized void closeLocalClient() {
+        AstrometryDotNet client = localSolverClient;
+        localSolverClient = null;
+        localSolverClientFor = null;
         if (client != null) {
             client.close();
         }

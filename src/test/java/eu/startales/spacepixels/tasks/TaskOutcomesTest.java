@@ -54,7 +54,7 @@ public class TaskOutcomesTest {
         AppConfig config = new AppConfig();
         config.astapExecutablePath = new File(folder.getRoot(), "missing-astap.exe").getAbsolutePath();
         try (PlateSolveService solver = new PlateSolveService(config)) {
-            JobOutcome<?> solved = outcomeOf(new PlateSolveTask(solver, missingFrame().getFilePath(), true, false));
+            JobOutcome<?> solved = outcomeOf(new PlateSolveTask(solver, missingFrame().getFilePath(), PlateSolveService.Solver.ASTAP));
             assertTrue(String.valueOf(solved), solved instanceof JobOutcome.Failed<?> failed
                     && failed.reason().startsWith("ASTAP executable path is not correct"));
         }
@@ -65,7 +65,7 @@ public class TaskOutcomesTest {
         StretchAlgorithm algorithm = StretchAlgorithm.values()[0];
         assertFailed(outcomeOf(new BatchStretchTask(null, 1, 1, algorithm)));
         assertFailed(outcomeOf(new BatchConvertMonoTask(null)));
-        assertFailed(outcomeOf(new PlateSolveTask(null, missingFrame().getFilePath(), true, false)));
+        assertFailed(outcomeOf(new PlateSolveTask(null, missingFrame().getFilePath(), PlateSolveService.Solver.ASTAP)));
         assertFailed(outcomeOf(new AutoTuneTask(null, new DetectionConfig(), 10,
                 AutoTuneProfile.values()[0])));
         assertFailed(outcomeOf(new DetectionTask(null, new DetectionConfig())));

@@ -7,6 +7,8 @@ public class AppConfig {
         copy.sirilExecutablePath = sirilExecutablePath;
         copy.astrometryNetUseOwnKey = astrometryNetUseOwnKey;
         copy.astrometryNetApiKey = astrometryNetApiKey;
+        copy.localSolverAddress = localSolverAddress;
+        copy.localSolverApiKey = localSolverApiKey;
         copy.observatoryCode = observatoryCode;
         copy.imageRA = imageRA;
         copy.imageDEC = imageDEC;
@@ -39,6 +41,13 @@ public class AppConfig {
     public boolean astrometryNetUseOwnKey = false;
     /** The observer's own Astrometry.net API key. Kept while solving anonymously, so it can be chosen again. */
     public String astrometryNetApiKey = "";
+    /**
+     * The address of a plate solver on this computer or the network that offers the Astrometry.net web API (such as
+     * Watney Astrometry's solver API), as typed; empty when there is none.
+     */
+    public String localSolverAddress = "";
+    /** The key that local solver asks for, if any; empty sends JPlateSolve's guest key. */
+    public String localSolverApiKey = "";
     public String observatoryCode = "";
     public String imageRA = "";
     public String imageDEC = "";
