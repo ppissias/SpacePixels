@@ -920,7 +920,7 @@ public class ConfigurationPanel extends JPanel {
         } else if (solver == null) {
             showStatus(localSolverStatus, wrapStatus(AstrometryNetAccount.localSolverAddressProblem(typed)), null);
         } else {
-            showStatus(localSolverStatus, null, wrapStatus("Local solves go to " + solver + "."));
+            showStatus(localSolverStatus, null, wrapStatus("Local solves go to " + solver));
         }
     }
 
@@ -977,9 +977,10 @@ public class ConfigurationPanel extends JPanel {
         showStatus(astrometryStatus, problem == null ? null : wrapStatus(problem), note == null ? null : wrapStatus(note));
     }
 
+    /** A Plate Solving status, wrapped and aligned to the right edge of the controls above it. */
     private static String wrapStatus(String text) {
         String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return "<html>" + escaped + "</html>";
+        return "<html><div align='right'>" + escaped + "</div></html>";
     }
 
     // ==========================================
@@ -1143,11 +1144,14 @@ public class ConfigurationPanel extends JPanel {
         return panel;
     }
 
+    /** A status above a link, both against the right edge, under the controls they belong to. */
     private static JPanel verticalStack(JComponent top, JComponent bottom) {
         JPanel panel = new JPanel();
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
-        top.setAlignmentX(Component.LEFT_ALIGNMENT);
-        bottom.setAlignmentX(Component.LEFT_ALIGNMENT);
+        top.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        bottom.setAlignmentX(Component.RIGHT_ALIGNMENT);
+        // A link's text meets the same right edge as the status text, without the button's side padding.
+        if (bottom instanceof AbstractButton link) link.setMargin(new Insets(2, 0, 2, 0));
         panel.add(top);
         panel.add(Box.createVerticalStrut(4));
         panel.add(bottom);
