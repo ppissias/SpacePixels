@@ -221,9 +221,8 @@ public class ConfigurationPanel extends JPanel {
                 "A plate solver on this computer or your network that answers like Astrometry.net, used by <b>Plate Solve "
                         + "Selected</b> with the <b>Astrometry.net (local)</b> option, which is offered once an address is set. "
                         + "Enter its address, such as <code>http://localhost:5000/</code>, and its API key if it asks for one. "
-                        + "<b>Watney Astrometry</b> is one such solver: it is free and solves in seconds; run its solver API "
-                        + "(<code>watney-api</code>), which has the key in <code>apikeys.yml</code>. Frames are sent as a copy "
-                        + "without your site location or observer name. <b>Check</b> logs in without sending a frame.",
+                        + "<b>Watney Astrometry</b> is one such solver: run its solver API (<code>watney-api</code>), which "
+                        + "has the key in <code>apikeys.yml</code>.",
                 rightColumn(localAddressRow, rightColumn(localKeyRow, verticalStack(localSolverStatus, watneyLink)))));
         localSolverAddressField.getAccessibleContext().setAccessibleName("Local solver address");
         localSolverKeyField.getAccessibleContext().setAccessibleName("Local solver API key");
