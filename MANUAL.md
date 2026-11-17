@@ -100,7 +100,7 @@ The window has four tabs:
 
 **4 Detect** says under its heading which settings are in use and, after this folder has a saved auto-tune, when that auto-tune was run. Below it is split in two. On the left, **Auto-Tune Settings** sits over a small box with the detection settings now in use: **Sigma**, **Grow** and **Min px** of the detection and of the star mask, then the mask overlap and the star jitter. **Edit settings…** in the corner of that box opens Detection Settings. On the right are **Detect Moving Targets**, **Detect Iteratively** and, once there is a report, **Open last report** and **Open output folder**.
 
-**Help**, at the right end of the tab bar, holds **User Manual**, which opens this manual in your browser, **Tips** and **Acknowledgements**.
+**Help**, at the right end of the tab bar, holds **User Manual**, which opens this manual in your browser, **Tips**, **Acknowledgements** and **About SpacePixels**, which shows the version, the copyright and the license.
 
 **Tips** opens a short **Did you know?** screen with a link to the manual for each tip. It also opens when SpacePixels starts, with a new tip each time, without blocking the main window. Untick **Show tips at startup** to stop that; **Help** keeps offering it.
 
