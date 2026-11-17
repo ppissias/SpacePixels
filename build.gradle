@@ -123,6 +123,11 @@ tasks.named('processResources') {
     filesMatching('spacepixels-build.properties') {
         expand(appVersion: appVersion, engineVersion: engineVersion.get())
     }
+    // The About window shows the license from the jar, so it is the same text as LICENSE.
+    from('LICENSE') {
+        into('eu/startales/spacepixels/gui')
+        rename { 'LICENSE.txt' }
+    }
 }
 
 def desktopJar = tasks.register('desktopJar', Jar) {

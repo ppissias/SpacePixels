@@ -772,12 +772,15 @@ public class ApplicationWindow {
         menu.add(helpItem("Tips", "Short tips on features you may not have met yet.", this::showTips));
         menu.add(helpItem("Acknowledgements", "Contributors, external services, catalogues and software used by SpacePixels.",
                 () -> AcknowledgementsDialog.show(frmIpodImage)));
+        menu.addSeparator();
+        menu.add(helpItem("About SpacePixels", "Version, copyright and license.",
+                () -> new AboutDialog(frmIpodImage, this::openInBrowser, () -> AcknowledgementsDialog.show(frmIpodImage)).setVisible(true)));
         JButton help = new JButton("Help ▾");
         help.putClientProperty("JButton.buttonType", "borderless");
         help.setForeground(UiStyle.linkColor());
         help.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
         help.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-        help.setToolTipText("User manual, tips and acknowledgements.");
+        help.setToolTipText("User manual, tips, acknowledgements and the version.");
         help.getAccessibleContext().setAccessibleName("Help menu");
         help.addActionListener(event -> menu.show(help, help.getWidth() - menu.getPreferredSize().width, help.getHeight()));
         updateNoticeLabel.setFont(updateNoticeLabel.getFont().deriveFont(Font.BOLD));
