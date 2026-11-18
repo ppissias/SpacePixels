@@ -65,4 +65,20 @@ public class FaintMoverMotionLimitTest {
         assertFalse(FaintMoverRuntimeEstimate.trail(session(), config, 4.14).beyondPoint());
         assertNull(FaintMoverRuntimeEstimate.trail(new FitsFileInformation[0], config, 4.14));
     }
+
+    @Test
+    public void gpuModeRaisesMotionCapTimeLimitAndScalesEstimate() {
+        var config = new DetectionConfig();
+        config.faintMoverMinDisplacementFwhm = 2;
+        config.faintMoverMaxSpeedPixelsPerMinute = 7.6242; // ~190k motions: over 100k CPU cap, under 400k GPU cap
+        var gpuLimit = FaintMoverRuntimeEstimate.motionLimit(session(), config, 4.14,
+                io.github.ppissias.jtransient.core.FaintMoverSearch.MAX_MOTIONS_GPU);
+        assertFalse(gpuLimit.exceeded());
+        assertEquals(io.github.ppissias.jtransient.core.FaintMoverSearch.MAX_MOTIONS_GPU, gpuLimit.maxMotions());
+
+        String gpuText = FaintMoverRuntimeEstimate.describe(session(), config, 4.14,
+                io.github.ppissias.jtransient.core.FaintMoverSearch.MAX_MOTIONS_GPU, config.faintMoverMaxSecondsGpu, 20.0);
+        assertFalse(gpuText, gpuText.contains("probably skip"));
+        assertTrue(gpuText, gpuText.contains("limit 30.0 min"));
+    }
 }

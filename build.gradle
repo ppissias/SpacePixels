@@ -15,7 +15,7 @@ plugins {
 
 def mainLauncherName = 'SpacePixels'
 def publicLauncherName = "Start${mainLauncherName}"
-def sharedJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC"]
+def sharedJvmArgs = ["-XX:MaxRAMPercentage=80.0", "-XX:+UseG1GC", "--enable-native-access=ALL-UNNAMED"]
 def batchDetectJvmArgs = sharedJvmArgs + ["-Djava.awt.headless=true"]
 def centralArtifactId = 'spacepixels'
 repositories {
@@ -258,6 +258,7 @@ tasks.withType(JavaExec).configureEach {
 // Opt-in larger heap for real-data diagnostic tests, e.g. -PtestMaxHeap=6g
 tasks.withType(Test).configureEach {
     // Restart tests fork an isolated application host rather than relaunching the Gradle test worker.
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
     doFirst { systemProperty 'spacepixels.test.classpath', classpath.asPath }
     if (project.hasProperty('testMaxHeap')) {
         maxHeapSize = project.property('testMaxHeap')
@@ -437,7 +438,7 @@ tasks.register('verifyApplicationDistribution') {
         def expectedLicense = normalize(licenseFile.asFile.getText('UTF-8'))
         def expectedNotice = normalize(noticeFile.asFile.getText('UTF-8'))
         def jarAllowed = { String name ->
-            name ==~ /(?i)(spacepixels|jtransient|jplatesolve|nom-tam-fits|gson|flatlaf)-.+\.jar/
+            name ==~ /(?i)(spacepixels|jtransient|jplatesolve|jocl|nom-tam-fits|gson|flatlaf)-.+\.jar/
         }
         def forbidden = { String name ->
             def lower = name.toLowerCase(java.util.Locale.ROOT)
@@ -447,7 +448,7 @@ tasks.register('verifyApplicationDistribution') {
         def assertJars = { Collection<String> names, String where ->
             def jars = names.findAll { it.toLowerCase(java.util.Locale.ROOT).endsWith('.jar') }
             def bad = jars.findAll { forbidden(it) || !jarAllowed(it) }
-            def missing = ['spacepixels', 'jtransient', 'jplatesolve', 'nom-tam-fits', 'gson', 'flatlaf'].findAll { stem ->
+            def missing = ['spacepixels', 'jtransient', 'jplatesolve', 'jocl', 'nom-tam-fits', 'gson', 'flatlaf'].findAll { stem ->
                 jars.every { !it.toLowerCase(java.util.Locale.ROOT).startsWith(stem + '-') }
             }
             if (bad || missing) {

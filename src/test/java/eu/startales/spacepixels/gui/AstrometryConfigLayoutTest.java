@@ -32,7 +32,8 @@ public class AstrometryConfigLayoutTest {
                 assertEquals(List.of(
                         "Plate Solving",
                         "Sky Catalogue (Annotate)",
-                        "Observing Site (for object identification)"), sectionTitles(panel));
+                        "Observing Site (for object identification)",
+                        "GPU acceleration (faint movers)"), sectionTitles(panel));
 
                 JTextField code = named(panel, JTextField.class, "IAU Observatory Code");
                 JTextField latitude = named(panel, JTextField.class, "Site Latitude (N)");
@@ -40,6 +41,9 @@ public class AstrometryConfigLayoutTest {
                 JPasswordField key = named(panel, JPasswordField.class, "Astrometry.net Account");
                 JSpinner starDepth = named(panel, JSpinner.class, "Star Depth (Gaia G)");
                 JSpinner solarDepth = named(panel, JSpinner.class, "Asteroid and Comet Depth (V)");
+                javax.swing.JComboBox<?> gpuMode = named(panel, javax.swing.JComboBox.class, "First pass compute");
+                javax.swing.JComboBox<?> gpuDevice = named(panel, javax.swing.JComboBox.class, "Graphics device");
+                JButton testGpu = named(panel, JButton.class, "Graphics device: Test GPU");
                 // Short numeric text fields take the standard number width; the API key keeps its long field.
                 for (JTextField field : List.of(code, latitude, longitude)) {
                     assertEquals(UiStyle.space(UiStyle.NUMBER_INPUT_WIDTH), field.getPreferredSize().width);
@@ -50,6 +54,9 @@ public class AstrometryConfigLayoutTest {
                 assertEquals("Plate Solving", sectionTitle(key));
                 assertEquals("Sky Catalogue (Annotate)", sectionTitle(starDepth));
                 assertEquals("Observing Site (for object identification)", sectionTitle(latitude));
+                assertEquals("GPU acceleration (faint movers)", sectionTitle(gpuMode));
+                assertEquals("GPU acceleration (faint movers)", sectionTitle(gpuDevice));
+                assertEquals("GPU acceleration (faint movers)", sectionTitle(testGpu));
                 assertNull(sectionTitle(named(panel, JButton.class, "Save")));
                 assertNull(sectionTitle(named(panel, JButton.class, "Revert")));
                 assertNull(sectionTitle(named(panel, JButton.class, "Fill Site from FITS Header")));

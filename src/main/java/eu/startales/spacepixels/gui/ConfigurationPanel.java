@@ -12,10 +12,13 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.ObservingSites;
+import eu.startales.spacepixels.detection.ComputeOptionsMapper;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.platesolve.AstrometryNetAccount;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.ObservingSite;
+import io.github.ppissias.jtransient.compute.GpuDiagnostics;
+import io.github.ppissias.jtransient.gpu.OpenClDevice;
 
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
@@ -107,6 +110,19 @@ public class ConfigurationPanel extends JPanel {
             AppConfig.DEFAULT_SOLAR_SYSTEM_MAGNITUDE, AppConfig.MIN_SOLAR_SYSTEM_MAGNITUDE,
             AppConfig.MAX_SOLAR_SYSTEM_MAGNITUDE, 0.5));
     private final JLabel solarDepthStatus = statusLabel();
+    private final JComboBox<GpuModeChoice> gpuModeCombo = new JComboBox<>(new GpuModeChoice[] {
+            new GpuModeChoice("AUTO", "Auto (recommended)"),
+            new GpuModeChoice("GPU", "Always GPU"),
+            new GpuModeChoice("CPU", "Always CPU")
+    });
+    private final DefaultComboBoxModel<GpuDeviceChoice> gpuDeviceModel = new DefaultComboBoxModel<>();
+    private final JComboBox<GpuDeviceChoice> gpuDeviceCombo = new JComboBox<>(gpuDeviceModel);
+    private final JButton gpuTestButton = new JButton("Test GPU");
+    private final JLabel gpuStatusLabel = statusLabel();
+    /** Background OpenCL probe and benchmark workers; null when idle. */
+    private SwingWorker<GpuDiagnostics.ProbeSummary, Void> gpuProbeWorker;
+    private SwingWorker<GpuDiagnostics.TestResult, Void> gpuTestWorker;
+    private GpuDiagnostics.ProbeSummary latestGpuProbe;
 
     /** Site values as last saved, for the unsaved-changes indicator and Revert. */
     private String savedObservatoryCode = "";
@@ -122,6 +138,8 @@ public class ConfigurationPanel extends JPanel {
     private String savedLocalSolverApiKey = "";
     private double savedStarDepth;
     private double savedSolarDepth;
+    private String savedGpuMode = AppConfig.DEFAULT_GPU_MODE;
+    private String savedGpuDeviceId = "";
     private long saveVersion;
     /** True while the fields are filled from the configuration, so the fill is not treated as an edit. */
     private boolean loading;
@@ -297,6 +315,29 @@ public class ConfigurationPanel extends JPanel {
                 fieldWithStatus(altitudeTextField, altitudeStatus)));
         mainContent.add(observingSite);
 
+        JPanel gpuAcceleration = section("GPU acceleration (faint movers)");
+        gpuModeCombo.setToolTipText("Choose whether the faint mover first-pass search may run on OpenCL graphics hardware.");
+        gpuAcceleration.add(createConfigRow(
+                "First pass compute",
+                "Auto (recommended) checks parity and CPU-vs-GPU speed once on your machine and uses the GPU when it is clearly faster. "
+                        + "Always GPU forces OpenCL when a compatible graphics card is present; Always CPU disables OpenCL.",
+                gpuModeCombo));
+
+        gpuDeviceModel.addElement(new GpuDeviceChoice("", "Auto (fastest verified)"));
+        gpuDeviceCombo.getAccessibleContext().setAccessibleName("Graphics device");
+        gpuDeviceCombo.setPrototypeDisplayValue(new GpuDeviceChoice("", "Auto (fastest verified device)   "));
+        gpuDeviceCombo.setToolTipText("Select a specific OpenCL graphics device or leave Auto to pick the fastest verified card.");
+        gpuTestButton.setToolTipText("Run the OpenCL parity self-test and multi-core CPU benchmark in the background.");
+        JPanel gpuDeviceControls = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        gpuDeviceControls.setOpaque(false);
+        gpuDeviceControls.add(gpuDeviceCombo);
+        gpuDeviceControls.add(gpuTestButton);
+        gpuAcceleration.add(createConfigRow(
+                "Graphics device",
+                "OpenCL device used for faint mover acceleration. Use Test GPU to run the parity check and benchmark on demand.",
+                fieldWithStatus(gpuDeviceControls, gpuStatusLabel)));
+        mainContent.add(gpuAcceleration);
+
         JScrollPane scrollPane = new JScrollPane(mainContent);
         scrollPane.setBorder(null);
         scrollPane.getVerticalScrollBar().setUnitIncrement(16);
@@ -384,6 +425,9 @@ public class ConfigurationPanel extends JPanel {
             @Override public void removeUpdate(DocumentEvent e) { siteNameEdited(); }
             @Override public void changedUpdate(DocumentEvent e) { siteNameEdited(); }
         });
+        gpuModeCombo.addActionListener(e -> gpuModeChanged());
+        gpuDeviceCombo.addActionListener(e -> gpuDeviceChanged());
+        gpuTestButton.addActionListener(e -> runGpuTest());
     }
 
     public void refreshComponents() {
@@ -402,6 +446,9 @@ public class ConfigurationPanel extends JPanel {
             astrometryKeyField.setEnabled(config.astrometryNetUseOwnKey);
             localSolverAddressField.setText(nullToEmpty(config.localSolverAddress));
             localSolverKeyField.setText(nullToEmpty(config.localSolverApiKey));
+            selectGpuMode(config.gpuMode());
+            rebuildGpuDeviceChoices(config.gpuDeviceId());
+            updateGpuControlsEnabled(config);
             ObservingSites.ensure(config);
             fillSite();
         } finally {
@@ -420,10 +467,14 @@ public class ConfigurationPanel extends JPanel {
         savedLocalSolverApiKey = nullToEmpty(config.localSolverApiKey);
         savedStarDepth = config.skyCatalogueStarMagnitude();
         savedSolarDepth = config.solarSystemMagnitude();
+        savedGpuMode = config.gpuMode();
+        savedGpuDeviceId = config.gpuDeviceId();
         validateAll();
         checkAstap();
         showAstrometryAccountNote();
         showLocalSolverNote();
+        probeGpuDevices();
+        refreshGpuStatusLine();
         updateSavedState();
         fetchSettingsChanged.run();
     }
@@ -648,6 +699,8 @@ public class ConfigurationPanel extends JPanel {
                 savedLocalSolverApiKey = nullToEmpty(snapshot.localSolverApiKey);
                 savedStarDepth = snapshot.skyCatalogueStarMagnitude();
                 savedSolarDepth = snapshot.solarSystemMagnitude();
+                savedGpuMode = snapshot.gpuMode();
+                savedGpuDeviceId = snapshot.gpuDeviceId();
             }
             updateSavedState();
             if (saveVersion != expectedVersion) return;
@@ -792,7 +845,9 @@ public class ConfigurationPanel extends JPanel {
                 || !nullToEmpty(config().localSolverAddress).equals(savedLocalSolverAddress)
                 || !nullToEmpty(config().localSolverApiKey).equals(savedLocalSolverApiKey)
                 || config().skyCatalogueStarMagnitude() != savedStarDepth
-                || config().solarSystemMagnitude() != savedSolarDepth;
+                || config().solarSystemMagnitude() != savedSolarDepth
+                || !config().gpuMode().equals(savedGpuMode)
+                || !config().gpuDeviceId().equals(savedGpuDeviceId);
     }
 
     /** Keeps the new star depth at once, like the ASTAP path. */
@@ -1042,6 +1097,16 @@ public class ConfigurationPanel extends JPanel {
         if (local != null) {
             local.cancel(true);
         }
+        SwingWorker<GpuDiagnostics.ProbeSummary, Void> probe = gpuProbeWorker;
+        gpuProbeWorker = null;
+        if (probe != null) {
+            probe.cancel(true);
+        }
+        SwingWorker<GpuDiagnostics.TestResult, Void> gpuTest = gpuTestWorker;
+        gpuTestWorker = null;
+        if (gpuTest != null) {
+            gpuTest.cancel(true);
+        }
     }
 
     /** Star databases found in the folder, by name (e.g. D50), with their file counts. */
@@ -1155,6 +1220,207 @@ public class ConfigurationPanel extends JPanel {
         panel.add(Box.createVerticalStrut(4));
         panel.add(bottom);
         return panel;
+    }
+
+    // ==========================================
+    // GPU ACCELERATION (FAINT MOVERS)
+    // ==========================================
+
+    private void gpuModeChanged() {
+        if (loading || applicationSettings == null) return;
+        GpuModeChoice selected = (GpuModeChoice) gpuModeCombo.getSelectedItem();
+        if (selected == null) return;
+        config().gpuMode = selected.code();
+        updateGpuControlsEnabled(config());
+        refreshGpuStatusLine();
+        fetchSettingsChanged.run();
+        updateSavedState();
+        saveDefaults(false);
+    }
+
+    private void gpuDeviceChanged() {
+        if (loading || applicationSettings == null) return;
+        GpuDeviceChoice selected = (GpuDeviceChoice) gpuDeviceCombo.getSelectedItem();
+        if (selected == null) return;
+        config().gpuDeviceId = selected.id();
+        refreshGpuStatusLine();
+        fetchSettingsChanged.run();
+        updateSavedState();
+        saveDefaults(false);
+    }
+
+    private void selectGpuMode(String mode) {
+        String normalized = AppConfig.normalizeGpuMode(mode);
+        for (int i = 0; i < gpuModeCombo.getItemCount(); i++) {
+            GpuModeChoice item = gpuModeCombo.getItemAt(i);
+            if (item.code().equals(normalized)) {
+                gpuModeCombo.setSelectedIndex(i);
+                return;
+            }
+        }
+        gpuModeCombo.setSelectedIndex(0);
+    }
+
+    private void rebuildGpuDeviceChoices(String selectedDeviceId) {
+        loading = true;
+        try {
+            gpuDeviceModel.removeAllElements();
+            GpuDeviceChoice auto = new GpuDeviceChoice("", "Auto (fastest verified)");
+            gpuDeviceModel.addElement(auto);
+            GpuDeviceChoice selectedChoice = auto;
+            String targetId = selectedDeviceId == null ? "" : selectedDeviceId.trim();
+            boolean found = targetId.isEmpty();
+            if (latestGpuProbe != null && latestGpuProbe.devices() != null) {
+                for (OpenClDevice device : latestGpuProbe.devices()) {
+                    String label = device.name() + " · " + device.formattedMemory() + " · " + device.openclVersion()
+                            + (device.hostUnifiedMemory() ? " · shared RAM" : "");
+                    GpuDeviceChoice choice = new GpuDeviceChoice(device.stableId(), label);
+                    gpuDeviceModel.addElement(choice);
+                    if (!found && device.stableId().equals(targetId)) {
+                        selectedChoice = choice;
+                        found = true;
+                    }
+                }
+            }
+            if (!found) {
+                GpuDeviceChoice missing = new GpuDeviceChoice(targetId,
+                        latestGpuProbe == null ? "Saved device (" + targetId + ")" : "Saved device (unavailable: " + targetId + ")");
+                gpuDeviceModel.addElement(missing);
+                selectedChoice = missing;
+            }
+            gpuDeviceCombo.setSelectedItem(selectedChoice);
+            gpuDeviceCombo.setToolTipText(selectedChoice.label());
+        } finally {
+            loading = false;
+        }
+    }
+
+    private void updateGpuControlsEnabled(AppConfig config) {
+        boolean cpuOnly = "CPU".equals(config.gpuMode());
+        boolean hasSavedId = !config.gpuDeviceId().isEmpty();
+        boolean hasDevices = latestGpuProbe == null || (latestGpuProbe.devices() != null && !latestGpuProbe.devices().isEmpty());
+        gpuDeviceCombo.setEnabled(!cpuOnly && (hasDevices || hasSavedId));
+        gpuTestButton.setEnabled(gpuTestWorker == null && !closing.getAsBoolean());
+    }
+
+    private void probeGpuDevices() {
+        if (applicationSettings == null || closing.getAsBoolean()) return;
+        if (gpuProbeWorker != null) gpuProbeWorker.cancel(true);
+        if (gpuTestWorker == null && !"CPU".equals(config().gpuMode())) {
+            gpuStatusLabel.setForeground(UiStyle.helpColor());
+            gpuStatusLabel.setText("Checking OpenCL devices...");
+        }
+        SwingWorker<GpuDiagnostics.ProbeSummary, Void> worker = new SwingWorker<>() {
+            @Override protected GpuDiagnostics.ProbeSummary doInBackground() {
+                return GpuDiagnostics.probeDevices();
+            }
+
+            @Override protected void done() {
+                if (gpuProbeWorker == this) gpuProbeWorker = null;
+                if (isCancelled() || closing.getAsBoolean() || applicationSettings == null) return;
+                try {
+                    latestGpuProbe = get();
+                } catch (CancellationException | InterruptedException e) {
+                    return;
+                } catch (ExecutionException e) {
+                    latestGpuProbe = new GpuDiagnostics.ProbeSummary(List.of(), "OpenCL probe failed: " + e.getCause().getMessage());
+                }
+                rebuildGpuDeviceChoices(config().gpuDeviceId());
+                updateGpuControlsEnabled(config());
+                if (gpuTestWorker == null) refreshGpuStatusLine();
+                fetchSettingsChanged.run();
+            }
+        };
+        gpuProbeWorker = worker;
+        worker.execute();
+    }
+
+    private void runGpuTest() {
+        if (applicationSettings == null || closing.getAsBoolean()) return;
+        if (gpuTestWorker != null) gpuTestWorker.cancel(true);
+        String preferredId = config().gpuDeviceId();
+        gpuTestButton.setEnabled(false);
+        gpuStatusLabel.setForeground(UiStyle.helpColor());
+        gpuStatusLabel.setText("Testing OpenCL kernel and CPU-vs-GPU benchmark...");
+        SwingWorker<GpuDiagnostics.TestResult, Void> worker = new SwingWorker<>() {
+            @Override protected GpuDiagnostics.TestResult doInBackground() {
+                return GpuDiagnostics.testDevice(preferredId, ComputeOptionsMapper.defaultCacheDirectory(), cpuWorkersForDiagnostics());
+            }
+
+            @Override protected void done() {
+                if (gpuTestWorker == this) gpuTestWorker = null;
+                if (isCancelled() || closing.getAsBoolean() || applicationSettings == null) return;
+                gpuTestButton.setEnabled(true);
+                try {
+                    GpuDiagnostics.TestResult result = get();
+                    if (result.device() != null && result.passed()) {
+                        String tested = result.testedIso() == null || result.testedIso().isEmpty() ? "" : " · tested " + result.testedIso();
+                        gpuStatusLabel.setForeground(UiStyle.helpColor());
+                        gpuStatusLabel.setText(wrapStatus("✓ " + result.message() + " · " + result.device().openclVersion()
+                                + " · " + result.device().name() + " · driver " + result.device().driverVersion() + tested));
+                    } else {
+                        gpuStatusLabel.setForeground(warningColor());
+                        gpuStatusLabel.setText(wrapStatus(result.message()));
+                    }
+                    if (latestGpuProbe == null) probeGpuDevices();
+                    fetchSettingsChanged.run();
+                } catch (CancellationException | InterruptedException ignored) {
+                } catch (ExecutionException e) {
+                    gpuStatusLabel.setForeground(warningColor());
+                    gpuStatusLabel.setText(wrapStatus("GPU test failed: " + e.getCause().getMessage()));
+                }
+            }
+        };
+        gpuTestWorker = worker;
+        worker.execute();
+    }
+
+    private void refreshGpuStatusLine() {
+        if (applicationSettings == null) return;
+        AppConfig cfg = config();
+        if ("CPU".equals(cfg.gpuMode())) {
+            gpuStatusLabel.setForeground(UiStyle.helpColor());
+            gpuStatusLabel.setText(wrapStatus("CPU (Always CPU setting)"));
+            return;
+        }
+        if (latestGpuProbe == null) {
+            gpuStatusLabel.setForeground(UiStyle.helpColor());
+            gpuStatusLabel.setText("Checking OpenCL devices...");
+            return;
+        }
+        GpuDiagnostics.ResolvedStatus resolved = GpuDiagnostics.resolveFromProbe(
+                ComputeOptionsMapper.from(cfg), latestGpuProbe, cpuWorkersForDiagnostics());
+        OpenClDevice dev = resolved.activeDevice();
+        if (dev == null) {
+            gpuStatusLabel.setForeground(warningColor());
+            gpuStatusLabel.setText(wrapStatus(resolved.statusLine()));
+            return;
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(dev.openclVersion()).append(" · ").append(dev.name()).append(" · driver ").append(dev.driverVersion());
+        if (!resolved.testedIso().isEmpty()) sb.append(" · tested ").append(resolved.testedIso());
+        if (Double.isFinite(resolved.cachedSpeedup())) {
+            sb.append(String.format(Locale.ROOT, " (%.1f× vs CPU)", resolved.cachedSpeedup()));
+        }
+        if (!resolved.usingGpu()) {
+            gpuStatusLabel.setForeground(warningColor());
+            gpuStatusLabel.setText(wrapStatus(resolved.statusLine() + " · " + sb));
+        } else {
+            gpuStatusLabel.setForeground(UiStyle.helpColor());
+            gpuStatusLabel.setText(wrapStatus((resolved.testedIso().isEmpty() ? resolved.statusLine() + " · " : "✓ ") + sb));
+        }
+    }
+
+    private static int cpuWorkersForDiagnostics() {
+        return Math.max(1, Runtime.getRuntime().availableProcessors());
+    }
+
+    private record GpuModeChoice(String code, String label) {
+        @Override public String toString() { return label; }
+    }
+
+    private record GpuDeviceChoice(String id, String label) {
+        @Override public String toString() { return label; }
     }
 
     private JPanel createConfigRow(String title, String description, JComponent inputControl) {

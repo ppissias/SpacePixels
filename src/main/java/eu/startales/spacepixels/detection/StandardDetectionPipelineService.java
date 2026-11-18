@@ -152,7 +152,7 @@ public final class StandardDetectionPipelineService {
 
         DetectionConfig effectiveConfig = DetectionPipelineSupport.createEffectiveDetectionConfig(capturedConfig, framesForLibrary.size());
 
-        JTransientEngine engine = new JTransientEngine();
+        JTransientEngine engine = new JTransientEngine(ComputeOptionsMapper.from(options.applicationConfig()));
         // The picture from loading stays, marked as such, until the engine's first stage finishes.
         RunPreviewScope.offer(true, () -> RunPreview.captionOnly("Picture from loading · the detection is running"));
         LiveFindings liveFindings = LiveFindings.forCurrentRun(rawFramesForExport, options.visualization());
@@ -167,6 +167,18 @@ public final class StandardDetectionPipelineService {
             engine.shutdown();
             if (liveFindings != null) {
                 liveFindings.close();
+            }
+        }
+
+        if (result.telemetry != null && result.telemetry.faintMoverSearchTelemetry != null) {
+            var fm = result.telemetry.faintMoverSearchTelemetry;
+            var logger = java.util.logging.Logger.getLogger(StandardDetectionPipelineService.class.getName());
+            String deviceLabel = fm.coarseDevice != null && !fm.coarseDevice.isEmpty() ? fm.coarseDevice : "CPU";
+            logger.info("Faint-mover coarse search: path=" + fm.coarsePath + ", device=" + deviceLabel
+                    + ", reason=" + fm.coarseReason);
+            if (fm.cpuFallbackTiles > 0) {
+                logger.warning("Faint-mover search fell back to CPU on " + fm.cpuFallbackTiles
+                        + " tile(s): " + fm.coarseReason);
             }
         }
 

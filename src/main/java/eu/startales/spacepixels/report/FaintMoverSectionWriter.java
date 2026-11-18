@@ -45,6 +45,7 @@ final class FaintMoverSectionWriter {
                         + "consecutive frames into " + telemetry.coarseFrames + " frames" : "",
                 telemetry.frames);
         else out.printf(Locale.ROOT, "<p>Search speed: %s. The first pass used every pixel of every frame.</p>%n", speed);
+        out.println("<p><strong>First pass compute</strong>: " + escape(computeDescription(telemetry)) + ".</p>");
         Double angularScale = FaintMoverPresentation.angularPixelScale(c);
         if (angularScale != null) out.printf(Locale.ROOT,
                 "<p>Searched angular motion range: %.5g–%.5g arcsec/min (field-centre WCS equivalent). "
@@ -143,6 +144,7 @@ final class FaintMoverSectionWriter {
         metric(out, "Searched frames", Integer.toString(e.fittedPositions().size()));
         metric(out, "Unmasked path centres", e.review().unmaskedFrames() == null ? "N/A" : e.review().unmaskedFrames() + " / " + e.fittedPositions().size());
         metric(out, "Search coverage", t.tilesSearched + " / " + t.tiles + " tiles · " + (t.truncated ? "partial" : "complete"));
+        metric(out, "First pass", computeMetricValue(t));
         out.println("</dl><div class='coord-line'>" + escape(DetectionReportAstrometry.formatPixelCoordinateWithSky(c.astrometryContext, e.x(), e.y()))
                 + " · reference " + Instant.ofEpochMilli(e.referenceTimeMillis()) + "</div>");
         out.println("<details><summary>Scores, timing and fitted motion</summary><dl class='anomaly-summary fm-summary'>");
@@ -161,6 +163,51 @@ final class FaintMoverSectionWriter {
     /** Escapes both parts of one compact evidence row. */
     private static void metric(PrintWriter out, String title, String value) {
         out.println("<div><dt>" + escape(title) + "</dt><dd>" + escape(value) + "</dd></div>");
+    }
+
+    /** Formats a compact summary of the coarse-search compute backend for candidate summary cards. */
+    private static String computeMetricValue(io.github.ppissias.jtransient.telemetry.FaintMoverSearchTelemetry t) {
+        if (t == null) return "Java CPU";
+        String path = hasText(t.coarsePath) ? t.coarsePath : "Java";
+        if (!"OpenCL".equalsIgnoreCase(path)) {
+            return t.cpuFallbackTiles > 0 ? path + " CPU (" + t.cpuFallbackTiles + " fallback tiles)" : path + " CPU";
+        }
+        StringBuilder sb = new StringBuilder("OpenCL");
+        if (hasText(t.coarseDevice)) {
+            sb.append(" (").append(t.coarseDevice);
+            if (Double.isFinite(t.gpuBenchmarkSpeedup)) sb.append(String.format(Locale.ROOT, ", %.1f×", t.gpuBenchmarkSpeedup));
+            if (t.cpuFallbackTiles > 0) sb.append(", ").append(t.cpuFallbackTiles).append(" CPU fallback tiles");
+            sb.append(')');
+        }
+        return sb.toString();
+    }
+
+    /** Formats the full first-pass compute backend, self-test, benchmark, limit, and timing line. */
+    private static String computeDescription(io.github.ppissias.jtransient.telemetry.FaintMoverSearchTelemetry t) {
+        String path = hasText(t.coarsePath) ? t.coarsePath : "Java";
+        StringBuilder sb = new StringBuilder(path);
+        if (hasText(t.coarseDevice)) sb.append(" · ").append(t.coarseDevice);
+        if (hasText(t.coarseDriver)) sb.append(" (driver ").append(t.coarseDriver).append(')');
+        if (hasText(t.openclVersion)) sb.append(" · ").append(t.openclVersion);
+        if (hasText(t.coarseReason)) sb.append("; ").append(t.coarseReason);
+        if (hasText(t.gpuSelfTest) && !"not run".equalsIgnoreCase(t.gpuSelfTest)) sb.append("; self-test ").append(t.gpuSelfTest);
+        if (Double.isFinite(t.gpuBenchmarkSpeedup)) sb.append(String.format(Locale.ROOT, "; benchmark %.2f× vs CPU", t.gpuBenchmarkSpeedup));
+        if (t.cpuFallbackTiles > 0) sb.append("; ").append(t.cpuFallbackTiles).append(" CPU fallback tile(s)");
+        if (t.maxMotionsApplied > 0) {
+            sb.append(String.format(Locale.ROOT, "; limits %,d motions", t.maxMotionsApplied));
+            if (Double.isFinite(t.timeLimitSecondsApplied) && t.timeLimitSecondsApplied > 0) {
+                sb.append(String.format(Locale.ROOT, ", %.0f s", t.timeLimitSecondsApplied));
+            }
+        }
+        if (t.prepMs > 0 || t.coarseMs > 0 || t.refineMs > 0) {
+            sb.append(String.format(Locale.ROOT, " (prep %.1f s, coarse %.1f s, refine %.1f s)",
+                    t.prepMs / 1000.0, t.coarseMs / 1000.0, t.refineMs / 1000.0));
+        }
+        return sb.toString();
+    }
+
+    private static boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     /** Streams one source-frame crop at a time, using one shared stretch for a faithful blink. */

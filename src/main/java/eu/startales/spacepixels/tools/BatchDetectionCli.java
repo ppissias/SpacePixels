@@ -37,22 +37,25 @@ import java.util.Objects;
  */
 public class BatchDetectionCli {
 
-    private static class CliArguments {
+    static class CliArguments {
         private final File inputDir;
         private final File configFile;
         private final AutoTuneProfile autoTuneProfile;
         private final int maxCategoryItems;
+        final String gpuMode;
         private final boolean showHelp;
 
         private CliArguments(File inputDir,
                              File configFile,
                              AutoTuneProfile autoTuneProfile,
                              int maxCategoryItems,
+                             String gpuMode,
                              boolean showHelp) {
             this.inputDir = inputDir;
             this.configFile = configFile;
             this.autoTuneProfile = autoTuneProfile;
             this.maxCategoryItems = maxCategoryItems;
+            this.gpuMode = gpuMode;
             this.showHelp = showHelp;
         }
     }
@@ -104,8 +107,12 @@ public class BatchDetectionCli {
 
         SpacePixelsDetectionProfile detectionProfile = loadDetectionConfig(cliArguments.configFile);
         DetectionConfig baseConfig = detectionProfile.getDetectionConfig();
+        var appConfig = ApplicationSettings.loadDefault().getConfig().copy();
+        if (cliArguments.gpuMode != null) {
+            appConfig.gpuMode = cliArguments.gpuMode;
+        }
         var options = DetectionRunOptions.capture(
-                ApplicationSettings.loadDefault().getConfig(), detectionProfile.getAutoTuneMaxCandidateFrames())
+                appConfig, detectionProfile.getAutoTuneMaxCandidateFrames())
                 .withVisualization(loadVisualizationPreferences(err).withVariableStarReportOptions(detectionProfile.getVariableStarReportOptions()));
         SpacePixelsPipelineApi pipelineApi = new DefaultSpacePixelsPipelineApi();
         SpacePixelsPipelineRequest request = SpacePixelsPipelineRequest.builder(cliArguments.inputDir)
@@ -154,19 +161,20 @@ public class BatchDetectionCli {
         }
     }
 
-    private static CliArguments parseArguments(String[] args) {
+    static CliArguments parseArguments(String[] args) {
         if (args.length == 0) {
-            return new CliArguments(null, null, null, 0, true);
+            return new CliArguments(null, null, null, 0, null, true);
         }
 
         List<String> positionalArgs = new ArrayList<>();
         AutoTuneProfile autoTuneProfile = null;
         int maxCategoryItems = 0;
+        String gpuMode = null;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
-                return new CliArguments(null, null, null, 0, true);
+                return new CliArguments(null, null, null, 0, null, true);
             }
 
             if (arg.startsWith("--auto-tune=")) {
@@ -195,6 +203,19 @@ public class BatchDetectionCli {
                 continue;
             }
 
+            if (arg.startsWith("--gpu=")) {
+                gpuMode = parseGpuMode(arg.substring("--gpu=".length()));
+                continue;
+            }
+
+            if ("--gpu".equalsIgnoreCase(arg)) {
+                if (i + 1 >= args.length) {
+                    throw new IllegalArgumentException("Missing GPU mode after " + arg + ".");
+                }
+                gpuMode = parseGpuMode(args[++i]);
+                continue;
+            }
+
             positionalArgs.add(arg);
         }
 
@@ -207,7 +228,20 @@ public class BatchDetectionCli {
                 new File(positionalArgs.get(1)),
                 autoTuneProfile,
                 maxCategoryItems,
+                gpuMode,
                 false);
+    }
+
+    private static String parseGpuMode(String value) {
+        if (value == null) {
+            throw new IllegalArgumentException("Missing GPU mode. Expected auto, gpu or cpu.");
+        }
+        return switch (value.trim().toLowerCase(Locale.ROOT)) {
+            case "auto" -> "AUTO";
+            case "gpu" -> "GPU";
+            case "cpu" -> "CPU";
+            default -> throw new IllegalArgumentException("Unknown GPU mode '" + value + "'. Expected auto, gpu or cpu.");
+        };
     }
 
     private static int parseMaxCategoryItems(String value) {
@@ -252,7 +286,7 @@ public class BatchDetectionCli {
         out.println("  SpacePixels - Batch Detection CLI");
         out.println("==================================================================");
         out.println("Usage:");
-        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--max-category-items <number>]");
+        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--max-category-items <number>] [--gpu <auto|gpu|cpu>]");
         out.println();
         out.println("Notes:");
         out.println("  - The input directory must contain only uncompressed unsigned 16-bit (BZERO 32768) monochrome FITS files with identical dimensions.");

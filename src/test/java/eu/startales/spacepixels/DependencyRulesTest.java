@@ -86,6 +86,12 @@ public class DependencyRulesTest {
         }
     }
 
+    /** SpacePixels isolates OpenCL / JOCL behind JTransient's compute facade and imports no JOCL types directly. */
+    @Test
+    public void applicationDoesNotImportJoclDirectly() throws IOException {
+        assertNoReferences(".", "org.jocl.");
+    }
+
     /** Scans Java sources recursively for imports and qualified references across the selected boundary. */
     private static void assertNoReferences(String packageName, String... forbidden) throws IOException {
         Path directory = SOURCES.resolve(packageName);

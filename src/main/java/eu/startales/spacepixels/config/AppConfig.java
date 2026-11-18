@@ -31,6 +31,8 @@ public class AppConfig {
         copy.mpcComment = mpcComment;
         copy.mpcEmail = mpcEmail;
         copy.findOrbExecutable = findOrbExecutable;
+        copy.gpuMode = gpuMode;
+        copy.gpuDeviceId = gpuDeviceId;
         return copy;
     }
 
@@ -81,6 +83,12 @@ public class AppConfig {
     public String mpcEmail = "";
     /** Bill Gray's command-line Find_Orb (fo64.exe on Windows), in the folder of the console Find_Orb; empty when not installed. */
     public String findOrbExecutable = "";
+    /** Default GPU compute mode when absent or invalid. */
+    public static final String DEFAULT_GPU_MODE = "AUTO";
+    /** Compute policy for the faint-mover first pass: AUTO, GPU, or CPU. */
+    public String gpuMode = DEFAULT_GPU_MODE;
+    /** Saved OpenCL device stable identifier; empty selects the best available GPU. */
+    public String gpuDeviceId = "";
     /** Faintest Gaia G magnitude fetched by Fetch Sky Catalogue. */
     public double skyCatalogueStarMagnitude = DEFAULT_SKY_CATALOGUE_STAR_MAGNITUDE;
 
@@ -116,5 +124,28 @@ public class AppConfig {
             return "";
         }
         return astrometryNetApiKey.trim();
+    }
+
+    /** Normalizes any compute policy string to {@code AUTO}, {@code GPU}, or {@code CPU}. */
+    public static String normalizeGpuMode(String mode) {
+        if (mode == null || mode.isBlank()) {
+            return DEFAULT_GPU_MODE;
+        }
+        return switch (mode.trim().toUpperCase(java.util.Locale.ROOT)) {
+            case "AUTO" -> "AUTO";
+            case "GPU" -> "GPU";
+            case "CPU" -> "CPU";
+            default -> DEFAULT_GPU_MODE;
+        };
+    }
+
+    /** Normalized GPU compute mode ({@code AUTO}, {@code GPU}, or {@code CPU}; defaults to {@code AUTO}). */
+    public String gpuMode() {
+        return normalizeGpuMode(gpuMode);
+    }
+
+    /** Normalized saved GPU device identifier (empty means best available). */
+    public String gpuDeviceId() {
+        return gpuDeviceId == null ? "" : gpuDeviceId.trim();
     }
 }

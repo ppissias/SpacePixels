@@ -244,6 +244,17 @@ final class FaintMoverPresentation {
         data.put("coarseMotions", t.coarseMotions); data.put("tiles", t.tiles); data.put("tilesSearched", t.tilesSearched);
         data.put("searchSpeed", t.searchSpeed); data.put("coarseBin", t.coarseBin); data.put("coarseFrames", t.coarseFrames);
         data.put("searchedPixels", t.searchedPixels); data.put("elapsedMs", t.elapsedMs);
+        data.put("prepMs", t.prepMs); data.put("coarseMs", t.coarseMs); data.put("refineMs", t.refineMs);
+        data.put("exposureMinutes", finite(t.exposureMinutes));
+        data.put("pointLikeMaxSpeedPixelsPerMinute", finite(t.pointLikeMaxSpeedPixelsPerMinute));
+        data.put("trailFwhmAtMaxSpeed", finite(t.trailFwhmAtMaxSpeed));
+        data.put("coarsePath", t.coarsePath); data.put("coarseDevice", t.coarseDevice);
+        data.put("coarseDriver", t.coarseDriver); data.put("openclVersion", t.openclVersion);
+        data.put("coarseReason", t.coarseReason); data.put("gpuSelfTest", t.gpuSelfTest);
+        data.put("gpuBenchmarkSpeedup", finite(t.gpuBenchmarkSpeedup));
+        data.put("cpuFallbackTiles", t.cpuFallbackTiles);
+        data.put("maxMotionsApplied", t.maxMotionsApplied);
+        data.put("timeLimitSecondsApplied", finite(t.timeLimitSecondsApplied));
         data.put("diagnosticsAvailable", t.diagnosticsAvailable); data.put("diagnosticBytes", t.diagnosticBytes);
         data.put("refinedPeaks", t.refinedPeaks); data.put("belowScore", t.belowScore);
         data.put("rejectedSplitHalf", t.rejectedSplitHalf); data.put("rejectedFewFrames", t.rejectedFewFrames);

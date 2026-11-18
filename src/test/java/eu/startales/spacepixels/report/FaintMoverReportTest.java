@@ -415,6 +415,45 @@ public class FaintMoverReportTest {
         assertTrue(entry.getAsJsonArray("catalogueComparisons").isEmpty());
     }
 
+    /** Compute provenance, phase timings and limits appear in both HTML and finite-checked JSON. */
+    @Test public void computeProvenanceAndPhaseTimingsExportSafelyToHtmlAndJson() throws Exception {
+        var files = files();
+        var c = candidate(files[0].getObservationTimestamp() + 60_000);
+        var t = telemetry();
+        t.coarsePath = "OpenCL";
+        t.coarseDevice = "Test GPU <0>";
+        t.coarseDriver = "591.97";
+        t.openclVersion = "OpenCL 1.2";
+        t.coarseReason = "Verified fast GPU";
+        t.gpuSelfTest = "passed";
+        t.gpuBenchmarkSpeedup = 18.4;
+        t.cpuFallbackTiles = 1;
+        t.maxMotionsApplied = 400_000;
+        t.timeLimitSecondsApplied = 1800.0;
+        t.prepMs = 1200;
+        t.coarseMs = 3400;
+        t.refineMs = 5600;
+        t.exposureMinutes = 1.5;
+        t.pointLikeMaxSpeedPixelsPerMinute = 3.3;
+        t.trailFwhmAtMaxSpeed = 0.6;
+        File output = export(files, c, t, ReportInclusion.all());
+        String html = Files.readString(output.toPath().resolve("detection_report.html"));
+        String json = Files.readString(output.toPath().resolve("report-data.json"));
+        assertFalse(json.contains("NaN"));
+        assertFalse(json.contains("Infinity"));
+        assertTrue(html.contains("First pass compute"));
+        assertTrue(html.contains("Test GPU &lt;0&gt;"));
+        assertTrue(html.contains("<dt>First pass</dt><dd>OpenCL (Test GPU &lt;0&gt;, 18.4×, 1 CPU fallback tiles)</dd>"));
+        var search = JsonParser.parseString(json).getAsJsonObject().getAsJsonObject("faintMoverSearch");
+        assertEquals("OpenCL", search.get("coarsePath").getAsString());
+        assertEquals("Test GPU <0>", search.get("coarseDevice").getAsString());
+        assertEquals("passed", search.get("gpuSelfTest").getAsString());
+        assertEquals(18.4, search.get("gpuBenchmarkSpeedup").getAsDouble(), 1e-6);
+        assertEquals(1, search.get("cpuFallbackTiles").getAsInt());
+        assertEquals(400_000, search.get("maxMotionsApplied").getAsInt());
+        assertEquals(3400, search.get("coarseMs").getAsLong());
+    }
+
     /** Builds ambiguous matching predictions and one deliberately incompatible motion using the same WCS. */
     private static SolarSystemObjects predictions(FaintMoverCandidate c, WcsCoordinateTransformer wcs, FitsFileInformation file) {
         var objects = new SolarSystemObjects();

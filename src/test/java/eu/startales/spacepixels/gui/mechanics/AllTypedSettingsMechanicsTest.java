@@ -59,7 +59,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("76 engine fields, 13 application fields and the rejection preset", 90, inputs.size());
+        assertEquals("77 engine fields, 13 application fields and the rejection preset", 91, inputs.size());
         for (String hidden : Set.of("linearityMaxConcentrationDrift", "linearityMinRangeMag", "linearityMaxFrameSlope",
                 "linearityMaxFailingFrameFraction", "variableLimitedMinAmplitudeMag", "variableAmplitudeNoiseFactor",
                 "variableMinSplitHalfCorrelation", "variableMaxApertureAmplitudeDifference",
@@ -260,12 +260,12 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
     }
 
     /** The settings shown in one unit and stored in another. */
-    private static final Set<String> CONVERTED = Set.of("faintMoverMaxSeconds", "faintMoverMaxSpeedPixelsPerMinute",
-            "faintMoverMinDisplacementFwhm");
+    private static final Set<String> CONVERTED = Set.of("faintMoverMaxSeconds", "faintMoverMaxSecondsGpu",
+            "faintMoverMaxSpeedPixelsPerMinute", "faintMoverMinDisplacementFwhm");
 
     /** Converts displayed motion/time units into canonical profile values for persistence checks. */
     private Object canonicalValue(String id, Object value) {
-        if (id.equals("faintMoverMaxSeconds")) return ((Number) value).doubleValue() * 60;
+        if (id.equals("faintMoverMaxSeconds") || id.equals("faintMoverMaxSecondsGpu")) return ((Number) value).doubleValue() * 60;
         if (id.equals("faintMoverMaxSpeedPixelsPerMinute")) return ((Number) value).doubleValue() / faintMoverDisplayScale();
         if (id.equals("faintMoverMinDisplacementFwhm")) return ((Number) value).doubleValue() / faintMoverMinimumDisplayScale();
         return value;

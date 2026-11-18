@@ -44,15 +44,20 @@ public final class FaintMoversSettings {
             false, Integer.class, c -> c.faintMoverSearchSpeed, (c, v) -> c.faintMoverSearchSpeed = v);
     public static final DetectionSetting<Double> TIME_LIMIT = new DetectionSetting<>(
             "faintMoverMaxSeconds", "Time limit (minutes)", "",
-            "Maximum additional search time, displayed in minutes and stored in seconds. A stopped search reports its partial coverage; "
+            "Maximum additional search time on CPU, displayed in minutes and stored in seconds. A stopped search reports its partial coverage; "
                     + "cancelling the whole job follows normal cancellation.",
             false, Double.class, c -> c.faintMoverMaxSeconds, (c, v) -> c.faintMoverMaxSeconds = v);
+    public static final DetectionSetting<Double> TIME_LIMIT_GPU = new DetectionSetting<>(
+            "faintMoverMaxSecondsGpu", "Time limit with GPU (minutes)", "",
+            "Maximum additional search time when the first pass runs on an OpenCL graphics card, displayed in minutes and stored in seconds. "
+                    + "A stopped search reports its partial coverage; cancelling the whole job follows normal cancellation.",
+            false, Double.class, c -> c.faintMoverMaxSecondsGpu, (c, v) -> c.faintMoverMaxSecondsGpu = v);
 
     /** Prevents construction of the fixed definitions. */
     private FaintMoversSettings() { }
 
     /** Returns all bindings in display order; Auto-Tune preserves these values. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, SEARCH_SPEED, TIME_LIMIT);
+        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, SEARCH_SPEED, TIME_LIMIT, TIME_LIMIT_GPU);
     }
 }

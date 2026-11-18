@@ -217,13 +217,16 @@ public class ApplicationWindow {
                 }, this::setSessionTabsEnabled, viewers);
         configurationApplicationPanel = new ConfigurationPanel(applicationSettings, sessionAccess, mainApplicationPanel,
                 storage, () -> closing);
-        configurationApplicationPanel.onFetchSettingsChanged(mainApplicationPanel::refreshWorkflowStatus);
         mainApplicationPanel.configureAstrometry(() -> tabbedPane.setSelectedComponent(configurationApplicationPanel));
         stretchPanel = new StretchPanel(sessionAccess, mainApplicationPanel.batchStretchAction(),
                 mainApplicationPanel::showInPreview, this::showStretchEditor);
         detectionConfigurationPanel = new DetectionConfigurationPanel(sessionAccess, jobCoordinator, storage, frmIpodImage,
                 () -> closing, () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel),
-                mainApplicationPanel, mainApplicationPanel, viewers);
+                mainApplicationPanel, mainApplicationPanel, viewers, applicationSettings::getConfig);
+        configurationApplicationPanel.onFetchSettingsChanged(() -> {
+            mainApplicationPanel.refreshWorkflowStatus();
+            detectionConfigurationPanel.refreshGpuContext();
+        });
         mainApplicationPanel.attach(stretchPanel, detectionConfigurationPanel,
                 () -> tabbedPane.setSelectedComponent(detectionConfigurationPanel));
         mainApplicationPanel.configurePreparation(this::showPreparation,
@@ -310,6 +313,7 @@ public class ApplicationWindow {
         if (preparationWindow != null) preparationWindow.dispose();
         viewers.closeAll();
         if (configurationApplicationPanel != null) configurationApplicationPanel.close();
+        if (detectionConfigurationPanel != null) detectionConfigurationPanel.close();
         if (mainApplicationPanel != null) mainApplicationPanel.closeSessionViews();
         sessions.close();
         storage.close();
