@@ -23,7 +23,7 @@ Use the individual exposures before stacking. Rejection during stacking can supp
 
 Choose an application package under **Assets** at [SpacePixels Releases](https://github.com/ppissias/SpacePixels/releases).
 
-**Windows x64 installer:** download the EXE under Assets and run `SpacePixels-<installer-version>.exe`. It includes Java 21, installs for your Windows account and offers desktop and Start menu shortcuts. Launch the installed **SpacePixels** shortcut or `SpacePixels.exe`. See the [manual's installation instructions](MANUAL.md#installing) for unsigned-installer notices, upgrades and uninstalling.
+**Windows x64 installer:** download the EXE under Assets and run `SpacePixels-<installer-version>.exe`. It includes its own bundled Java runtime (Java 21 or newer), installs for your Windows account and offers desktop and Start menu shortcuts. Launch the installed **SpacePixels** shortcut or `SpacePixels.exe`. See the [manual's installation instructions](MANUAL.md#installing) for unsigned-installer notices, upgrades and uninstalling.
 
 **ZIP/TAR archives (Windows, Linux and macOS):** install Java 21 or newer, for example [Eclipse Temurin](https://adoptium.net/temurin/releases/?version=21) or [Oracle Java](https://www.oracle.com/java/technologies/downloads/), then unpack the complete archive and run from its folder:
 
@@ -270,7 +270,7 @@ Report reproducible problems through [GitHub Issues](https://github.com/ppissias
 
 ### Running from source
 
-Use JDK 21. From the project root:
+Use JDK 21 or newer (`--release 21` compiles for Java 21+ JREs). From the project root:
 
 - Windows: `.\gradlew.bat run`
 - Linux/macOS: `./gradlew run`

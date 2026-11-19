@@ -35,8 +35,8 @@ def packagingJava = {
     if (!System.getProperty('os.name').startsWith('Windows') || System.getProperty('os.arch') != 'amd64') {
         throw new GradleException('Windows packaging requires a Windows x64 build machine.')
     }
-    if (JavaVersion.current() != JavaVersion.VERSION_21) {
-        throw new GradleException('Run Windows packaging with a 64-bit JDK 21; JAVA_HOME selects the bundled runtime.')
+    if (JavaVersion.current() < JavaVersion.VERSION_21) {
+        throw new GradleException('Run Windows packaging with a 64-bit JDK 21 or newer; JAVA_HOME selects the bundled runtime.')
     }
     def executable = new File(System.getProperty('java.home'), 'bin/jpackage.exe')
     if (!executable.isFile()) throw new GradleException('The selected JDK does not contain jpackage.exe.')
@@ -111,7 +111,7 @@ def prepareResources = tasks.register('prepareWindowsResources') {
 
 tasks.register('windowsAppImage', Exec) {
     group = 'distribution'
-    description = 'Builds SpacePixels.exe, console tool launchers and a private Java 21 runtime (Windows x64).'
+    description = 'Builds SpacePixels.exe, console tool launchers and a private Java runtime (Windows x64).'
     dependsOn prepareInput, prepareResources
     inputs.dir(inputDirectory)
     inputs.files(iconFile, batchProperties, injectorProperties)

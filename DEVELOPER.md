@@ -139,7 +139,7 @@ These apply to everyone, including coding agents.
 
 ## Build and run
 
-Use Java 21 and the Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` elsewhere) from the repository root.
+Use JDK 21 or newer (`--release 21`) and the Gradle wrapper (`gradlew.bat` on Windows, `./gradlew` elsewhere) from the repository root.
 
 ```powershell
 .\gradlew.bat compileJava compileDesktopJava compileTestJava
@@ -175,13 +175,13 @@ Application distributions bundle those libraries and JTransient and JPlateSolve 
 
 FITS HDU creation uses the public `Fits.makeHDU(Object)` API in pixel conversion, XISF import, artificial-star injection and test fixtures.
 
-The application and both libraries compile for Java 21. The Windows installer bundles a Java 21 runtime.
+The application and both libraries compile with `--release 21` so any Java 21+ JRE can execute them. The Windows installer bundles the packaging JDK's private runtime (`>= 21`).
 
 ### Windows installer
 
-`gradle/windows-installer.gradle` supplies two opt-in Windows x64 tasks: `windowsAppImage` produces `build/windows/image/SpacePixels/SpacePixels.exe` and a private Java runtime; `windowsInstaller` wraps that image in `build/installers/SpacePixels-<installer-version>.exe`. Use a 64-bit JDK 21. The installer task also needs WiX 3 build tools (`candle.exe`, `light.exe`), found through `-PwixHome=<folder>`, `WIX_HOME`, `WIX`, or PATH. Store local paths in git-ignored `gradle.properties`, not in the build script. See [PUBLISHING.md](PUBLISHING.md#windows-installer) for commands and release validation.
+`gradle/windows-installer.gradle` supplies two opt-in Windows x64 tasks: `windowsAppImage` produces `build/windows/image/SpacePixels/SpacePixels.exe` and a private Java runtime; `windowsInstaller` wraps that image in `build/installers/SpacePixels-<installer-version>.exe`. Use a 64-bit JDK 21 or newer (`JAVA_HOME`). The installer task also needs WiX 3 build tools (`candle.exe`, `light.exe`), found through `-PwixHome=<folder>`, `WIX_HOME`, `WIX`, or PATH. Store local paths in git-ignored `gradle.properties`, not in the build script. See [PUBLISHING.md](PUBLISHING.md#windows-installer) for commands and release validation.
 
-The tasks reuse `installDist`'s complete JAR set and all shared distribution files, including the default detection profile, appearance example, license and third-party notices. Archive launcher scripts are replaced by `SpacePixels.exe`, `spacepixels-batch.exe` and `injectStars.exe`; both command-line tools have console launchers. The multi-size ICO embeds the existing PNG icons without changing their pixels. `jpackage` links the packaging JDK's Java 21 runtime; native `java`/`javaw` commands are retained for Appearance's helper-based restart, and runtime legal notices stay included. All three launchers keep the existing memory/G1 options.
+The tasks reuse `installDist`'s complete JAR set and all shared distribution files, including the default detection profile, appearance example, license and third-party notices. Archive launcher scripts are replaced by `SpacePixels.exe`, `spacepixels-batch.exe` and `injectStars.exe`; both command-line tools have console launchers. The multi-size ICO embeds the existing PNG icons without changing their pixels. `jpackage` links the packaging JDK's runtime; native `java`/`javaw` commands are retained for Appearance's helper-based restart, and runtime legal notices stay included. All three launchers keep the existing memory/G1 options.
 
 The installer uses per-user installation and directory selection. Repair, removal, and a different release use that selected folder: `src/windows-installer/main.wxs` records it because the generated file components are registered by registry key paths, which otherwise make maintenance fall back to the default Local AppData folder. The folder page of another release shows the saved path unless `INSTALLDIR` was set on the command line. It also offers optional desktop and Start menu shortcuts, is unsigned, is built locally, and upgrades through a new installer. The fixed upgrade UUID must not change between releases. The Windows installer uses a numeric version derived from the application version; `-PwindowsInstallerVersion=major.minor.build` can override it (Windows limits: 255.255.65535). Home settings and datasets are kept outside the installation folder and are not installer payload or cleanup targets. There is no automatic updater.
 

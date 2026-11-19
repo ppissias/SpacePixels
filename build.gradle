@@ -30,6 +30,10 @@ base {
     archivesName = centralArtifactId
 }
 
+if (JavaVersion.current() < JavaVersion.VERSION_21) {
+    throw new GradleException('SpacePixels requires JDK 21 or newer to build (bytecode targets Java 21 via --release 21).')
+}
+
 tasks.withType(JavaCompile) {
     options.encoding = 'UTF-8'
     options.release = 21

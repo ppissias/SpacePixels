@@ -35,7 +35,7 @@ Before publishing a release, upload the intended application archives and, for a
 
 ## Windows installer
 
-Build on Windows x64 with a 64-bit JDK 21 selected by `JAVA_HOME`. The JDK supplies `jpackage` and `jlink`. Building the installer also requires the WiX 3 build tools (`candle.exe` and `light.exe`); WiX is not needed by the installed application.
+Build on Windows x64 with a 64-bit JDK 21 or newer selected by `JAVA_HOME`. The JDK supplies `jpackage` and `jlink`. Building the installer also requires the WiX 3 build tools (`candle.exe` and `light.exe`); WiX is not needed by the installed application.
 
 ```powershell
 .\gradlew.bat windowsAppImage
@@ -44,7 +44,7 @@ Build on Windows x64 with a 64-bit JDK 21 selected by `JAVA_HOME`. The JDK suppl
 
 `windowsAppImage` creates `build/windows/image/SpacePixels/`. `windowsInstaller` creates the image if needed, then writes `build/installers/SpacePixels-<installer-version>.exe`. WiX can instead be configured with `wixHome` in git-ignored `gradle.properties`, `WIX_HOME`, `WIX`, or PATH. Ordinary builds and archive distributions do not require Windows or WiX.
 
-The image contains the desktop and headless JARs, their dependencies, all shared files from the Java distribution and a private Java 21 runtime with its legal notices. The default detection profile, appearance example, application license and `NOTICE.txt` are included unchanged under `app/`; future distribution configuration files and examples are copied too. Native launchers replace the archive's launcher scripts:
+The image contains the desktop and headless JARs, their dependencies, all shared files from the Java distribution and a private Java runtime from the packaging JDK (`>= 21`) with its legal notices. The default detection profile, appearance example, application license and `NOTICE.txt` are included unchanged under `app/`; future distribution configuration files and examples are copied too. Native launchers replace the archive's launcher scripts:
 
 - `SpacePixels.exe` opens the desktop without a console.
 - `spacepixels-batch.exe` runs the batch CLI in a console. For example, from the installation folder: `.\spacepixels-batch.exe "<sequence folder>" "app\config\default_detection_profile.json"`.
