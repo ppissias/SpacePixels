@@ -111,6 +111,7 @@ public final class SatCheckerTrackLookup {
         var warnings = new ArrayList<>(observation.warnings());
         checkCoordinateFrame(observation, warnings);
         var candidates = new LinkedHashMap<Integer, JsonObject>();
+        var discoveryFailures = new ArrayList<String>();
         boolean discoveryComplete = true;
         int discoveredExposures = 0;
         int attemptedExposures = 0;
@@ -162,12 +163,15 @@ public final class SatCheckerTrackLookup {
                 control.checkCancelled();
                 if (control.isTimedOut()) {
                     discoveryComplete = false;
-                    warnings.add("The five-minute time budget ended candidate discovery. Completed evidence is retained.");
+                    String timeoutMessage = "The five-minute time budget ended candidate discovery.";
+                    discoveryFailures.add(timeoutMessage);
+                    warnings.add(timeoutMessage + " Completed evidence is retained.");
                     break;
                 }
                 throw e;
             } catch (RuntimeException e) {
                 discoveryComplete = false;
+                if (e.getMessage() != null && !e.getMessage().isBlank()) discoveryFailures.add(e.getMessage());
                 warnings.add("Frame " + exposure.frame() + " candidate search failed: " + e.getMessage());
             }
         }
@@ -251,7 +255,11 @@ public final class SatCheckerTrackLookup {
         if (observation.astrometry().get("imageAxes") != null)
             normalized.add("imageAxes", new Gson().toJsonTree(observation.astrometry().get("imageAxes")));
         var response = new JsonObject();
-        response.addProperty("ok", true);
+        boolean ok = discoveredExposures > 0;
+        response.addProperty("ok", ok);
+        if (!ok) {
+            response.addProperty("message", discoveryFailureSummary(observation.exposures().size(), discoveryFailures));
+        }
         response.addProperty("provider", "satchecker");
         response.addProperty("observationDigest", observation.digest());
         response.addProperty("fetchedAtUtc", Instant.now().toString());
@@ -262,6 +270,21 @@ public final class SatCheckerTrackLookup {
         payload.add("queries", queries);
         response.add("payload", payload);
         return response;
+    }
+
+    /**
+     * Summarises a total discovery failure without repeating identical upstream error text for every frame.
+     */
+    private static String discoveryFailureSummary(int totalExposures, List<String> failures) {
+        var unique = new LinkedHashSet<String>();
+        for (String failure : failures) {
+            if (failure != null && !failure.isBlank()) unique.add(failure.trim());
+        }
+        String scope = totalExposures == 1 ? "the exposure" : "all " + totalExposures + " exposures";
+        if (unique.isEmpty()) {
+            return "SatChecker search failed for " + scope + ". Retry when the service responds.";
+        }
+        return "SatChecker search failed for " + scope + " (" + String.join("; ", unique) + ").";
     }
 
     /**

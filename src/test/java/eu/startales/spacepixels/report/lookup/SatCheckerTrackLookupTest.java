@@ -161,9 +161,32 @@ public class SatCheckerTrackLookupTest {
             return reply(url, false);
         }, new SatCheckerTrackLookup.Control()).compare(observation());
         var n = result.getAsJsonObject("normalized");
+        assertTrue(result.get("ok").getAsBoolean());
         assertFalse(n.get("discoveryComplete").getAsBoolean());
         assertEquals(1, n.get("searchedExposures").getAsInt());
         assertTrue(n.get("warnings").toString().contains("timeout"));
+    }
+
+    /**
+     * All Exposures Failing Discovery Returns A Visible Failure Instead Of An Empty Search.
+     */
+    @Test
+    public void allExposuresFailingDiscoveryReturnsFailureAndRetainsQueryDiagnostics() {
+        var count = new AtomicInteger();
+        var result = new SatCheckerTrackLookup(url -> {
+            if (count.getAndIncrement() == 0)
+                return JsonParser.parseString("{\"ok\":false,\"message\":\"Live lookup failed: Read timed out\"}").getAsJsonObject();
+            return JsonParser.parseString("{\"ok\":false,\"message\":\"SatChecker returned HTTP 502.\"}").getAsJsonObject();
+        }, new SatCheckerTrackLookup.Control()).compare(observation());
+        assertFalse(result.get("ok").getAsBoolean());
+        String message = result.get("message").getAsString();
+        assertTrue(message.contains("all 2 exposures"));
+        assertTrue(message.contains("Read timed out"));
+        assertTrue(message.contains("HTTP 502"));
+        var n = result.getAsJsonObject("normalized");
+        assertEquals(0, n.get("searchedExposures").getAsInt());
+        assertFalse(n.get("discoveryComplete").getAsBoolean());
+        assertEquals(2, result.getAsJsonObject("payload").getAsJsonArray("queries").size());
     }
 
     /**

@@ -97,6 +97,7 @@
   "variableMinSpanMinutes": 30.0,
   "variableNoiseModelNeighbors": 50,
   "variableScoreSigma": 7.0,
+  "variableMinExcessScatter": 3.0,
   "variableMinAmplitudeMag": 0.05,
   "variableLimitedMinAmplitudeMag": 0.1,
   "variableAmplitudeNoiseFactor": 5.0,

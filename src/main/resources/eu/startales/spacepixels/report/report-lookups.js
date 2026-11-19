@@ -243,8 +243,7 @@
 
   function buildErrorResponseHtml(response, title) {
     const message = response && response.message ? response.message : 'The live lookup did not return usable data.';
-    let html = "<div class='live-render-panel error'><div class='live-render-title'>Live lookup failed</div><p class='live-caption'>" + escapeHtml(message) + "</p>";
-    html = "<div class='live-render-panel error'><div class='live-render-heading'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta'>Lookup failed</div></div><p class='live-caption'>" + escapeHtml(message) + "</p>";
+    let html = "<div class='live-render-panel error'><div class='live-render-heading'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta'>Lookup failed</div></div><p class='live-caption'>" + escapeHtml(message) + "</p>";
     if (response && response.upstreamStatus) {
       html += "<div class='live-caption'>Upstream HTTP status: " + escapeHtml(response.upstreamStatus) + "</div>";
     }
@@ -384,10 +383,14 @@
   }
 
   function buildSatelliteComparisonHtml(response, title) {
-    const n = response.normalized || {}, candidates = safeArray(n.candidates);
+    const n = response.normalized || {}, candidates = safeArray(n.candidates), warnings = safeArray(n.warnings);
     let html = "<div class='live-render-panel'><div class='live-render-heading' style='flex-wrap:wrap'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta' style='overflow-wrap:anywhere'>" + escapeHtml(buildRenderMeta(response)) + "</div></div>";
     html += "<p class='live-caption'>Candidate discovery succeeded for " + escapeHtml(n.searchedExposures) + ' of ' + escapeHtml(n.totalExposures) + ' independent exposures. '
       + (n.discoveryComplete ? 'Search intervals were covered; catalogue completeness is unknown.' : '<strong>Search coverage is incomplete.</strong>') + '</p>';
+    if (!n.discoveryComplete) {
+      warnings.filter(w => /candidate search failed|time budget|limited to|five-degree/i.test(String(w)))
+        .forEach(w => { html += "<p class='live-caption'>" + escapeHtml(w) + '</p>'; });
+    }
     if (n.unavailableExposureCount) html += "<p class='live-caption'>" + escapeHtml(n.unavailableExposureCount) + ' additional observed exposures lack usable timing or sky measurements and could not be compared.</p>';
     if (n.followUpComplete === false) html += "<p class='live-caption'><strong>Trajectory follow-up is incomplete.</strong> " + escapeHtml(candidates.length) + ' of ' + escapeHtml(n.totalReturnedCandidates) + ' returned candidates have follow-up results or errors. Inspect coverage and limitations before comparing alternatives.</p>';
     if (!candidates.length) html += "<p class='live-empty-note'>No candidate was returned by the completed searches. This does not rule out a satellite.</p>";
@@ -573,7 +576,10 @@
       }
       const persistedResponse = Object.assign({}, entries[sidecarFile], { cacheSource: 'saved-report' });
       const digest = button.getAttribute('data-observation-digest');
-      if (digest && (persistedResponse.observationDigest !== digest || !persistedResponse.normalized || persistedResponse.normalized.comparisonVersion !== 1)) return;
+      if (digest && (persistedResponse.observationDigest !== digest
+          || !persistedResponse.normalized
+          || persistedResponse.normalized.comparisonVersion !== 1
+          || (typeof persistedResponse.normalized.searchedExposures === 'number' && persistedResponse.normalized.searchedExposures <= 0))) return;
       const provider = button.getAttribute('data-provider');
       const target = button.getAttribute('data-target');
       if (provider && target) {

@@ -18,6 +18,7 @@ public final class MpcExport {
     public static final int DEFAULT_SELECTION = 6;
     private static final Pattern NUMBERED = Pattern.compile("^(\\d+)(?: .*)?$");
     private static final Pattern PROVISIONAL = Pattern.compile("^\\(?(\\d{4} [A-Z]{2}\\d*)\\)?$");
+    private static final Pattern STATION = Pattern.compile("^[A-Za-z0-9]{3,4}$");
 
     private MpcExport() { }
 
@@ -119,12 +120,20 @@ public final class MpcExport {
         return String.format(Locale.US, "%s · %s · %d observation%s over %.2f h", findingId, id, o.size(), o.size() == 1 ? "" : "s", hours);
     }
 
+    /** Whether {@code stationCode} has the 3- or 4-character alphanumeric form of an MPC observatory code. */
+    public static boolean isValidStationCode(String stationCode) {
+        return stationCode != null && STATION.matcher(stationCode.trim()).matches();
+    }
+
     /**
      * The values MPChecker's form asks for, for one observation: the UTC date with a decimal day, RA and Dec in
      * sexagesimal and the observatory code. MPChecker has no documented programmatic interface, so the user types or
-     * pastes these into its page.
+     * pastes these into its page. Refuses a blank or malformed observatory code rather than substituting {@code 500}.
      */
     public static String mpcheckerValues(MpcObservation observation, String stationCode) {
+        if (!isValidStationCode(stationCode)) {
+            throw new IllegalArgumentException("MPChecker requires a 3- or 4-character MPC observatory code (or 500 for geocentric).");
+        }
         var time = java.time.Instant.ofEpochMilli(observation.midpointMillis()).atZone(java.time.ZoneOffset.UTC);
         double day = time.getDayOfMonth() + time.toLocalTime().toNanoOfDay() / 86_400e9;
         long tenthsOfTimeSecond = Math.round(observation.raDegrees() / 15 * 36_000) % (24 * 36_000);
@@ -133,7 +142,7 @@ public final class MpcExport {
                 time.getYear(), time.getMonthValue(), day,
                 tenthsOfTimeSecond / 36_000, tenthsOfTimeSecond / 600 % 60, tenthsOfTimeSecond % 600 / 10.0,
                 observation.decDegrees() < 0 ? "-" : "+", tenthsOfArcsecond / 36_000, tenthsOfArcsecond / 600 % 60, tenthsOfArcsecond % 600 / 10.0,
-                stationCode == null || stationCode.isBlank() ? "500" : stationCode.trim().toUpperCase(Locale.ROOT));
+                stationCode.trim().toUpperCase(Locale.ROOT));
     }
 
     /** The objects the window offers to export by default: tracks that are known or match nothing known. */

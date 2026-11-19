@@ -7,6 +7,7 @@ import com.sun.net.httpserver.HttpHandler;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.*;
+import java.util.function.Function;
 
 /**
  * Local report endpoint with two owned comparison slots, explicit cancellation and observation-bound caching.
@@ -15,6 +16,21 @@ final class SatelliteComparisonHandler implements HttpHandler {
     private final ConcurrentMap<String, SatCheckerTrackLookup.Control> active = new ConcurrentHashMap<>();
     private final Semaphore slots = new Semaphore(2);
     private final Gson gson = new Gson();
+    private final Function<SatCheckerTrackLookup.Control, SatCheckerTrackLookup> lookupFactory;
+
+    /**
+     * Creates a handler backed by live SatChecker requests.
+     */
+    SatelliteComparisonHandler() {
+        this(SatCheckerTrackLookup::new);
+    }
+
+    /**
+     * Supplies a deterministic lookup factory for loopback HTTP tests.
+     */
+    SatelliteComparisonHandler(Function<SatCheckerTrackLookup.Control, SatCheckerTrackLookup> lookupFactory) {
+        this.lookupFactory = lookupFactory;
+    }
 
     /**
      * Handles bounded snapshot requests; provider URLs are generated on the server, never supplied by the browser.
@@ -65,9 +81,7 @@ final class SatelliteComparisonHandler implements HttpHandler {
             String source = "satchecker-track:" + observation.digest();
             var cached = body.has("refresh") && body.get("refresh").getAsBoolean() ? null :
                     ReportLookupCacheStore.tryLoadMatchingSidecarResponse(sidecar, "satchecker", source);
-            if (cached != null && cached.has("observationDigest") && observation.digest().equals(cached.get("observationDigest").getAsString())
-                    && cached.has("normalized") && cached.getAsJsonObject("normalized").has("comparisonVersion")
-                    && cached.getAsJsonObject("normalized").get("comparisonVersion").getAsInt() == 1) {
+            if (isReusableCachedComparison(cached, observation)) {
                 cached.addProperty("persisted", ReportLookupCacheStore.persistResponseInReportCache(report, sidecarName, cached));
                 write(exchange, 200, cached);
                 return;
@@ -80,11 +94,16 @@ final class SatelliteComparisonHandler implements HttpHandler {
             if (active.putIfAbsent(id, control) != null)
                 throw new IllegalArgumentException("This comparison request is already running.");
             CompletableFuture.delayedExecutor(300, TimeUnit.SECONDS).execute(control::expire);
-            var response = new SatCheckerTrackLookup(control).compare(observation);
+            var response = lookupFactory.apply(control).compare(observation);
             control.checkCancelled();
             response.addProperty("sourceUrl", source);
-            ReportLookupCacheStore.writeSidecarResponse(sidecar, response);
-            response.addProperty("persisted", ReportLookupCacheStore.persistResponseInReportCache(report, sidecarName, response));
+            boolean ok = response.has("ok") && response.get("ok").getAsBoolean();
+            if (ok) {
+                ReportLookupCacheStore.writeSidecarResponse(sidecar, response);
+                response.addProperty("persisted", ReportLookupCacheStore.persistResponseInReportCache(report, sidecarName, response));
+            } else {
+                response.addProperty("persisted", false);
+            }
             write(exchange, 200, response);
         } catch (CancellationException e) {
             write(exchange, 200, error("Satellite comparison cancelled or timed out. No identity conclusion was drawn."));
@@ -102,6 +121,18 @@ final class SatelliteComparisonHandler implements HttpHandler {
      */
     void cancelAll() {
         active.values().forEach(SatCheckerTrackLookup.Control::cancel);
+    }
+
+    /**
+     * Reuses a saved sidecar only when it succeeded for these observations and searched at least one exposure.
+     */
+    private static boolean isReusableCachedComparison(JsonObject cached, StreakTrackObservation observation) {
+        if (cached == null || !cached.has("ok") || !cached.get("ok").getAsBoolean()) return false;
+        if (!cached.has("observationDigest") || !observation.digest().equals(cached.get("observationDigest").getAsString())) return false;
+        if (!cached.has("normalized") || !cached.get("normalized").isJsonObject()) return false;
+        var normalized = cached.getAsJsonObject("normalized");
+        if (!normalized.has("comparisonVersion") || normalized.get("comparisonVersion").getAsInt() != 1) return false;
+        return !normalized.has("searchedExposures") || normalized.get("searchedExposures").getAsInt() > 0;
     }
 
     /**

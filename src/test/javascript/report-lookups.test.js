@@ -89,12 +89,39 @@ test('cancellation aborts the active comparison and rejects a late successful re
 
 test('partial searches and failed trajectories remain explicit in the evidence display', () => {
   const r = trackResponse(); r.normalized.discoveryComplete = false;
+  r.normalized.warnings.push('Frame 3 candidate search failed: Live lookup failed: Read timed out');
   r.normalized.candidates[0].unavailableReason = 'No historical orbit';
   const c = client([]);
   const html = c.api.buildSatelliteComparisonHtml(r, 'Comparison');
   assert.match(html, /Search coverage is incomplete/); assert.match(html, /No historical orbit/);
+  assert.match(html.split('<details><summary>Assumptions and limitations</summary>')[0], /Frame 3 candidate search failed: Live lookup failed: Read timed out/);
   r.normalized.candidates = [];
   assert.match(c.api.buildSatelliteComparisonHtml(r, 'Comparison'), /does not rule out a satellite/);
+});
+
+test('total track comparison failure renders an error panel with retry and is not cached', async () => {
+  const failed = {ok: false, provider: 'satchecker', observationDigest: 'digest',
+    message: 'SatChecker search failed for all 4 exposures (Read timed out; HTTP 502).',
+    normalized: {trackComparison: true, comparisonVersion: 1, discoveryComplete: false, searchedExposures: 0, totalExposures: 4, candidates: [], warnings: []},
+    payload: {queries: [{ok: false, message: 'HTTP 502'}]}};
+  const c = client([failed, trackResponse()], 1, '', {}, {attributes: trackAttributes, observation: {findingId: 'ST1'}});
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.match(c.slot.innerHTML, /Lookup failed/);
+  assert.match(c.slot.innerHTML, /SatChecker search failed for all 4 exposures/);
+  assert.match(c.slot.innerHTML, /Retry lookup/);
+  assert.match(c.slot.innerHTML, /Show Raw JSON/);
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.equal(c.requests.length, 2);
+  assert.match(c.slot.innerHTML, /Satellite &lt;example&gt;/);
+});
+
+test('legacy saved track comparison with zero searched exposures is ignored on load', () => {
+  const legacyFailed = trackResponse();
+  legacyFailed.normalized.searchedExposures = 0;
+  legacyFailed.normalized.discoveryComplete = false;
+  legacyFailed.normalized.candidates = [];
+  const c = client([], 1, '', {}, {attributes: trackAttributes, cache: {entries: {'v0.json': legacyFailed}}});
+  assert.equal(c.slot.innerHTML, '');
 });
 
 test('catalogue star remains without a VSX match and a positive VSX result takes precedence', async () => {

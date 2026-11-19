@@ -27,6 +27,7 @@ import eu.startales.spacepixels.mpc.MpcObservation;
 import eu.startales.spacepixels.mpc.MpcRecords;
 import eu.startales.spacepixels.mpc.NightLinks;
 import eu.startales.spacepixels.mpc.ReportedObjects;
+import eu.startales.spacepixels.mpc.SavedMeasurements;
 import io.github.ppissias.jtransient.core.SubStackAstrometry;
 import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.session.ApplicationStorage;
@@ -144,8 +145,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JButton unlinkButton = new JButton("Unlink");
     /** The running read of the linked nights; null otherwise. EDT only. */
     private SwingWorker<?, ?> nightsWorker;
+    /** The running Find_Orb fit or JPL station check; null otherwise. EDT only. */
+    private SwingWorker<?, ?> findOrbWorker, stationWorker;
     /** What the user recorded about each object and the MPC, as saved beside the report; EDT only. */
     private final Map<String, MpcRecords.Entry> records;
+    /** Sub-stacks, changed observation ticks and measured light curves, as saved beside the report; EDT only. */
+    private final Map<String, SavedMeasurements.Entry> measurements;
     /** Objects whose linked nights are left out of the file (This night only); EDT only. */
     private final Set<String> thisNightOnly = new java.util.HashSet<>();
     private final JCheckBox thisNightOnlyBox = new JCheckBox("This night only");
@@ -165,6 +170,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final AtomicInteger generation = new AtomicInteger();
     private SwingWorker<List<short[][][]>, Void> worker;
     private boolean closed;
+    private String checkedStationCode;
     private String stationProblem;
     private String stationText = "not checked";
 
@@ -231,6 +237,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     + eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME + " beside it.");
         }
         this.records = new java.util.LinkedHashMap<>(MpcRecords.load(report.folder()));
+        this.measurements = new java.util.LinkedHashMap<>(SavedMeasurements.load(report.folder()));
         this.reduction = AstrometricReduction.create(header, correction, this.files);
         this.settings = settings;
         this.storage = storage;
@@ -243,10 +250,26 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             // A night already submitted is not offered again by default.
             var record = records.get(object.id());
             exported.put(object.id(), MpcExport.includedByDefault(object) && (record == null || record.submittedUtc == null));
-            List<MpcObservation> reduced = reduction.reduction() == null || !object.measured()
-                    ? List.of() : reduction.reduction().reducePositions(object.positions());
+            SavedMeasurements.Entry saved = measurements.get(object.id());
+            List<MpcObservation> reduced;
+            if (object.measured()) {
+                reduced = reduction.reduction() == null ? List.of() : reduction.reduction().reducePositions(object.positions());
+            } else if (saved != null && saved.subStacks != null && !saved.subStacks.isEmpty()) {
+                subStacks.put(object.id(), saved.restoredSubStacks());
+                reduced = saved.restoredSubStackObservations();
+            } else {
+                reduced = List.of();
+            }
             observations.put(object.id(), reduced);
-            selected.put(object.id(), new TreeSet<>(MpcExport.spreadSelection(reduced.size(), MpcExport.DEFAULT_SELECTION)));
+            Set<Integer> restoredSelection = saved == null ? null : saved.restoredSelection(reduced.size());
+            selected.put(object.id(), restoredSelection != null
+                    ? restoredSelection
+                    : new TreeSet<>(object.measured()
+                            ? MpcExport.spreadSelection(reduced.size(), MpcExport.DEFAULT_SELECTION)
+                            : java.util.stream.IntStream.range(0, reduced.size()).boxed().toList()));
+            if (saved != null && saved.lightCurve != null) {
+                curves.put(object.id(), saved.lightCurve.toCurve());
+            }
         }
         this.thisNight = new NightLinks.Night(this.report, reduction, site);
         playTimer =new Timer(Math.max(50, visualization.getGifBlinkSpeedMs()), e -> step(1));
@@ -504,7 +527,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 }
                 try {
                     var curve = get();
-                    if (curve != null) curves.put(object.id(), curve);
+                    if (curve != null) {
+                        curves.put(object.id(), curve);
+                        measurementEntry(object.id()).lightCurve = SavedMeasurements.SavedCurve.from(curve);
+                        saveMeasurements();
+                    }
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     curveLabel.setText(object.id() + "'s light curve could not be measured: " + cause.getMessage());
@@ -629,6 +656,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         thisNightOnlyBox.addActionListener(e -> {
             if (shown == null) return;
             if (thisNightOnlyBox.isSelected()) thisNightOnly.add(shown.id()); else thisNightOnly.remove(shown.id());
+            refreshObjects();
             refreshExport();
         });
         panel.add(thisNightOnlyBox);
@@ -902,7 +930,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     /** Applies a new selection rule to the shown object's observations. */
     private void select(java.util.function.Function<List<MpcObservation>, Set<Integer>> rule) {
         if (shown == null) return;
-        selected.put(shown.id(), rule.apply(observations.get(shown.id())));
+        Set<Integer> updated = new TreeSet<>(rule.apply(observations.get(shown.id())));
+        selected.put(shown.id(), updated);
+        measurementEntry(shown.id()).selectedIndices = new ArrayList<>(updated);
+        saveMeasurements();
         forgetOrbit();
         observationsModel.fireTableDataChanged();
         refreshObjects();
@@ -946,15 +977,27 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     problems.add(object.id() + ": " + MpcRecords.problem(designation));
                     continue;
                 }
-                notes.add(object.id() + " is reported as " + designation + ", its designation from the MPC.");
+                notes.add(object.id() + " is reported as " + designation + ", its designation from the MPC"
+                        + (others.isEmpty() ? "." : " (" + omittedNightsPhrase(others.size()) + ")."));
                 tracklets.add(designated);
                 continue;
             }
             var named = namedObject(object, others);
-            if (named != object) notes.add(object.id() + " is reported as " + named.names().getFirst() + ", the identification of its linked night.");
+            if (named != object) {
+                notes.add(object.id() + " is reported as " + named.names().getFirst()
+                        + ", the identification of its linked night"
+                        + (others.isEmpty() ? "." : " (" + omittedNightsPhrase(others.size()) + ")."));
+            }
             var tracklet = MpcExport.tracklet(named, chosen, report.sessionStartMillis(), i);
             var unsent = others.stream().filter(o -> !o.submitted()).toList();
             boolean unidentified = tracklet.permID() == null && tracklet.provID() == null;
+            if (!unidentified && named == object && !others.isEmpty()) {
+                String label = tracklet.permID() != null ? tracklet.permID() : tracklet.provID();
+                notes.add(object.id() + " is reported as " + label + " (" + omittedNightsPhrase(others.size()) + ").");
+            }
+            if (unidentified && !others.isEmpty() && thisNightOnly.contains(object.id())) {
+                notes.add(object.id() + ": " + omittedNightsPhrase(others.size()) + ".");
+            }
             for (var other : others) {
                 if (unidentified && other.submitted() && !thisNightOnly.contains(object.id())) {
                     notes.add(object.id() + ": " + other.name() + " was marked submitted on " + other.record().submittedUtc
@@ -967,7 +1010,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 String trkSub = tracklet.trkSub();
                 long first = report.sessionStartMillis();
                 for (var other : unsent) {
-                    all.addAll(NightLinks.defaultSelection(other.observations()));
+                    all.addAll(SavedMeasurements.selectedOrDefault(other.observations(), other.saved()));
                     long start = other.night().report().sessionStartMillis();
                     if (start > 0 && start < first) {
                         first = start;
@@ -1002,7 +1045,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
         }
         if (reduction.reduction() == null) problems.add(reduction.problem());
-        if (stationProblem != null) problems.add(stationProblem);
+        String currentCode = context.stationCode() == null ? "" : context.stationCode().trim().toUpperCase(Locale.ROOT);
+        if (stationProblem != null && currentCode.equals(checkedStationCode)) {
+            problems.add(stationProblem);
+        } else if (!currentCode.isBlank() && site != null && !currentCode.equals(checkedStationCode)) {
+            notes.add("Observatory code " + currentCode + " has not been checked against the observing site with JPL yet.");
+        }
         problems.addAll(AdesPsv.problems(context, tracklets));
         problemsArea.setText(problems.isEmpty() ? "Ready: " + tracklets.size() + " object" + (tracklets.size() == 1 ? "" : "s")
                 + " with " + tracklets.stream().mapToInt(t -> t.observations().size()).sum() + " observations."
@@ -1127,33 +1175,47 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
 
     /** Asks JPL Horizons where the code's station is, on a worker, and compares it with the observing site. */
     private void checkStation(String code) {
+        if (stationWorker != null) stationWorker.cancel(true);
+        String normalizedCode = code == null ? "" : code.trim().toUpperCase(Locale.ROOT);
         stationLabel.setText("Asking JPL…");
-        new SwingWorker<SolarSystemClient.Station, Void>() {
+        stationWorker = new SwingWorker<SolarSystemClient.Station, Void>() {
             @Override protected SolarSystemClient.Station doInBackground() throws Exception {
-                return new SolarSystemClient().station(code);
+                return new SolarSystemClient().station(normalizedCode);
             }
 
             @Override protected void done() {
-                if (closed) return;
+                if (stationWorker == this) stationWorker = null;
+                if (closed || isCancelled()) return;
                 try {
                     var station = get();
+                    checkedStationCode = normalizedCode;
                     stationProblem = AdesPsv.stationProblem(station, site);
                     stationText = station.code() + " · " + station.name();
                     stationLabel.setHtml(escape(stationText) + (stationProblem == null
                             ? site == null ? " · no observing site to compare" : " · agrees with the observing site" : " · does not agree"));
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
-                    stationProblem = null;
-                    stationLabel.setHtml(escape(cause.getMessage()));
+                    // Keep an earlier disagreement for the same code until a later check actually agrees.
+                    if (!normalizedCode.equals(checkedStationCode)) {
+                        checkedStationCode = null;
+                        stationProblem = null;
+                    }
+                    String detail = cause.getMessage();
+                    if (stationProblem != null && normalizedCode.equals(checkedStationCode)) {
+                        detail += " · earlier disagreement for " + normalizedCode + " still applies";
+                    }
+                    stationLabel.setHtml(escape(detail));
                 }
                 refreshExport();
             }
-        }.execute();
+        };
+        stationWorker.execute();
     }
 
     /**
      * Copies the MPChecker values of the shown object's middle selected observation (else its middle observation)
-     * and opens MPChecker in the browser, where the user pastes them; nothing is sent from here.
+     * and opens MPChecker in the browser, where the user pastes them; nothing is sent from here. When no observatory
+     * code is configured, asks whether to use {@code 500} (geocentric) or enter a valid MPC code explicitly.
      */
     private void openMpchecker() {
         if (shown == null) return;
@@ -1162,12 +1224,49 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             problemsArea.setText("MPChecker needs a measured position: " + shown.id() + " has none.");
             return;
         }
+        String stationCode = settings.getConfig().observatoryCode;
+        if (!MpcExport.isValidStationCode(stationCode)) {
+            stationCode = askMpcheckerStationCode();
+            if (stationCode == null) return;
+        }
         var chosen = new ArrayList<>(selected.get(shown.id()));
         int index = chosen.isEmpty() ? list.size() / 2 : chosen.get(chosen.size() / 2);
-        String values = MpcExport.mpcheckerValues(list.get(index), settings.getConfig().observatoryCode);
+        String values = MpcExport.mpcheckerValues(list.get(index), stationCode);
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(values), null);
         problemsArea.setText("Copied for MPChecker (" + shown.id() + ", frame " + list.get(index).frameNumber() + "):\n" + values);
         browse(MPCHECKER);
+    }
+
+    /**
+     * Prompts for an observatory code when none is set in Astrometry Config: either explicit {@code 500} (geocentric)
+     * or a user-entered 3- or 4-character MPC code. Returns null if cancelled.
+     */
+    private String askMpcheckerStationCode() {
+        String message = "<html><body style='width:420px'>"
+                + "No IAU observatory code is set in Astrometry Config. MPChecker requires a 3- or 4-character MPC "
+                + "observatory code (it does not accept latitude/longitude directly).<br><br>"
+                + "<b>Code 500 (Geocentric)</b> calculates positions from the Earth's centre: usually accurate within "
+                + "MPChecker's search radius for main-belt asteroids, but parallax can shift close Near-Earth Objects "
+                + "by arcminutes.<br><br>"
+                + "<i>Tip: Compare again / Identify all in SpacePixels already uses your exact site coordinates via JPL Horizons.</i>"
+                + "</body></html>";
+        Object[] options = {"Use 500 (Geocentric)", "Enter code…", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(this, message, "Observatory code for MPChecker",
+                JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+        if (choice == 0) return "500";
+        if (choice != 1) return null;
+        String entered = "";
+        while (true) {
+            Object reply = JOptionPane.showInputDialog(this,
+                    "Enter a 3- or 4-character MPC observatory code (yours or a nearby station):",
+                    "Enter MPC observatory code", JOptionPane.PLAIN_MESSAGE, null, null, entered);
+            if (reply == null) return null;
+            entered = reply.toString().trim().toUpperCase(Locale.ROOT);
+            if (MpcExport.isValidStationCode(entered)) return entered;
+            JOptionPane.showMessageDialog(this,
+                    "An MPC observatory code must be 3 or 4 letters/digits (for example W84 or 500).",
+                    "Invalid observatory code", JOptionPane.WARNING_MESSAGE);
+        }
     }
 
     /**
@@ -1181,7 +1280,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         var others = nightsOf(shown.id());
         String site = others.isEmpty() ? null : siteProblem(shown.id());
         var all = new ArrayList<>(chosen);
-        if (site == null) for (var other : others) all.addAll(NightLinks.defaultSelection(other.observations()));
+        if (site == null) for (var other : others) all.addAll(SavedMeasurements.selectedOrDefault(other.observations(), other.saved()));
         all.sort(java.util.Comparator.comparingLong(MpcObservation::midpointMillis));
         int nights = site == null ? 1 + (int) others.stream().filter(o -> !o.observations().isEmpty()).count() : 1;
         if (all.size() < 3) {
@@ -1217,12 +1316,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         var times = all.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
         var singleTimes = chosen.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
         var object = shown;
+        if (findOrbWorker != null) findOrbWorker.cancel(true);
         orbitLabel.setText("Fitting " + object.id() + (nights > 1 ? " on " + nights + " nights" : "") + " with Find_Orb…");
-        new SwingWorker<FindOrb.Orbit[], Void>() {
+        findOrbWorker = new SwingWorker<FindOrb.Orbit[], Void>() {
             @Override protected FindOrb.Orbit[] doInBackground() throws Exception {
                 FindOrb.Orbit fit = FindOrb.fit(program, text, times);
                 FindOrb.Orbit alone = null;
-                if (single != null) {
+                if (single != null && !isCancelled()) {
                     try {
                         alone = FindOrb.fit(program, single, singleTimes);
                     } catch (java.io.IOException noSingleNightOrbit) {
@@ -1233,7 +1333,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
 
             @Override protected void done() {
-                if (closed) return;
+                if (findOrbWorker == this) findOrbWorker = null;
+                if (closed || isCancelled()) return;
                 try {
                     var fits = get();
                     orbits.put(object.id(), fits[0]);
@@ -1251,7 +1352,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     if (orbits.containsKey(object.id())) showOrbitWindow();
                 }
             }
-        }.execute();
+        };
+        findOrbWorker.execute();
     }
 
     /** A fit belongs to the observations it was made from: a changed selection drops it. */
@@ -1916,7 +2018,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     }
                     subStacks.put(object.id(), stacks);
                     observations.put(object.id(), list);
-                    selected.put(object.id(), new TreeSet<>(java.util.stream.IntStream.range(0, list.size()).boxed().toList()));
+                    var allIndices = new TreeSet<>(java.util.stream.IntStream.range(0, list.size()).boxed().toList());
+                    selected.put(object.id(), allIndices);
+                    var entry = measurementEntry(object.id());
+                    entry.subStacks = SavedMeasurements.pairSubStacks(stacks, list);
+                    entry.selectedIndices = new ArrayList<>(allIndices);
+                    saveMeasurements();
                     problemsArea.setText(" ");
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
@@ -1931,11 +2038,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     }
 
     /**
-     * One other night of an object: the night, the object there, its measured positions as observations, and what the
-     * user recorded about it and the MPC on that night (null when nothing).
+     * One other night of an object: the night, the object there, its measured positions as observations, what the
+     * user recorded about it and the MPC on that night (null when nothing), and any saved measurements/ticks.
      */
     private record OtherNight(NightLinks.Night night, ReportedObjects.ReportedObject object, List<MpcObservation> observations,
-                              MpcRecords.Entry record) {
+                              MpcRecords.Entry record, SavedMeasurements.Entry saved) {
         /** Whether that night's observations were marked submitted. */
         boolean submitted() {
             return record != null && record.submittedUtc != null;
@@ -2022,8 +2129,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                             var night = openNight(ref.folder(), latitude, longitude, altitude);
                             var object = night.object(ref.objectId());
                             if (object == null) problems.add(ref.objectId() + " is not in " + ref.folder().getName() + ".");
-                            else nights.add(new OtherNight(night, object, night.observations(object),
-                                    MpcRecords.load(ref.folder()).get(ref.objectId())));
+                            else {
+                                var saved = SavedMeasurements.load(ref.folder()).get(ref.objectId());
+                                var obs = object.measured() ? night.observations(object)
+                                        : saved == null ? List.<MpcObservation>of() : saved.restoredSubStackObservations();
+                                nights.add(new OtherNight(night, object, obs,
+                                        MpcRecords.load(ref.folder()).get(ref.objectId()), saved));
+                            }
                         } catch (Exception e) {
                             problems.add(ref.folder().getName() + " cannot be read: " + message(e));
                         }
@@ -2300,9 +2412,64 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             return null;
         }, problem -> {
             updateRecord();
+            refreshObjects();
             if (problem != null) recordLabel.setHtml(escape("Not saved: " + problem));
             refreshExport();
         });
+    }
+
+    /** Returns the mutable saved-measurement entry for {@code id}, creating one if absent. */
+    private SavedMeasurements.Entry measurementEntry(String id) {
+        return measurements.computeIfAbsent(id, key -> {
+            var created = new SavedMeasurements.Entry();
+            created.id = key;
+            return created;
+        });
+    }
+
+    /** Writes saved sub-stacks, observation selections and light curves beside the report on a worker. */
+    private void saveMeasurements() {
+        File folder = report.folder();
+        var snapshot = new java.util.LinkedHashMap<String, SavedMeasurements.Entry>();
+        for (var entry : measurements.entrySet()) {
+            if (entry.getValue() != null && !entry.getValue().isEmpty()) {
+                snapshot.put(entry.getKey(), entry.getValue().copy());
+            }
+        }
+        writeOnWorker(() -> {
+            SavedMeasurements.save(folder, snapshot);
+            return null;
+        }, problem -> {
+            if (problem != null) problemsArea.setText("Measurements could not be saved: " + problem);
+        });
+    }
+
+    /** How many of {@code object}'s linked nights will actually be written into this ADES file. */
+    private int includedLinkedNightsCount(ReportedObjects.ReportedObject object) {
+        var others = nightsOf(object.id());
+        if (others.isEmpty() || thisNightOnly.contains(object.id()) || designation(object.id()) != null) return 0;
+        var named = namedObject(object, others);
+        var tracklet = MpcExport.tracklet(named, List.of(), report.sessionStartMillis(), Math.max(0, report.objects().indexOf(object)));
+        if (tracklet.permID() != null || tracklet.provID() != null) return 0;
+        return (int) others.stream().filter(o -> !o.submitted()).count();
+    }
+
+    /** Table-cell suffix showing how many linked nights are included in, or omitted from, this file. */
+    static String linkedNightsSuffix(int totalLinked, int includedLinked) {
+        if (totalLinked <= 0) return "";
+        if (includedLinked <= 0) {
+            return " · " + totalLinked + (totalLinked == 1 ? " linked night (not in file)" : " linked nights (not in file)");
+        }
+        String included = " · +" + includedLinked + (includedLinked == 1 ? " night" : " nights");
+        int omitted = totalLinked - includedLinked;
+        return omitted <= 0 ? included : included + " (" + omitted + " not in file)";
+    }
+
+    /** Export-note clause stating that linked nights are not written into this file. */
+    static String omittedNightsPhrase(int linkedCount) {
+        return linkedCount == 1
+                ? "this night only; 1 linked night is not in this file"
+                : "this night only; " + linkedCount + " linked nights are not in this file";
     }
 
     /** An exception's cause's message. */
@@ -2339,8 +2506,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             playTimer.stop();
             if (worker != null) worker.cancel(true);
             worker = null;
-            for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker, nightsWorker}) if (running != null) running.cancel(true);
-            identifyWorker = curveWorker = subStackWorker = nightsWorker = null;
+            for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker, nightsWorker, findOrbWorker, stationWorker}) {
+                if (running != null) running.cancel(true);
+            }
+            identifyWorker = curveWorker = subStackWorker = nightsWorker = findOrbWorker = stationWorker = null;
             pictures = List.of();
         }
         super.dispose();
@@ -2368,8 +2537,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 case 3 -> String.join(" or ", object.names());
                 default -> (object.measured() ? selected.get(object.id()).size() + " of " + observations.get(object.id()).size()
                         : subStacks.containsKey(object.id()) ? subStacks.get(object.id()).size() + " sub-stacks" : "fitted only")
-                        + (nightsOf(object.id()).isEmpty() ? "" : " · +" + nightsOf(object.id()).size()
-                        + (nightsOf(object.id()).size() == 1 ? " night" : " nights"));
+                        + linkedNightsSuffix(nightsOf(object.id()).size(), includedLinkedNightsCount(object));
             };
         }
 
@@ -2412,6 +2580,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         @Override public void setValueAt(Object value, int row, int column) {
             Set<Integer> set = selected.get(shown.id());
             if (Boolean.TRUE.equals(value)) set.add(row); else set.remove(row);
+            measurementEntry(shown.id()).selectedIndices = new ArrayList<>(set);
+            saveMeasurements();
             forgetOrbit();
             fireTableCellUpdated(row, column);
             refreshObjects();

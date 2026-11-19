@@ -65,10 +65,65 @@ public class SatelliteComparisonHandlerTest {
     }
 
     /**
+     * A Failed Comparison Is Never Persisted And A Legacy Zero-Search Sidecar Is Ignored.
+     */
+    @Test
+    public void failedComparisonIsNotPersistedAndLegacyZeroSearchSidecarIsIgnored() throws Exception {
+        var observation = SatelliteTrackComparisonTest.observation(List.of(
+                SatelliteTrackComparisonTest.exposure(1, 0, 100, .05), SatelliteTrackComparisonTest.exposure(2, 200, 300, .25)));
+        Path report = temporary.newFile("detection_report.html").toPath();
+        Files.writeString(report, "<html><body>Saved report</body></html>");
+        // First: no sidecar exists; a total upstream failure must not write a sidecar or embed into the report.
+        Path freshSidecar = report.resolveSibling("fresh_failed.json");
+        var failingHandler = new SatelliteComparisonHandler(control -> new SatCheckerTrackLookup(
+                url -> JsonParser.parseString("{\"ok\":false,\"message\":\"SatChecker returned HTTP 502.\"}").getAsJsonObject(), control));
+        var freshBody = new JsonObject();
+        freshBody.addProperty("requestId", "test-comparison-failed1");
+        freshBody.add("observation", new Gson().toJsonTree(observation));
+        freshBody.addProperty("report", report.toUri().toString());
+        freshBody.addProperty("sidecar", freshSidecar.getFileName().toString());
+        var failedResult = request(failingHandler, "POST", freshBody);
+        assertFalse(failedResult.get("ok").getAsBoolean());
+        assertFalse(failedResult.get("persisted").getAsBoolean());
+        assertTrue(failedResult.get("message").getAsString().contains("HTTP 502"));
+        assertFalse(Files.exists(freshSidecar));
+        assertFalse(Files.readString(report).contains("spacepixels-persisted-live-results"));
+
+        // Second: a legacy sidecar saved with searchedExposures == 0 must not be served as a cached hit.
+        var legacyCached = new JsonObject();
+        legacyCached.addProperty("ok", true);
+        legacyCached.addProperty("provider", "satchecker");
+        legacyCached.addProperty("sourceUrl", "satchecker-track:" + observation.digest());
+        legacyCached.addProperty("observationDigest", observation.digest());
+        var legacyNormalized = new JsonObject();
+        legacyNormalized.addProperty("comparisonVersion", 1);
+        legacyNormalized.addProperty("trackComparison", true);
+        legacyNormalized.addProperty("searchedExposures", 0);
+        legacyCached.add("normalized", legacyNormalized);
+        Path legacySidecar = report.resolveSibling("legacy_zero.json");
+        ReportLookupCacheStore.writeSidecarResponse(legacySidecar, legacyCached);
+        var legacyBody = new JsonObject();
+        legacyBody.addProperty("requestId", "test-comparison-failed2");
+        legacyBody.add("observation", new Gson().toJsonTree(observation));
+        legacyBody.addProperty("report", report.toUri().toString());
+        legacyBody.addProperty("sidecar", legacySidecar.getFileName().toString());
+        var retryResult = request(failingHandler, "POST", legacyBody);
+        assertFalse(retryResult.get("ok").getAsBoolean());
+        assertEquals("live", retryResult.get("cacheSource").getAsString());
+        assertFalse(Files.readString(report).contains("spacepixels-persisted-live-results"));
+    }
+
+    /**
      * Drives the production handler at an ephemeral loopback port with temporary report files only.
      */
     private JsonObject request(String method, JsonObject body) throws Exception {
-        var handler = new SatelliteComparisonHandler();
+        return request(new SatelliteComparisonHandler(), method, body);
+    }
+
+    /**
+     * Drives the given handler instance at an ephemeral loopback port.
+     */
+    private JsonObject request(SatelliteComparisonHandler handler, String method, JsonObject body) throws Exception {
         var server = HttpServer.create(new InetSocketAddress(InetAddress.getLoopbackAddress(), 0), 0);
         server.createContext("/compare", handler);
         server.start();

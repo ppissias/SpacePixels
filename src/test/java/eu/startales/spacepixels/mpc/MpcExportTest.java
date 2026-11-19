@@ -85,7 +85,18 @@ public class MpcExportTest {
         assertTrue(values, values.contains("Dec: -01 48 18.5"));
         assertTrue(values, values.contains("Observatory code: W84"));
         var edge = new MpcObservation(1, 0, 0, 0, 0, 359.99999, 0.0, 0.1, 0.1, "Gaia3", "");
-        assertTrue("RA rounds to 00 00 00.0, not 24 or a 60", MpcExport.mpcheckerValues(edge, "").contains("RA: 00 00 00.0"));
+        assertTrue("RA rounds to 00 00 00.0, not 24 or a 60", MpcExport.mpcheckerValues(edge, "500").contains("RA: 00 00 00.0"));
+        assertTrue(MpcExport.isValidStationCode("W84"));
+        assertTrue(MpcExport.isValidStationCode("500"));
+        assertFalse(MpcExport.isValidStationCode(""));
+        assertFalse(MpcExport.isValidStationCode("   "));
+        assertFalse(MpcExport.isValidStationCode("AB"));
+        try {
+            MpcExport.mpcheckerValues(edge, "");
+            org.junit.Assert.fail("Blank station code must not silently substitute 500");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("500"));
+        }
     }
 
     /** Only measured tracks that are known or match nothing are offered by default. */
