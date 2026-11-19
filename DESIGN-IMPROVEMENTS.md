@@ -14,6 +14,7 @@ Every item here is a proposal until the maintainer decides on it. When an item i
 | [SP-22](#sp-22-upgrade-gson-to-2150) | Upgrade Gson to 2.15.0 | Low | Small |
 | [JT-04](#shared-logging-review-jt-04) | Shared logging review across all three repositories | Medium | Review first |
 | [SP-26](#sp-26-review-of-the-sky-catalogue-fallback-services) | Unify sky-catalogue fallback chains (Item 6) | Medium | Small |
+| [SP-27](#sp-27-asteroids--comets-window-review) | Asteroids & Comets window review | Medium | Small |
 
 Keep dependency maintenance (SP-21 and SP-22) separate from refactorings, according to each item's timing.
 
@@ -52,3 +53,14 @@ SpacePixels' part covers GUI/CLI output, `DebugOutput`, library diagnostic bridg
   - **Problem:** In `SkyCatalogueClient`, the fallback chains are written three ways: SIMBAD uses a loop over parallel arrays (`endpoints`, `services`, `places`), VSX uses three sequential try blocks, and Gaia stars use try/catch nested three deep with an out-parameter `String[] source` and two `Runnable` progress hooks.
   - **Proposal:** Follow the "few patterns applied consistently" principle: use one shared descriptor of a copy (service name, source name, endpoint, query and column mapping) and one loop. This eliminates nesting, the out-parameter, and duplicated `depthQuery`/`depthArchiveQuery` box code.
   - **Verification:** Live probe of each provider, catalogue regression on reference datasets, and unit tests covering error/fallback transitions.
+
+### SP-27. Asteroids & Comets window review
+
+**Code review (2026-11-17).** Review of `gui.AsteroidsCometsWindow` and the `mpc` types it uses, against the [F33](FEATURE-REQUESTS.md#f33-mpc-observation-export-and-find_orb) window as it stands. The split into Identify, Measure, Check and Export is sound: nothing is submitted by itself, weak sub-stacks and reports that lack a detection's size and signal-to-noise block the file, Find_Orb's result is kept only when its residual times match the observations sent, and the MPC test runs only after the user confirms. The points below are the ones worth changing. Recheck each against the current code before editing it.
+
+- **Compute orbit ignores "This night only".** The ADES file leaves out linked nights when that box is ticked, and it leaves out a night already marked submitted. `openFindOrb` still adds every linked night whose site matches, and the paste for the online Find_Orb does the same. The fitted orbit and the file can describe different observations. The orbit should use the same nights as the file.
+- **A designation drops the other nights without saying so.** Linking an unidentified object puts its nights in one tracklet. Saving an MPC designation (`MpcRecords.tracklet`), or taking a single known name from a linked night (`namedObject`), then writes only this night. The object row still shows "+ N nights", and the ready note only says the object is reported under that designation. The note and the row should say that the other nights are not in this file.
+- **A failed station check forgets an earlier disagreement.** When "Check with JPL" finds the observatory code far from the observing site, export is blocked (`AdesPsv.stationProblem`). A later check that fails, for example because JPL cannot be reached, sets `stationProblem` back to null in `checkStation`, so the file becomes ready with the same code. Keep the disagreement until a later check agrees. Export also stays ready when the station has never been checked.
+- **MPChecker is given code 500 when no observatory code is set.** `MpcExport.mpcheckerValues` substitutes the geocentre. Find_Orb and the ADES file refuse a blank code. MPChecker should too, and the copied line should not say 500.
+- **Faint-mover measurements and the observation ticks last only while the window is open.** Tracks are reduced again from the report, so they return on the default six observations. A faint mover's sub-stacks do not: after the window closes there is nothing to export until they are measured again, and any changed ticks are gone. A measured light curve is lost the same way. Identifications (`LaterIdentifications`), designations and the submitted mark (`MpcRecords`), and night links (`NightLinks`) are already kept beside the report. The measurements need the same.
+- **Closing the window leaves Find_Orb running.** `dispose` cancels Identify all, the light curve, the sub-stacks and the night reader. The Find_Orb fit is a separate worker and runs until it finishes or reaches its two-minute limit. Cancel it with the others.
