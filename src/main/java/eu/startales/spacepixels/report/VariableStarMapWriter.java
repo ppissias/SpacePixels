@@ -255,7 +255,7 @@ final class VariableStarMapWriter {
                 x, y, color, size, ReportFormat.escapeHtml(value));
     }
 
-    private static String jpeg(BufferedImage image) throws IOException {
+    static String jpeg(BufferedImage image) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         ImageWriter writer = ImageIO.getImageWritersByFormatName("jpg").next();
         ImageWriteParam param = writer.getDefaultWriteParam();

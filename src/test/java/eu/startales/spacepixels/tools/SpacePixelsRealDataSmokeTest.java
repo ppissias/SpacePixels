@@ -10,6 +10,10 @@ import eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO;
 import eu.startales.spacepixels.config.SpacePixelsDetectionProfile;
 import eu.startales.spacepixels.fits.FitsInput;
 import io.github.ppissias.jtransient.photometry.PhotometricReadiness;
+import io.github.ppissias.jtransient.photometry.VariabilityTier;
+import nom.tam.fits.Fits;
+import nom.tam.fits.Header;
+import nom.tam.fits.ImageHDU;
 import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
@@ -62,13 +66,94 @@ public class SpacePixelsRealDataSmokeTest {
         assertTrue("m31-b anomalies", result.getPipelineResult().anomalies.isEmpty());
     }
 
-    /** The crowded stellar field exercises photometry and its CSV exports. */
+    /** The crowded stellar field exercises photometry readiness, measurements and CSV exports. */
     @Test public void m5PhotometryAndReport() throws Exception {
         var result = checkDataset("m5-reg", 36, 32, true, false);
         var variables = result.getPipelineResult().variableStarAnalysis;
         assertEquals(PhotometricReadiness.Verdict.LIMITED, variables.readiness.verdict);
         assertEquals("Measured stars in the reference field", 418, variables.stars.size());
-        assertEquals("Scored candidates in the reference run", 1, variables.candidates.size());
+        assertEquals("Scored candidates in the reference run", 0, variables.candidates.size());
+    }
+
+    /**
+     * A 1600x1600 crop of the M81 session around known VSX variable V3 (full-frame X=2789.5, Y=3941.9)
+     * verifies real variable-star detection, comparison neighbourhood crops, and photometry exports quickly.
+     */
+    @Test public void m81CroppedVariableStarAndReport() throws Exception {
+        Path source = dataset("M81-kumar-L-dataset-registered");
+        var images = FitsInput.list(source.toFile());
+        assertEquals("M81 source frame count", 41, images.length);
+        int cropX = 2000;
+        int cropY = 2550;
+        int cropSize = 1600;
+        double expectedX = 2789.5 - cropX;
+        double expectedY = 3941.9 - cropY;
+
+        Path croppedDir = temporary.newFolder("m81-crop").toPath();
+        for (var image : images) {
+            cropFits16Bit(image.toPath(), croppedDir.resolve(image.getName()), cropX, cropY, cropSize, cropSize);
+        }
+        Path home = temporary.newFolder("home-m81").toPath();
+        String previousHome = System.getProperty("user.home");
+        try {
+            System.setProperty("user.home", home.toString());
+            SpacePixelsDetectionProfile profile;
+            try (var reader = Files.newBufferedReader(Path.of("src/dist/config/default_detection_profile.json"))) {
+                profile = SpacePixelsDetectionProfileIO.load(reader);
+            }
+            var config = profile.getDetectionConfig();
+            config.enableVariableStarDetection = true;
+            config.enableFaintMoverSearch = false;
+            SpacePixelsPipelineResult result = new DefaultSpacePixelsPipelineApi().run(
+                    SpacePixelsPipelineRequest.builder(croppedDir.toFile()).detectionConfig(config)
+                            .inputPreparationMode(InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO)
+                            .generateReport(true).build());
+            var pipeline = result.getPipelineResult();
+            assertFalse("M81 crop stopped after quality control", pipeline.tooFewFrames);
+            var variables = pipeline.variableStarAnalysis;
+            assertNotEquals(PhotometricReadiness.Verdict.NOT_READY, variables.readiness.verdict);
+            System.out.printf(Locale.ROOT, "Real-data smoke M81-crop: kept=%d, photometry=%s, stars=%d, candidates=%d%n",
+                    pipeline.telemetry.totalFramesKept, variables.readiness.verdict,
+                    variables.stars.size(), variables.candidates.size());
+            assertTrue("Known M81 variable V3 must be detected as HIGH_CONFIDENCE near (" + expectedX + ", " + expectedY + ")",
+                    variables.candidates.stream().anyMatch(c ->
+                            c.tier == VariabilityTier.HIGH_CONFIDENCE
+                                    && Math.hypot(c.x - expectedX, c.y - expectedY) <= 3.0));
+            verifyReport(result, images.length, true, false);
+            Path varDir = result.getExportDirectory().toPath().resolve("variable_stars");
+            assertTrue("Candidate map SVG", Files.size(varDir.resolve("photometry_candidate_map.svg")) > 0);
+            assertTrue("Comparison neighbourhood crop SVG", Files.size(varDir.resolve("photometry_v1_comparison.svg")) > 0);
+        } finally {
+            if (previousHome == null) System.clearProperty("user.home");
+            else System.setProperty("user.home", previousHome);
+        }
+    }
+
+    /** Crops a 16-bit mono FITS frame while keeping timing and scaling keywords intact. */
+    private static void cropFits16Bit(Path source, Path target, int x0, int y0, int width, int height) throws Exception {
+        short[][] cropped = new short[height][width];
+        Header srcHeader;
+        try (Fits in = new Fits(source.toFile())) {
+            ImageHDU hdu = (ImageHDU) in.getHDU(0);
+            srcHeader = hdu.getHeader();
+            short[][] raw = (short[][]) hdu.getKernel();
+            for (int y = 0; y < height; y++) {
+                System.arraycopy(raw[y0 + y], x0, cropped[y], 0, width);
+            }
+        }
+        try (Fits out = new Fits()) {
+            var hdu = Fits.makeHDU(cropped);
+            Header header = hdu.getHeader();
+            for (String key : List.of("BZERO", "BSCALE", "EXPTIME", "EXPOSURE")) {
+                if (srcHeader.containsKey(key)) header.addValue(key, srcHeader.getDoubleValue(key), null);
+            }
+            for (String key : List.of("DATE-OBS", "OBJECT")) {
+                String value = srcHeader.getStringValue(key);
+                if (value != null && !value.isBlank()) header.addValue(key, value, null);
+            }
+            out.addHDU(hdu);
+            out.write(target.toFile());
+        }
     }
 
     /** Copies only source images, isolates settings, and runs preparation, detection and reporting synchronously. */

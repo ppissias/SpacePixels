@@ -138,6 +138,23 @@ public class SettingsRowLayoutTest {
         });
     }
 
+    /** Fill-width guidance expands across wide forms instead of remaining capped at its initial fallback width. */
+    @Test public void fillParentWidthGuidanceExpandsAcrossWideContainers() throws Exception {
+        EventQueue.invokeAndWait(() -> {
+            JPanel parent = new JPanel();
+            parent.setLayout(new BoxLayout(parent, BoxLayout.Y_AXIS));
+            parent.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(20), 0, UiStyle.space(20)));
+            WrappingHelpLabel expanded = new WrappingHelpLabel(LONG_HELP, 560).fillParentWidth();
+            WrappingHelpLabel capped = new WrappingHelpLabel(LONG_HELP, 560);
+            parent.add(expanded);
+            parent.add(capped);
+            parent.setSize(UiStyle.space(1040), 5000);
+            parent.doLayout();
+            assertEquals(UiStyle.space(1000), expanded.getPreferredSize().width);
+            assertEquals(UiStyle.space(560), capped.getPreferredSize().width);
+        });
+    }
+
     /** Lays out real Swing descendants so assertions cover allocated bounds as well as preferred sizes. */
     private static void layoutChildren(Container parent) {
         parent.doLayout();

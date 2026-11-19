@@ -75,6 +75,12 @@ public class AsteroidsCometsWindowTest {
             assertEquals("FM1", onEdt(() -> objects.getValueAt(1, 1)));
             assertEquals("Known", onEdt(() -> objects.getValueAt(0, 2)));
             assertEquals("Check", onEdt(() -> objects.getValueAt(1, 2)));
+            // Find_Orb shows its program path ("Not set" initially), executable hint, and updates orbit status right in its section.
+            assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("Program: Not set"))));
+            assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("fo64.exe") && l.getText().contains("fo32.exe"))));
+            onEdt(() -> { objects.setRowSelectionInterval(1, 1); button(window, "Compute orbit").doClick(); return null; });
+            assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("needs at least three selected observations of FM1"))));
+            onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
 
             // Unticking an observation keeps the table and the selected object (once it emptied the table).
             JTable observationsTable = onEdt(() -> tables(window).get(1));
@@ -145,6 +151,86 @@ public class AsteroidsCometsWindowTest {
             assertTrue(onEdt(() -> labels(reopened).stream().anyMatch(l -> l.getText().contains("made after the report"))));
         } finally {
             onEdt(() -> { reopened.dispose(); return null; });
+        }
+    }
+
+    @Test(timeout = 120_000)
+    public void identifyAllPromotesConfirmedMatchesToKnownAndKeepsLooserOnesPossible() throws Exception {
+        assumeFalse("needs a display", GraphicsEnvironment.isHeadless());
+        Path session = session(folder.newFolder("identify-all-session").toPath());
+        FitsFileInformation[] files = files(session);
+        WcsCoordinateTransformer wcs = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
+        long start = files[0].getObservationTimestamp();
+        File reportFolder = report(folder.newFolder("identify-all-report"), files);
+        var report = ReportedObjects.load(reportFolder);
+        long first = report.frames().stream().mapToLong(ReportedObjects.Frame::timestampMillis).min().orElseThrow();
+        long last = report.frames().stream().mapToLong(f -> f.timestampMillis() + Math.max(0, f.exposureMillis())).max().orElseThrow();
+        long epoch = first + (last - first) / 2;
+
+        // Place one known asteroid squarely on T1 (already Known) and one right on FM1 (unidentified).
+        var t1Place = eu.startales.spacepixels.mpc.NearbyKnown.place(
+                eu.startales.spacepixels.mpc.LightCurve.samples(report, report.objects().get(0)), null, epoch, wcs);
+        var fm1Place = eu.startales.spacepixels.mpc.NearbyKnown.place(
+                eu.startales.spacepixels.mpc.LightCurve.samples(report, report.objects().get(1)), report.objects().get(1).motion(), epoch, wcs);
+        var knownT1 = new eu.startales.spacepixels.solarsystem.SolarSystemClient.Known(
+                "649341 (2011 DK30)", false, t1Place.ra(), t1Place.dec(), 18.2, t1Place.raRateArcsecPerHour(), t1Place.decRateArcsecPerHour());
+        var knownFm1 = new eu.startales.spacepixels.solarsystem.SolarSystemClient.Known(
+                "2026 AB1", false, fm1Place.ra(), fm1Place.dec(), 20.5, fm1Place.raRateArcsecPerHour(), fm1Place.decRateArcsecPerHour());
+        var fieldObjects = new eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects(
+                List.of(knownT1, knownFm1), List.of(), List.of());
+
+        var rawNearby = new java.util.LinkedHashMap<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>>();
+        for (var obj : report.objects()) {
+            var p = eu.startales.spacepixels.mpc.NearbyKnown.place(
+                    eu.startales.spacepixels.mpc.LightCurve.samples(report, obj), obj.motion(), epoch, wcs);
+            rawNearby.put(obj.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(p, fieldObjects.objects()));
+        }
+        var byFinding = eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(rawNearby);
+        var selected = AsteroidsCometsWindow.agreeingKnownForUnidentified(report.objects(), fieldObjects.objects(), byFinding);
+        assertEquals(List.of("2026 AB1"), selected.stream().map(eu.startales.spacepixels.solarsystem.SolarSystemClient.Known::name).toList());
+
+        var config = new AppConfig();
+        config.observatoryCode = "500";
+        ApplicationSettings settings = ApplicationSettings.inMemory(config);
+
+        // 1) Ephemeris matches FM1 -> promoted to Known (same PredictionMatch rules as Compare again).
+        AsteroidsCometsWindow w1 = onEdt(() -> new AsteroidsCometsWindow(null, files, report, wcs, correction(wcs), settings,
+                new ApplicationStorage(), VisualizationSettings.defaults(), null, null, () -> null));
+        try {
+            var exactEphem = predictions(wcs, start);
+            exactEphem.magnitudeLimit = Double.NaN;
+            onEdt(() -> {
+                w1.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fieldObjects, byFinding, exactEphem));
+                return null;
+            });
+            JTable objects = onEdt(() -> tables(w1).getFirst());
+            assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
+            assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+            waitFor("Identify all saved later_identifications",
+                    () -> eu.startales.spacepixels.mpc.LaterIdentifications.load(reportFolder).containsKey("FM1"));
+            assertEquals(ReportedObjects.KNOWN, eu.startales.spacepixels.mpc.LaterIdentifications.load(reportFolder).get("FM1").status);
+        } finally {
+            onEdt(() -> { w1.dispose(); return null; });
+        }
+
+        // 2) Ephemeris fails strict PredictionMatch (e.g. shifted by 20 px) -> falls back to Possible from 1' nearby match.
+        File reportFolder2 = report(folder.newFolder("identify-all-possible-report"), files);
+        var report2 = ReportedObjects.load(reportFolder2);
+        AsteroidsCometsWindow w2 = onEdt(() -> new AsteroidsCometsWindow(null, files, report2, wcs, correction(wcs), settings,
+                new ApplicationStorage(), VisualizationSettings.defaults(), null, null, () -> null));
+        try {
+            var shifted = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+            shifted.magnitudeLimit = Double.NaN;
+            shifted.bodies = List.of(body(wcs, start, "2026 AB1", 80, 30, 0, 1.5));
+            onEdt(() -> {
+                w2.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fieldObjects, byFinding, shifted));
+                return null;
+            });
+            JTable objects = onEdt(() -> tables(w2).getFirst());
+            assertEquals("Possible", onEdt(() -> objects.getValueAt(1, 2)));
+            assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+        } finally {
+            onEdt(() -> { w2.dispose(); return null; });
         }
     }
 

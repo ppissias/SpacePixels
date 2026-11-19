@@ -10,6 +10,7 @@ import java.awt.Insets;
 final class WrappingHelpLabel extends JLabel {
     private final int logicalWidth;
     private int wrapWidth;
+    private boolean expandToParent;
 
     /** Preserves inline HTML while using current body typography and readable theme colors. */
     WrappingHelpLabel(String html, int logicalWidth) {
@@ -26,6 +27,12 @@ final class WrappingHelpLabel extends JLabel {
         revalidate();
     }
 
+    /** Uses the full enclosing container width when laid out, instead of capping at {@code logicalWidth}. */
+    WrappingHelpLabel fillParentWidth() {
+        expandToParent = true;
+        return this;
+    }
+
     /** Sets the next measured column width in scaled pixels; no fixed text height is retained. */
     void wrapAt(int width) {
         wrapWidth = Math.max(1, width);
@@ -36,7 +43,8 @@ final class WrappingHelpLabel extends JLabel {
         int width = wrapWidth > 0 ? wrapWidth : UiStyle.space(logicalWidth);
         if (wrapWidth == 0 && getParent() != null && getParent().getWidth() > 0) {
             Insets parentInsets = getParent().getInsets();
-            width = Math.min(width, getParent().getWidth() - parentInsets.left - parentInsets.right);
+            int available = Math.max(UiStyle.space(180), getParent().getWidth() - parentInsets.left - parentInsets.right);
+            width = expandToParent ? available : Math.min(width, available);
         }
         View html = (View) getClientProperty(BasicHTML.propertyKey);
         if (html == null) return super.getPreferredSize();

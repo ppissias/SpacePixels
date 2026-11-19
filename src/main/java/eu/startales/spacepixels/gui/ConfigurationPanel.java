@@ -81,8 +81,8 @@ public class ConfigurationPanel extends JPanel {
     private final JPasswordField localSolverKeyField = new JPasswordField();
     private final JButton localSolverCheckButton = new JButton("Check");
     private final JLabel localSolverStatus = statusLabel();
-    private final JButton watneyLink = AccessibleControls.link("Watney Astrometry (free download)",
-            "Download Watney Astrometry", () -> openBrowser(WATNEY_URL));
+    private final JButton watneyLink = AccessibleControls.link("Watney Astrometry",
+            "Open Watney Astrometry page", () -> openBrowser(WATNEY_URL));
     /** The running local solver check; null when none runs. */
     private SwingWorker<Void, Void> localSolverCheck;
     private final DefaultComboBoxModel<String> siteNames = new DefaultComboBoxModel<>();

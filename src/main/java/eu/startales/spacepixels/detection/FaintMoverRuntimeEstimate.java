@@ -202,27 +202,21 @@ public final class FaintMoverRuntimeEstimate {
         }
         if (motions > maxMotions) {
             double highest = Math.sqrt(maxMotions * step * step / Math.PI + min * min);
-            return String.format(Locale.ROOT, "<b>The run will probably skip the search:</b> the fastest motion needs about "
-                            + "%,.0f trial motions for these frames, over the search's limit of %,d. Lower the fastest motion "
-                            + "to about %.2f px/min or less. Based on %d imported frames over %.2f min and %s.",
+            return String.format(Locale.ROOT, "<b>The run will probably skip the search:</b> needs about "
+                            + "%,.0f trial motions (limit %,d). Lower fastest motion to ~%.2f px/min or less (%d frames, %.1f min, %s).",
                     motions, maxMotions, highest, n, span,
-                    measured ? String.format(Locale.ROOT, "the star size of %.2f px the last detection run measured", fwhm)
-                            : "an assumed " + fwhm + " px star size (a detection run measures it)");
+                    measured ? String.format(Locale.ROOT, "%.2f px the last detection run measured", fwhm)
+                            : "assumed " + fwhm + " px star size");
         }
         int selected = Math.max(0, Math.min(SPEED_NAMES.length - 1, config.faintMoverSearchSpeed));
         double margin = Math.ceil(maxSpeed * halfSpan) + 16;
         double mib = Math.pow(512 + 2 * margin, 2) * (4 * n + 12) / (1024 * 1024);
         return String.format(Locale.ROOT,
-                "Approximate extra time: %s. Selected: %s; limit %.1f min. About %.0f MiB per search worker. "
-                        + "Fast and Faster add pixels or consecutive frames in the first pass and can miss candidates close "
-                        + "to the limits, Faster more; every candidate is still scored on all frames at full resolution. "
-                        + "Based on %d imported frames over %.2f min and %s. "
-                        + "Estimated minimum speed = %.2f FWHM × %s px / span = %.5f px/min. "
-                        + "CPU, seeing, masks and kept frames change this estimate.",
+                "Approximate extra time: %s. Selected: %s (limit %.1f min, ~%.0f MiB per search worker). "
+                        + "Based on %d frames over %.1f min and %s (seeing, masks and kept frames vary actual time).",
                 times, SPEED_NAMES[selected], timeLimitSeconds / 60, mib, n, span,
-                measured ? String.format(Locale.ROOT, "the star size of %.2f px the last detection run measured", fwhm)
-                        : "an assumed " + fwhm + " px star size (a detection run measures it)",
-                config.faintMoverMinDisplacementFwhm, String.format(Locale.ROOT, "%.2f", fwhm), min);
+                measured ? String.format(Locale.ROOT, "%.2f px the last detection run measured", fwhm)
+                        : "assumed " + fwhm + " px star size");
     }
 
     /** A time range from half to twice the estimate, in minutes. */

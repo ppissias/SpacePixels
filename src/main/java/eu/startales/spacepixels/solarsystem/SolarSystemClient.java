@@ -154,13 +154,7 @@ public final class SolarSystemClient {
      * @throws InterruptedException when the thread is interrupted, which cancels the fetch
      */
     public SolarSystemObjects fetch(SolarSystemQuery query, Progress progress) throws InterruptedException {
-        SolarSystemObjects result = new SolarSystemObjects();
-        result.fetchedAtUtc = Instant.now().toString();
-        result.field = SkyField.of(query.transformer(), query.width(), query.height());
-        result.startMillis = query.startMillis();
-        result.endMillis = query.endMillis();
-        result.magnitudeLimit = query.magnitudeLimit();
-        result.observer = query.observer().description();
+        SolarSystemObjects result = baseResult(query);
         ObservingSite site = query.observer().site();
         String horizon = site == null ? null : site.horizonProblem(result.field.centerRa, result.field.centerDec,
                 query.startMillis(), query.endMillis());
@@ -259,16 +253,13 @@ public final class SolarSystemClient {
                 SolarSystemObjects.Body body = null;
                 if (i < refined) {
                     progress.stage(String.format(Locale.US, "positions of object %d of %d (JPL Horizons): %s", i + 1, refined, candidate.name()));
-                    String url = horizonsUri(query, candidate).toString();
-                    try {
-                        String answer = http.get(URI.create(url), HORIZONS_TIMEOUT);
-                        body = parseHorizons(answer, candidate);
-                        horizonsVersion = version(answer);
+                    HorizonsReply reply = askHorizons(query, candidate);
+                    if (reply.failure() == null) {
+                        body = reply.body();
+                        if (reply.version() != null) horizonsVersion = reply.version();
                         horizonsOk++;
-                    } catch (IOException problem) {
-                        objectFailures.add(FetchStep.of("JPL Horizons", candidate.name(), FetchStep.Status.FAILED,
-                                "Kept with the field search's straight-line motion, without an uncertainty.",
-                                problem.getMessage(), url, null));
+                    } else {
+                        objectFailures.add(reply.failure());
                         publish(result, progress, objectFailures);
                     }
                     nextHorizons = i + 1;
@@ -428,6 +419,89 @@ public final class SolarSystemClient {
             problems.add("IMCCE SkyBoT: " + problem.getMessage());
         }
         return new FieldObjects(List.copyOf(found.values()), List.copyOf(problems), List.copyOf(addresses));
+    }
+
+    /**
+     * Fetches multi-frame JPL Horizons ephemerides (with uncertainties, falling back to straight-line motion if
+     * Horizons fails) for {@code matches} returned by {@link #knownInField}, returning {@link SolarSystemObjects}
+     * suitable for {@link eu.startales.spacepixels.report.PredictionMatch}.
+     *
+     * @throws InterruptedException when the thread is interrupted, which cancels the fetch
+     */
+    public SolarSystemObjects ephemeridesFor(SolarSystemQuery query, long epochMillis, List<Known> matches)
+            throws InterruptedException {
+        if (query == null) {
+            throw new IllegalArgumentException("query must not be null");
+        }
+        SolarSystemObjects result = baseResult(query);
+        result.magnitudeLimit = Double.NaN;
+        if (matches == null || matches.isEmpty()) {
+            result.source = "";
+            return result;
+        }
+        Map<String, Candidate> unique = new LinkedHashMap<>();
+        for (Known known : matches) {
+            if (known == null || known.name() == null) continue;
+            unique.putIfAbsent(designationKey(known.name()),
+                    new Candidate(known.name(), known.comet(), known.ra(), known.dec(), known.magnitude(),
+                            known.raRateArcsecPerHour(), known.decRateArcsecPerHour(), epochMillis));
+        }
+        int asked = 0;
+        int ok = 0;
+        String horizonsVersion = null;
+        List<FetchStep> failures = new ArrayList<>();
+        for (Candidate candidate : unique.values()) {
+            if (Thread.interrupted()) {
+                throw new InterruptedException();
+            }
+            asked++;
+            HorizonsReply reply = askHorizons(query, candidate);
+            SolarSystemObjects.Body body = reply.body();
+            if (body != null) {
+                if (reply.version() != null) horizonsVersion = reply.version();
+                ok++;
+            } else {
+                body = straightLine(candidate, query);
+                failures.add(reply.failure());
+            }
+            result.bodies.add(body);
+        }
+        result.fetchSteps.add(horizonsSummary(ok, asked, false));
+        result.fetchSteps.addAll(failures);
+        if (!failures.isEmpty()) {
+            result.problems.add(String.format(Locale.US, "JPL Horizons could not give positions for %d of %d objects; "
+                    + "they use the field search's position and rate as straight-line motion, without an uncertainty.",
+                    failures.size(), asked));
+        }
+        result.source = horizonsVersion == null ? "Field search" : "JPL Horizons API " + horizonsVersion;
+        return result;
+    }
+
+    private record HorizonsReply(SolarSystemObjects.Body body, String version, FetchStep failure) {
+    }
+
+    private static SolarSystemObjects baseResult(SolarSystemQuery query) {
+        SolarSystemObjects result = new SolarSystemObjects();
+        result.fetchedAtUtc = Instant.now().toString();
+        result.field = SkyField.of(query.transformer(), query.width(), query.height());
+        result.startMillis = query.startMillis();
+        result.endMillis = query.endMillis();
+        result.magnitudeLimit = query.magnitudeLimit();
+        result.observer = query.observer().description();
+        return result;
+    }
+
+    private HorizonsReply askHorizons(SolarSystemQuery query, Candidate candidate) throws InterruptedException {
+        String url = horizonsUri(query, candidate).toString();
+        try {
+            String answer = http.get(URI.create(url), HORIZONS_TIMEOUT);
+            return new HorizonsReply(parseHorizons(answer, candidate), version(answer), null);
+        } catch (IOException problem) {
+            FetchStep failure = FetchStep.of("JPL Horizons", candidate.name(), FetchStep.Status.FAILED,
+                    "Kept with the field search's straight-line motion, without an uncertainty.",
+                    problem.getMessage(), url, null);
+            return new HorizonsReply(null, null, failure);
+        }
     }
 
     private static Known known(Candidate c) {

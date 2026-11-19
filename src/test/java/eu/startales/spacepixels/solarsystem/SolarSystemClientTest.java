@@ -613,6 +613,38 @@ public class SolarSystemClientTest {
         assertTrue(step(result.fetchSteps, "JPL Horizons", "Positions").detail.contains("No object crosses"));
     }
 
+    @Test
+    public void ephemeridesForDeduplicatesQueriesAndFallsBackToStraightLineOnHorizonsError() throws Exception {
+        List<String> requestedCommands = new ArrayList<>();
+        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+            String decoded = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            requestedCommands.add(decoded);
+            if (decoded.contains("COMMAND='1001;'") || decoded.contains("COMMAND='1001'")) {
+                return horizonsAnswer("1001 Gaussia", "JPL#42", "V", List.of(
+                        new double[]{0, 150.0, 20.0, 20.4, 0.3, 0.3},
+                        new double[]{30, 150.008, 20.004, 20.4, 0.3, 0.3},
+                        new double[]{60, 150.016, 20.008, 20.4, 0.3, 0.3}));
+            }
+            throw new IOException("Horizons timeout");
+        });
+        long mid = START + 30 * 60_000L;
+        SolarSystemClient.Known confirmed = new SolarSystemClient.Known("1001 Gaussia", false, 150.008, 20.004, 20.4, 27.0, 14.4);
+        SolarSystemClient.Known duplicate = new SolarSystemClient.Known("1001 (1923 OA)", false, 150.008, 20.004, 20.4, 27.0, 14.4);
+        SolarSystemClient.Known fallback = new SolarSystemClient.Known("2022 QJ95", false, 150.02, 20.01, 21.1, 25.0, 10.0);
+
+        SolarSystemObjects result = client.ephemeridesFor(query(), mid, List.of(confirmed, duplicate, fallback));
+
+        assertEquals(2, requestedCommands.size());
+        assertTrue(Double.isNaN(result.magnitudeLimit));
+        assertEquals(2, result.bodies.size());
+        assertEquals("JPL#42", result.bodies.get(0).orbitSolution);
+        assertEquals(3, result.bodies.get(0).samples.size());
+        assertEquals(0.3, result.bodies.get(0).samples.get(0).raSigmaArcsec, 1e-6);
+        assertNull(result.bodies.get(1).orbitSolution);
+        assertEquals(1, result.problems.size());
+        assertTrue(result.problems.get(0).contains("1 of 2"));
+    }
+
     /** The recorded step for this service and question. */
     private static FetchStep step(List<FetchStep> steps, String service, String question) {
         return steps.stream()

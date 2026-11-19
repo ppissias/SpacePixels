@@ -77,8 +77,8 @@ public class FaintMoverMotionLimitTest {
         assertEquals(io.github.ppissias.jtransient.core.FaintMoverSearch.MAX_MOTIONS_GPU, gpuLimit.maxMotions());
 
         String gpuText = FaintMoverRuntimeEstimate.describe(session(), config, 4.14,
-                io.github.ppissias.jtransient.core.FaintMoverSearch.MAX_MOTIONS_GPU, config.faintMoverMaxSecondsGpu, 20.0);
+                io.github.ppissias.jtransient.core.FaintMoverSearch.MAX_MOTIONS_GPU, config.faintMoverMaxSeconds, 20.0);
         assertFalse(gpuText, gpuText.contains("probably skip"));
-        assertTrue(gpuText, gpuText.contains("limit 30.0 min"));
+        assertTrue(gpuText, gpuText.contains("limit 10.0 min"));
     }
 }

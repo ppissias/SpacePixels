@@ -48,6 +48,15 @@ public final class PhotometryReportSectionWriter {
     private static final int COMPARISON_STARS = 3;
     private static final double COMPARISON_MAG_WINDOW = 0.5;
     private static final int CUTOUT_DISPLAY_SIZE = 150;
+    private static final int COMPARISON_CROP_DISPLAY_SIZE = 260;
+    private static final int MIN_COMPARISON_CROP_SPAN = 140;
+    private static final int MAX_COMPARISON_CROP_SPAN = 640;
+    /** Distinct dark-surface colors for C1–C3 (never reusing the candidate's blue or orange). */
+    private static final String[] COMPARISON_COLORS = {
+            PhotometrySvgChart.SERIES_AQUA,
+            "#b388eb",
+            "#d6b74b"
+    };
     /** Catalogue search radius: this many pixels, kept between the two limits below. */
     private static final double SEARCH_RADIUS_PIXELS = 4.0;
     private static final double MIN_SEARCH_RADIUS_ARCSEC = 10.0;
@@ -819,8 +828,11 @@ public final class PhotometryReportSectionWriter {
             writeCandidateTable(report, context, analysis, cards, sessionCatalogue);
             CatalogueComparisonWriter.writeData(report, context, analysis, presentation.identities, sessionCatalogue);
             writeFollowUpGuidance(report);
+            short[][] stack = context.masterStackData;
+            BufferedImage fieldDisplay = (stack != null && stack.length > 0 && stack[0].length > 0)
+                    ? context.fieldDisplayImage(stack) : null;
             for (StarLightCurve star : presentation.cards) {
-                writeCandidateCard(report, context, analysis, star, presentation.number(star), sessionCatalogue);
+                writeCandidateCard(report, context, analysis, star, presentation.number(star), sessionCatalogue, fieldDisplay);
             }
             if (cards.size() > presentation.cards.size()) {
                 report.println("<p class='compact-note'>" + (cards.size() - presentation.cards.size()) + " more candidates are listed in the table, maps and photometry_stars.csv.</p>");
@@ -855,7 +867,8 @@ public final class PhotometryReportSectionWriter {
     }
 
     private static void writeCandidateCard(PrintWriter report, DetectionReportContext context, VariableStarAnalysis analysis,
-                                           StarLightCurve star, int number, SessionCatalogue sessionCatalogue) throws IOException {
+                                           StarLightCurve star, int number, SessionCatalogue sessionCatalogue,
+                                           BufferedImage fieldDisplay) throws IOException {
         boolean high = star.tier == VariabilityTier.HIGH_CONFIDENCE;
         String tierColor = high ? PhotometrySvgChart.SERIES_BLUE : PhotometrySvgChart.SERIES_ORANGE;
         report.println("<div class='detection-card' id='" + context.findingAnchor(FindingCategory.VARIABLE_STAR, number) + "' style='border-left-color:" + tierColor + ";'>");
@@ -922,14 +935,20 @@ public final class PhotometryReportSectionWriter {
         }
         report.println("</div>");
 
-        // Light curve + cutouts
+        // Light curve + comparison neighbourhood crop + cutouts
         List<StarLightCurve> comparisons = comparisonStars(analysis, star);
-        report.println(legend(
-                legendDot(tierColor, "Candidate"),
-                legendHollow(PhotometrySvgChart.CONTEXT_GRAY, "Excluded from analysis"),
-                legendLine(PhotometrySvgChart.CONTEXT_GRAY, "Constant comparison stars (offset)")));
-        report.println("<div class='image-container' style='flex-wrap:wrap;'>");
+        List<String> pills = new ArrayList<>();
+        pills.add(legendDot(tierColor, FindingCategory.VARIABLE_STAR.id(number) + " (candidate)"));
+        pills.add(legendHollow(PhotometrySvgChart.CONTEXT_GRAY, "Excluded from analysis"));
+        for (int k = 0; k < comparisons.size(); k++) {
+            StarLightCurve comp = comparisons.get(k);
+            long distPx = Math.round(Math.hypot(comp.x - star.x, comp.y - star.y));
+            pills.add(legendLine(comparisonColor(k), String.format(Locale.US, "C%d (#%d, %d px, offset)", k + 1, comp.id, distPx)));
+        }
+        report.println(legend(pills.toArray(new String[0])));
+        report.println("<div class='image-container' style='flex-wrap:wrap; align-items:flex-start;'>");
         report.println(lightCurveChart(analysis, star, comparisons, tierColor));
+        report.println(comparisonCrop(context, fieldDisplay, star, comparisons, number, tierColor));
         report.println(cutouts(context, analysis, star, number));
         report.println("</div>");
         report.println("</div>");
@@ -1402,10 +1421,11 @@ public final class PhotometryReportSectionWriter {
                     lastY = y[j];
                 }
             }
-            chart.line(x, y, PhotometrySvgChart.CONTEXT_GRAY, 1.5, false,
+            String compColor = comparisonColor(k);
+            chart.line(x, y, compColor, 1.6, false,
                     String.format(Locale.US, "Steady comparison star C%d, star #%d, average brightness %.2f. Drawn %.2f mag below the candidate so the shapes can be compared.",
                             k + 1, comparison.id, comparison.meanMag, offset));
-            chart.label(lastX, lastY, "C" + (k + 1));
+            chart.label(lastX, lastY, "C" + (k + 1), compColor);
         }
 
         double[] used = new double[n];
@@ -1452,6 +1472,147 @@ public final class PhotometryReportSectionWriter {
     /**
      * Crops the brightest and faintest usable frames, matching local sky and transparency on a shared display span.
      */
+    /** Color for the {@code k}-th plotted comparison star (C1, C2, C3), shared by the chart and neighbourhood crop. */
+    private static String comparisonColor(int k) {
+        return COMPARISON_COLORS[k % COMPARISON_COLORS.length];
+    }
+
+    /**
+     * Writes a self-contained SVG crop of the field display image around {@code star} and its plotted comparison stars
+     * ({@code C1..C3}), circling and labelling each star in the same color used on {@link #lightCurveChart}.
+     */
+    private static String comparisonCrop(DetectionReportContext context, BufferedImage fieldDisplay,
+                                         StarLightCurve star, List<StarLightCurve> comparisons,
+                                         int number, String tierColor) throws IOException {
+        if (fieldDisplay == null || comparisons.isEmpty()
+                || !Double.isFinite(star.x) || !Double.isFinite(star.y)) {
+            return "";
+        }
+        int imgW = fieldDisplay.getWidth();
+        int imgH = fieldDisplay.getHeight();
+        if (imgW <= 0 || imgH <= 0 || star.x < 0 || star.y < 0 || star.x >= imgW || star.y >= imgH) {
+            return "";
+        }
+
+        double minX = star.x, maxX = star.x;
+        double minY = star.y, maxY = star.y;
+        List<Integer> shownIndices = new ArrayList<>();
+        List<String> outsideNotes = new ArrayList<>();
+        for (int k = 0; k < comparisons.size(); k++) {
+            StarLightCurve comp = comparisons.get(k);
+            if (!Double.isFinite(comp.x) || !Double.isFinite(comp.y)
+                    || comp.x < 0 || comp.y < 0 || comp.x >= imgW || comp.y >= imgH) {
+                continue;
+            }
+            double nextMinX = Math.min(minX, comp.x), nextMaxX = Math.max(maxX, comp.x);
+            double nextMinY = Math.min(minY, comp.y), nextMaxY = Math.max(maxY, comp.y);
+            double span = Math.max(nextMaxX - nextMinX, nextMaxY - nextMinY);
+            if (span <= MAX_COMPARISON_CROP_SPAN) {
+                minX = nextMinX;
+                maxX = nextMaxX;
+                minY = nextMinY;
+                maxY = nextMaxY;
+                shownIndices.add(k);
+            } else {
+                long distPx = Math.round(Math.hypot(comp.x - star.x, comp.y - star.y));
+                outsideNotes.add(String.format(Locale.US, "C%d (%d px)", k + 1, distPx));
+            }
+        }
+        if (shownIndices.isEmpty()) {
+            return "";
+        }
+
+        double rawSpan = Math.max(maxX - minX, maxY - minY);
+        double pad = Math.max(24.0, 0.14 * rawSpan);
+        int desiredSide = Math.max(MIN_COMPARISON_CROP_SPAN, (int) Math.ceil(rawSpan + 2.0 * pad));
+        int cropW = Math.min(imgW, desiredSide);
+        int cropH = Math.min(imgH, desiredSide);
+        int x0 = (int) Math.round(0.5 * (minX + maxX) - 0.5 * cropW);
+        int y0 = (int) Math.round(0.5 * (minY + maxY) - 0.5 * cropH);
+        x0 = Math.max(0, Math.min(imgW - cropW, x0));
+        y0 = Math.max(0, Math.min(imgH - cropH, y0));
+
+        // Copy into a standalone RGB buffer so JPEG encoding works consistently regardless of source image type/stride.
+        BufferedImage sub = new BufferedImage(cropW, cropH, BufferedImage.TYPE_INT_RGB);
+        java.awt.Graphics2D g = sub.createGraphics();
+        try {
+            g.drawImage(fieldDisplay, 0, 0, cropW, cropH, x0, y0, x0 + cropW, y0 + cropH, null);
+        } finally {
+            g.dispose();
+        }
+
+        String relPath = ReportFiles.link(FindingCategory.VARIABLE_STAR, "photometry_v" + number + "_comparison.svg");
+        String candidateId = FindingCategory.VARIABLE_STAR.id(number);
+        double scale = Math.max(cropW, cropH) / (double) COMPARISON_CROP_DISPLAY_SIZE;
+        double radius = Math.max(5.0, 9.5 * scale);
+        double stroke = Math.max(1.0, 1.8 * scale);
+        double fontSize = Math.max(6.5, 11.5 * scale);
+        double halo = Math.max(1.5, 2.8 * scale);
+
+        try (AtomicReportFile artifact = new AtomicReportFile(context.file(relPath))) {
+            PrintWriter out = artifact.writer();
+            out.println("<svg xmlns='http://www.w3.org/2000/svg' width='" + cropW + "' height='" + cropH
+                    + "' viewBox='0 0 " + cropW + " " + cropH + "' role='img' font-family='Segoe UI, sans-serif'>");
+            out.println("<title>Comparison neighbourhood for " + ReportFormat.escapeHtml(candidateId) + "</title>");
+            out.println("<desc>Crop of the " + ReportFormat.escapeHtml(context.fieldName())
+                    + " showing candidate " + ReportFormat.escapeHtml(candidateId)
+                    + " and its constant comparison stars in matching light-curve colors.</desc>");
+            out.println("<image width='" + cropW + "' height='" + cropH + "' href='data:image/jpeg;base64,"
+                    + VariableStarMapWriter.jpeg(sub) + "'/>");
+            // Draw comparison stars first, then the candidate on top so it is never obscured.
+            for (int k : shownIndices) {
+                StarLightCurve comp = comparisons.get(k);
+                long distPx = Math.round(Math.hypot(comp.x - star.x, comp.y - star.y));
+                String tip = String.format(Locale.US, "C%d · star #%d · constant comparison · %d px from %s · mean mag %s",
+                        k + 1, comp.id, distPx, candidateId, formatMag(comp.meanMag, 2));
+                writeCropMarker(out, comp.x - x0 + 0.5, comp.y - y0 + 0.5, cropW, cropH,
+                        radius, stroke, fontSize, halo, comparisonColor(k), "C" + (k + 1), tip);
+            }
+            String candTip = String.format(Locale.US, "%s · star #%d · %s · mean mag %s · observed variation %s mag",
+                    candidateId, star.id, tierLabel(star.tier), formatMag(star.meanMag, 2), formatMag(star.amplitude, 3));
+            writeCropMarker(out, star.x - x0 + 0.5, star.y - y0 + 0.5, cropW, cropH,
+                    radius, stroke, fontSize, halo, tierColor, candidateId, candTip);
+            out.println("</svg>");
+            artifact.commit();
+        }
+
+        StringBuilder caption = new StringBuilder();
+        caption.append("Comparison neighbourhood (").append(candidateId).append(" &amp; ");
+        for (int i = 0; i < shownIndices.size(); i++) {
+            if (i > 0) caption.append(", ");
+            caption.append('C').append(shownIndices.get(i) + 1);
+        }
+        caption.append(String.format(Locale.US, "; %d&times;%d px crop). Nearest steady stars of similar brightness, matching curve colours.", cropW, cropH));
+        if (!outsideNotes.isEmpty()) {
+            caption.append(" Outside crop: ").append(ReportFormat.escapeHtml(String.join(", ", outsideNotes))).append('.');
+        }
+
+        return "<div style='max-width:" + COMPARISON_CROP_DISPLAY_SIZE + "px;'>"
+                + "<a href='" + relPath + "' target='_blank' rel='noopener'>"
+                + "<img loading='lazy' decoding='async' src='" + relPath + "' width='" + cropW + "' height='" + cropH
+                + "' style='display:block; width:" + COMPARISON_CROP_DISPLAY_SIZE + "px; max-width:100%; height:auto; border-radius:4px;' "
+                + "alt='" + ReportFormat.escapeHtml("Comparison neighbourhood for " + candidateId) + "' /></a>"
+                + "<p class='compact-note' style='margin-top:4px;'>" + caption + "</p></div>";
+    }
+
+    private static void writeCropMarker(PrintWriter out, double px, double py, int cropW, int cropH,
+                                        double radius, double stroke, double fontSize, double halo,
+                                        String color, String label, String tooltip) {
+        boolean flipLeft = px + radius + fontSize * 2.5 > cropW;
+        double textX = flipLeft ? Math.max(4.0, px - radius - 0.35 * fontSize) : Math.min(cropW - 4.0, px + radius + 0.35 * fontSize);
+        double textY = Math.max(fontSize + 2.0, Math.min(cropH - 4.0, py + 0.35 * fontSize));
+        String anchor = flipLeft ? "end" : "start";
+        out.println("<g><title>" + ReportFormat.escapeHtml(tooltip) + "</title>");
+        out.printf(Locale.US, "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='#141414' stroke-width='%.2f' opacity='0.7'/>%n",
+                px, py, radius, stroke * 1.8);
+        out.printf(Locale.US, "<circle cx='%.2f' cy='%.2f' r='%.2f' fill='none' stroke='%s' stroke-width='%.2f'/>%n",
+                px, py, radius, color, stroke);
+        out.printf(Locale.US, "<text x='%.2f' y='%.2f' text-anchor='%s' fill='%s' font-size='%.1f' font-weight='700' "
+                        + "paint-order='stroke' stroke='#141414' stroke-width='%.2f' stroke-linejoin='round'>%s</text>%n",
+                textX, textY, anchor, color, fontSize, halo, ReportFormat.escapeHtml(label));
+        out.println("</g>");
+    }
+
     private static String cutouts(DetectionReportContext context, VariableStarAnalysis analysis, StarLightCurve star, int number) throws IOException {
         int brightest = -1;
         int faintest = -1;

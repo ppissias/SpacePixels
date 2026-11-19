@@ -44,6 +44,9 @@ public class AstrometryConfigLayoutTest {
                 javax.swing.JComboBox<?> gpuMode = named(panel, javax.swing.JComboBox.class, "First pass compute");
                 javax.swing.JComboBox<?> gpuDevice = named(panel, javax.swing.JComboBox.class, "Graphics device");
                 JButton testGpu = named(panel, JButton.class, "Graphics device: Test GPU");
+                JButton watney = buttonWithText(panel, "Watney Astrometry");
+                assertNotNull(watney);
+                assertNull(buttonWithText(panel, "Watney Astrometry (free download)"));
                 // Short numeric text fields take the standard number width; the API key keeps its long field.
                 for (JTextField field : List.of(code, latitude, longitude)) {
                     assertEquals(UiStyle.space(UiStyle.NUMBER_INPUT_WIDTH), field.getPreferredSize().width);
@@ -91,6 +94,17 @@ public class AstrometryConfigLayoutTest {
                 panel.close();
             }
         });
+    }
+
+    private static JButton buttonWithText(Component root, String text) {
+        if (root instanceof JButton b && text.equals(b.getText())) return b;
+        if (root instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                JButton match = buttonWithText(child, text);
+                if (match != null) return match;
+            }
+        }
+        return null;
     }
 
     /** An editor keeps the width of its text when the surrounding stack is widened by the status line. */

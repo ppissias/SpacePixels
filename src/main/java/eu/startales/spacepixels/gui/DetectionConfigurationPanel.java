@@ -1581,21 +1581,14 @@ public class DetectionConfigurationPanel extends JPanel {
             double current = jTransientConfig.faintMoverMaxSeconds;
             return storedFromDisplay(displayed, current, v -> v / 60, v -> v * 60);
         }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
-        addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), "Time limit (minutes)", FaintMoversSettings.TIME_LIMIT.help(), false, time);
-        JSpinner timeGpu = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSecondsGpu / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
-        registerTypedBinding(FaintMoversSettings.TIME_LIMIT_GPU, timeGpu, () -> {
-            double displayed = ((Number) timeGpu.getValue()).doubleValue();
-            double current = jTransientConfig.faintMoverMaxSecondsGpu;
-            return storedFromDisplay(displayed, current, v -> v / 60, v -> v * 60);
-        }, value -> setSpinnerValueClamped(timeGpu, faintMoverDisplayNumber(value / 60)));
-        addSettingRow(panel, FaintMoversSettings.TIME_LIMIT_GPU.id(), FaintMoversSettings.TIME_LIMIT_GPU.title(),
-                FaintMoversSettings.TIME_LIMIT_GPU.help(), false, timeGpu);
-        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, speed, time, timeGpu);
-        faintMoverGpuStatus = new WrappingHelpLabel("", 560);
+        addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), FaintMoversSettings.TIME_LIMIT.title(), FaintMoversSettings.TIME_LIMIT.help(), false, time);
+        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, speed, time);
+        faintMoverGpuStatus = new WrappingHelpLabel("", 560).fillParentWidth();
         faintMoverGpuStatus.setForeground(UiStyle.helpColor());
+        faintMoverGpuStatus.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(4), 0, UiStyle.space(4), 0));
         faintMoverGpuStatus.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(faintMoverGpuStatus);
-        faintMoverEstimate = new WrappingHelpLabel("", 560);
+        faintMoverEstimate = new WrappingHelpLabel("", 560).fillParentWidth();
         faintMoverEstimate.setForeground(UiStyle.helpColor());
         faintMoverEstimate.setAlignmentX(Component.LEFT_ALIGNMENT);
         panel.add(faintMoverEstimate);
@@ -1691,7 +1684,7 @@ public class DetectionConfigurationPanel extends JPanel {
         boolean belowSlowest = Double.isFinite(minimumRate) && !(maximumRate > minimumRate);
         GpuDiagnostics.ResolvedStatus gpuStatus = resolveFaintMoverGpuStatus();
         int maxMotions = effectiveFaintMoverMaxMotions(gpuStatus);
-        double timeLimitSeconds = effectiveFaintMoverTimeLimitSeconds(gpuStatus);
+        double timeLimitSeconds = jTransientConfig.faintMoverMaxSeconds;
         double gpuSpeedup = effectiveFaintMoverGpuSpeedup(gpuStatus);
         updateFaintMoverGpuStatusLabel(gpuStatus);
         var limit = FaintMoverRuntimeEstimate.motionLimit(files, jTransientConfig, starSize, maxMotions);
@@ -1773,14 +1766,6 @@ public class DetectionConfigurationPanel extends JPanel {
         return FaintMoverRuntimeEstimate.MAX_MOTIONS;
     }
 
-    private double effectiveFaintMoverTimeLimitSeconds(GpuDiagnostics.ResolvedStatus status) {
-        if (status != null) return status.usingGpu() ? jTransientConfig.faintMoverMaxSecondsGpu : jTransientConfig.faintMoverMaxSeconds;
-        if (appConfigSupplier != null && ComputeOptionsMapper.from(appConfigSupplier.get()).mode() != ComputeMode.CPU) {
-            return jTransientConfig.faintMoverMaxSecondsGpu;
-        }
-        return jTransientConfig.faintMoverMaxSeconds;
-    }
-
     private static double effectiveFaintMoverGpuSpeedup(GpuDiagnostics.ResolvedStatus status) {
         return status != null && status.usingGpu() ? status.cachedSpeedup() : Double.NaN;
     }
@@ -1788,17 +1773,21 @@ public class DetectionConfigurationPanel extends JPanel {
     private void updateFaintMoverGpuStatusLabel(GpuDiagnostics.ResolvedStatus status) {
         if (faintMoverGpuStatus == null) return;
         if (appConfigSupplier == null) {
-            faintMoverGpuStatus.setText("");
+            faintMoverGpuStatus.setHtml("");
             return;
         }
         if (status == null) {
-            faintMoverGpuStatus.setText("First pass compute: checking OpenCL devices...");
+            faintMoverGpuStatus.setHtml("First pass compute: checking OpenCL devices...");
             return;
         }
         String extra = Double.isFinite(status.cachedSpeedup()) && status.usingGpu()
                 ? String.format(java.util.Locale.ROOT, " · %.1f× vs CPU · limit %,d motions", status.cachedSpeedup(), status.maxMotions())
                 : String.format(java.util.Locale.ROOT, " · limit %,d motions", status.maxMotions());
-        faintMoverGpuStatus.setText("First pass compute: " + status.statusLine() + extra + ".");
+        faintMoverGpuStatus.setHtml(escapeHtml("First pass compute: " + status.statusLine() + extra + "."));
+    }
+
+    private static String escapeHtml(String text) {
+        return text == null ? "" : text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 
     private static int cpuWorkersForEstimate() {
@@ -1833,16 +1822,13 @@ public class DetectionConfigurationPanel extends JPanel {
                 : unit + ": unavailable";
     }
 
-    /** Explains metadata estimates and display-only WCS conversion, distinct from the final measured search domain. */
+    /** Shows concise metadata-based runtime, memory, and pixel-scale guidance. */
     private String faintMoverEstimateText(FitsFileInformation[] files, double starSize,
                                           int maxMotions, double timeLimitSeconds, double gpuSpeedup) {
-        String units = !Double.isFinite(faintMoverAngularScale) ? "No usable WCS: angular rates are unavailable."
-                : String.format(java.util.Locale.ROOT, "Rates use %.6f arcsec/pixel at the first usable WCS field centre.", faintMoverAngularScale);
+        String scaleNote = !Double.isFinite(faintMoverAngularScale) ? "No usable WCS (using pixel rates)."
+                : String.format(java.util.Locale.ROOT, "WCS scale: %.4f″/px.", faintMoverAngularScale);
         return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig, starSize,
-                maxMotions, timeLimitSeconds, gpuSpeedup) + "<br>" + units
-                + " The slowest rate is estimated from imported times and the star size above; it cannot be set below 2 FWHM/session. "
-                + "When the fastest rate is not above the slowest, the run skips the search and the report says why. Without WCS the controls use pixel rates; without timing the minimum uses session displacement. "
-                + "The report gives the actual search range from kept frames and measured seeing (or its labelled fallback).</html>";
+                maxMotions, timeLimitSeconds, gpuSpeedup) + " " + scaleNote + "</html>";
     }
 
     /** Adds a typed boolean row using the same model later shared with the Overview analysis switch. */

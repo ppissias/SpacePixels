@@ -90,6 +90,14 @@ public class PhotometryReportSectionWriterTest {
         assertTrue(new File(exportDir, "variable_stars/photometry_lightcurves.csv").isFile());
         assertTrue(new File(exportDir, "variable_stars/photometry_frames.csv").isFile());
         assertTrue(new File(exportDir, "variable_stars/photometry_v1_brightest.png").isFile());
+        File comparisonSvgFile = new File(exportDir, "variable_stars/photometry_v1_comparison.svg");
+        assertTrue(comparisonSvgFile.isFile());
+        String comparisonSvg = Files.readString(comparisonSvgFile.toPath());
+        assertTrue(comparisonSvg.contains(">V1<"));
+        assertTrue(comparisonSvg.contains(">C1<"));
+        assertTrue(comparisonSvg.contains(PhotometrySvgChart.SERIES_AQUA));
+        assertTrue(html.contains("variable_stars/photometry_v1_comparison.svg"));
+        assertTrue(html.contains("Comparison neighbourhood"));
         assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map.svg").isFile());
         assertTrue(new File(exportDir, "variable_stars/photometry_candidate_map_full.svg").isFile());
         assertEquals(FRAMES + 1, Files.readAllLines(new File(exportDir, "variable_stars/photometry_frames.csv").toPath()).size());

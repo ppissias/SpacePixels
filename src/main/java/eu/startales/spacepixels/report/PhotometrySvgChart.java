@@ -237,12 +237,17 @@ final class PhotometrySvgChart {
 
     /** Text placed at data coordinates (used for sparse direct labels). */
     void label(double x, double y, String text) {
+        label(x, y, text, TEXT_SECONDARY);
+    }
+
+    /** Places a right-margin label at data coordinates {@code (x, y)} in {@code color}. */
+    void label(double x, double y, String text, String color) {
         deferred.add(() -> {
             if (!finite(x) || !finite(y)) {
                 return;
             }
             marks.append("<text x='").append(fmt(px(x) + 6)).append("' y='").append(fmt(py(y) + 4))
-                    .append("' fill='").append(TEXT_SECONDARY).append("' font-size='10'>")
+                    .append("' fill='").append(color).append("' font-size='10' font-weight='600'>")
                     .append(ReportFormat.escapeHtml(text)).append("</text>");
         });
     }
