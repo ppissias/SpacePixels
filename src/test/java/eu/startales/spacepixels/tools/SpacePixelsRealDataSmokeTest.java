@@ -29,8 +29,8 @@ import static org.junit.Assert.*;
 
 /**
  * Release smoke for Tier 1 of the local reference inventory, on scratch copies.
- * Outcomes use the distributed detection profile. Photometry is enabled only for m5-reg.
- * Klangwolke-2 is the golden reference and is outside this task.
+ * Outcomes use the distributed detection profile. Photometry is enabled for m5-reg and the cropped M81 check.
+ * Klangwolke-2 and B1m are the two golden references and are outside this task.
  */
 public class SpacePixelsRealDataSmokeTest {
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();

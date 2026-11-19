@@ -215,6 +215,7 @@ public class FrameCalibrationInspectorTest {
         Assume.assumeTrue("Test data root is not available", testDataRoot != null && Files.isDirectory(Path.of(testDataRoot)));
 
         String[] benchmarkDatasets = {
+                "B1m",
                 "klangwolke-1",
                 "dc-reg",
                 "m101-reg",
