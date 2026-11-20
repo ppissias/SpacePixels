@@ -76,6 +76,28 @@ public class BatchDetectionCliTest {
         assertTrue(result.stdout, result.stdout.startsWith("Report file:"));
     }
 
+    /** With --data-only the run folder holds only the data file and the profile, and the command prints the data file. */
+    @Test
+    public void dataOnlyWritesOnlyTheDataFiles() throws Exception {
+        Path tempRoot = Files.createTempDirectory("spacepixels-cli-data-only");
+        Path sequenceDirectory = SyntheticDatasetFactory.createMono16FitsSequence(tempRoot, "mono16", FRAME_COUNT);
+        Path configFile = SyntheticDatasetFactory.writeDetectionProfile(
+                tempRoot,
+                "profile.json",
+                SyntheticDatasetFactory.createSyntheticDetectionConfig());
+
+        ExecutionResult result = executeCli(sequenceDirectory, configFile, "--data-only");
+
+        assertEquals(result.stderr, 0, result.exitCode);
+        assertTrue(result.stdout, result.stdout.startsWith("Report data:"));
+        Path data = Path.of(result.stdout.substring("Report data:".length()).trim());
+        assertEquals("report-data.json", data.getFileName().toString());
+        try (var entries = Files.list(data.getParent())) {
+            assertEquals(java.util.Set.of("report-data.json", "detection_config.json"),
+                    entries.map(p -> p.getFileName().toString()).collect(java.util.stream.Collectors.toSet()));
+        }
+    }
+
     @Test
     public void executeRejectsInvalidMaxCategoryItems() throws Exception {
         Path tempRoot = Files.createTempDirectory("spacepixels-cli-invalid-items");

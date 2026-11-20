@@ -110,11 +110,14 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
             File reportFile = null;
             File exportDirectory = null;
             if (request.isGenerateReport()) {
-                emitProgress(progressListener, 90, "Exporting tracks and generating HTML report...");
-                reportFile = ReportExporter.export(new ReportRequest(executionData.getPipelineResult(),
+                emitProgress(progressListener, 90, request.isReportDataOnly()
+                        ? "Writing report data..." : "Exporting tracks and generating HTML report...");
+                ReportRequest reportRequest = new ReportRequest(executionData.getPipelineResult(),
                         executionData.getRawFramesForExport(), executionData.getFilesInformation(), null,
                         executionData.getEffectiveConfig(), executionData.getReportContext(), null,
-                        (percentage, message) -> emitScaledProgress(progressListener, 90, 100, percentage, message)));
+                        (percentage, message) -> emitScaledProgress(progressListener, 90, 100, percentage, message));
+                reportFile = request.isReportDataOnly()
+                        ? ReportExporter.exportData(reportRequest) : ReportExporter.export(reportRequest);
                 if (reportFile == null) {
                     throw new SpacePixelsPipelineException("Pipeline completed without producing an export report.");
                 }

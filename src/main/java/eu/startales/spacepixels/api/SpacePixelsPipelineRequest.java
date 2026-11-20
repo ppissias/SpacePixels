@@ -34,6 +34,7 @@ public final class SpacePixelsPipelineRequest {
     private final NegativeValueHandling negativeValueHandling;
     private final eu.startales.spacepixels.fits.ImageScaling.OutlierHandling outlierHandling;
     private final boolean generateReport;
+    private final boolean reportDataOnly;
     private final boolean failIfUncalibratedOrMisaligned;
     private final int maxCategoryItems;
     private final VariableStarReportOptions variableStarReportOptions;
@@ -50,6 +51,7 @@ public final class SpacePixelsPipelineRequest {
         this.negativeValueHandling = builder.negativeValueHandling;
         this.outlierHandling = builder.outlierHandling;
         this.generateReport = builder.generateReport;
+        this.reportDataOnly = builder.reportDataOnly;
         this.failIfUncalibratedOrMisaligned = builder.failIfUncalibratedOrMisaligned;
         this.maxCategoryItems = builder.maxCategoryItems;
         this.variableStarReportOptions = builder.variableStarReportOptions;
@@ -149,6 +151,15 @@ public final class SpacePixelsPipelineRequest {
         return generateReport;
     }
 
+    /**
+     * Returns whether a generated report holds only {@code report-data.json} and {@code detection_config.json}.
+     *
+     * @return {@code true} for the data files only, {@code false} for the full report
+     */
+    public boolean isReportDataOnly() {
+        return reportDataOnly;
+    }
+
     /** Presentation-only choices for variable-star cards; never applied to the engine. */
     public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
 
@@ -196,6 +207,7 @@ public final class SpacePixelsPipelineRequest {
         private InputPreparationMode inputPreparationMode = InputPreparationMode.FAIL_IF_NOT_READY;
         private NegativeValueHandling negativeValueHandling = NegativeValueHandling.ADD_OFFSET;
         private boolean generateReport = true;
+        private boolean reportDataOnly = false;
         private boolean failIfUncalibratedOrMisaligned = false;
         private int maxCategoryItems = 0;
         private VariableStarReportOptions variableStarReportOptions = VariableStarReportOptions.DEFAULT;
@@ -297,6 +309,20 @@ public final class SpacePixelsPipelineRequest {
          */
         public Builder generateReport(boolean generateReport) {
             this.generateReport = generateReport;
+            return this;
+        }
+
+        /**
+         * Sets whether a generated report holds only its data files ({@code report-data.json} and
+         * {@code detection_config.json}), without the HTML page, pictures, animations, light curves, enhanced stack or
+         * CSV files. The data file is the same one the full report writes. Meant for measuring detection changes; has no
+         * effect when no report is generated.
+         *
+         * @param reportDataOnly {@code true} for the data files only
+         * @return this builder
+         */
+        public Builder reportDataOnly(boolean reportDataOnly) {
+            this.reportDataOnly = reportDataOnly;
             return this;
         }
 

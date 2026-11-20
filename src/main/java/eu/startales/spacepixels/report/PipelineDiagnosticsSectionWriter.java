@@ -644,11 +644,14 @@ final class PipelineDiagnosticsSectionWriter {
         report.println("</div>");
     }
 
-    private static void writePipelineConfiguration(PrintWriter report, DetectionReportContext reportContext) {
+    /**
+     * Writes the run's profile as {@code detection_config.json} in the report folder, for full and data-only exports;
+     * a failure is logged and leaves the rest of the export intact. Does nothing without a configuration.
+     */
+    static void writeConfigurationFile(DetectionReportContext reportContext) {
         if (reportContext.config == null) {
             return;
         }
-
         File jsonConfigFile = new File(reportContext.exportDir, "detection_config.json");
         try (FileWriter writer = new FileWriter(jsonConfigFile)) {
             SpacePixelsDetectionProfileIO.write(
@@ -658,6 +661,14 @@ final class PipelineDiagnosticsSectionWriter {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Failed to write config JSON", e);
         }
+    }
+
+    private static void writePipelineConfiguration(PrintWriter report, DetectionReportContext reportContext) {
+        if (reportContext.config == null) {
+            return;
+        }
+
+        writeConfigurationFile(reportContext);
 
         report.println("<div class='panel'>");
         report.println("<h2>Pipeline Configuration</h2>");

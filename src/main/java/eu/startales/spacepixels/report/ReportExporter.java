@@ -28,21 +28,8 @@ public final class ReportExporter {
      * Other failures preserve their reason and never publish an incomplete HTML page.
      */
     public static File export(ReportRequest request) throws IOException {
-        Objects.requireNonNull(request, "request");
-        FitsFileInformation[] files = request.fitsFiles();
-        if (files.length == 0) return null;
-        File exportDir = request.outputDirectory() == null
-                ? OutputFolders.createDetectionsDirectory(new File(files[0].getFilePath())) : request.outputDirectory();
-        Files.createDirectories(exportDir.toPath());
-        try {
-            ReportProgress progress = new ReportProgress(request.progress());
-            progress.step(0, 2, "preparing");
-            DetectionReportContext context = DetectionReportContext.create(request, exportDir, progress);
-            write(context, request.result(), request.inclusion());
-        } catch (IOException | RuntimeException failure) {
-            if (Cancellation.isCancellation(failure)) OutputFolders.deleteUnfinished(exportDir);
-            throw failure;
-        }
+        File exportDir = exportFolder(request, false);
+        if (exportDir == null) return null;
         String pathWarning = ReportPathWarnings.afterDetection(new File(exportDir, REPORT_FILE_NAME));
         try {
             ReportPathWarnings.addCompletedReportNote(new File(exportDir, REPORT_FILE_NAME), pathWarning);
@@ -52,6 +39,46 @@ public final class ReportExporter {
         }
         if (pathWarning != null) java.util.logging.Logger.getLogger(ReportExporter.class.getName()).warning(pathWarning);
         return new File(exportDir, REPORT_FILE_NAME);
+    }
+
+    /**
+     * Writes only {@code report-data.json} and {@code detection_config.json}, for measuring detection changes without
+     * the HTML page, pictures, animations, light curves, enhanced stack or CSV files; returns the data file, or null when
+     * there are no files. The data file is the same one a full export writes. Progress and cancellation as in
+     * {@link #export(ReportRequest)}.
+     */
+    public static File exportData(ReportRequest request) throws IOException {
+        File exportDir = exportFolder(request, true);
+        return exportDir == null ? null : new File(exportDir, ReportData.FILE_NAME);
+    }
+
+    /**
+     * Creates the output folder and writes the full report, or only the data files; returns the folder, or null when
+     * there are no files. Cancellation removes the unfinished folder.
+     */
+    private static File exportFolder(ReportRequest request, boolean dataOnly) throws IOException {
+        Objects.requireNonNull(request, "request");
+        FitsFileInformation[] files = request.fitsFiles();
+        if (files.length == 0) return null;
+        File exportDir = request.outputDirectory() == null
+                ? OutputFolders.createDetectionsDirectory(new File(files[0].getFilePath())) : request.outputDirectory();
+        Files.createDirectories(exportDir.toPath());
+        try {
+            ReportProgress progress = new ReportProgress(request.progress());
+            progress.step(0, 2, "preparing");
+            if (dataOnly) {
+                DetectionReportContext context = DetectionReportContext.createForData(request, exportDir, progress);
+                context.data.writeJson(exportDir);
+                PipelineDiagnosticsSectionWriter.writeConfigurationFile(context);
+            } else {
+                DetectionReportContext context = DetectionReportContext.create(request, exportDir, progress);
+                write(context, request.result(), request.inclusion());
+            }
+        } catch (IOException | RuntimeException failure) {
+            if (Cancellation.isCancellation(failure)) OutputFolders.deleteUnfinished(exportDir);
+            throw failure;
+        }
+        return exportDir;
     }
 
     /** Renders sections in report order using a context that is complete before any output is emitted. */

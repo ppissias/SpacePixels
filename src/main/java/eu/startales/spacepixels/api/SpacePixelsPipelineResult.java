@@ -195,7 +195,10 @@ public final class SpacePixelsPipelineResult {
         return calibrationWarning != null;
     }
 
-    /** Returns the generated HTML report, or null when reporting was disabled. */
+    /**
+     * Returns the generated HTML report, or {@code report-data.json} for a data-only report, or null when reporting was
+     * disabled.
+     */
     public File getReportFile() {
         return reportFile;
     }

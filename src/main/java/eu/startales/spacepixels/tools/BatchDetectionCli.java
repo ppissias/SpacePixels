@@ -43,6 +43,7 @@ public class BatchDetectionCli {
         private final AutoTuneProfile autoTuneProfile;
         private final int maxCategoryItems;
         final String gpuMode;
+        final boolean dataOnly;
         private final boolean showHelp;
 
         private CliArguments(File inputDir,
@@ -50,12 +51,14 @@ public class BatchDetectionCli {
                              AutoTuneProfile autoTuneProfile,
                              int maxCategoryItems,
                              String gpuMode,
+                             boolean dataOnly,
                              boolean showHelp) {
             this.inputDir = inputDir;
             this.configFile = configFile;
             this.autoTuneProfile = autoTuneProfile;
             this.maxCategoryItems = maxCategoryItems;
             this.gpuMode = gpuMode;
+            this.dataOnly = dataOnly;
             this.showHelp = showHelp;
         }
     }
@@ -124,6 +127,7 @@ public class BatchDetectionCli {
                 .maxCategoryItems(cliArguments.maxCategoryItems)
                 .inputPreparationMode(InputPreparationMode.FAIL_IF_NOT_READY)
                 .generateReport(true)
+                .reportDataOnly(cliArguments.dataOnly)
                 .progressListener(DebugOutput.isEnabled() ? createConsoleProgressListener("Pipeline", out) : null)
                 .build();
 
@@ -137,7 +141,7 @@ public class BatchDetectionCli {
             out.println("Warning: " + pipelineResult.getCalibrationWarning());
         }
 
-        out.println("Report file: " + reportFile.getAbsolutePath());
+        out.println((cliArguments.dataOnly ? "Report data: " : "Report file: ") + reportFile.getAbsolutePath());
     }
 
     private static SpacePixelsDetectionProfile loadDetectionConfig(File configFile) throws IOException {
@@ -163,18 +167,19 @@ public class BatchDetectionCli {
 
     static CliArguments parseArguments(String[] args) {
         if (args.length == 0) {
-            return new CliArguments(null, null, null, 0, null, true);
+            return new CliArguments(null, null, null, 0, null, false, true);
         }
 
         List<String> positionalArgs = new ArrayList<>();
         AutoTuneProfile autoTuneProfile = null;
         int maxCategoryItems = 0;
         String gpuMode = null;
+        boolean dataOnly = false;
 
         for (int i = 0; i < args.length; i++) {
             String arg = args[i];
             if ("--help".equalsIgnoreCase(arg) || "-h".equalsIgnoreCase(arg)) {
-                return new CliArguments(null, null, null, 0, null, true);
+                return new CliArguments(null, null, null, 0, null, false, true);
             }
 
             if (arg.startsWith("--auto-tune=")) {
@@ -216,6 +221,11 @@ public class BatchDetectionCli {
                 continue;
             }
 
+            if ("--data-only".equalsIgnoreCase(arg)) {
+                dataOnly = true;
+                continue;
+            }
+
             positionalArgs.add(arg);
         }
 
@@ -229,6 +239,7 @@ public class BatchDetectionCli {
                 autoTuneProfile,
                 maxCategoryItems,
                 gpuMode,
+                dataOnly,
                 false);
     }
 
@@ -286,7 +297,7 @@ public class BatchDetectionCli {
         out.println("  SpacePixels - Batch Detection CLI");
         out.println("==================================================================");
         out.println("Usage:");
-        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--max-category-items <number>] [--gpu <auto|gpu|cpu>]");
+        out.println("  java eu.startales.spacepixels.tools.BatchDetectionCli <fits_directory> <detection_config.json> [--auto-tune <low|medium|high|maximum>] [--max-category-items <number>] [--gpu <auto|gpu|cpu>] [--data-only]");
         out.println();
         out.println("Notes:");
         out.println("  - The input directory must contain only uncompressed unsigned 16-bit (BZERO 32768) monochrome FITS files with identical dimensions.");
@@ -294,6 +305,7 @@ public class BatchDetectionCli {
         out.println("  - Packaged distributions include config/default_detection_profile.json as a starting point.");
         out.println("  - When Auto-Tune is enabled, the tuned configuration is used for the pipeline run and exported with the report.");
         out.println("  - When --max-category-items is specified (> 0), each finding category exports at most that many detailed cards and visualizations in the report.");
+        out.println("  - --data-only writes only report-data.json and detection_config.json (no HTML page, pictures, animations or CSV files), for measuring detection changes quickly.");
         out.println("  - Only the report path and problems are printed; add -D" + DebugOutput.PROPERTY + "=true to the JVM options for progress and diagnostics.");
         out.println();
         out.println("Packaged launcher example:");

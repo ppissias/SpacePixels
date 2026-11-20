@@ -75,11 +75,20 @@ final class DetectionReportContext {
 
     /** Builds every shared report input and model before a section can use the context. */
     static DetectionReportContext create(ReportRequest request, File exportDir, ReportProgress progress) {
-        return new DetectionReportContext(request, exportDir, progress);
+        return new DetectionReportContext(request, exportDir, progress, true);
+    }
+
+    /**
+     * Builds the context for a data-only export: the same report data, without the enhanced stack, which only the
+     * pictures use.
+     */
+    static DetectionReportContext createForData(ReportRequest request, File exportDir, ReportProgress progress) {
+        return new DetectionReportContext(request, exportDir, progress, false);
     }
 
     /** Normalizes optional engine outputs while retaining the captured run's settings, WCS and catalogue. */
-    private DetectionReportContext(ReportRequest request, File exportDir, ReportProgress progress) {
+    private DetectionReportContext(ReportRequest request, File exportDir, ReportProgress progress,
+                                   boolean buildEnhancedStack) {
         PipelineResult result = request.result();
         ReportInclusion inclusion = request.inclusion();
         this.settings = request.runContext().options().visualization();
@@ -175,7 +184,8 @@ final class DetectionReportContext {
         this.data = ReportData.create(this, pipelineTelemetry, result.variableStarAnalysis, commonMotionGroups, inclusion);
         EnhancedStack stack = null;
         String problem = null;
-        if (settings.isEnhancedStack() && !result.tooFewFrames && masterStackData != null && !rawFrames.isEmpty()) {
+        if (buildEnhancedStack && settings.isEnhancedStack() && !result.tooFewFrames && masterStackData != null
+                && !rawFrames.isEmpty()) {
             List<short[][]> kept = new ArrayList<>();
             List<Integer> keptIndices = new ArrayList<>();
             for (int i = 0; i < rawFrames.size(); i++) {

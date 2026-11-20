@@ -152,6 +152,48 @@ public class ReportExporterTest {
         assertFalse(html.contains("Dither & Sensor Drift Diagnostics"));
     }
 
+    /**
+     * A data-only export writes exactly the data file and the profile, with the same contents as a full export of the
+     * same run apart from the generation time.
+     */
+    @Test public void dataOnlyWritesTheSameDataFilesAndNothingElse() throws Exception {
+        var telemetry = new PipelineTelemetry();
+        telemetry.totalFramesLoaded = 3;
+        telemetry.totalFramesKept = 3;
+        var result = PipelineResult.builder()
+                .driftPoints(List.of(new Pixel(0, 0, 0), new Pixel(2, 3, 1), new Pixel(4, 5, 2)))
+                .telemetry(telemetry).build();
+        File full = temporary.newFolder("full");
+        File dataOnly = temporary.newFolder("data-only");
+        FitsFileInformation[] files = files(temporary.getRoot());
+        var frames = List.of(new short[24][24], new short[24][24], new short[24][24]);
+        var runContext = ReportRunContext.capture(DetectionRunOptions.defaults(), files);
+        ReportExporter.export(new ReportRequest(result, frames, files, full, new DetectionConfig(), runContext, null, null));
+        File data = ReportExporter.exportData(
+                new ReportRequest(result, frames, files, dataOnly, new DetectionConfig(), runContext, null, null));
+
+        assertEquals(new File(dataOnly, "report-data.json"), data);
+        assertEquals(Set.of("report-data.json", "detection_config.json"), Set.of(dataOnly.list()));
+        assertEquals(withoutGenerationTime(new File(full, "report-data.json")), withoutGenerationTime(data));
+        assertArrayEquals(Files.readAllBytes(new File(full, "detection_config.json").toPath()),
+                Files.readAllBytes(new File(dataOnly, "detection_config.json").toPath()));
+    }
+
+    /** Cancelling a data-only export removes its unfinished folder, as for a full export. */
+    @Test public void dataOnlyCancellationRemovesUnfinishedOutput() throws Exception {
+        File output = new File(temporary.getRoot(), "cancel-data");
+        var request = request(output, (percent, message) -> {
+            throw new CancellationException("cancel export");
+        });
+        assertThrows(CancellationException.class, () -> ReportExporter.exportData(request));
+        assertFalse(output.exists());
+    }
+
+    /** The data file's text without its generation-time line. */
+    private static String withoutGenerationTime(File data) throws Exception {
+        return Files.readString(data.toPath()).replaceAll("(?m)^\\s*\"generatedAtUtc\".*$", "");
+    }
+
     /** Creates a small non-WCS run without reading any FITS buffers from disk. */
     private ReportRequest request(File output, TransientEngineProgressListener listener) {
         FitsFileInformation[] files = files(temporary.getRoot());

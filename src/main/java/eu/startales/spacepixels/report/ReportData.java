@@ -12,6 +12,9 @@ import java.util.*;
 
 /** Shared report identities and frame selection; never mutates the engine result. */
 final class ReportData {
+    /** The data file's name in a report folder. */
+    static final String FILE_NAME = "report-data.json";
+
     /**
      * One export finding with stable compatibility IDs/text; category semantics resolve through its ID.
      * {@code faintSearchDetections} counts the finding's detections from the faint-streak search, null when none (so
@@ -213,7 +216,7 @@ final class ReportData {
         if (!rescueAssociations.isEmpty()) data.put("rescueAssociations", rescueAssociations);
         if (knownSolarSystem != null) data.put("knownSolarSystem", knownSolarSystem);
         data.put("variableStarPresentation", variableStarOptions);
-        try (var file = new AtomicReportFile(new File(directory, "report-data.json"))) {
+        try (var file = new AtomicReportFile(new File(directory, FILE_NAME))) {
             new GsonBuilder().setPrettyPrinting().create().toJson(data, file.writer()); file.commit();
         }
     }
