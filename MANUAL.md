@@ -112,7 +112,9 @@ Before detection, **Run quality control**, above the frame list, checks **every 
 
 ![The frame table after quality control, with its verdict tints](docs/images/manual/ui-quality.png)
 
-The frame table fills its **Quality**, **FWHM (px)**, **Stars**, **Elongation** and **QC reason** columns; the columns stay where they are. **Would keep** rows have a light green tint; **Would reject** rows have a light red tint. The toolbar above the list counts them, says **QC stale** once the settings have changed, and warns when too few frames would remain for detection. Every imported frame remains listed and selected frames stay selected; this check does not remove files or alter the input for a later detection run. That run evaluates quality again using its captured settings.
+The frame table fills its **Quality**, **FWHM (px)**, **Stars**, **Elongation** and **QC reason** columns; the columns stay where they are. **Would keep** rows have a light green tint; **Would reject** rows have a light red tint. The toolbar above the list counts them, says **QC stale** once the settings have changed, and warns when too few frames would remain for detection.
+
+Quality control also checks that the frames are aligned on the stars (**Check Registration**, on by default): it follows the bright stars from frame to frame, over the whole frame and in 4 × 4 zones. A frame whose stars jump against the frames before and after it is left out with the reason *Registration jump*. Stars that slowly move during the session, for example at the edges of a wide field when the alignment does not correct lens distortion, leave light past the star masks that detection can take for moving objects. Quality control then shows **⚠ Registration** in the toolbar. Click it to see how far the stars move in each zone, in star widths (FWHM). When zones are flagged, **Exclude these areas** adds them to the session's excluded areas after you press it; run quality control again afterwards. When the whole star field moves, the frames were not aligned on the stars (for example aligned on a moving target): align them again on the stars. The two limits (**Registration Jump Limit**, 0.5 FWHM, and **Registration Creep Limit**, 0.3 FWHM) are expert settings on the Quality Control page. Every imported frame remains listed and selected frames stay selected; this check does not remove files or alter the input for a later detection run. That run evaluates quality again using its captured settings.
 
 ![Quality details of a rejected frame, with each measurement beside its session limit](docs/images/manual/ui-quality-details.png)
 
@@ -327,6 +329,10 @@ When sensor drift or dithering is measured across the session, the **Dither & Se
 - **Per-frame coordinates**: the exact pixel displacement for each frame.
 
 Sensor dust and uncalibrated hot pixels stay fixed on the camera sensor, so in registered frames they appear to move along this exact drift trajectory. Checking this section first allows you to quickly recognize false moving-object patterns before reviewing candidate detections.
+
+### Registration check
+
+The **Registration Check** panel follows (**Registration** in the **Jump to** bar, marked when something is flagged). It shows how far the stars move between the aligned frames, in star widths (FWHM): over the whole frame, and as a 4 × 4 map of the frame's zones, with the zones above the limit in red and a dash where a zone has too few stars. When zones are flagged, a box names the areas to exclude, with their pixel ranges; the **⚠ Registration** button above the frame list in the main window adds them. When the whole star field moves, the box says the frames were not aligned on the stars. Frames left out for a jump are listed with the other rejected frames.
 
 ### A moving object
 

@@ -138,6 +138,9 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private JSpinner spinBrightStarEccentricitySigma;
     private JCheckBox chkEnableBrightStarEccentricityFilter;
+    private JCheckBox chkEnableRegistrationCheck;
+    private JSpinner spinRegistrationJump;
+    private JSpinner spinRegistrationCreep;
     private JComboBox<String> cmbFrameRejection;
     private boolean syncingFrameRejection;
 
@@ -267,6 +270,7 @@ public class DetectionConfigurationPanel extends JPanel {
         showOnlyWhen(chkEnableLocalActivityClusters, spinLocalActivityClusterRadiusPixels, spinLocalActivityClusterMinFrames);
         showOnlyWhen(chkEnableCommonMotionRejection, spinCommonMotionShiftTolerance);
         showOnlyWhen(chkEnableBrightStarEccentricityFilter, spinBrightStarEccentricitySigma);
+        showOnlyWhen(chkEnableRegistrationCheck, spinRegistrationJump, spinRegistrationCreep);
         navigator.setExtraChangedCount("Overview", () -> overviewPanel.unsavedCoreCount());
         navigator.finishBuilding();
         // Ctrl+D runs Detect Moving Targets here too: the main window's command, with its enabled state.
@@ -1176,6 +1180,12 @@ public class DetectionConfigurationPanel extends JPanel {
         spinBrightStarEccentricitySigma = addTypedDouble(panel, QualitySettings.BRIGHT_STAR_ECCENTRICITY_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
         spinBackgroundSigma = addTypedDouble(panel, QualitySettings.BACKGROUND_SIGMA_DEVIATION, 0.0, 10.0, 0.1);
         spinMinBgDevAdu = addTypedDouble(panel, QualitySettings.MIN_BACKGROUND_DEVIATION_ADU, 0.0, 10000.0, 5.0);
+
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(createSectionHeader("Registration"));
+        chkEnableRegistrationCheck = addTypedCheckbox(panel, QualitySettings.ENABLE_REGISTRATION_CHECK);
+        spinRegistrationJump = addTypedDouble(panel, QualitySettings.REGISTRATION_JUMP_FWHM, 0.05, 10.0, 0.05);
+        spinRegistrationCreep = addTypedDouble(panel, QualitySettings.REGISTRATION_CREEP_FWHM, 0.05, 10.0, 0.05);
 
         panel.add(Box.createVerticalStrut(10));
         panel.add(createExpertSectionHeader("Auto-Tune"));

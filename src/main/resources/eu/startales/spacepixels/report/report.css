@@ -156,6 +156,11 @@ a:visited { color: var(--sp-link-visited); }
 .asteroid-status-check { color: var(--sp-status-warning); border-color: var(--sp-status-warning); }
 .asteroid-status-no-known-match { color: var(--sp-link); border-color: var(--sp-link); }
 .asteroid-site-alert { margin: 12px 0; padding: 10px 14px; background: var(--sp-error-bg); border: 1px solid var(--sp-error-border); border-radius: 6px; line-height: 1.5; }
+.registration-alert { margin: 12px 0; padding: 10px 14px; background: var(--sp-error-bg); border: 1px solid var(--sp-error-border); border-radius: 6px; line-height: 1.5; }
+.registration-grid { border-collapse: collapse; margin: 10px 0; }
+.registration-grid td { width: 72px; height: 40px; text-align: center; border: 1px solid var(--sp-border-subtle); font-variant-numeric: tabular-nums; }
+.registration-grid td.flagged { background: var(--sp-error-bg); color: var(--sp-alert); font-weight: bold; }
+.registration-grid td.unmeasured { color: var(--sp-text-muted); }
 .asteroid-oc-plot { display: block; width: 150px; height: 44px; margin-top: 6px; background: var(--sp-sunken); border-radius: 4px; }
 .asteroid-oc-plot line { stroke: var(--sp-border-strong); stroke-width: 1; }
 .asteroid-oc-plot .oc-ra { fill: var(--sp-accent); }

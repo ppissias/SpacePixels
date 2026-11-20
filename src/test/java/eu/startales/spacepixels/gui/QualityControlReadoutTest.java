@@ -20,7 +20,8 @@ public class QualityControlReadoutTest {
             String key = QualityControlSnapshot.settingsKey(config);
             var metrics = List.of(frame(0, false), frame(1, true));
             var result = new FrameQualityResult(metrics, new FrameQualityResult.Thresholds(false,
-                    Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN), 0.9, 0.95);
+                    Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN, Double.NaN), 0.9, 0.95,
+                    FrameQualityResult.RegistrationCheck.notMeasured("switched off"));
             var snapshot = new QualityControlSnapshot(QualityControlSnapshot.inputs(files), key, result);
             var model = new FitsFileTableModel(files);
             var table = new QualityControlTable();
@@ -75,7 +76,8 @@ public class QualityControlReadoutTest {
             var frame = new FrameQualityResult.Frame(1, "b.fit", true, "Too few stars <60%", 1102.5, 56.5, 3.125, 1.25, 1.125, 812, 300, 12, 120, fit);
             var metrics = List.of(frame(0, false), frame, new FrameQualityResult.Frame(2, "c.fit", false, "OK", 1100, 55, 3, 1.2, 1.1, 900, 310, 13, 125, fit));
             var limits = new FrameQualityResult.Thresholds(true, 300.5, 4.5, 1.6, 1.55, 1100, 50, 1050, 1150);
-            var result = new FrameQualityResult(metrics, limits, 0.983, 0.978);
+            var result = new FrameQualityResult(metrics, limits, 0.983, 0.978,
+                    FrameQualityResult.RegistrationCheck.notMeasured("switched off"));
             var snapshot = new QualityControlSnapshot(QualityControlSnapshot.inputs(files), QualityControlSnapshot.settingsKey(new DetectionConfig()), result);
             String shown = labels(QualityControlDetails.content(snapshot, frame, true));
             assertTrue(shown.contains("Would reject"));

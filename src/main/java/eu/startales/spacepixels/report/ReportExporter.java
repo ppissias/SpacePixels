@@ -126,6 +126,7 @@ public final class ReportExporter {
                     reportContext.commonMotionGroups.size(), inclusion);
             PipelineDiagnosticsSectionWriter.writeDriftDiagnostics(report, reportContext, result.driftPoints,
                     reportContext.pipelineTelemetry != null ? reportContext.pipelineTelemetry.driftExcludedFrames : null);
+            RegistrationCheckSection.write(report, reportContext.pipelineTelemetry);
             KnownSolarSystemReport.write(report, reportContext, fieldDepth);
 
             progress.step(20, 26, "moving objects and streaks");
@@ -213,6 +214,11 @@ public final class ReportExporter {
         items.add(new PipelineDiagnosticsSectionWriter.NavItem("overview", "Overview", null, false));
         if (PipelineDiagnosticsSectionWriter.hasDrift(context, driftPoints)) {
             items.add(new PipelineDiagnosticsSectionWriter.NavItem("dither-drift", "Dither & drift", null, false));
+        }
+        if (RegistrationCheckSection.shown(pipelineTelemetry)) {
+            var registration = pipelineTelemetry.registrationCheck;
+            items.add(new PipelineDiagnosticsSectionWriter.NavItem("registration-check", "Registration",
+                    RegistrationCheckSection.flagged(registration) ? "check" : null, false));
         }
         if (context.knownSolarSystem != null) items.add(new PipelineDiagnosticsSectionWriter.NavItem(
                 "known-solar-system", "Asteroids & comets", Integer.toString(context.knownSolarSystem.identifications().size()), false));

@@ -248,6 +248,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     private final FrameChip rejectChip = new FrameChip(QualityControlTable.REJECT_COLOUR,
             "Frames a detection run would leave out. The table gives each one's reason.");
     private final FrameChip qualityNote = new FrameChip(QualityControlTable.REJECT_COLOUR, null);
+    /** Shown when quality control's registration check flagged stars moving between the frames. */
+    private final JButton registrationLink = AccessibleControls.link("⚠ Registration", "Registration check: stars move between the frames",
+            this::showRegistrationCheck);
     private final JLabel selectionCount = new JLabel();
     private final JButton clearSelectionLink = AccessibleControls.link("Clear selection", "Clear the frame selection",
             () -> table.clearSelection());
@@ -519,6 +522,10 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         frameListActions.add(keepChip);
         frameListActions.add(rejectChip);
         frameListActions.add(qualityNote);
+        registrationLink.setToolTipText("Stars move between the aligned frames in part of the field or in all of it. "
+                + "Shows where, and offers to exclude the affected areas.");
+        registrationLink.setVisible(false);
+        frameListActions.add(registrationLink);
         selectionCount.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(8), 0, 0));
         selectionCount.setVisible(false);
         clearSelectionLink.setToolTipText("Select no frames: Preview starts on the first frame. Blink and plate-solve follow the selection.");
@@ -679,6 +686,26 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         });
     }
 
+    /**
+     * Shows the current quality-control result's registration check and, when the user confirms, adds its flagged areas
+     * to the session's excluded areas, which saves them and makes the quality result stale. EDT only.
+     */
+    private void showRegistrationCheck() {
+        if (uiLocked || !(table.getModel() instanceof FitsFileTableModel model) || model.quality() == null
+                || !model.isQualityCurrent()) return;
+        ProcessingSession owner = sessions.current();
+        if (owner == null) return;
+        var check = model.quality().result().registrationCheck();
+        RegistrationCheckDialog.show(this, check, owner.getExcludedAreas().areas(), areas -> {
+            var changed = owner.getExcludedAreas();
+            for (var area : areas) changed = changed.with(area);
+            owner.setExcludedAreas(changed, failure -> showStatus(failure == null
+                    ? (areas.size() == 1 ? "1 area" : areas.size() + " areas")
+                            + " excluded from detection. Run quality control again for current results."
+                    : "The excluded areas were not saved: " + failure.getMessage()));
+        });
+    }
+
     /** Shows the quality and limits of the frame in this table row, even when the captured settings are now stale. */
     private void showQualityDetails(int row) {
         var frame = qualityOfRow(row);
@@ -719,6 +746,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         boolean stale = quality != null && !current;
         boolean tooFew = current && quality.tooFewFrames();
         qualityNote.setVisible(stale || tooFew);
+        registrationLink.setVisible(current && quality.registrationCheck().anyFlagged());
         qualityNote.setText(stale ? "QC stale" : "⚠ too few for detection");
         qualityNote.setToolTipText(stale ? "The settings, frames or excluded areas changed after quality control ran. Run it again for current results."
                 : "Quality control would keep fewer than three frames, so a detection run would stop there.");

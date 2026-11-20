@@ -39,12 +39,28 @@ public final class QualitySettings {
             "Smallest allowed sky-level shift, in ADU, even when the measured session variation is tiny. The allowed shift is also never smaller than the typical sky noise of one frame.",
             true, Double.class, config -> config.minBackgroundDeviationADU,
             (config, value) -> config.minBackgroundDeviationADU = value);
+    public static final DetectionSetting<Boolean> ENABLE_REGISTRATION_CHECK = new DetectionSetting<>(
+            "enableRegistrationCheck", "Check Registration", "",
+            "Checks that the frames are aligned on the stars, over the whole frame and in 4 x 4 zones. Frames whose stars jump against the frames before and after them are left out. Stars that slowly move during the session, for example at the edges of a wide field with lens distortion, are reported with the zones they affect, which you can exclude; their light past the star masks can look like moving objects.",
+            false, Boolean.class, config -> config.enableRegistrationCheck,
+            (config, value) -> config.enableRegistrationCheck = value);
+    public static final DetectionSetting<Double> REGISTRATION_JUMP_FWHM = new DetectionSetting<>(
+            "qualityMaxRegistrationJumpFwhm", "Registration Jump Limit", "FWHM",
+            "A frame whose stars, over the whole frame or in one zone, are more than this many star widths away from where the frames before and after it have them is left out: its alignment failed.",
+            true, Double.class, config -> config.qualityMaxRegistrationJumpFwhm,
+            (config, value) -> config.qualityMaxRegistrationJumpFwhm = value);
+    public static final DetectionSetting<Double> REGISTRATION_CREEP_FWHM = new DetectionSetting<>(
+            "qualityMaxRegistrationCreepFwhm", "Registration Creep Limit", "FWHM",
+            "The whole frame or a zone is flagged when its stars move by more than this many star widths during the session. Flagging leaves no frame out; the report and the Quality Control readout offer the flagged zones as excluded areas.",
+            true, Double.class, config -> config.qualityMaxRegistrationCreepFwhm,
+            (config, value) -> config.qualityMaxRegistrationCreepFwhm = value);
 
     /** Prevents constructing the fixed page definitions. */
     private QualitySettings() {}
 
     /** Returns the immutable definitions in the existing page order. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(STAR_COUNT_SIGMA_DEVIATION, FWHM_SIGMA_DEVIATION, ECCENTRICITY_SIGMA_DEVIATION, ENABLE_BRIGHT_STAR_ECCENTRICITY_FILTER, BRIGHT_STAR_ECCENTRICITY_SIGMA_DEVIATION, BACKGROUND_SIGMA_DEVIATION, MIN_BACKGROUND_DEVIATION_ADU);
+        return List.of(STAR_COUNT_SIGMA_DEVIATION, FWHM_SIGMA_DEVIATION, ECCENTRICITY_SIGMA_DEVIATION, ENABLE_BRIGHT_STAR_ECCENTRICITY_FILTER, BRIGHT_STAR_ECCENTRICITY_SIGMA_DEVIATION, BACKGROUND_SIGMA_DEVIATION, MIN_BACKGROUND_DEVIATION_ADU,
+                ENABLE_REGISTRATION_CHECK, REGISTRATION_JUMP_FWHM, REGISTRATION_CREEP_FWHM);
     }
 }
