@@ -200,6 +200,7 @@ public class ConfigurationPanel extends JPanel {
         astrometryAccount.add(astrometryAnonymousButton);
         astrometryAccount.add(astrometryOwnKeyButton);
         astrometryAnonymousButton.setSelected(true);
+        astrometryKeyField.setName("astrometryNetApiKey");
         astrometryKeyField.setEnabled(false);
         astrometryCheckButton.setToolTipText("Log in to Astrometry.net with this account. Nothing is uploaded.");
         JPanel astrometryChoiceRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));

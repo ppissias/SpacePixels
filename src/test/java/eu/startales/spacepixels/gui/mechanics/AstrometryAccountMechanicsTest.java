@@ -2,7 +2,6 @@ package eu.startales.spacepixels.gui.mechanics;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.SpacePixelsAppConfigIO;
-import org.assertj.swing.core.GenericTypeMatcher;
 import org.assertj.swing.fixture.JTextComponentFixture;
 import org.junit.Test;
 
@@ -48,12 +47,7 @@ public class AstrometryAccountMechanicsTest extends MechanicsTestCase {
     }
 
     private JTextComponentFixture keyField() {
-        return window().textBox(new GenericTypeMatcher<>(JPasswordField.class, true) {
-            @Override
-            protected boolean isMatching(JPasswordField component) {
-                return true;
-            }
-        });
+        return window().textBox("astrometryNetApiKey");
     }
 
     /** What the next start reads, once the background save has written it; the key is kept while Anonymous is chosen. */
