@@ -3,6 +3,12 @@
 <!-- root-toc:start -->
 ## Contents
 
+- [2026.11-05](#202611-05)
+- [2026.11-04](#202611-04)
+  - [GPU acceleration for digital tracking](#gpu-acceleration-for-digital-tracking)
+  - [Detection and quality control](#detection-and-quality-control)
+  - [Reports and astrometry](#reports-and-astrometry)
+  - [Upgrading to 2026.11-04](#upgrading-to-202611-04)
 - [2026.11-03](#202611-03)
   - [Highlights](#highlights)
   - [Asteroids, comets and the Minor Planet Center](#asteroids-comets-and-the-minor-planet-center)
@@ -44,6 +50,39 @@
   - [Upgrading](#upgrading)
   - [Under the hood](#under-the-hood)
 <!-- root-toc:end -->
+
+## 2026.11-05
+
+- **Faint-mover sensitivity.** The search identifies star cores against each tile’s sky background again. This restores a faint asteroid lost when the mask was expanded around nearby stars. Refinement respects the configured minimum total motion across the session.
+
+## 2026.11-04
+
+### GPU acceleration for digital tracking
+
+**The faint-mover search ran 14.1× faster with GPU acceleration** in a 115-frame DECam benchmark. An NVIDIA GeForce RTX 5060 Laptop GPU cut the stage from **36 min 23 sec to 2 min 35 sec**, returning the same 30 candidates as the CPU run. The gain depends on the hardware and how much time the search spends testing trial motions.
+
+- **Faster shift-and-stack search.** Digital tracking, also called synthetic tracking, combines frames along trial motions to find objects too faint to see in individual exposures. OpenCL accelerates the first pass of this experimental search. With a verified GPU, it can test up to **400,000 trial motions**, up from the CPU limit of 100,000.
+- **Automatic GPU selection.** Under **Astrometry Config → GPU acceleration (faint movers)**, **Auto** checks that the OpenCL first pass matches the CPU exactly and uses the GPU when its benchmark is at least twice as fast. Otherwise, SpacePixels uses the CPU. You can select a graphics device, run **Test GPU**, or set **Always GPU** or **Always CPU**. [Faint-mover settings](MANUAL.md#faint-movers-experimental)
+- **One time limit for either compute path.** The faint-mover settings show the active compute mode and an estimated search time. Reports record the compute path and, when OpenCL runs, the graphics device used. Batch runs can choose a mode with `--gpu=auto|gpu|cpu`.
+
+### Detection and quality control
+
+- **Star-alignment checks.** Quality control now rejects individual frames with a sudden registration jump and flags areas where stars drift over the session. The report shows a 4 × 4 map of the drift in star widths. The main window’s **Registration** dialog lets you add flagged zones to the session’s excluded areas. [Registration check](MANUAL.md#registration-check)
+- **Fewer false faint-mover candidates on uneven backgrounds.** The search now uses the local sky background when masking star cores, helping suppress false paths from stars on gradients or nebulosity. Refinement also respects the configured minimum total motion.
+- **Stricter variable-star screening.** Candidates must clear stronger noise checks that include nearby constant stars.
+
+### Reports and astrometry
+
+- **Colour-coded comparison stars in variable-star reports.** A candidate’s light curve is plotted alongside up to three nearby comparison stars (C1–C3) of similar brightness, so you can see whether they brighten or dim together. A clickable image of the star field uses matching colours to show where each comparison star is, and the chart legend gives its distance from the candidate in pixels.
+- **Easier review of single-frame anomalies.** Long, thin events rank higher alongside bright compact events. Reports with many anomalies show up to 40 in a mosaic, and you can choose how many individual cards to generate. The report data and viewers retain every anomaly.
+- **Local plate solving through the Astrometry.net API.** Configure a compatible solver such as Watney Astrometry on your computer or network, then select **Astrometry.net (local)** in the main window.
+- **Asteroids & Comets improvements.** **Identify all** checks agreeing candidates against full JPL Horizons predictions before marking confirmed matches as **Known**. Faint-mover sub-stack measurements, observation selections and light curves return when you reopen the window. ADES export shows which linked nights are included, and **Test with the MPC** shows the submission ID as confirmation of receipt by the test service.
+- **Clearer satellite lookup errors.** The report displays an explicit error when a SatChecker request fails.
+
+### Upgrading to 2026.11-04
+
+- **Libraries and Java.** This release uses **JTransient 1.1.1** and **JPlateSolve 1.0.3**. The build accepts JDK 21 and newer and produces Java 21 bytecode.
+- **Headless runs.** Java API callers can choose the GPU mode and device through `DetectionRunOptions`. Use `--data-only` in the batch CLI or `reportDataOnly(true)` in the API to write just `report-data.json` and `detection_config.json`. This mode returns `report-data.json` from `getReportFile()`. [API and CLI guide](API.md)
 
 ## 2026.11-03
 
