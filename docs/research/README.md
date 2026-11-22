@@ -14,4 +14,8 @@ The coordinated slow-mover collection is maintained with the detection engine:
 
 In a sibling checkout, the [local archive](../../../JTransient/docs/research/slow-movers/README.md) provides the same evidence. The collection covers SM-F1/SM-F2/SM-F3/SM-F6/SM-F7. SpacePixels presentation/reporting behavior remains in [MANUAL.md](../../MANUAL.md) and [DEVELOPER.md](../../DEVELOPER.md).
 
-The investigation round is closed with current scientific filters/defaults retained. Only the deferred [engine extension item](../../../JTransient/FEATURE-REQUESTS.md#sm-f7-slow-and-faint-mover-extensions) remains for concrete missed-source or resource needs; no further campaign is scheduled. The collection preserves the earlier findings and limitations, without making them current implementation promises. Original observing-site metadata, raw observation caches and executable diagnostic harnesses remain external.
+The November 3–5 investigation round closed with its filters and defaults retained. Original observing-site metadata, raw observation caches and executable diagnostic harnesses remain external.
+
+## Faint-mover star mask
+
+The November 21–22 investigation closed with the local-background star mask from JTransient 1.1.1 restored in 1.1.2. The archive records the decision to accept the loss of the blind FM10 detection in Klangwolke-2, along with the Andromeda and Austral Kiwi results, the FM10 pixel and mask review, and the alternatives tested. [Investigation and decision](https://github.com/ppissias/JTransient/tree/main/docs/research/slow-movers/12-faint-mover-star-mask) · [Sibling checkout](../../../JTransient/docs/research/slow-movers/12-faint-mover-star-mask/README.md)

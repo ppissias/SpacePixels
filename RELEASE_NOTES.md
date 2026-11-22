@@ -53,7 +53,8 @@
 
 ## 2026.11-05
 
-- **Faint-mover sensitivity.** The search identifies star cores against each tile’s sky background again. This restores a faint asteroid lost when the mask was expanded around nearby stars. Refinement respects the configured minimum total motion across the session.
+- **Faint-mover star mask unchanged.** The search keeps the 2026.11-04 star mask, which also finds star cores above the local background. On fields with gradients or nebulosity this removes many false paths. A faint asteroid passing close to a star can lose part of its signal. [Faint-mover settings](MANUAL.md#faint-movers-experimental) · [Investigation](docs/research/README.md#faint-mover-star-mask)
+- **Libraries.** This release uses **JTransient 1.1.2**, which detects the same as 1.1.1, and **JPlateSolve 1.0.3**.
 
 ## 2026.11-04
 

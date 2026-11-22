@@ -18,9 +18,7 @@ Registration quality is owned by JTransient: [registration quality](../JTransien
 
 <a id="f01-slow-mover-and-per-frame-tuning-relation"></a>
 
-**Slow and faint movers.** Digital tracking (JTransient SM-F2 / SpacePixels F25) and the agreed review/report controls are delivered; see the [manual](MANUAL.md#faint-movers-experimental) and [engine algorithm](../JTransient/ALGORITHM.md#faint-mover-search). Maximum-stack position/time review and track correspondences are also implemented. The investigation round is closed with current scientific filters and defaults retained. F01's separate tuning experiment is retired: stack and single-frame noise thresholds remain distinct, and Auto-Tune does not tune maximum-stack thresholds.
-
-The faint and slow-mover investigation round is closed; no further experiment or integration is scheduled. Any future engine extension must update application settings, result provenance and review together. The [existing research collection](docs/research/README.md) preserves the completed evidence and delivery history.
+**Slow and faint movers.** Digital tracking (JTransient SM-F2 / SpacePixels F25), maximum-stack position/time review and track correspondences are delivered. See the [manual](MANUAL.md#faint-movers-experimental) and [engine algorithm](../JTransient/ALGORITHM.md#faint-mover-search). The star-mask decision and supporting results are in the [research archive](docs/research/README.md#faint-mover-star-mask). F01's separate tuning experiment is retired. Stack and single-frame noise thresholds remain distinct, and Auto-Tune does not tune maximum-stack thresholds.
 
 The engine's [XC-3 background proposal](../JTransient/FEATURE-REQUESTS.md#xc-3-local-background-and-noise-for-frame-extraction) remains open and parked at the maintainer's request. Its current decision and proposed local-sky-only next step are kept there; the verified restart bundle is recorded in the ignored machine environment notes. No extraction change is selected.
 
