@@ -9,9 +9,8 @@ Use the individual exposures before stacking. Rejection during stacking can supp
 ## Start here
 
 - [Installation and launch](#installation-and-launch)
-- [Your first detection](#your-first-detection)
-- [What SpacePixels does](#what-spacepixels-does)
-- [Report output](#report-output)
+- [Features for Your Observing Session](#features-for-your-observing-session)
+- [How SpacePixels Works](#how-spacepixels-works) ([Typical GUI Workflow](#typical-gui-workflow))
 - [Video tutorials](#video-tutorials)
 - [Screenshots and sample reports](#screenshots-and-sample-reports)
 - [Acknowledgements](#acknowledgements)
@@ -32,138 +31,272 @@ Choose an application package under **Assets** at [SpacePixels Releases](https:/
 
 The **Source code** ZIP/TAR links are source snapshots, not runnable application packages.
 
-<a id="typical-gui-workflow"></a>
+## Features for Your Observing Session
 
-## Your first detection
+From frame preparation and GPU-assisted faint-mover searches to photometry, visual review and asteroid follow-up, powered by the JTransient detection engine.
 
-1. Start SpacePixels and choose **Import Aligned Frames…**. Select one folder of calibrated, registered exposures. Accept any required format conversion and import the resulting monochrome sequence.
-2. Use **Blink Selected** to check alignment and image quality. If the exposures need calibration or registration first, see [Preparing an observing session](MANUAL.md#preparing-an-observing-session).
-3. Optionally plate-solve one frame for sky coordinates and catalogue searches. Fetch the sky catalogue and known asteroids and comets before detection if you want catalogue context and known-object comparisons in the report.
-4. Run **Auto-Tune Settings** and start with **High**. Variable-star photometry and the experimental faint-mover search are on by default; switch them off under **Detection Settings → Overview → Analyses in This Run** when you do not need them.
-5. Click **Detect Moving Targets**, open the report when prompted, and inspect candidates in the animations and original frames.
+- **Multi-Frame Detection.** Find moving targets, streak tracks, single-frame streaks and bright anomalies. A dedicated faint-streak search recovers weaker trails. Iterative detection runs overlapping subsets for large datasets or very slow targets.
+- **Faint Movers (Experimental).** Digital tracking, also called shift-and-stack, combines weak signals along trial motions to find objects too faint for ordinary single-frame tracks. Review fitted paths, source and residual blinks, whole-session and half-session stacks, and exported measurements.
+- **GPU Acceleration.** OpenCL accelerates the first pass of the faint-mover search. Auto mode verifies identical CPU results and a speed advantage before using a compatible GPU, with CPU fallback. Select a graphics device, run Test GPU, or choose Always GPU or Always CPU in Astrometry Config.
+- **Slow Movers & Residual Candidates.** Inspect elongated maximum-stack footprints, repeated weak detections and local activity clusters. Slow-mover cards include original-frame centroid checks. Camera-fixed and common-motion filters help separate likely sensor artifacts from candidates that deserve a closer look.
+- **Auto-Tuning.** Measure noise detections and artificial-star recovery on your own frames, then choose Low, Medium, High or Maximum sensitivity. Review calibration charts and live progress images, edit the detection settings, and preview their effect on real pixels.
+- **Frame Quality & Equipment Diagnostics.** Check frame quality before a full run and inspect rejection reasons. Reports measure seeing, transparency, field depth, sky brightness, drift and dithering, with maps of star size, shape, coma and flat-field patterns where the required calibration is available.
+- **Astrometry & Object Identification.** Plate-solve with ASTAP or Astrometry.net for sky coordinates. Compare tracks and faint movers with JPL and SkyBoT asteroid/comet predictions, check satellite exposure paths with SatChecker, and explore sky context in Stellarium Web or Local.
+- **Sky Annotations & Plate Correction.** Overlay Gaia stars, SIMBAD deep-sky objects, VSX variables and predicted asteroid/comet paths in the viewers. Gaia-based plate correction refines the session's sky coordinates. Saved catalogues and report findings return when you reopen a compatible session.
+- **Asteroid Measurements & MPC Export.** Use Asteroids & Comets to review identifications and reduce positions against Gaia DR3. Measure faint movers in independent sub-stacks, select observations, export ADES PSV files for the Minor Planet Center, and check the schema or MPC test service. You submit the final observations yourself.
+- **Other Nights, Orbits & Light Curves.** Link an object's observations across nights and fit preliminary orbits with Find_Orb. Measure relative moving-object light curves with transparency correction, frame binning and CSV export. Compare observed motion with expected main-belt motion to guide follow-up.
+- **Variable-Star Photometry.** Measure stationary stars with differential ensemble photometry and review variable candidates with light curves, comparison stars, readiness checks, noise diagnostics and CSV exports. AAVSO VSX matching and Gaia, VizieR and SIMBAD links support follow-up. Requires at least 20 frames after quality control.
+- **Interactive Reports & Exports.** Review HTML reports with animated crops, adjustable playback, finding navigation, trajectory maps and an interactive Unclassified Transient Inspector. Share the complete report folder for offline review, or export GIFs, CSV/JSON data and a noise-weighted enhanced FITS stack. Dark/light themes and text-size controls aid reading.
+- **Visual Inspection & Mask Tools.** Blink frames with report and catalogue overlays, export a region as a GIF, preview detections or inspect unlinked transients manually. Explore the star mask, exclude unusable image areas, and adjust display stretch with histograms. A separate export writes stretched copies.
+- **Prepare Your Frames.** Import supported FITS or XISF sequences, decompress and convert them to unsigned 16-bit FITS, and create linear monochrome copies. Prepare Frames uses a separately installed Siril to calibrate, debayer and register private copies of your exposures, with input inspection and an optional reference stack.
+- **Command Line & Java API.** Run headless batch detection with optional Auto-Tune, choose the GPU policy, and control report size or export data only. Integrate preparation and detection through the supported Java API. An artificial-star injection utility supports testing and validation.
 
-The [illustrated manual](MANUAL.md#3-workflow-find-moving-objects-in-a-session) explains each step and how to interpret the results. Local detection works without an online solver; catalogue downloads and online identification require internet access.
+## How SpacePixels Works
 
-For supported formats and detailed preparation rules, see [Input requirements](#input-requirements).
+### In Your Astrophotography Workflow
 
-## What SpacePixels does
+Once your images are calibrated and aligned, you can stack them for a finished image and use the same frames in SpacePixels to find moving objects and transients.
 
-SpacePixels analyses sequences of aligned FITS exposures to surface candidates for moving objects, streaks, brightness changes, and other transients that stacking would normally suppress. Findings are always presented as candidates for review, not confirmed discoveries.
+![Calibrated and aligned frames split into two paths: stacking at the top produces a final image, while SpacePixels below produces a report of what changed](docs/images/SpacePixels-Overall-Astro-Workflow-updated.png)
 
-- **Moving-object and transient detection.** Standard multi-frame pipeline for tracks, streak tracks, single-frame streaks and bright anomalies. Optional experimental digital-tracking (shift-and-stack) search for faint movers (FM#) automatically uses OpenCL GPU acceleration when a compatible graphics card is available and verified faster than the CPU (`Auto` mode under **Astrometry Config → GPU acceleration**; integrated or slower GPUs fall back to Java CPU). On an NVIDIA GeForce RTX 5060 Laptop GPU, the first-pass coarse search runs roughly 25×–75× faster, cutting faint-mover stage times by about 3×–14× on frame- and motion-heavy sequences while keeping identical results. Iterative mode is also available for large datasets or very slow targets.
-- **Variable-star photometry.** Measures stationary stars (on by default) and reports candidates with light curves, readiness checks, noise diagnostics and AAVSO VSX catalogue lookup (requires a plate-solved frame for matching).
-- **Auto-tuning and quality control.** Session-specific calibration of detection settings (low / medium / high / maximum profiles). Standalone quality-control check available before a full run.
-- **Identification helpers and sky context.** Plate-solving via ASTAP or Astrometry.net. Uses WCS for RA/Dec overlays, SkyBoT / JPL Small-Body Identification, known-asteroid/comet prediction comparison, SatChecker satellite-motion checks, and Stellarium Web/Local links.
-- **Interactive HTML report.** Self-contained session report with dark/light themes, adjustable text size, custom CSS, animated crops/GIFs, geometric overlays, trajectory and transient maps, diagnostics, and direct identification links.
-- **Supporting workflow tools.** Frame blinking with region GIF export, frame-by-frame detection preview, image stretch editor with histograms, colour-to-mono conversion, optional Siril-based calibration/registration of private copies, and headless batch utilities.
+*The same calibrated, aligned exposures support both paths: a stacked image and a report of moving objects and brightness changes.*
 
-## Report output
+### Inside SpacePixels Detection
 
-The detection pipeline produces a self-contained HTML session report (`detection_report.html` plus CSS/JS and associated PNG/GIF/FITS assets). It is designed for interactive review rather than as a final catalogue.
+SpacePixels checks frame quality, builds a median star map to mask stationary sources, then detects and links the remaining signals. Auto-Tune can calibrate the settings before detection; optional plate solving adds sky coordinates and identification tools.
 
-Typical contents include:
+![Processing pipeline: aligned frames, quality check, star map, detection and linking, then an HTML report, with Auto-Tune and plate solving shown as optional dotted branches](docs/images/SpacePixels-Detection-Workflow-updated.png)
 
-- Session overview (field, time span, frames, camera, plate-solve status) with sticky navigation, theme/text-size controls, and cards that jump to each result, plus a noise-weighted enhanced stack.
-- Visualisations of candidates: moving tracks, streak tracks, single-frame streaks, anomalies, slow-mover candidates, and experimental faint-mover (digital-tracking) results, with crops, animations, overlays and CSV exports where useful.
-- Identification and context tools: SkyBoT / JPL links, SatChecker exposure-path comparisons, Stellarium controls, and (when predictions were fetched) a known-asteroid/comet comparison table.
-- Global trajectory and transient maps, including an interactive unclassified-transient view with time-coloured footprints and a zoomed inspection animation.
-- Variable-star section (when enabled): readiness summary, candidate table with VSX matching, light curves, field map with sparklines, and CSV exports.
-- Diagnostics and supporting material: Night & Equipment quality maps, frame quality control, detection configuration (differences from defaults highlighted), star masks, drift/dither info, collapsed likely artifacts, and stage timings.
+*The main pipeline leads from your frames to a report for review. Dotted branches show optional Auto-Tune and plate solving.*
+
+### Typical GUI Workflow
+
+1. Calibrate and star-align your exposures, using your usual software or **Prepare Frames…** with Siril.
+2. Use **Import Aligned Frames…** or drop a folder of aligned FITS files or XISF-only images onto the window. Accept any required decompression or unsigned 16-bit conversion, then use **Convert to Mono** for color frames.
+3. Use **Run quality control** and **Blink Selected** to inspect the sequence. Adjust **Image Stretch** for viewing, and exclude unusable areas in Preview Frame. Detection uses the linear pixel values.
+4. Optionally configure your plate solver and observing site, then plate-solve one frame. Use **Fetch Sky Catalogue** for annotations and Gaia-based correction, and **Fetch Asteroids and Comets** for known-object comparisons.
+5. Run **Auto-Tune Settings** and start with High. Review the variable-star and experimental faint-mover switches under **Analyses in This Run**; both are on by default and add processing time.
+6. For faint movers, leave **First pass compute** on **Auto (recommended)** under **Astrometry Config → GPU acceleration**. SpacePixels uses a compatible GPU after verifying matching results and a speed advantage, otherwise it uses the CPU.
+7. Run **Detect Moving Targets**.
+8. Open the HTML report and inspect candidates in their image sequences. Use the identification links or **Asteroids & Comets…** for measurements, light curves, preliminary orbits and MPC export.
+
+The [illustrated manual](MANUAL.md#3-workflow-find-moving-objects-in-a-session) explains each step and how to interpret the results. Local detection works without an online solver; catalogue downloads and online identification require internet access. For supported formats and detailed preparation rules, see [Input requirements](#input-requirements).
 
 ## Video Tutorials
 
-These videos show the versions available when recorded. Use the manual for current controls and installation instructions.
+These videos show the versions available when recorded. Use the [user manual](MANUAL.md) and [release notes](RELEASE_NOTES.md) for current controls and installation instructions.
 
-### Latest tutorial
-
-<a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer">
-  <img src="docs/images/video-tutorial-latest-thumbnail.jpg" alt="Watch the latest SpacePixels full tutorial on YouTube" width="320"/>
-</a>
-
-[Watch the latest SpacePixels tutorial on YouTube](https://youtu.be/LhA1izPFql0)
-
-### Earlier tutorial
-
-<a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank">
-  <img src="docs/images/video-tutorial-thumbnail.jpg" alt="Watch the SpacePixels video tutorial on YouTube" width="320"/>
-</a>
-
-[Watch the earlier SpacePixels tutorial on YouTube](https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ)
+<table>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer">
+        <img src="docs/images/video-tutorial-latest-thumbnail.jpg" alt="Watch the latest SpacePixels full tutorial on YouTube" width="380" />
+      </a>
+      <br />
+      <a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer"><strong>Latest tutorial — watch on YouTube →</strong></a>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank" rel="noopener noreferrer">
+        <img src="docs/images/video-tutorial-thumbnail.jpg" alt="Watch the earlier SpacePixels tutorial on YouTube" width="380" />
+      </a>
+      <br />
+      <a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank" rel="noopener noreferrer"><strong>Earlier tutorial — watch on YouTube →</strong></a>
+    </td>
+  </tr>
+</table>
 
 ## Screenshots and sample reports
 
-Many thanks to Klangwolke at Cloudynights for providing amazing data for some of the reports.
+Explore full reports and animated detections from real sessions. Finding counts and labels depend on the input data and settings.
 
-Many thanks to Cloudynights user TheStarsabove for providing data.
+Many thanks to Klangwolke, TheStarsabove and Austral Kiwi at Cloudynights, and to Duncan Warren for the Apophis raw images. Many thanks to [Kumar](https://github.com/chvvkumar) for providing many, very useful datasets! DECam data from the [NSF NOIRLab Astro Data Archive](https://astroarchive.noirlab.edu/) were also used to test and improve SpacePixels.
 
-Many thanks to [Kumar](https://github.com/chvvkumar) for providing plenty of datasets! :)
+**Check out sample reports:**
 
-Many thanks to Austral Kiwi at Cloudynights for providing data.
+- [SpacePixels Report (Demonstrating digital tracking - 10 faint asteroids detected) - version 2026.11-01](https://startales.eu/various_files/detections_20261107_141108/detection_report.html) — HTML session report demonstrating digital tracking with 10 faint asteroids detected, known-asteroid comparisons, and diagnostics.
+- [Sample SpacePixels session report (earlier version)](https://startales.eu/various_files/detections_20261015_144623/detection_report.html) — HTML session report with diagnostics and detection visualizations.
+- [SpacePixels session report (3 asteroids) (earlier version)](https://startales.eu/various_files/detections_20261004_131720/detection_report_public.html) — Complete detection analysis with diagnostics and visualizations.
+- [Sample SpacePixels report (Apophis) (earlier version)](https://startales.eu/various_files/detections_20260327_104057/detection_report.html) — Focused asteroid detection and tracking of Apophis.
+- [Sample SpacePixels report (earlier version)](https://startales.eu/various_files/detections_20260327_104830/detection_report.html) — Another example of a SpacePixels detection report.
 
-DECam data from the [NSF NOIRLab Astro Data Archive](https://astroarchive.noirlab.edu/) were used to test and improve SpacePixels.
+### A Closer Look at the Newer Tools
 
-**Check out sample reports.**
+Examples from the [user manual](MANUAL.md) show how SpacePixels helps you inspect faint signals, understand your equipment and follow up moving objects. Select any image to view it at full size.
 
-<a href="https://startales.eu/various_files/detections_20261107_141108/detection_report.html" target="_blank">SpacePixels Report (Demonstrating digital tracking - 10 faint asteroids detected) - version 2026.11-01</a><br/>
-<a href="https://startales.eu/various_files/detections_20261015_144623/detection_report.html" target="_blank">Sample SpacePixels session report (earlier version)</a><br/>
-<a href="https://startales.eu/various_files/detections_20261004_131720/detection_report_public.html" target="_blank">SpacePixels session report (3 asteroids) (earlier version)</a><br/>
-<a href="https://startales.eu/various_files/detections_20260327_104057/detection_report.html" target="_blank">Sample SpacePixels report (Apophis) (earlier version)</a> <br/>
-<a href="https://startales.eu/various_files/detections_20260327_104830/detection_report.html" target="_blank">Sample SpacePixels report (earlier version)</a> <br/>
+#### Finding Faint Movers with Digital Tracking
 
-![Main Interface](docs/images/user-interface-2026-10-01.png)
-<br/>*The SpacePixels Main Workspace.*
+*Experimental · Unverified candidate*
 
-![Sample Detection](docs/images/streak-track-1.png)
-<br/>*Sample Detection - Streak track*
+A moving object can be difficult to see in one exposure. Digital tracking, also called synthetic tracking or shift-and-stack, combines weak signals along trial motions so they can stand out together.
 
-![Asteroid Bondia detection report](docs/images/Bondia-Screenshot.png)
-<br/>*Asteroid Bondia - hiding in a 2017 dataset*
+This manual example compares a source exposure, a processed residual, the whole-session shift stack, and independent first/second half stacks. The processed views help inspect the candidate; the fitted path remains unverified. [Read the faint-mover guide](MANUAL.md#faint-movers-experimental).
 
-![Asteroid Bondia animation](docs/images/Bondia-moving_track_1_star_centric.gif)
-<br/>*Asteroid Bondia - hiding in a 2017 dataset*
+<a href="docs/images/manual/report-faint-mover.png">
+  <img src="docs/images/manual/report-faint-mover.png" alt="Faint-mover report card showing source exposure, processed residual, whole-session shift stack, and first/second half stacks" width="760" />
+</a>
 
-![Sample Detection](docs/images/Prokne-detection.png)
-<br/>*Sample Detection - asteroid Prokne (data credit Klangwolke @ Cloudynights)*
+#### GPU Acceleration in One Measured Session
 
-![Sample Detection](docs/images/Prokne-moving_track_2_star_centric.gif)
-<br/>*Sample Detection - asteroid Prokne (data credit Klangwolke @ Cloudynights)*
+The full faint-mover stage ran **8.8× faster** with OpenCL in this paired validation run. GPU acceleration handles the first search pass; preparation and refinement still use the CPU.
 
-![Sample Detection](docs/images/Valeria-Screenshot.png)
-<br/>*Sample Detection - asteroid Valeria (data credit Klangwolke @ Cloudynights)*
+| Compute backend | Faint-mover stage wall time | Relative speed |
+| --- | ---: | ---: |
+| Java CPU | 226.1 s | 1.0× |
+| OpenCL GPU | 25.7 s | **8.8× faster** |
 
-![Sample Detection](docs/images/Valeria-moving_track_1_star_centric.gif)
-<br/>*Sample Detection - asteroid Valeria (data credit Klangwolke @ Cloudynights)*
+*M101 aligned sequence: 111 imported frames, 106 searched after quality control. AMD Ryzen 9 9955HX CPU and NVIDIA GeForce RTX 5060 Laptop GPU, Windows 11, SpacePixels 2026.11-04, 18 November 2026. Times show the full faint-mover stage wall time, excluding other detection stages and report generation. These are single-run measurements; gains vary with hardware and workload, and preparation can dominate on large sensors.*
 
-![Sample Detection](docs/images/Sutoku-Screenshot.png)
-<br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
+#### Understand Your Night & Equipment
 
-![Sample Detection](docs/images/Sutoku-micro_drift_1_context.gif)
-<br/>*Sample Detection - asteroid Sutoku (data credit Klangwolke @ Cloudynights)*
+Follow seeing, transparency and sky brightness through the session. Field maps reveal patterns in star size, shape and coma that can help investigate focus, tilt or optical spacing.
 
-![Sample Detection](docs/images/variable-star-summary.png)
-![Sample Detection](docs/images/variable-star-detection.png)
-<br/>*Sample Detection - Variable star DK Per*
+<a href="docs/images/manual/report-night-equipment.png">
+  <img src="docs/images/manual/report-night-equipment.png" alt="Night and Equipment report with seeing, transparency and sky-brightness charts above maps of star size, shape and coma" width="840" />
+</a>
 
-![Variable star TSVSC1 TN-N213111103-25-82-2 detection and light curve](docs/images/variable-star-tsvsc1-tn-n213111103-25-82-2.png)
-<br/>*Sample Detection - Variable star TSVSC1 TN-N213111103-25-82-2 (W UMa-type eclipsing binary), showing 0.61 mag variation over 299 minutes.*
+*Measurements from a real session, with explanations below each chart. Optical patterns guide investigation and do not establish a unique diagnosis.*
 
-![Sample Detection](docs/images/aptrack_1_star_centric.gif)
-<br/>*Sample Detection - Comet Africano 2019*
+#### From Detection to Asteroid Follow-up
 
-![Sample Detection](docs/images/aptrack_1_object_centric.gif)
-<br/>*Sample Detection - Comet Africano 2019*
+Review object identifications and Gaia-based position measurements in **Asteroids & Comets**. Link observations across nights, fit preliminary orbits with Find_Orb, and prepare ADES files for the Minor Planet Center.
 
-![Sample Detection](docs/images/track_5_object_centric.gif)
-*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), object-centric view.*
+<table>
+  <tr>
+    <td width="72%" valign="top">
+      <a href="docs/images/manual/ui-asteroids-comets.png">
+        <img src="docs/images/manual/ui-asteroids-comets.png" alt="Asteroids and Comets workspace showing object identifications, an object-centred image and measured positions" />
+      </a>
+      <br />
+      <em>Identify objects and review the observations you will export.</em>
+    </td>
+    <td width="28%" valign="top">
+      <a href="docs/images/manual/ui-asteroids-orbit.png">
+        <img src="docs/images/manual/ui-asteroids-orbit.png" alt="Find_Orb preliminary asteroid orbit with the Sun, planetary orbits, fitted elements and uncertainties" />
+      </a>
+      <br />
+      <em>A preliminary orbit from one night remains uncertain.</em>
+    </td>
+  </tr>
+</table>
 
-![Sample Detection](docs/images/track_5_star_centric.gif)
-<br/>*Sample Detection - Apophis asteroid 2021 (raw images credit Duncan Warren), star-centric view.*
+<details>
+  <summary><strong>See a moving-object light curve</strong></summary>
+  <br />
+  <a href="docs/images/manual/ui-asteroids-lightcurve.png">
+    <img src="docs/images/manual/ui-asteroids-lightcurve.png" alt="Relative asteroid brightness over 75 frames with uncertainty bars and transparency correction from 27 comparison stars" width="680" />
+  </a>
+  <br />
+  <em>Measure relative brightness, compare frame bins and save the measurements as CSV. This example is not calibrated photometry or a rotation-period determination.</em>
+</details>
 
-![Sample Detection](docs/images/streak_track_3_star_centric.gif)
-<br/>*Sample Detection - streak track.*
+### SpacePixels Main Interface
 
-![Sample Detection](docs/images/anomaly_17_context.gif)
-<br/> *Sample Detection - single-frame anomaly candidate (cause unconfirmed), data credit cloudynights user TheStarsabove.*
+Prepare frames, configure astrometry, inspect your sequence and run detection from one workspace. This manual example shows an imported monochrome sequence.
+
+<a href="docs/images/manual/ui-imported.png">
+  <img src="docs/images/manual/ui-imported.png" alt="SpacePixels main workspace with Prepare, Astrometry, Inspect and Detect groups above the imported-frame table" />
+</a>
+
+### Screenshots & Animated Detections
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <a href="docs/images/Bondia-moving_track_1_star_centric.gif">
+        <img src="docs/images/Bondia-moving_track_1_star_centric.gif" alt="Asteroid Bondia — Star-Centric View" width="260" />
+      </a>
+      <br />
+      <code>Asteroid</code><br />
+      <strong>Asteroid Bondia</strong><br />
+      <em>Star-Centric View</em><br />
+      Asteroid Bondia — hiding in a 2017 dataset.
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/images/Prokne-moving_track_2_star_centric.gif">
+        <img src="docs/images/Prokne-moving_track_2_star_centric.gif" alt="Asteroid Prokne — Star-Centric View" width="260" />
+      </a>
+      <br />
+      <code>Asteroid</code><br />
+      <strong>Asteroid Prokne</strong><br />
+      <em>Star-Centric View</em><br />
+      Animated detection of Prokne moving against the star field (data credit: Klangwolke @ Cloudynights).
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/images/Sutoku-micro_drift_1_context.gif">
+        <img src="docs/images/Sutoku-micro_drift_1_context.gif" alt="Asteroid Sutoku — Context View" width="260" />
+      </a>
+      <br />
+      <code>Asteroid</code><br />
+      <strong>Asteroid Sutoku</strong><br />
+      <em>Context View</em><br />
+      Animated context view of Sutoku's slow local drift (data credit: Klangwolke @ Cloudynights).
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <a href="docs/images/variable-star-detection.png">
+        <img src="docs/images/variable-star-detection.png" alt="Variable Star DK Per — Detection &amp; Light Curve" width="260" />
+      </a>
+      <br />
+      <code>Variable Star</code><br />
+      <strong>Variable Star DK Per</strong><br />
+      <em>Detection &amp; Light Curve</em><br />
+      Variable-star candidate details and light curve for DK Per.
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/images/variable-star-tsvsc1-tn-n213111103-25-82-2.png">
+        <img src="docs/images/variable-star-tsvsc1-tn-n213111103-25-82-2.png" alt="Variable Star TSVSC1 TN-N213111103-25-82-2 — W UMa-Type Eclipsing Binary" width="260" />
+      </a>
+      <br />
+      <code>Variable Star</code><br />
+      <strong>Variable Star TSVSC1 TN-N213111103-25-82-2</strong><br />
+      <em>W UMa-Type Eclipsing Binary</em><br />
+      High-confidence detection showing 0.61 mag variation over 299 minutes, with a light curve and a limited catalogue comparison.
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/images/aptrack_1_object_centric.gif">
+        <img src="docs/images/aptrack_1_object_centric.gif" alt="Comet Africano 2019 — Object-Centric View" width="260" />
+      </a>
+      <br />
+      <code>Comet</code><br />
+      <strong>Comet Africano 2019</strong><br />
+      <em>Object-Centric View</em><br />
+      Detection with the comet centered in the animation.
+    </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <a href="docs/images/track_5_star_centric.gif">
+        <img src="docs/images/track_5_star_centric.gif" alt="Apophis Asteroid 2021 — Star-Centric View" width="260" />
+      </a>
+      <br />
+      <code>Asteroid</code><br />
+      <strong>Apophis Asteroid 2021</strong><br />
+      <em>Star-Centric View</em><br />
+      Apophis moving against the star field (raw images credit: Duncan Warren).
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/images/streak_track_3_star_centric.gif">
+        <img src="docs/images/streak_track_3_star_centric.gif" alt="Streak Track Detection — Star-Centric View" width="260" />
+      </a>
+      <br />
+      <code>Streak Track</code><br />
+      <strong>Streak Track Detection</strong><br />
+      <em>Star-Centric View</em><br />
+      Sample detection — streak track.
+    </td>
+    <td width="33%" valign="top">
+      <a href="docs/images/anomaly_17_context.gif">
+        <img src="docs/images/anomaly_17_context.gif" alt="Single-Frame Anomaly Candidate — Cause Unconfirmed" width="260" />
+      </a>
+      <br />
+      <code>Anomaly Candidate</code><br />
+      <strong>Single-Frame Anomaly Candidate</strong><br />
+      <em>Cause Unconfirmed</em><br />
+      A bright event in one exposure; its physical cause is not established (data credit: Cloudynights user TheStarsabove).
+    </td>
+  </tr>
+</table>
 
 ## Input requirements
 
