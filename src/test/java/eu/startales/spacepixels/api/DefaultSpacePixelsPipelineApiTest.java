@@ -19,6 +19,23 @@ public class DefaultSpacePixelsPipelineApiTest {
 
     private static final int FRAME_COUNT = 5;
 
+    /**
+     * Raw colour exposures are refused before any conversion, in either preparation mode, with a message that names
+     * the mosaic and points to preparation. Nothing is written beside them.
+     */
+    @Test public void refusesRawColourExposures() throws Exception {
+        Path root = Files.createTempDirectory("spacepixels-api-raw-colour");
+        Path raw = SyntheticDatasetFactory.createRawColourFitsSequence(root, "raw", FRAME_COUNT, java.util.Map.of());
+        var api = new DefaultSpacePixelsPipelineApi();
+        for (var mode : InputPreparationMode.values()) {
+            var refused = org.junit.Assert.assertThrows(SpacePixelsPipelineException.class, () -> api.run(
+                    SpacePixelsPipelineRequest.builder(raw.toFile()).inputPreparationMode(mode).generateReport(false).build()));
+            assertTrue(refused.getMessage(), refused.getMessage().contains("raw colour exposures: a Bayer GRBG mosaic"));
+            assertTrue(refused.getMessage(), refused.getMessage().contains("Prepare Observing Session"));
+        }
+        try (var entries = Files.list(raw)) { assertFalse(entries.anyMatch(Files::isDirectory)); }
+    }
+
     /** API conversion never opens a GUI: defaults reject extremes and explicit policies cover both FITS and XISF. */
     @Test public void outlierPolicyIsOptionalAndExplicitForBothInputFormats() throws Exception {
         var defaultRequest = SpacePixelsPipelineRequest.builder(new java.io.File(".")).build();

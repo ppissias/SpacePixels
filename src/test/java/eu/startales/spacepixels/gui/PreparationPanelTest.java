@@ -232,6 +232,72 @@ public class PreparationPanelTest {
         } finally { if (owner.get() != null) edt(owner.get()::close); storage.finish(); }
     }
 
+    /**
+     * Seestar lights fill in colour and their camera's preset after Inspect. The readiness names each value's source,
+     * an override of the files warns, monochrome is refused for raw colour, and a re-inspection keeps the observer's
+     * own choices.
+     */
+    @Test public void seestarLightsFillTheCameraFromTheirHeaders() throws Exception {
+        Path lights = eu.startales.spacepixels.testsupport.SyntheticDatasetFactory.createRawColourFitsSequence(
+                temporary.getRoot().toPath(), "seestar", 3, java.util.Map.of());
+        Path executable = temporary.newFile("seestar-siril.exe").toPath();
+        var settings = ApplicationSettings.inMemory(new AppConfig());
+        var storage = new ApplicationStorage();
+        var owner = new AtomicReference<PreparationPanel>();
+        try {
+            edt(() -> {
+                var panel = new PreparationPanel(settings, storage, () -> false, ignored -> { },
+                        ignored -> new PreparationPanel.Installation(executable, "siril 1.4.4"));
+                owner.set(panel);
+                field(panel, "Siril installation path").setText(executable.toString());
+                button(panel, "Check").doClick();
+                assertNull(combo(panel, PreparationRequest.Sensor.class).getSelectedItem());
+                panel.startWithLights(lights);
+            });
+            await(() -> settings.getConfig().sirilExecutablePath.equals(executable.toString()));
+            // The in-memory settings report an unsaved path in the feedback line, so wait for the readiness instead.
+            await(() -> text(owner.get()).contains("✓ Inputs counted"));
+            edt(() -> {
+                var panel = owner.get();
+                assertEquals(lights.toString(), field(panel, "Lights (required)").getText());
+                assertEquals(PreparationRequest.Sensor.CFA, combo(panel, PreparationRequest.Sensor.class).getSelectedItem());
+                assertEquals(CameraBayerPreset.SEESTAR_S30_PRO, cameraPreset(panel).selected());
+                var request = request(panel);
+                assertEquals(PreparationRequest.Bayer.METADATA, request.bayer());
+                assertEquals(PreparationRequest.RowOrder.TOP_DOWN, request.rowOrder());
+                assertEquals("ZWO Seestar S30 Pro", request.cameraPreset());
+                String text = text(panel);
+                assertTrue(text, text.contains("Bayer: GRBG (from the files)"));
+                assertTrue(text, text.contains("Rows: top-down (ZWO Seestar S30 Pro preset; the files have no ROWORDER)"));
+                assertTrue(text, text.contains("Bayer offsets: 0, 0 (none in the files)"));
+                assertFalse(text, text.contains("lack ROWORDER"));
+                combo(panel, PreparationRequest.Bayer.class).setSelectedItem(PreparationRequest.Bayer.RGGB);
+                assertEquals(CameraBayerPreset.CUSTOM, cameraPreset(panel).selected());
+                assertTrue(text(panel), text(panel).contains("The files say GRBG; RGGB overrides them."));
+                assertNotEquals(readinessColor(panel, "Engine: Siril"), readinessColor(panel, "The files say GRBG"));
+                assertNull(request(panel).cameraPreset());
+                combo(panel, PreparationRequest.Sensor.class).setSelectedItem(PreparationRequest.Sensor.MONO);
+                assertTrue(text(panel).contains("The FITS lights are raw colour (BAYERPAT GRBG). Choose Colour (Bayer CFA)."));
+                checkbox(panel, "These folders contain").doClick();
+                checkbox(panel, "I confirm this recipe").doClick();
+                assertFalse("Raw colour lights cannot be prepared as monochrome", button(panel, "Prepare with Siril").isEnabled());
+                button(panel, "Inspect inputs").doClick();
+            });
+            await(() -> inspectionFinished(owner.get()));
+            edt(() -> {
+                var panel = owner.get();
+                assertEquals("The observer's sensor choice stays", PreparationRequest.Sensor.MONO, combo(panel, PreparationRequest.Sensor.class).getSelectedItem());
+                assertEquals("The observer's camera choice stays", CameraBayerPreset.CUSTOM, cameraPreset(panel).selected());
+            });
+        } finally { if (owner.get() != null) edt(owner.get()::close); storage.finish(); }
+    }
+
+    /** Waits for an inspection's completion message, which replaces "Inspecting…". */
+    private static boolean inspectionFinished(Container panel) {
+        return all(panel).stream().filter(JLabel.class::isInstance).map(JLabel.class::cast).map(JLabel::getToolTipText)
+                .anyMatch(text -> text != null && text.startsWith("Inputs counted"));
+    }
+
     /** Captures a valid form on the EDT, reporting an unexpected validation failure as a test failure. */
     private static PreparationRequest request(PreparationPanel panel) {
         try { return panel.selection().request(); }

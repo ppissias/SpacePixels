@@ -1,17 +1,19 @@
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.fits.BayerMosaic;
 import eu.startales.spacepixels.preparation.PreparationRequest.Bayer;
 import eu.startales.spacepixels.preparation.PreparationRequest.RowOrder;
 
 /**
  * Desktop shortcuts for nominal camera mosaics and the usual file row order.
  * Row order is how the file is stored, not a display flip. RAW shortcuts leave both to the decoder.
- * Manufacturer references and the distinction from decoded RAW metadata are recorded in
+ * The Seestar entries take the pattern from the file, which every Seestar writes, and supply only the row order
+ * the files leave out. Manufacturer references and the distinction from decoded RAW metadata are recorded in
  * {@code docs/features/preparation-integrations.md}. Custom preserves the current controls.
  */
 enum CameraBayerPreset {
     METADATA("From file metadata (recommended)", Bayer.METADATA),
-    CUSTOM("Custom", null),
+    CUSTOM("Custom", (Bayer) null),
     CANON_RAW("Canon EOS RAW (CR2 / CR3) — file metadata", Bayer.METADATA),
     NIKON_RAW("Nikon RAW (NEF) — file metadata", Bayer.METADATA),
     SONY_RAW("Sony Alpha RAW (ARW) — file metadata", Bayer.METADATA),
@@ -24,6 +26,10 @@ enum CameraBayerPreset {
     ZWO_ASI2600MC("ZWO ASI2600MC Pro", Bayer.RGGB),
     ZWO_ASI071MC("ZWO ASI071MC Pro", Bayer.RGGB),
     ZWO_ASI2400MC("ZWO ASI2400MC Pro", Bayer.RGGB),
+    SEESTAR_S30("ZWO Seestar S30", "Seestar S30"),
+    SEESTAR_S30_PRO("ZWO Seestar S30 Pro", "Seestar S30 Pro"),
+    SEESTAR_S50("ZWO Seestar S50", "Seestar S50"),
+    SEESTAR_S50_PRO("ZWO Seestar S50 Pro", "Seestar S50 Pro"),
     QHY8L("QHY8L-C", Bayer.GBRG),
     QHY10("QHY10-C", Bayer.RGGB),
     QHY12("QHY12-C", Bayer.BGGR),
@@ -51,28 +57,63 @@ enum CameraBayerPreset {
     private final String label;
     private final Bayer pattern;
     private final RowOrder rowOrder;
+    /** The model a Seestar names in its header, or null for presets that are never chosen from the header. */
+    private final String headerModel;
 
     /** A camera preset uses top-down storage. RAW and metadata shortcuts keep the decoder's row order. */
     CameraBayerPreset(String label, Bayer pattern) {
-        this(label, pattern, pattern == null || pattern == Bayer.METADATA ? null : RowOrder.TOP_DOWN);
-    }
-
-    /** A camera with an explicit row order, or null for none. */
-    CameraBayerPreset(String label, Bayer pattern, RowOrder rowOrder) {
         this.label = label;
         this.pattern = pattern;
-        this.rowOrder = rowOrder;
+        this.rowOrder = pattern == null || pattern == Bayer.METADATA ? null : RowOrder.TOP_DOWN;
+        this.headerModel = null;
+    }
+
+    /**
+     * A Seestar: the pattern comes from the file and the rows are top-down, which the files do not state. On the
+     * S30 Pro the two green phases of the header's GRBG start on the first stored row; the other models are assumed
+     * to store their rows the same way.
+     */
+    CameraBayerPreset(String label, String headerModel) {
+        this.label = label;
+        this.pattern = Bayer.METADATA;
+        this.rowOrder = RowOrder.TOP_DOWN;
+        this.headerModel = headerModel;
     }
 
     /** Returns the pattern to apply; Custom leaves all existing interpretation controls untouched. */
     Bayer pattern() { return pattern; }
 
     /** Returns the file row order to apply, or null when the preset must not replace it. */
-    RowOrder rowOrder() { return pattern == Bayer.METADATA ? RowOrder.METADATA : rowOrder; }
+    RowOrder rowOrder() {
+        if (rowOrder != null) return rowOrder;
+        return pattern == Bayer.METADATA ? RowOrder.METADATA : null;
+    }
+
+    /** The camera name without the pattern, for the readiness summary and the prepared frames' provenance. */
+    String label() { return label; }
+
+    /** Whether this entry names a camera, rather than the file-metadata default or Custom. */
+    boolean camera() { return this != METADATA && this != CUSTOM; }
+
+    /**
+     * The preset of the camera that wrote a mosaic, or null when no preset is chosen from headers. A Seestar names
+     * itself in {@code CREATOR} ("ZWO Seestar S30 Pro") or {@code INSTRUME} ("Seestar S50"); the whole model name
+     * must match, so an S30 is never taken for an S30 Pro.
+     */
+    static CameraBayerPreset forCamera(BayerMosaic mosaic) {
+        if (mosaic == null) return null;
+        for (CameraBayerPreset preset : values()) {
+            if (preset.headerModel == null) continue;
+            if (preset.headerModel.equalsIgnoreCase(mosaic.instrument()) || preset.headerModel.equalsIgnoreCase(mosaic.creator())
+                    || ("ZWO " + preset.headerModel).equalsIgnoreCase(mosaic.creator())) return preset;
+        }
+        return null;
+    }
 
     /** Includes the pattern and row order so the observer can review the shortcut before selecting it. */
     @Override public String toString() {
-        if (pattern == null || pattern == Bayer.METADATA) return label;
-        return label + " — " + pattern + ", " + (rowOrder == RowOrder.BOTTOM_UP ? "bottom-up" : "top-down");
+        if (pattern == null || pattern == Bayer.METADATA && rowOrder == null) return label;
+        String rows = rowOrder == RowOrder.BOTTOM_UP ? "bottom-up" : "top-down";
+        return label + " — " + (pattern == Bayer.METADATA ? "pattern from file" : pattern) + ", " + rows;
     }
 }

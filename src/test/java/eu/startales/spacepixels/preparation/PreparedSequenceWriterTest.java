@@ -82,6 +82,35 @@ public class PreparedSequenceWriterTest {
         }
     }
 
+    /** The Bayer interpretation of colour lights is recorded in every prepared frame's HISTORY, after the preparation line. */
+    @Test public void recordsTheBayerInterpretation() throws Exception {
+        List<PreparedSequenceWriter.Frame> frames = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            Path input = temporary.newFile("colour" + i + ".fit").toPath();
+            try (Fits fits = new Fits()) {
+                var hdu = Fits.makeHDU(new float[][]{{0.1f, 0.2f * (i + 1)}});
+                hdu.getHeader().addValue("DATE-OBS", "2020-01-01T01:02:0" + i, null);
+                hdu.getHeader().addValue("BAYERPAT", "GRBG", null);
+                fits.addHDU(hdu); fits.write(input.toFile());
+            }
+            frames.add(new PreparedSequenceWriter.Frame(input, input, input));
+        }
+        var lines = List.of("Bayer pattern GRBG (from the files)", "Bayer row order top-down (ZWO Seestar S30 Pro preset)");
+        var result = PreparedSequenceWriter.write(frames, temporary.getRoot().toPath().resolve("colour"), () -> false, ignored -> { }, null, lines);
+        try (Fits fits = new Fits(result.files().getFirst().toFile())) {
+            var header = FitsInput.getImageHDU(fits).getHeader();
+            assertFalse("A prepared frame is monochrome", header.containsKey("BAYERPAT"));
+            List<String> history = new java.util.ArrayList<>();
+            var cards = header.iterator();
+            while (cards.hasNext()) { var card = cards.next(); if ("HISTORY".equals(card.getKey())) history.add(card.getComment()); }
+            // Long text continues on further HISTORY cards, wrapped at a space; compare without spaces.
+            String text = String.join("", history).replace("&", "").replace(" ", "");
+            assertTrue(text, text.contains("SpacePixelspreparation:RGBmean;commonimage-datascaling;zeroregistrationfillpreserved."));
+            assertTrue(text, text.contains("SpacePixelspreparation:BayerpatternGRBG(fromthefiles)"));
+            assertTrue(text, text.contains("SpacePixelspreparation:Bayerrowordertop-down(ZWOSeestarS30Propreset)"));
+        }
+    }
+
     /** A corrupt nonfinite input fails instead of fabricating a zero-valued scientific measurement. */
     @Test public void rejectsNonfiniteDataAndObservesCancellation() throws Exception {
         Path file = temporary.newFile("nan.fit").toPath();

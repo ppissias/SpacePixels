@@ -35,6 +35,36 @@ public class PreparationSensorTest {
         }
     }
 
+    /**
+     * A Seestar preset keeps the file's pattern and offsets and adds only the row order the files leave out. Without
+     * it, a file with no ROWORDER still needs an explicit choice.
+     */
+    @Test public void seestarPresetKeepsThePatternAndAddsTheRowOrder() throws Exception {
+        Path image = temporary.newFile().toPath();
+        try (Fits fits = new Fits()) {
+            var hdu = Fits.makeHDU(new short[][]{{1, 2}, {3, 4}});
+            hdu.getHeader().addValue("BAYERPAT", "GRBG", null);
+            fits.addHDU(hdu); fits.write(image.toFile());
+        }
+        var fromFiles = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.METADATA, 0, 0, temporary.getRoot().toPath(), false, false);
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(fromFiles, List.of(image), PreparationInputs.Role.LIGHTS));
+        var seestar = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.TOP_DOWN, 0, 0, temporary.getRoot().toPath(), false, false,
+                java.util.Set.of(), " ZWO Seestar S30 Pro ");
+        assertEquals("ZWO Seestar S30 Pro", seestar.cameraPreset());
+        assertEquals("GRBG", FramePreparationService.validateSensor(seestar, List.of(image), PreparationInputs.Role.LIGHTS));
+        var header = SirilHeaderCorrections.imageHeader(image);
+        assertEquals("GRBG", header.getStringValue("BAYERPAT"));
+        assertEquals("TOP-DOWN", header.getStringValue("ROWORDER"));
+        assertEquals(0, header.getIntValue("XBAYROFF"));
+        assertEquals(List.of("Bayer pattern GRBG (from the files)", "Bayer row order top-down (ZWO Seestar S30 Pro preset)",
+                "Bayer offsets 0, 0 (from the files)"), seestar.interpretationHistory("GRBG", "TOP-DOWN", 0, 0));
+        assertEquals(List.of("Bayer pattern BGGR (chosen)", "Bayer row order top-down (chosen)", "Bayer offsets 1, 0 (chosen)"),
+                request(PreparationRequest.Bayer.BGGR).interpretationHistory("BGGR", "TOP-DOWN", 1, 0));
+        assertNull(request(PreparationRequest.Bayer.BGGR).cameraPreset());
+    }
+
     /** A manual four-letter override cannot disguise metadata identifying an unsupported six-by-six colour mosaic. */
     @Test public void refusesKnownNonBayerMosaicsEvenWithAnOverride() throws Exception {
         Path image = image("RGB".repeat(12));

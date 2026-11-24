@@ -436,9 +436,10 @@ public class ApplicationWindow {
     /** Imports through the existing guarded handover, with an optional follow-up only after successful installation. */
     private void importFolder(File folder, java.util.function.Consumer<ProcessingSession> imported) {
         if (folder != null && folder.isDirectory()) {
+            GuiFitsImportInteraction interaction = new GuiFitsImportInteraction(applicationSettings.getConfig().sirilExecutablePath);
             JobCoordinator.Admission admission = jobCoordinator.start(JobKind.IMPORT, sessions.current(),
-                    new FitsImportTask(folder, storage, new GuiFitsImportInteraction(applicationSettings.getConfig().sirilExecutablePath)),
-                    (handle, outcome) -> importFinished(handle.session(), outcome, imported));
+                    new FitsImportTask(folder, storage, interaction),
+                    (handle, outcome) -> importFinished(handle.session(), outcome, imported, interaction));
             if (!admission.admitted()) {
                 mainApplicationPanel.showStatus(admission.refusal());
             }
@@ -456,9 +457,12 @@ public class ApplicationWindow {
         }
     }
 
-    /** The end of an import: installs the imported session, or says why there is none. */
+    /**
+     * The end of an import: installs the imported session, or says why there is none. When the observer chose to
+     * prepare raw colour exposures instead, the preparation window opens on their folder.
+     */
     private void importFinished(ProcessingSession expectedSession, JobOutcome<FitsImportTask.Result> outcome,
-                                java.util.function.Consumer<ProcessingSession> afterImport) {
+                                java.util.function.Consumer<ProcessingSession> afterImport, GuiFitsImportInteraction interaction) {
         if (closing) return;
         if (outcome instanceof JobOutcome.Completed<FitsImportTask.Result> completed) {
             // The session's solver reads the window's settings, so Astrometry Config edits reach the next solve.
@@ -480,6 +484,7 @@ public class ApplicationWindow {
             // Nothing was imported, for example because a conversion was declined: the open session stays.
             mainApplicationPanel.showStatus(sessions.current() != null
                     ? "Nothing imported; the open session is unchanged." : "No files loaded");
+            if (interaction.preparationFolder() != null) showPreparation(interaction.preparationFolder());
         } else if (outcome instanceof JobOutcome.Failed<FitsImportTask.Result> failed) {
             mainApplicationPanel.showStatus("Import failed");
             FailureDialog.show(frmIpodImage, "Import Error", "Error loading files: " + failed.reason(), failed.cause());
@@ -501,8 +506,11 @@ public class ApplicationWindow {
                 && jobCoordinator.current() == null) mainApplicationPanel.convertToMono();
     }
 
-    /** Opens one modeless preparation window; all entry points share the main command's availability rules. */
-    private void showPreparation() {
+    /**
+     * Opens one modeless preparation window; all entry points share the main command's availability rules. With a
+     * folder, the window inspects it as the lights, as after a raw colour import or batch operation.
+     */
+    private void showPreparation(java.nio.file.Path lights) {
         if (closing || jobCoordinator.current() != null) return;
         if (preparationWindow == null || !preparationWindow.isDisplayable()) {
             preparationWindow = new PreparationWindow(frmIpodImage, applicationSettings, storage, () -> closing,
@@ -512,6 +520,7 @@ public class ApplicationWindow {
         }
         preparationWindow.setVisible(true);
         preparationWindow.toFront();
+        if (lights != null) preparationWindow.startWithLights(lights);
     }
 
     /** Imports a prepared result through the ordinary guarded handover, closing its window only after successful installation. */

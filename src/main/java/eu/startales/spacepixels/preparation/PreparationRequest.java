@@ -2,20 +2,33 @@ package eu.startales.spacepixels.preparation;
 
 import java.nio.file.Path;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-/** Immutable observer-selected inputs and interpretation; workers never read live window controls. */
+/**
+ * Immutable observer-selected inputs and interpretation; workers never read live window controls.
+ * {@code cameraPreset} names the camera preset that supplied explicit Bayer choices, for provenance only; it is null
+ * when the choices came from the files or were set by hand.
+ */
 public record PreparationRequest(Path executable, Map<PreparationInputs.Role, Path> inputs,
                                  Sensor sensor, Bayer bayer, RowOrder rowOrder, int offsetX, int offsetY,
                                  Path outputParent, boolean referenceStack, boolean keepWorkingFiles,
-                                 Set<Path> omittedInputs) {
+                                 Set<Path> omittedInputs, String cameraPreset) {
     /** A request that keeps every inspected image. */
     public PreparationRequest(Path executable, Map<PreparationInputs.Role, Path> inputs,
                               Sensor sensor, Bayer bayer, RowOrder rowOrder, int offsetX, int offsetY,
                               Path outputParent, boolean referenceStack, boolean keepWorkingFiles) {
         this(executable, inputs, sensor, bayer, rowOrder, offsetX, offsetY, outputParent, referenceStack, keepWorkingFiles, Set.of());
+    }
+
+    /** A request whose Bayer choices did not come from a camera preset. */
+    public PreparationRequest(Path executable, Map<PreparationInputs.Role, Path> inputs,
+                              Sensor sensor, Bayer bayer, RowOrder rowOrder, int offsetX, int offsetY,
+                              Path outputParent, boolean referenceStack, boolean keepWorkingFiles, Set<Path> omittedInputs) {
+        this(executable, inputs, sensor, bayer, rowOrder, offsetX, offsetY, outputParent, referenceStack, keepWorkingFiles,
+                omittedInputs, null);
     }
 
     /** Sensor interpretation is independent of the input file's number of image planes. */
@@ -56,5 +69,21 @@ public record PreparationRequest(Path executable, Map<PreparationInputs.Role, Pa
         Set<Path> normalized = new LinkedHashSet<>();
         for (Path path : omittedInputs) normalized.add(Objects.requireNonNull(path).toAbsolutePath().normalize());
         omittedInputs = Set.copyOf(normalized);
+        cameraPreset = cameraPreset == null || cameraPreset.isBlank() ? null : cameraPreset.strip();
+    }
+
+    /**
+     * The Bayer interpretation of a colour mosaic and where each part came from, one short line per part, as the
+     * prepared frames record it in {@code HISTORY} cards. The arguments are the resolved pattern, row order and
+     * offsets of the converted lights.
+     */
+    public List<String> interpretationHistory(String pattern, String row, int offsetX, int offsetY) {
+        String chosen = " (" + (cameraPreset != null ? cameraPreset + " preset" : "chosen") + ")";
+        String files = " (from the files)";
+        return List.of(
+                "Bayer pattern " + pattern + (bayer == Bayer.METADATA ? files : chosen),
+                "Bayer row order " + (row == null ? "unknown" : row.toLowerCase(java.util.Locale.ROOT))
+                        + (rowOrder == RowOrder.METADATA ? files : chosen),
+                "Bayer offsets " + offsetX + ", " + offsetY + (bayer == Bayer.METADATA ? files : chosen));
     }
 }

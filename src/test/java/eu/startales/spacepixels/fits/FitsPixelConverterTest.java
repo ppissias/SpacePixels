@@ -58,6 +58,29 @@ public class FitsPixelConverterTest {
         assertEquals(1.0d, convertedHeader.getDoubleValue("BSCALE"), 1.0e-9);
     }
 
+    /**
+     * A monochrome copy of a colour image drops the Bayer cards it inherited, so it is never read as raw colour. A raw
+     * mosaic converted plane for plane keeps them, with the row order.
+     */
+    @Test
+    public void monochromeFromColourIsNotAMosaicButAConvertedMosaicStaysOne() throws Exception {
+        BasicHDU<?> colorHdu = Fits.makeHDU(new short[3][2][2]);
+        Header colour = colorHdu.getHeader();
+        colour.addValue("BAYERPAT", "RGGB", null);
+        colour.addValue("XBAYROFF", 0, null);
+        colour.addValue("ROWORDER", "TOP-DOWN", null);
+        Header fromColour = FitsPixelConverter.createFitsFromData(new short[2][2], colour).getHDU(0).getHeader();
+        assertFalse(fromColour.containsKey("BAYERPAT"));
+        assertFalse(fromColour.containsKey("XBAYROFF"));
+        assertEquals("TOP-DOWN", fromColour.getStringValue("ROWORDER"));
+
+        BasicHDU<?> mosaicHdu = Fits.makeHDU(new float[2][2]);
+        Header mosaic = mosaicHdu.getHeader();
+        mosaic.addValue("BAYERPAT", "GRBG", null);
+        Header converted = FitsPixelConverter.createFitsFromData(new short[2][2], mosaic).getHDU(0).getHeader();
+        assertEquals("GRBG", converted.getStringValue("BAYERPAT"));
+    }
+
     @Test
     public void standardizeTo16BitMonoScalesUnitFloatDataIntoUnsignedShortStorage() throws Exception {
         short[][] converted = FitsPixelConverter.standardizeTo16BitMono(new float[][]{

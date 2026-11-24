@@ -47,6 +47,25 @@ public final class SyntheticDatasetFactory {
         return sequenceDirectory;
     }
 
+    /**
+     * Raw colour exposures as a Seestar S30 Pro writes them: unsigned 16-bit single-plane frames with
+     * {@code BAYERPAT = 'GRBG'}, the camera in {@code CREATOR} and no {@code ROWORDER}. {@code extraCards} adds or
+     * replaces cards; a null value leaves that card out.
+     */
+    public static Path createRawColourFitsSequence(Path rootDirectory, String directoryName, int frameCount,
+                                                   Map<String, Object> extraCards) throws Exception {
+        Path sequenceDirectory = Files.createDirectories(rootDirectory.resolve(directoryName));
+        for (int i = 0; i < frameCount; i++) {
+            Map<String, Object> values = standardHeaderValues(i);
+            values.put("BAYERPAT", "GRBG");
+            values.put("CREATOR", "ZWO Seestar S30 Pro");
+            values.putAll(extraCards);
+            values.values().removeIf(java.util.Objects::isNull);
+            writeFits(sequenceDirectory.resolve(frameFilename(i)), createMono16Frame(), values);
+        }
+        return sequenceDirectory;
+    }
+
     public static Path createUncalibratedMono16FitsSequence(Path rootDirectory, String directoryName, int frameCount, int hotPixelSpikes) throws Exception {
         Path sequenceDirectory = Files.createDirectories(rootDirectory.resolve(directoryName));
         for (int i = 0; i < frameCount; i++) {

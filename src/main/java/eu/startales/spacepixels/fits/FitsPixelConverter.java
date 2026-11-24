@@ -52,6 +52,11 @@ public final class FitsPixelConverter {
                 "SIMPLE", "BITPIX", "NAXIS", "NAXIS1", "NAXIS2", "NAXIS3",
                 "EXTEND", "BZERO", "BSCALE"
         );
+        // A monochrome image made from colour planes is not a Bayer mosaic, whatever the colour image's cards said;
+        // keeping them would make it read as raw colour (BayerMosaic). A raw mosaic converted plane for plane keeps them.
+        int[] newAxes = newHDU.getAxes();
+        boolean monochromeFromColour = BayerMosaic.planes(originalHeader) > 1 && newAxes != null && newAxes.length == 2;
+        List<String> bayerKeys = List.of("BAYERPAT", "XBAYROFF", "YBAYROFF");
 
         Cursor<String, HeaderCard> originalCursor = originalHeader.iterator();
         while (originalCursor.hasNext()) {
@@ -59,6 +64,7 @@ public final class FitsPixelConverter {
             String key = card.getKey();
 
             if (key != null && !structuralKeys.contains(key) && !newHeader.containsKey(key)
+                    && !(monochromeFromColour && bayerKeys.contains(key))
                     && !(addedOffset > 0 && ADDED_OFFSET_KEY.equals(key))) {
                 newHeader.addLine(card);
             }

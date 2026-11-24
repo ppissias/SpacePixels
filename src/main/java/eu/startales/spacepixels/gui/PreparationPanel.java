@@ -2,6 +2,7 @@ package eu.startales.spacepixels.gui;
 
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
+import eu.startales.spacepixels.fits.BayerMosaic;
 import eu.startales.spacepixels.preparation.FramePreparationService;
 import eu.startales.spacepixels.preparation.PreparationCohort;
 import eu.startales.spacepixels.preparation.PreparationInputs;
@@ -92,9 +93,18 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     private FramePreparationService.Inputs inspected;
     private Set<Path> omittedInputs = Set.of();
     private boolean fitsNeedExplicitRowOrder;
+    /** The Bayer facts of the inspected lights that preparation keeps, or null before an inspection. */
+    private PreparationCohort.LightsBayer lightsBayer;
     private Path scannedRoot;
     private boolean updating;
     private boolean applyingPreset;
+    /** Set while choices are filled from the lights' headers, so the change is not taken for the observer's own. */
+    private boolean fillingFromHeaders;
+    /** The sensor and the camera preset were filled from the headers; the next inspection may replace them. */
+    private boolean sensorFromHeaders;
+    private boolean presetFromHeaders;
+    /** The observer chose a camera preset or edited a Bayer control; inspection never replaces that choice. */
+    private boolean cameraChosen;
     private boolean busy;
     private boolean closed;
 
@@ -247,9 +257,13 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         add(feedback, BorderLayout.SOUTH);
         editors.addAll(List.of(root, output, sensor, cameraPreset, bayer, showAdvanced, rowOrder, offsetX, offsetY, rolesConfirmed, recipeConfirmed, stack, importFrames, keepWorkingFiles, scan));
         inputs.values().forEach(editors::add);
-        sensor.addActionListener(event -> recipeChanged());
+        sensor.addActionListener(event -> {
+            if (!fillingFromHeaders) sensorFromHeaders = false;
+            recipeChanged();
+        });
         for (JComboBox<?> choice : List.of(bayer, rowOrder, offsetX, offsetY)) choice.addActionListener(event -> {
             if (applyingPreset) return;
+            if (!fillingFromHeaders) { cameraChosen = true; presetFromHeaders = false; }
             applyingPreset = true;
             try { cameraPreset.select(CameraBayerPreset.CUSTOM); }
             finally { applyingPreset = false; }
@@ -270,6 +284,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     /** Applies an explicit shortcut atomically. Custom leaves the current interpretation untouched. EDT only. */
     private void applyCameraPreset() {
         if (applyingPreset) return;
+        if (!fillingFromHeaders) { cameraChosen = true; presetFromHeaders = false; }
         CameraBayerPreset preset = cameraPreset.selected();
         if (preset == null || preset.pattern() == null) return;
         applyingPreset = true;
@@ -316,11 +331,16 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         if (sensor.getSelectedItem() == null) throw new IOException("Choose the input camera interpretation.");
         boolean cfa = sensor.getSelectedItem() == PreparationRequest.Sensor.CFA;
         boolean manualPattern = cfa && bayer.getSelectedItem() != PreparationRequest.Bayer.METADATA;
+        PreparationRequest.Bayer pattern = cfa ? (PreparationRequest.Bayer) bayer.getSelectedItem() : PreparationRequest.Bayer.METADATA;
+        PreparationRequest.RowOrder rows = cfa ? (PreparationRequest.RowOrder) rowOrder.getSelectedItem() : PreparationRequest.RowOrder.METADATA;
+        // A preset is named only when it supplied a choice; a RAW shortcut takes everything from the files.
+        CameraBayerPreset preset = cameraPreset.selected();
+        String presetName = cfa && preset.camera()
+                && (pattern != PreparationRequest.Bayer.METADATA || rows != PreparationRequest.RowOrder.METADATA) ? preset.label() : null;
         PreparationRequest request = new PreparationRequest(siril.installation.executable(), paths,
-                (PreparationRequest.Sensor) sensor.getSelectedItem(), cfa ? (PreparationRequest.Bayer) bayer.getSelectedItem() : PreparationRequest.Bayer.METADATA,
-                cfa ? (PreparationRequest.RowOrder) rowOrder.getSelectedItem() : PreparationRequest.RowOrder.METADATA,
+                (PreparationRequest.Sensor) sensor.getSelectedItem(), pattern, rows,
                 manualPattern ? (Integer) offsetX.getSelectedItem() : 0, manualPattern ? (Integer) offsetY.getSelectedItem() : 0,
-                parent, stack.isSelected(), keepWorkingFiles.isSelected(), omittedInputs);
+                parent, stack.isSelected(), keepWorkingFiles.isSelected(), omittedInputs, presetName);
         return new Selection(request, importFrames.isSelected());
     }
 
@@ -391,7 +411,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
             background(() -> {
                 FramePreparationService.Inputs inputs = FramePreparationService.inspect(paths);
                 return new Inspection(inputs, PreparationCohort.questions(inputs),
-                        PreparationCohort.fitsMissingRowOrder(inputs.files().getOrDefault(Role.LIGHTS, List.of())));
+                        PreparationCohort.lightsBayer(inputs.files().getOrDefault(Role.LIGHTS, List.of())));
             }, pending -> {
                 try {
                     FramePreparationService.Inputs accepted = pending.inputs;
@@ -402,6 +422,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
                             inspected = null;
                             omittedInputs = Set.of();
                             fitsNeedExplicitRowOrder = false;
+                            lightsBayer = null;
                             rolesConfirmed.setSelected(false);
                             recipeConfirmed.setSelected(false);
                             counts.values().forEach(label -> label.setText("Not inspected"));
@@ -416,7 +437,9 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
                     omittedInputs = Set.copyOf(omitted);
                     Set<Path> keptLights = new java.util.HashSet<>();
                     for (Path light : accepted.files().getOrDefault(Role.LIGHTS, List.of())) keptLights.add(light.toAbsolutePath().normalize());
-                    fitsNeedExplicitRowOrder = pending.fitsMissingRowOrder.stream().anyMatch(keptLights::contains);
+                    lightsBayer = pending.bayer.keeping(keptLights);
+                    fitsNeedExplicitRowOrder = !lightsBayer.missingRowOrder().isEmpty();
+                    fillFromHeaders();
                     for (Role role : Role.values()) {
                         List<Path> files = accepted.files().get(role);
                         int excluded = (int) omitted.stream().filter(path -> pending.inputs.files().getOrDefault(role, List.of()).contains(path)).count();
@@ -432,7 +455,48 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
     }
 
     /** Header classification captured with the inventory, so the question is shown only after the worker returns. */
-    private record Inspection(FramePreparationService.Inputs inputs, List<PreparationCohort.Question> questions, Set<Path> fitsMissingRowOrder) { }
+    private record Inspection(FramePreparationService.Inputs inputs, List<PreparationCohort.Question> questions,
+                              PreparationCohort.LightsBayer bayer) { }
+
+    /**
+     * Selects Colour (Bayer CFA) when every kept FITS light is a raw colour mosaic, and the camera's preset when its
+     * header names a Seestar. Values filled this way follow the next inspection; the observer's own choices are never
+     * replaced. EDT only.
+     */
+    private void fillFromHeaders() {
+        boolean mosaics = lightsBayer != null && lightsBayer.allMosaics();
+        fillingFromHeaders = true;
+        try {
+            if (sensor.getSelectedItem() == null || sensorFromHeaders) {
+                if (mosaics) {
+                    sensor.setSelectedItem(PreparationRequest.Sensor.CFA);
+                    sensorFromHeaders = true;
+                } else if (sensorFromHeaders) {
+                    sensor.setSelectedIndex(-1);
+                    sensorFromHeaders = false;
+                }
+            }
+            if (!cameraChosen) {
+                CameraBayerPreset camera = mosaics ? CameraBayerPreset.forCamera(lightsBayer.any()) : null;
+                if (camera != null) {
+                    cameraPreset.select(camera);
+                    presetFromHeaders = true;
+                } else if (presetFromHeaders) {
+                    cameraPreset.select(CameraBayerPreset.METADATA);
+                    presetFromHeaders = false;
+                }
+            }
+        } finally { fillingFromHeaders = false; }
+    }
+
+    /** Opens on one folder of lights, as the import does for raw colour exposures, and inspects it. EDT only. */
+    void startWithLights(Path lights) {
+        if (closed || busy || lights == null) return;
+        root.setText("");
+        inputs.values().forEach(field -> field.setText(""));
+        inputs.get(Role.LIGHTS).setText(lights.toString());
+        inspect();
+    }
 
     /** Asks which different files to leave out. Cancel leaves the folder selection unchanged. */
     private List<Path> choose(PreparationCohort.Question question) {
@@ -494,6 +558,7 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         inspected = null;
         omittedInputs = Set.of();
         fitsNeedExplicitRowOrder = false;
+        lightsBayer = null;
         rolesConfirmed.setSelected(false);
         recipeConfirmed.setSelected(false);
         counts.values().forEach(label -> label.setText("Not inspected"));
@@ -514,8 +579,10 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         String outputProblem = null;
         try { destination = outputParent(); } catch (IOException invalid) { outputProblem = invalid.getMessage(); }
         boolean missingRowOrder = cfa && rowOrder.getSelectedItem() == PreparationRequest.RowOrder.METADATA && fitsNeedExplicitRowOrder;
+        String cfaProblem = cfaProblem();
         boolean ready = !busy && !closed && available && inspected != null && rolesConfirmed.isSelected()
-                && recipeConfirmed.isSelected() && sensor.getSelectedItem() != null && destination != null && !missingRowOrder;
+                && recipeConfirmed.isSelected() && sensor.getSelectedItem() != null && destination != null && !missingRowOrder
+                && cfaProblem == null;
         prepare.setEnabled(ready);
         preview.setEnabled(!busy && available && inspected != null);
         prepareReadinessStyles();
@@ -529,9 +596,9 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         boolean sensorMissing = sensor.getSelectedItem() == null;
         appendReadiness("\nEffective recipe\nEngine: Siril\n", false);
         appendReadiness("Input: " + (sensorMissing ? "choose camera interpretation" : sensor.getSelectedItem()) + "\n", sensorMissing);
+        if (cfaProblem != null) appendReadiness("○ " + cfaProblem + "\n", true);
         if (missingRowOrder) appendReadiness("○ FITS files lack ROWORDER metadata. Select Top-down or Bottom-up under advanced options.\n", true);
-        if (cfa) appendReadiness("Bayer: " + bayer.getSelectedItem() + "\nRows: " + rowOrder.getSelectedItem()
-                + "\nBayer offsets: " + (manual ? offsetX.getSelectedItem() + ", " + offsetY.getSelectedItem() : "from metadata"), false);
+        if (cfa) appendCfaReadiness(manual);
         if (inspected != null) {
             StringBuilder roles = new StringBuilder();
             for (Role role : Role.values()) roles.append('\n').append(role).append(": ")
@@ -561,6 +628,84 @@ final class PreparationPanel extends JPanel implements AutoCloseable {
         appendReadiness(rest.toString(), false);
         readiness.setCaretPosition(0);
         revalidate();
+    }
+
+    /**
+     * A contradiction between the camera interpretation and the inspected lights' Bayer cards that preparation would
+     * reject, or null. Raw colour lights cannot be prepared as monochrome, and with the pattern taken from the files
+     * every FITS light must name the same one. EDT only.
+     */
+    private String cfaProblem() {
+        if (lightsBayer == null || lightsBayer.mosaics().isEmpty()) {
+            if (sensor.getSelectedItem() == PreparationRequest.Sensor.CFA && bayer.getSelectedItem() == PreparationRequest.Bayer.METADATA
+                    && lightsBayer != null && !lightsBayer.fits().isEmpty()) {
+                return "The FITS lights have no BAYERPAT. Choose a camera preset or an explicit Bayer pattern.";
+            }
+            return null;
+        }
+        if (sensor.getSelectedItem() == PreparationRequest.Sensor.MONO) {
+            return "The FITS lights are raw colour (BAYERPAT " + lightsBayer.any().pattern() + "). Choose Colour (Bayer CFA).";
+        }
+        if (sensor.getSelectedItem() != PreparationRequest.Sensor.CFA || bayer.getSelectedItem() != PreparationRequest.Bayer.METADATA) return null;
+        if (!lightsBayer.allMosaics()) return "Some FITS lights have no BAYERPAT. Choose a camera preset or an explicit Bayer pattern.";
+        boolean samePattern = lightsBayer.mosaics().values().stream().map(BayerMosaic::pattern).distinct().count() == 1;
+        if (!samePattern) return "The FITS lights name different Bayer patterns. Keep one group of lights.";
+        return null;
+    }
+
+    /**
+     * The effective Bayer interpretation with the source of each part: the files, a camera preset, or Custom. A choice
+     * that overrides what the files say adds a warning; it does not block preparation. EDT only.
+     */
+    private void appendCfaReadiness(boolean manual) {
+        CameraBayerPreset preset = cameraPreset.selected();
+        String chosen = preset.camera() ? preset.label() + " preset" : "Custom";
+        // Camera RAW files carry no FITS cards; Siril decodes their mosaic during conversion.
+        boolean rawOnly = lightsBayer != null && lightsBayer.fits().isEmpty();
+        String fromFiles = rawOnly ? "from the files, decoded by Siril during conversion" : "from the files";
+        BayerMosaic files = lightsBayer == null ? null : lightsBayer.common();
+        StringBuilder text = new StringBuilder();
+        List<String> warnings = new ArrayList<>();
+
+        PreparationRequest.Bayer pattern = (PreparationRequest.Bayer) bayer.getSelectedItem();
+        if (pattern == PreparationRequest.Bayer.METADATA) {
+            text.append("Bayer: ").append(files != null ? files.pattern() + " (from the files)" : fromFiles);
+        } else {
+            text.append("Bayer: ").append(pattern).append(" (").append(chosen).append(')');
+            if (files != null && !files.pattern().equals(pattern.name())) {
+                warnings.add("The files say " + files.pattern() + "; " + pattern + " overrides them.");
+            }
+        }
+
+        PreparationRequest.RowOrder rows = (PreparationRequest.RowOrder) rowOrder.getSelectedItem();
+        if (rows == PreparationRequest.RowOrder.METADATA) {
+            if (files != null && files.hasRowOrder()) text.append("\nRows: ").append(BayerMosaic.rowOrderText(files.rowOrder())).append(" (from the files)");
+            else if (!fitsNeedExplicitRowOrder) text.append("\nRows: ").append(fromFiles);
+        } else {
+            String chosenRows = rows == PreparationRequest.RowOrder.TOP_DOWN ? "TOP-DOWN" : "BOTTOM-UP";
+            boolean filesHaveNone = lightsBayer != null && !lightsBayer.fits().isEmpty() && lightsBayer.missingRowOrder().size() == lightsBayer.fits().size();
+            text.append("\nRows: ").append(BayerMosaic.rowOrderText(chosenRows)).append(" (").append(chosen)
+                    .append(filesHaveNone ? "; the files have no ROWORDER" : "").append(')');
+            if (files != null && files.hasRowOrder() && !files.rowOrder().equals(chosenRows)) {
+                warnings.add("The files say " + BayerMosaic.rowOrderText(files.rowOrder()) + "; " + BayerMosaic.rowOrderText(chosenRows) + " overrides them.");
+            }
+        }
+
+        if (!manual) {
+            if (files != null) {
+                text.append("\nBayer offsets: ").append(files.effectiveOffsetX()).append(", ").append(files.effectiveOffsetY())
+                        .append(files.hasOffsets() ? " (from the files)" : " (none in the files)");
+            } else text.append("\nBayer offsets: ").append(fromFiles);
+        } else {
+            int x = (Integer) offsetX.getSelectedItem();
+            int y = (Integer) offsetY.getSelectedItem();
+            text.append("\nBayer offsets: ").append(x).append(", ").append(y).append(" (").append(chosen).append(')');
+            if (files != null && files.hasOffsets() && (files.effectiveOffsetX() != x || files.effectiveOffsetY() != y)) {
+                warnings.add("The files say offsets " + files.effectiveOffsetX() + ", " + files.effectiveOffsetY() + "; " + x + ", " + y + " override them.");
+            }
+        }
+        appendReadiness(text.toString(), false);
+        for (String warning : warnings) appendReadiness("\n⚠ " + warning, true);
     }
 
     /** Uses the current theme colours so validation lines stay red after a look-and-feel change. */

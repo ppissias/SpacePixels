@@ -115,6 +115,32 @@ public class PreparationCohortTest {
     }
 
     /** A selected master file is not partitioned, even when its name looks like a product. */
+    /** The lights' Bayer facts are read once: FITS files, their mosaics, and those without a row order; camera RAW is left out. */
+    @Test public void lightsBayerReadsEachFitsLightOnce() throws Exception {
+        Path folder = temporary.newFolder("bayer-lights").toPath();
+        Path seestar = folder.resolve("a.fit");
+        Path stated = folder.resolve("b.fit");
+        Path mono = folder.resolve("c.fit");
+        Path raw = Files.createFile(folder.resolve("d.cr2"));
+        writeHeader(seestar, "SIMPLE  = T", "BITPIX  = 16", "NAXIS   = 2", "NAXIS1  = 1", "NAXIS2  = 1",
+                "BAYERPAT= 'GRBG    '", "CREATOR = 'ZWO Seestar S30 Pro'");
+        writeHeader(stated, "SIMPLE  = T", "BITPIX  = 16", "NAXIS   = 2", "NAXIS1  = 1", "NAXIS2  = 1",
+                "BAYERPAT= 'GRBG    '", "ROWORDER= 'TOP-DOWN'");
+        writeHeader(mono, "SIMPLE  = T", "BITPIX  = 16", "NAXIS   = 2", "NAXIS1  = 1", "NAXIS2  = 1");
+        var facts = PreparationCohort.lightsBayer(List.of(seestar, stated, mono, raw));
+        assertEquals(3, facts.fits().size());
+        assertEquals(2, facts.mosaics().size());
+        assertFalse(facts.allMosaics());
+        assertNull(facts.common());
+        assertEquals(java.util.Set.of(seestar.toAbsolutePath().normalize(), mono.toAbsolutePath().normalize()), facts.missingRowOrder());
+        assertEquals(facts.missingRowOrder(), PreparationCohort.fitsMissingRowOrder(List.of(seestar, stated, mono, raw)));
+        var kept = facts.keeping(java.util.Set.of(seestar.toAbsolutePath().normalize()));
+        assertTrue(kept.allMosaics());
+        assertEquals("GRBG", kept.common().pattern());
+        assertEquals("ZWO Seestar S30 Pro", kept.any().creator());
+        assertTrue(PreparationCohort.lightsBayer(List.of(raw)).fits().isEmpty());
+    }
+
     @Test public void masterFileIsNotQuestioned() throws Exception {
         Path lights = temporary.newFolder("only-lights").toPath();
         for (int i = 0; i < 3; i++) Files.createFile(lights.resolve(i + ".cr2"));

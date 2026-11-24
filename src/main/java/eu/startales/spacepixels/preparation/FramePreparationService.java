@@ -176,6 +176,7 @@ public final class FramePreparationService {
         manifest.put("rowOrder", request.rowOrder().name());
         manifest.put("offsetX", request.offsetX());
         manifest.put("offsetY", request.offsetY());
+        if (request.cameraPreset() != null) manifest.put("cameraPreset", request.cameraPreset());
         manifest.put("keepWorkingFiles", request.keepWorkingFiles());
         manifest.put("omittedInputs", request.omittedInputs().stream().map(Path::toString).toList());
         manifest.put("freeSpaceChecked", freeSpaceChecked);
@@ -222,6 +223,7 @@ public final class FramePreparationService {
             Map<Role, Integer> counts = new EnumMap<>(Role.class);
             Map<Role, Header> roleHeaders = new EnumMap<>(Role.class);
             Map<Role, ExposureSpan> exposures = new EnumMap<>(Role.class);
+            List<String> interpretation = List.of();
             for (Role role : copies.keySet()) {
                 counts.put(role, copies.get(role).size());
                 if (inputs.masters().contains(role)) {
@@ -241,6 +243,8 @@ public final class FramePreparationService {
                         Header cfa = SirilHeaderCorrections.imageHeader(converted.getFirst());
                         manifest.put("resolvedCfa", Map.of("pattern", cfa.getStringValue("BAYERPAT"), "rowOrder", cfa.getStringValue("ROWORDER"),
                                 "offsetX", cfa.getIntValue("XBAYROFF", 0), "offsetY", cfa.getIntValue("YBAYROFF", 0)));
+                        interpretation = request.interpretationHistory(cfa.getStringValue("BAYERPAT").strip(), cfa.getStringValue("ROWORDER"),
+                                cfa.getIntValue("XBAYROFF", 0), cfa.getIntValue("YBAYROFF", 0));
                     }
                 }
             }
@@ -270,7 +274,8 @@ public final class FramePreparationService {
             }
             progress.accept(70, "Validating and writing the common 16-bit monochrome sequence…");
             PreparedSequenceWriter.Result written = PreparedSequenceWriter.write(frames, run.resolve("aligned"), cancelled,
-                    percent -> progress.accept(70 + percent * 29 / 100, "Validating prepared frames… " + percent + "%"), decision);
+                    percent -> progress.accept(70 + percent * 29 / 100, "Validating prepared frames… " + percent + "%"), decision,
+                    interpretation);
             check(cancelled);
             try (var importer = new eu.startales.spacepixels.fits.FitsImportService(run.resolve("aligned").toFile(), null)) {
                 if (importer.readFiles().length != frames.size()) throw new IOException("The completed sequence did not pass ordinary import validation.");

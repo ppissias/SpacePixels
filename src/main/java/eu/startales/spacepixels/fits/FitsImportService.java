@@ -48,6 +48,12 @@ public final class FitsImportService implements AutoCloseable {
         if (interaction == null) {
             return checkCalibration(metadata(inputs, "Headless import"));
         }
+        // Raw colour exposures are named before any conversion, which would otherwise treat them as monochrome.
+        BayerMosaic mosaic = BayerMosaic.firstOf(Arrays.stream(inputs).map(FitsInput.Input::information).toArray(FitsFileInformation[]::new));
+        if (mosaic != null && interaction.rawColour(mosaic, directory) != FitsImportInteraction.RawColourChoice.IMPORT_AS_MONOCHROME) {
+            LOGGER.info("Raw colour exposures were not imported: " + directory);
+            return new FitsFileInformation[0];
+        }
         FitsInput.Input reference = inputs[0];
         if (reference.compressed()) {
             FitsInput.FitsFormat compressedFormat = reference.format();
@@ -163,13 +169,14 @@ public final class FitsImportService implements AutoCloseable {
         if (inspection.hasWarning()) {
             if (interaction != null) {
                 boolean alignment = inspection.isMisaligned() && metadata.length >= 3
-                        && Arrays.stream(metadata).allMatch(FitsFileInformation::isMonochrome) && interaction.canAlignFrames();
+                        && Arrays.stream(metadata).allMatch(FitsFileInformation::isMonochrome) && interaction.canAlignFrames(metadata);
                 String[] options = alignment
                         ? new String[]{"Cancel Import (Recommended)", "Proceed Anyway", "Align with Siril"}
                         : new String[]{"Cancel Import (Recommended)", "Proceed Anyway"};
                 String message = inspection.warningDialogText();
                 if (alignment) message = message.replace("</body>",
                         "<p><b>Align with Siril</b> writes aligned copies to a new folder and imports them. "
+                        + (BayerMosaic.firstOf(metadata) != null ? "It debayers the raw colour exposures first. " : "")
                         + "It does not correct hot pixels or replace dark/bias calibration. Originals are kept.</p></body>");
                 int choice = interaction.choose(message, "Dataset Quality Warning", options);
                 if (alignment && choice == 2) {

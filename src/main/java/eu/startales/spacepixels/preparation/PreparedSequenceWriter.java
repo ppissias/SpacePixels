@@ -63,6 +63,16 @@ public final class PreparedSequenceWriter {
     /** Inspects the complete retained cohort and asks once about extremes before publishing final files. */
     public static Result write(List<Frame> frames, Path folder, BooleanSupplier cancelled, IntConsumer progress,
                                ImageScaling.Decision decision) throws Exception {
+        return write(frames, folder, cancelled, progress, decision, List.of());
+    }
+
+    /**
+     * Writes the sequence and records {@code interpretation}, the Bayer interpretation of colour lights with its sources
+     * (one line each, see {@link PreparationRequest#interpretationHistory}), as {@code HISTORY} cards in every frame.
+     * It is empty for monochrome and already-RGB lights.
+     */
+    public static Result write(List<Frame> frames, Path folder, BooleanSupplier cancelled, IntConsumer progress,
+                               ImageScaling.Decision decision, List<String> interpretation) throws Exception {
         if (frames.size() < 3) throw new IOException("Preparation needs at least three registered individual exposures.");
         ImageScaling.Scan scan = new ImageScaling.Scan();
         int width = -1;
@@ -120,9 +130,13 @@ public final class PreparedSequenceWriter {
             eu.startales.spacepixels.fits.PlateSolveHints.write(outputHeader, solveHints);
             scaling.record(outputHeader, image.pixels().floatingPoint());
             outputHeader.addValue("SPORIGIN", frame.original().getFileName().toString(), "Original exposure filename");
-            outputHeader.insertHistory("SpacePixels preparation: RGB mean; common image-data scaling; zero registration fill preserved.");
             Path output = folder.resolve(String.format(java.util.Locale.ROOT, "frame_%06d.fit", i + 1));
             try (Fits fits = FitsPixelConverter.createFitsFromData(pixels, outputHeader)) {
+                // The converter copies only the first card of each key, so the HISTORY cards go on the written header,
+                // complete with their continuation cards.
+                Header published = fits.getHDU(0).getHeader();
+                published.insertHistory("SpacePixels preparation: RGB mean; common image-data scaling; zero registration fill preserved.");
+                for (String line : interpretation) published.insertHistory("SpacePixels preparation: " + line);
                 StagedFile.write(output.toFile(), staged -> fits.write(staged.toFile()));
             }
             written.add(output);

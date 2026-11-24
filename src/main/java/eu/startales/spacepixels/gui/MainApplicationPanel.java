@@ -9,6 +9,7 @@
  */
 package eu.startales.spacepixels.gui;
 
+import eu.startales.spacepixels.fits.BayerMosaic;
 import eu.startales.spacepixels.fits.BlinkSequence;
 import eu.startales.spacepixels.session.ProcessingSession;
 import eu.startales.spacepixels.session.SkyCatalogueModel;
@@ -92,7 +93,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
 
     private final JProgressBar progressBar = new JProgressBar();
     private final JButton prepareFramesButton = new JButton("Prepare Frames…");
-    private Runnable showPreparation = () -> { };
+    private java.util.function.Consumer<java.nio.file.Path> showPreparation = ignored -> { };
     private Consumer<Boolean> preparationLock = busy -> { };
     private final JButton importButton = new JButton("Import Aligned Frames…");
     private final JButton convertMonoButton = new JButton("Convert to Mono");
@@ -166,7 +167,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     // The commands with one entry point, enabled the same way.
     private final CommandAction prepareFramesAction = new CommandAction("Prepare Frames…",
             "Prepare an observing session with Siril in a separate window, then import its aligned frames.",
-            CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.run());
+            CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.accept(null));
     private final CommandAction importAction = new CommandAction("Import Aligned Frames…",
             "Choose a folder of aligned FITS or XISF frames to import (or drop the folder onto the window). "
                     + "Compressed, 32-bit and XISF data are converted to a working folder first.",
@@ -207,7 +208,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
             CommandAvailability.Command.IMPORT, this::commandFacts, this::chooseAndImportFolder);
     private final CommandAction prepareRawAction = new CommandAction("Prepare Raw Frames…",
             "For exposures that still need calibration or alignment: prepare the session with Siril in a separate window.",
-            CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.run());
+            CommandAvailability.Command.PREPARE_FRAMES, this::commandFacts, () -> showPreparation.accept(null));
     private final List<CommandAction> commandActions = List.of(prepareFramesAction, importAction, convertMonoAction, stretchAction, imageStretchAction, solveAction,
             skyCatalogueAction, solarSystemAction, blinkAction, previewAction, inspectionAction, autoTuneAction, detectAction,
             iterativeAction, qualityControlAction, chooseFolderAction, prepareRawAction);
@@ -756,8 +757,11 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         clearSelectionLink.setVisible(selected > 0);
     }
 
-    /** Wires the independent preparation window and its job lock without taking the application window as a dependency. */
-    void configurePreparation(Runnable opener, Consumer<Boolean> lock) {
+    /**
+     * Wires the independent preparation window and its job lock without taking the application window as a dependency.
+     * The opener takes a folder of lights to inspect, or null to open the window as it is.
+     */
+    void configurePreparation(Consumer<java.nio.file.Path> opener, Consumer<Boolean> lock) {
         showPreparation = java.util.Objects.requireNonNull(opener);
         preparationLock = java.util.Objects.requireNonNull(lock);
     }
@@ -918,10 +922,29 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Converts every colour frame to linear 16-bit monochrome in a new folder, independently of display settings. */
     void convertToMono() {
         ProcessingSession owner = sessions.current();
-        if (owner == null) return;
+        if (owner == null || preparesRawColourInstead(owner, "Convert to Mono")) return;
         startJob(JobKind.CONVERT_TO_MONO, owner,
                 new BatchConvertMonoTask(owner.getBatchService()),
                 this::showConversionOutcome);
+    }
+
+    /**
+     * Raw colour exposures, imported as monochrome, would be skipped by Convert to Mono and stretched as mosaics by
+     * Batch Stretch. Names them and offers the preparation window instead. Returns true when {@code command} must not
+     * run. Reads only the session's header cards; EDT only.
+     */
+    private boolean preparesRawColourInstead(ProcessingSession owner, String command) {
+        BayerMosaic mosaic = BayerMosaic.firstOf(owner.getFiles());
+        if (mosaic == null) return false;
+        String[] options = {"Prepare observing session…", "Cancel"};
+        int choice = JOptionPane.showOptionDialog(SwingUtilities.getWindowAncestor(this),
+                mosaic.rawColourExplanation() + "\n\n" + command + " would treat the mosaic as monochrome. "
+                        + "Prepare observing session calibrates, debayers and registers them with Siril.",
+                "Raw colour exposures", JOptionPane.DEFAULT_OPTION, JOptionPane.INFORMATION_MESSAGE, null, options, options[0]);
+        if (choice == 0 && sessions.isCurrent(owner)) {
+            showPreparation.accept(new File(owner.getFiles()[0].getFilePath()).getAbsoluteFile().getParentFile().toPath());
+        }
+        return true;
     }
 
     /** Writes stretched copies of every frame, with the stretch editor's captured settings. */
@@ -931,7 +954,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         StretchAlgorithm algo = stretch.getStretchAlgorithm();
 
         ProcessingSession owner = sessions.current();
-        if (owner == null) return;
+        if (owner == null || preparesRawColourInstead(owner, "Export stretched copies")) return;
         FitsFileInformation[] files = owner.getFiles();
         if (files.length == 0) return;
         File destination = new File(new File(files[0].getFilePath()).getParentFile(), "_stretched");

@@ -53,6 +53,12 @@ public final class DefaultSpacePixelsPipelineApi implements SpacePixelsPipelineA
 
             SpacePixelsProgressListener progressListener = request.getProgressListener();
             var runOptions = request.getRunOptions();
+            // Raw colour exposures are refused before any conversion would treat the mosaic as monochrome.
+            var rawColour = eu.startales.spacepixels.fits.BayerMosaic.firstIn(request.getInputDirectory());
+            if (rawColour != null) {
+                throw new SpacePixelsPipelineException(rawColour.rawColourExplanation() + " Prepare them first, for example"
+                        + " with Prepare Observing Session in the SpacePixels window, and run on the prepared folder.");
+            }
             DetectionInputPreparation.PreparedDirectory preparedDirectory = DetectionInputPreparation.prepareInputDirectory(
                     request.getInputDirectory(),
                     request.getInputPreparationMode() == InputPreparationMode.AUTO_PREPARE_TO_16BIT_MONO,

@@ -208,6 +208,8 @@ var request = SpacePixelsPipelineRequest.builder(inputDirectory)
 - `AUTO_PREPARE_TO_16BIT_MONO`
   Use this when the input may be an XISF-only directory, color FITS, or supported FITS data that is not already 16-bit monochrome, and you want SpacePixels to normalize it into a new detection-ready directory first.
 
+In either mode, raw colour exposures are refused with `SpacePixelsPipelineException` before anything is converted. A raw colour exposure is a FITS image with one plane whose header names a Bayer pattern (`BAYERPAT`). The message names the pattern. Calibrate, debayer and register such frames first, for example with the desktop application's Prepare Frames, and run on the prepared folder.
+
 ## Sampled calibration and alignment warnings
 
 The prepared sequence is checked for sharp sensor defects and coherent star displacement before Auto-Tune or detection. The default request policy keeps processing and records any warning in `SpacePixelsPipelineResult.getCalibrationWarning()` (`null` when none was found); `hasCalibrationWarning()` tests its presence. The batch command prints this warning as well as the report location.

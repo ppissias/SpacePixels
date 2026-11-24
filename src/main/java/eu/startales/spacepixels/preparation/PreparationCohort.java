@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.preparation;
 
+import eu.startales.spacepixels.fits.BayerMosaic;
 import eu.startales.spacepixels.fits.ExposureGroup;
 import eu.startales.spacepixels.preparation.PreparationInputs.Role;
 
@@ -81,8 +82,8 @@ public final class PreparationCohort {
 
     private enum Family { RAW, FITS, XISF, TIFF }
 
-    /** Header facts needed to tell an individual exposure from a stack or another image family. */
-    private record Fact(Path path, Family family, int planes, long exposureMillis, String rowOrder) { }
+    /** Header facts needed to tell an individual exposure from a stack or another image family, and its Bayer mosaic. */
+    private record Fact(Path path, Family family, int planes, long exposureMillis, String rowOrder, BayerMosaic mosaic) { }
 
     /** The classifier has no mutable state. */
     private PreparationCohort() { }
@@ -193,9 +194,9 @@ public final class PreparationCohort {
     /** Reads FITS headers with nom.tam. An unreadable file stays in the FITS family with unknown dimensions. */
     private static Fact fact(Path path) {
         Family family = family(path);
-        if (family != Family.FITS) return new Fact(path, family, 0, -1, null);
+        if (family != Family.FITS) return new Fact(path, family, 0, -1, null, null);
         try { return fitsFact(path); }
-        catch (IOException | RuntimeException unread) { return new Fact(path, Family.FITS, 0, -1, null); }
+        catch (IOException | RuntimeException unread) { return new Fact(path, Family.FITS, 0, -1, null, null); }
     }
 
     private static Family family(Path path) {
@@ -227,32 +228,68 @@ public final class PreparationCohort {
             if (exposure < 0) exposure = exposure(primary);
             String row = image.getStringValue("ROWORDER");
             if (row == null) row = primary.getStringValue("ROWORDER");
-            return new Fact(path, Family.FITS, planes(image), exposure, row == null ? null : row.strip().toUpperCase(Locale.ROOT));
+            return new Fact(path, Family.FITS, BayerMosaic.planes(image), exposure,
+                    row == null ? null : row.strip().toUpperCase(Locale.ROOT), BayerMosaic.of(image, primary));
         }
     }
 
     /** FITS lights whose header does not name a top-down or bottom-up row order. Raw files are not included. */
     public static Set<Path> fitsMissingRowOrder(Iterable<Path> files) {
+        return lightsBayer(files).missingRowOrder();
+    }
+
+    /**
+     * The Bayer facts of the FITS images among the lights, read once for the preparation window: which files are FITS,
+     * the raw colour mosaic of each one that is, and which lack a row order. Camera RAW and other families are left
+     * out, because Siril decodes them during conversion.
+     *
+     * @param fits            every FITS file, normalised
+     * @param mosaics         the mosaic of each FITS file that is a raw colour mosaic
+     * @param missingRowOrder the FITS files whose header names neither top-down nor bottom-up
+     */
+    public record LightsBayer(Set<Path> fits, Map<Path, BayerMosaic> mosaics, Set<Path> missingRowOrder) {
+        /** Detaches the collections from the inspection's working copies. */
+        public LightsBayer {
+            fits = Set.copyOf(fits);
+            mosaics = Map.copyOf(mosaics);
+            missingRowOrder = Set.copyOf(missingRowOrder);
+        }
+
+        /** The facts of the files that preparation keeps, in no particular order. */
+        public LightsBayer keeping(Set<Path> kept) {
+            Set<Path> keptFits = new LinkedHashSet<>();
+            Map<Path, BayerMosaic> keptMosaics = new LinkedHashMap<>();
+            Set<Path> keptMissing = new LinkedHashSet<>();
+            for (Path file : fits) if (kept.contains(file)) keptFits.add(file);
+            mosaics.forEach((file, mosaic) -> { if (kept.contains(file)) keptMosaics.put(file, mosaic); });
+            for (Path file : missingRowOrder) if (kept.contains(file)) keptMissing.add(file);
+            return new LightsBayer(keptFits, keptMosaics, keptMissing);
+        }
+
+        /** Whether there are FITS lights and every one of them is a raw colour mosaic. */
+        public boolean allMosaics() { return !fits.isEmpty() && mosaics.size() == fits.size(); }
+
+        /** The interpretation all the FITS lights share, or null when some lack one or they differ. */
+        public BayerMosaic common() { return allMosaics() ? BayerMosaic.common(List.copyOf(mosaics.values())) : null; }
+
+        /** Any one mosaic, to name the camera, or null when no FITS light is a mosaic. */
+        public BayerMosaic any() { return mosaics.values().stream().findFirst().orElse(null); }
+    }
+
+    /** Reads the lights' headers once for {@link LightsBayer}; unreadable FITS files count as FITS without a mosaic. */
+    public static LightsBayer lightsBayer(Iterable<Path> files) {
+        Set<Path> fits = new LinkedHashSet<>();
+        Map<Path, BayerMosaic> mosaics = new LinkedHashMap<>();
         Set<Path> missing = new LinkedHashSet<>();
         for (Path file : files) {
             Fact fact = fact(file);
             if (fact.family != Family.FITS) continue;
-            if (!"TOP-DOWN".equals(fact.rowOrder) && !"BOTTOM-UP".equals(fact.rowOrder)) missing.add(file.toAbsolutePath().normalize());
+            Path normalized = file.toAbsolutePath().normalize();
+            fits.add(normalized);
+            if (fact.mosaic != null) mosaics.put(normalized, fact.mosaic);
+            if (!"TOP-DOWN".equals(fact.rowOrder) && !"BOTTOM-UP".equals(fact.rowOrder)) missing.add(normalized);
         }
-        return Set.copyOf(missing);
-    }
-
-    /** Tile-compressed images store the table as NAXIS 2; the image shape is ZNAXIS when ZIMAGE is set. */
-    private static int planes(Header header) {
-        if (header.getBooleanValue("ZIMAGE", false)) {
-            int compressed = header.getIntValue("ZNAXIS", 0);
-            if (compressed >= 3) return Math.max(header.getIntValue("ZNAXIS3", 1), 1);
-            if (compressed == 2) return 1;
-        }
-        int axes = header.getIntValue("NAXIS", 0);
-        if (axes >= 3) return Math.max(header.getIntValue("NAXIS3", 1), 1);
-        if (axes == 2) return 1;
-        return 0;
+        return new LightsBayer(fits, mosaics, missing);
     }
 
     private static long exposure(Header header) {

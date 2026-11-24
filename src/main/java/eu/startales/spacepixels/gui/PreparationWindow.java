@@ -39,6 +39,9 @@ final class PreparationWindow extends JDialog {
     /** Synchronizes this independent form with the application's single processing slot. */
     void setBusy(boolean busy) { panel.setBusy(busy); }
 
+    /** Inspects one folder as the lights, for raw colour exposures that the observer chose to prepare. EDT only. */
+    void startWithLights(java.nio.file.Path lights) { panel.startWithLights(lights); }
+
     /** Retains completed products in the window before an optional import starts. */
     void completed(FramePreparationService.Result result) { preparing = false; panel.completed(result); }
 
