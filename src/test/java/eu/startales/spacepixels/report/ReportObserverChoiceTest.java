@@ -38,7 +38,10 @@ public class ReportObserverChoiceTest {
         String jpl = DetectionReportAstrometry.buildJplSbIdentUrl(context, target, 0.1);
         assertTrue(jpl, jpl.contains("lat=33.3573") && jpl.contains("lon=-116.8598") && jpl.contains("alt=1.668"));
         assertFalse(jpl, jpl.contains("mpc-code"));
-        assertTrue(DetectionReportAstrometry.buildSkybotUrl(context, target, 0.1, false).contains("-observer=J95"));
+        String skybot = DetectionReportAstrometry.buildSkybotUrl(context, target, 0.1, false);
+        assertTrue(skybot, skybot.contains("-observer=J95"));
+        assertTrue(skybot, skybot.contains("-mime=text"));
+        assertFalse(skybot, skybot.contains("-mime=html"));
         String html = AstrometryIdentificationHtmlBuilder.buildSolarSystemIdentificationHtml(context, target,
                 "Epoch", "Search SkyBoT", "Radius", null, null, false);
         assertTrue(html, html.contains("JPL Small-Body Identification uses topocentric site coordinates from FITS header"));

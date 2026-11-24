@@ -427,6 +427,10 @@ public final class DetectionReportAstrometry {
                 (skySeparationDegrees * 3600.0d) / elapsedHours);
     }
 
+    /**
+     * Builds an IMCCE SkyBoT cone-search URL for a report lookup, using plain-text output ({@code -mime=text}) so
+     * browsers can display it directly without client-side XSLT processing.
+     */
     public static String buildSkybotUrl(Context astrometryContext,
                                  SolarSystemQueryTarget queryTarget,
                                  double searchRadiusDegrees,
@@ -443,7 +447,7 @@ public final class DetectionReportAstrometry {
         url.append("&-ra=").append(urlEncode(formatDecimal(skyCoordinate.getRaDegrees(), 6)));
         url.append("&-dec=").append(urlEncode(formatDecimal(skyCoordinate.getDecDegrees(), 6)));
         url.append("&-rd=").append(urlEncode(formatDecimal(searchRadiusDegrees, 6)));
-        url.append("&-mime=html");
+        url.append("&-mime=text");
         url.append("&-output=all");
         url.append("&-observer=").append(urlEncode(observer));
         url.append("&-objFilter=101");
