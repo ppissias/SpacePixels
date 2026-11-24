@@ -9,7 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * Normalizes raw SatChecker and JPL JSON payloads into the compact structures rendered inside reports.
+ * Normalizes raw SatChecker, JPL, SkyBoT, and VSX JSON payloads into the compact structures rendered inside reports.
  */
 final class ReportLookupPayloadNormalizer {
 
@@ -23,10 +23,94 @@ final class ReportLookupPayloadNormalizer {
         if ("jpl".equals(provider)) {
             return normalizeJplPayload(payload);
         }
+        if ("skybot".equals(provider)) {
+            return normalizeSkybotPayload(payload);
+        }
         if ("vsx".equals(provider)) {
             return normalizeVsxPayload(payload);
         }
         return new JsonObject();
+    }
+
+    /**
+     * Normalizes an IMCCE SkyBoT JSON cone-search array into matches ordered by angular separation from the query
+     * center.
+     */
+    static JsonObject normalizeSkybotPayload(JsonElement payload) {
+        JsonObject normalized = new JsonObject();
+        normalized.addProperty("source", "IMCCE SkyBoT");
+        java.util.List<JsonObject> matchList = new java.util.ArrayList<>();
+        if (payload != null && payload.isJsonArray()) {
+            for (JsonElement element : payload.getAsJsonArray()) {
+                JsonObject row = asObject(element);
+                if (row == null) {
+                    continue;
+                }
+                JsonObject match = new JsonObject();
+                String rawNumber = trimToNull(getString(row, "Num"));
+                String number = rawNumber != null && !"-".equals(rawNumber) ? rawNumber : null;
+                String name = trimToNull(getString(row, "Name"));
+                String displayName = formatSkybotDisplayName(number, name);
+
+                addStringProperty(match, "number", number);
+                addStringProperty(match, "name", name);
+                addStringProperty(match, "displayName", displayName);
+                addStringProperty(match, "objectClass", trimToNull(getString(row, "Class")));
+                addStringProperty(match, "raHms", trimToNull(getString(row, "RA (hms)")));
+                addStringProperty(match, "decDms", trimToNull(getString(row, "DEC (dms)")));
+                addFiniteProperty(match, "vMag", getDouble(row, "VMag (mag)"));
+                addFiniteProperty(match, "errArcsec", getDouble(row, "Err (arcsec)"));
+                addFiniteProperty(match, "distanceArcsec", getDouble(row, "d (arcsec)"));
+                addFiniteProperty(match, "raRateArcsecPerHour", getDouble(row, "dRA (arcsec/h)"));
+                addFiniteProperty(match, "decRateArcsecPerHour", getDouble(row, "dDEC (arcsec/h)"));
+
+                String sbdbSearch = number != null ? number : normalizeSbdbLookupSearchString(name);
+                if (sbdbSearch != null && !sbdbSearch.isEmpty()) {
+                    match.addProperty(
+                            "sbdbLookupUrl",
+                            "https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr="
+                                    + URLEncoder.encode(sbdbSearch, StandardCharsets.UTF_8));
+                }
+                JsonObject ssodnet = getObject(row, "ssodnet");
+                String ssoCardUrl = trimToNull(getString(ssodnet, "ssocard"));
+                if (ssoCardUrl != null && ssoCardUrl.startsWith("https://")) {
+                    match.addProperty("ssoCardUrl", ssoCardUrl);
+                }
+                matchList.add(match);
+            }
+        }
+        matchList.sort((left, right) -> {
+            double leftDistance = getDouble(left, "distanceArcsec");
+            double rightDistance = getDouble(right, "distanceArcsec");
+            if (!Double.isFinite(leftDistance) && !Double.isFinite(rightDistance)) {
+                return String.valueOf(getString(left, "displayName", ""))
+                        .compareToIgnoreCase(String.valueOf(getString(right, "displayName", "")));
+            }
+            if (!Double.isFinite(leftDistance)) return 1;
+            if (!Double.isFinite(rightDistance)) return -1;
+            int cmp = Double.compare(leftDistance, rightDistance);
+            if (cmp != 0) return cmp;
+            return String.valueOf(getString(left, "displayName", ""))
+                    .compareToIgnoreCase(String.valueOf(getString(right, "displayName", "")));
+        });
+
+        JsonArray matches = new JsonArray();
+        for (JsonObject match : matchList) {
+            matches.add(match);
+        }
+        normalized.addProperty("matchCount", matches.size());
+        normalized.add("matches", matches);
+        return normalized;
+    }
+
+    private static String formatSkybotDisplayName(String number, String name) {
+        if (name == null) {
+            return number;
+        }
+        if (number == null || name.startsWith(number + " ") || name.equals(number)) {
+            return name;
+        }
+        return number + " " + name;
     }
 
     /**

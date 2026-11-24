@@ -435,6 +435,25 @@ public final class DetectionReportAstrometry {
                                  SolarSystemQueryTarget queryTarget,
                                  double searchRadiusDegrees,
                                  boolean forceGeocenterObserver) {
+        return buildSkybotUrl(astrometryContext, queryTarget, searchRadiusDegrees, forceGeocenterObserver, "text");
+    }
+
+    /**
+     * Builds an IMCCE SkyBoT cone-search URL returning JSON ({@code -mime=json}) for in-report live rendering through
+     * the local lookup proxy.
+     */
+    public static String buildSkybotJsonUrl(Context astrometryContext,
+                                     SolarSystemQueryTarget queryTarget,
+                                     double searchRadiusDegrees,
+                                     boolean forceGeocenterObserver) {
+        return buildSkybotUrl(astrometryContext, queryTarget, searchRadiusDegrees, forceGeocenterObserver, "json");
+    }
+
+    private static String buildSkybotUrl(Context astrometryContext,
+                                         SolarSystemQueryTarget queryTarget,
+                                         double searchRadiusDegrees,
+                                         boolean forceGeocenterObserver,
+                                         String mime) {
         if (astrometryContext == null || !astrometryContext.hasAstrometricSolution() || queryTarget == null || queryTarget.timestampMillis <= 0L) {
             return null;
         }
@@ -447,7 +466,7 @@ public final class DetectionReportAstrometry {
         url.append("&-ra=").append(urlEncode(formatDecimal(skyCoordinate.getRaDegrees(), 6)));
         url.append("&-dec=").append(urlEncode(formatDecimal(skyCoordinate.getDecDegrees(), 6)));
         url.append("&-rd=").append(urlEncode(formatDecimal(searchRadiusDegrees, 6)));
-        url.append("&-mime=text");
+        url.append("&-mime=").append(urlEncode(mime));
         url.append("&-output=all");
         url.append("&-observer=").append(urlEncode(observer));
         url.append("&-objFilter=101");

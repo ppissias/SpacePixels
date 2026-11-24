@@ -88,7 +88,30 @@ public final class AstrometryIdentificationHtmlBuilder {
             double nominalRadiusArcmin = queryTarget.searchRadiusDegrees * 60.0;
             double widerRadiusDegrees = Math.min(queryTarget.searchRadiusDegrees * 2.5, 2.0);
             double muchWiderRadiusDegrees = Math.min(queryTarget.searchRadiusDegrees * 6.0, 5.0);
+            String skybotSlotId = liveJplRenderSlotId != null && !liveJplRenderSlotId.isEmpty()
+                    ? liveJplRenderSlotId + "-skybot" : null;
+            String skybotSidecarBase = toSkybotSidecarBaseName(liveJplRenderSidecarBaseName);
             html.append("<div class='id-links'>");
+            if (skybotSlotId != null) {
+                String nominalSkybotJsonUrl = DetectionReportAstrometry.buildSkybotJsonUrl(
+                        astrometryContext, queryTarget, queryTarget.searchRadiusDegrees, false);
+                String widerSkybotJsonUrl = DetectionReportAstrometry.buildSkybotJsonUrl(
+                        astrometryContext, queryTarget, widerRadiusDegrees, false);
+                html.append(DetectionReportAstrometry.buildLiveRenderButtonHtml(
+                        "skybot",
+                        nominalSkybotJsonUrl,
+                        skybotSlotId,
+                        "Render SkyBoT Results Here",
+                        DetectionReportAstrometry.buildLiveRenderSidecarFileName(skybotSidecarBase, "nominal"),
+                        "SkyBoT Cone Search Results"));
+                html.append(DetectionReportAstrometry.buildLiveRenderButtonHtml(
+                        "skybot",
+                        widerSkybotJsonUrl,
+                        skybotSlotId,
+                        "Render SkyBoT Wide Cone Here",
+                        DetectionReportAstrometry.buildLiveRenderSidecarFileName(skybotSidecarBase, "wide"),
+                        "SkyBoT Wide Cone Results"));
+            }
             html.append("<a class='id-link' href='").append(nominalSkybotUrl)
                     .append("' target='_blank' rel='noopener noreferrer'>")
                     .append(DetectionReportAstrometry.escapeHtml(buttonLabel))
@@ -116,7 +139,14 @@ public final class AstrometryIdentificationHtmlBuilder {
                     .append(DetectionReportAstrometry.escapeHtml(String.format(Locale.US, "%.2f arcmin", widerRadiusDegrees * 60.0)))
                     .append(" | Much wider: ")
                     .append(DetectionReportAstrometry.escapeHtml(String.format(Locale.US, "%.2f arcmin", muchWiderRadiusDegrees * 60.0)))
-                    .append(" (asteroids + comets).</div>");
+                    .append(" (asteroids + comets).");
+            if (skybotSlotId != null) {
+                html.append(" <strong>Render SkyBoT Results Here</strong> and <strong>Render SkyBoT Wide Cone Here</strong> fetch SkyBoT JSON results into this report while SpacePixels is running; the links beside them open SkyBoT's plain-text reply in a new tab.");
+            }
+            html.append("</div>");
+            if (skybotSlotId != null) {
+                html.append(DetectionReportAstrometry.buildLiveRenderContainerHtml(skybotSlotId));
+            }
         }
 
         String nominalJplUrl = DetectionReportAstrometry.buildJplSbIdentUrl(
@@ -227,6 +257,17 @@ public final class AstrometryIdentificationHtmlBuilder {
                 + "Keep SpacePixels running to show and save results here. "
                 + "A possible association does not confirm a satellite flash; no match does not rule one out.</p>"
                 + DetectionReportAstrometry.buildLiveRenderContainerHtml(slotId) + "</div>";
+    }
+
+    private static String toSkybotSidecarBaseName(String jplSidecarBaseName) {
+        if (jplSidecarBaseName == null || jplSidecarBaseName.isBlank()) {
+            return null;
+        }
+        String trimmed = jplSidecarBaseName.trim();
+        if (trimmed.startsWith("jpl_")) {
+            return "skybot_" + trimmed.substring(4);
+        }
+        return "skybot_" + trimmed;
     }
 
     private static String buildJplUnavailableReason(DetectionReportAstrometry.Context astrometryContext) {

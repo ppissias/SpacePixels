@@ -1,5 +1,6 @@
 package eu.startales.spacepixels.report.lookup;
 
+import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
@@ -23,6 +24,7 @@ public final class ReportLookupUpstreamClient {
 
     private static final int CONNECT_TIMEOUT_MS = 10_000;
     private static final int SATCHECKER_READ_TIMEOUT_MS = 60_000;
+    private static final int SKYBOT_READ_TIMEOUT_MS = 90_000;
     private static final int JPL_READ_TIMEOUT_MS = 300_000;
     private static final int MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 
@@ -30,6 +32,9 @@ public final class ReportLookupUpstreamClient {
     public static final String VSX_TAP_HOST = "tapvizier.cds.unistra.fr";
     public static final String VSX_TAP_PATH = "/TAPVizieR/tap/sync";
     public static final String VSX_TABLE = "B/vsx/vsx";
+    /** IMCCE SkyBoT cone-search service, queried as JSON for in-report live rendering. */
+    public static final String SKYBOT_HOST = "ssp.imcce.fr";
+    public static final String SKYBOT_PATH = "/webservices/skybot/api/conesearch.php";
 
     private ReportLookupUpstreamClient() {
     }
@@ -69,6 +74,9 @@ public final class ReportLookupUpstreamClient {
             }
 
             if (upstreamStatus >= 200 && upstreamStatus < 300) {
+                if ("skybot".equals(provider) && upstreamStatus == 204 && payload == JsonNull.INSTANCE) {
+                    payload = new JsonArray();
+                }
                 boolean ephemeris = "satchecker".equals(provider) && URI.create(targetUrl).getPath().equals("/ephemeris/catalog-number-jdstep/");
                 if (ephemeris) validateEphemerisPayload(payload); else validatePayload(provider, payload);
                 response.addProperty("ok", true);
@@ -167,6 +175,12 @@ public final class ReportLookupUpstreamClient {
             if (!"ssd-api.jpl.nasa.gov".equalsIgnoreCase(host) || !"/sb_ident.api".equals(path)) {
                 throw new IllegalArgumentException("Only JPL small-body identification lookups are allowed.");
             }
+        } else if ("skybot".equals(provider)) {
+            String query = uri.getRawQuery();
+            if (!SKYBOT_HOST.equalsIgnoreCase(host) || !SKYBOT_PATH.equals(path)
+                    || query == null || !query.contains("-mime=json")) {
+                throw new IllegalArgumentException("Only IMCCE SkyBoT JSON cone-search lookups are allowed.");
+            }
         } else if ("vsx".equals(provider)) {
             String query = uri.getQuery();
             if (!VSX_TAP_HOST.equalsIgnoreCase(host) || !VSX_TAP_PATH.equals(path)
@@ -179,6 +193,17 @@ public final class ReportLookupUpstreamClient {
     }
 
     static void validatePayload(String provider, JsonElement payload) {
+        if ("skybot".equals(provider)) {
+            if (payload == null || !payload.isJsonArray()) {
+                throw new IllegalArgumentException("The catalogue returned an invalid response, not a search result.");
+            }
+            for (JsonElement element : payload.getAsJsonArray()) {
+                if (element == null || !element.isJsonObject()) {
+                    throw new IllegalArgumentException("The catalogue response is incomplete; no identification conclusion can be drawn. Retry the lookup.");
+                }
+            }
+            return;
+        }
         if (payload == null || !payload.isJsonObject()) throw new IllegalArgumentException("The catalogue returned an invalid response, not a search result.");
         JsonObject root = payload.getAsJsonObject();
         if (root.has("error") && !root.get("error").isJsonNull()) throw new IllegalArgumentException("The catalogue reported an error: " + root.get("error"));
@@ -206,7 +231,13 @@ public final class ReportLookupUpstreamClient {
     }
 
     private static int resolveReadTimeoutMillis(String provider) {
-        return "jpl".equals(provider) ? JPL_READ_TIMEOUT_MS : SATCHECKER_READ_TIMEOUT_MS;
+        if ("jpl".equals(provider)) {
+            return JPL_READ_TIMEOUT_MS;
+        }
+        if ("skybot".equals(provider)) {
+            return SKYBOT_READ_TIMEOUT_MS;
+        }
+        return SATCHECKER_READ_TIMEOUT_MS;
     }
 
     private static String readLimitedUtf8(InputStream inputStream, int maxBytes) throws IOException {

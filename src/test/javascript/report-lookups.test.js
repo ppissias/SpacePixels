@@ -383,3 +383,47 @@ test('a comparison from a report without captured axes stays north up', () => {
   assert.match(html, /North ↑ · East →/);
   assert.doesNotMatch(html, /Same orientation/);
 });
+
+test('SkyBoT live lookup renders sorted matches, links, empty state, and unavailability notice', async () => {
+  const skybotAttrs = {
+    'data-provider': 'skybot',
+    'data-target': 'encoded-skybot',
+    'data-sidecar-file': 'skybot_track_01_nominal.json',
+    'data-render-title': 'SkyBoT Cone Search Results'
+  };
+  const hitResponse = {
+    ok: true,
+    provider: 'skybot',
+    persisted: true,
+    normalized: {
+      source: 'IMCCE SkyBoT',
+      matchCount: 2,
+      matches: [
+        {displayName: 'Far <Obj>', objectClass: 'MB>Outer', distanceArcsec: 120.5, vMag: 19.2, errArcsec: 0.4, raRateArcsecPerHour: 10.1, decRateArcsecPerHour: -2.3, raHms: '06 40 10', decDms: '+07 20 00'},
+        {displayName: '4767 Sutoku', objectClass: 'MB>Middle', distanceArcsec: 2.99, vMag: 17.6, errArcsec: 0.004, raRateArcsecPerHour: 12.27, decRateArcsecPerHour: 14.9, raHms: '06 40 04', decDms: '+07 19 48',
+          sbdbLookupUrl: 'https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=4767',
+          ssoCardUrl: 'https://ssp.imcce.fr/webservices/ssodnet/api/ssocard/Sutoku'}
+      ]
+    },
+    payload: [{Num: 4767, Name: 'Sutoku'}]
+  };
+  const emptyResponse = {ok: true, provider: 'skybot', persisted: true, normalized: {source: 'IMCCE SkyBoT', matchCount: 0, matches: []}, payload: []};
+
+  const c = client([hitResponse, emptyResponse], 1, '', {}, {attributes: skybotAttrs});
+  await c.api.loadLiveLookup(c.buttons[0]);
+  assert.match(c.requests[0], /provider=skybot/);
+  assert.match(c.slot.innerHTML, /SkyBoT Cone Search Results/);
+  assert.match(c.slot.innerHTML, /4767 Sutoku/);
+  assert.match(c.slot.innerHTML, /Far &lt;Obj&gt;/);
+  assert.ok(c.slot.innerHTML.indexOf('4767 Sutoku') < c.slot.innerHTML.indexOf('Far &lt;Obj&gt;'));
+  assert.match(c.slot.innerHTML, /JPL SBDB Lookup/);
+  assert.match(c.slot.innerHTML, /SsODNet/);
+  assert.match(c.slot.innerHTML, /Show Raw JSON/);
+
+  await c.api.loadLiveLookup(c.buttons[0], true);
+  assert.match(c.slot.innerHTML, /SkyBoT returned no known asteroids or comets within this search cone/);
+
+  const offline = client([new Error('Connection refused')], 1, '', {}, {attributes: skybotAttrs});
+  await offline.api.loadLiveLookup(offline.buttons[0]);
+  assert.match(offline.slot.innerHTML, /Render SkyBoT Results Here/);
+});

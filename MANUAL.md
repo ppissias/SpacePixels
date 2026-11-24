@@ -440,7 +440,7 @@ Iteration reports analyse overlapping frame selections. Their counts must not be
 
 When one frame is plate-solved, every track card shows the sky position and buttons to identify the object:
 
-- **Search SkyBoT** (three search radii): known asteroids and comets around the position, from the IMCCE SkyBoT service.
+- **Render SkyBoT Results Here** / **Render SkyBoT Wide Cone Here** and **Search SkyBoT** (three search radii): known asteroids and comets around the position, from the IMCCE SkyBoT service. The **Here** buttons render SkyBoT's JSON results inside the report; the links beside them open SkyBoT's plain-text reply in a new tab.
 - **Render JPL Results Here**: the JPL Small-Body Identification service for the exact field of the object.
 - **Render JPL NEO Recovery Results Here**: a wider JPL search for fast near-Earth objects, which JPL's exact search can miss.
 - **Compare track with satellites** (on streak tracks): searches the actual exposures, then compares the saved streak measurements with the predicted paths of the returned satellites.

@@ -78,7 +78,10 @@
   }
 
   function buildDefaultRenderTitle(provider) {
-    return provider === 'satchecker' ? 'SatChecker Results' : 'JPL Results';
+    if (provider === 'satchecker') return 'SatChecker Results';
+    if (provider === 'skybot') return 'SkyBoT Results';
+    if (provider === 'vsx') return 'VSX Results';
+    return 'JPL Results';
   }
 
   function buildEntryKey(provider, target, sidecarFile) {
@@ -236,7 +239,9 @@
   }
 
   function buildLookupUnavailablePanelHtml(provider, error, title) {
-    const providerLabel = provider === 'satchecker' ? 'SatChecker' : provider === 'vsx' ? 'VSX' : 'JPL';
+    const providerLabel = provider === 'satchecker' ? 'SatChecker'
+      : provider === 'skybot' ? 'SkyBoT'
+      : provider === 'vsx' ? 'VSX' : 'JPL';
     const details = error && error.message ? "<div class='live-caption'>Technical detail: " + escapeHtml(error.message) + "</div>" : '';
     return "<div class='live-render-panel error'><div class='live-render-heading'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta'>Unavailable</div></div><p class='live-caption'>SpacePixels is not reachable on " + escapeHtml(REPORT_PROXY_BASE_URL) + ". Start SpacePixels to use <strong>Render " + providerLabel + " Results Here</strong>. The browser link above still works.</p>" + details + "</div>";
   }
@@ -536,6 +541,68 @@
     return html;
   }
 
+  function buildSkybotResponseHtml(response, title) {
+    const normalized = response.normalized || {};
+    const allMatches = safeArray(normalized.matches).slice();
+    allMatches.sort(function (left, right) {
+      const leftDist = parseLooseNumber(left.distanceArcsec);
+      const rightDist = parseLooseNumber(right.distanceArcsec);
+      if (!Number.isFinite(leftDist) && !Number.isFinite(rightDist)) {
+        return String(left.displayName || left.name || '').localeCompare(String(right.displayName || right.name || ''));
+      }
+      if (!Number.isFinite(leftDist)) return 1;
+      if (!Number.isFinite(rightDist)) return -1;
+      return leftDist - rightDist;
+    });
+
+    const displayedMatches = allMatches.slice(0, JPL_MAX_RENDER_ROWS);
+    let html = "<div class='live-render-panel'><div class='live-render-heading'><div class='live-render-title'>" + escapeHtml(title) + "</div><div class='live-render-meta'>" + escapeHtml(buildRenderMeta(response)) + "</div></div>";
+    html += "<div class='live-mini-grid'>";
+    html += buildMetricCard('Matches', normalized.matchCount !== undefined ? String(normalized.matchCount) : String(allMatches.length));
+    if (allMatches.length) {
+      html += buildMetricCard('Closest', allMatches[0].distanceArcsec !== undefined ? formatNumber(allMatches[0].distanceArcsec, 1) + ' arcsec' : 'n/a');
+      html += buildMetricCard('Closest Object', allMatches[0].displayName || allMatches[0].name || 'n/a');
+    }
+    html += "</div>";
+    html += "<p class='live-caption'>This is the same IMCCE SkyBoT cone search shown by the browser link above, rendered inside the report for faster inspection.</p>";
+
+    if (!displayedMatches.length) {
+      html += "<p class='live-empty-note'>SkyBoT returned no known asteroids or comets within this search cone.</p>";
+    } else {
+      html += "<div class='live-table-box'><table><thead><tr><th>Object</th><th>Class</th><th>Dist (&Prime;)</th><th>V Mag</th><th>Err (&Prime;)</th><th>dRA (&Prime;/h)</th><th>dDec (&Prime;/h)</th><th>RA</th><th>Dec</th><th>Links</th></tr></thead><tbody>";
+      displayedMatches.forEach(function (match) {
+        let links = '';
+        if (match.sbdbLookupUrl) {
+          links += "<a class='live-link-inline' href='" + escapeHtml(match.sbdbLookupUrl) + "' target='_blank' rel='noopener noreferrer'>JPL SBDB Lookup</a>";
+        }
+        if (match.ssoCardUrl) {
+          if (links) { links += " | "; }
+          links += "<a class='live-link-inline' href='" + escapeHtml(match.ssoCardUrl) + "' target='_blank' rel='noopener noreferrer'>SsODNet</a>";
+        }
+        html += "<tr>" +
+          "<td>" + escapeHtml(match.displayName || match.name || 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.objectClass || 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.distanceArcsec !== undefined ? formatNumber(match.distanceArcsec, 2) : 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.vMag !== undefined ? formatNumber(match.vMag, 1) : 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.errArcsec !== undefined ? formatNumber(match.errArcsec, 3) : 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.raRateArcsecPerHour !== undefined ? formatNumber(match.raRateArcsecPerHour, 2) : 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.decRateArcsecPerHour !== undefined ? formatNumber(match.decRateArcsecPerHour, 2) : 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.raHms || 'n/a') + "</td>" +
+          "<td>" + escapeHtml(match.decDms || 'n/a') + "</td>" +
+          "<td>" + links + "</td>" +
+          "</tr>";
+      });
+      html += "</tbody></table></div>";
+      if (allMatches.length > displayedMatches.length) {
+        html += "<p class='live-empty-note'>Showing the closest " + escapeHtml(displayedMatches.length) + " of " + escapeHtml(allMatches.length) + " returned objects. Use the browser link above for the full response.</p>";
+      }
+    }
+
+    html += buildRawJsonDetails(response.payload);
+    html += "</div>";
+    return html;
+  }
+
   function buildPanelHtml(entry) {
     if (!entry) {
       return '';
@@ -554,6 +621,9 @@
     }
     if (entry.response.provider === 'vsx') {
       return buildVsxResponseHtml(entry.response, entry.renderTitle);
+    }
+    if (entry.response.provider === 'skybot') {
+      return buildSkybotResponseHtml(entry.response, entry.renderTitle);
     }
     if (entry.response.provider === 'jpl') {
       return buildJplResponseHtml(entry.response, entry.renderTitle);
@@ -651,7 +721,7 @@
         return Promise.resolve(response);
       }
     }
-    const timeout = setTimeout(cancelRequest, observationId ? 310000 : provider === 'jpl' ? 330000 : 90000);
+    const timeout = setTimeout(cancelRequest, observationId ? 310000 : provider === 'jpl' ? 330000 : provider === 'skybot' ? 100000 : 90000);
     return fetch(requestUrl, options)
       .then(function (httpResponse) {
         return httpResponse.json();
@@ -806,7 +876,7 @@
       });
   }
 
-  if (typeof module !== 'undefined' && module.exports) module.exports = {loadLiveLookup, identifyAllVsx, openLocalStellarium, buildSatelliteComparisonHtml};
+  if (typeof module !== 'undefined' && module.exports) module.exports = {loadLiveLookup, identifyAllVsx, openLocalStellarium, buildSatelliteComparisonHtml, buildSkybotResponseHtml};
   seedButtonRenderOrder();
   SpacePixelsCatalogueComparison.initialize(document);
   seedPersistedLookupResults();
