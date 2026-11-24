@@ -13,6 +13,7 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F32](#f32-excluded-areas-for-runs-on-converted-copies) | Excluded areas for runs on converted copies | Noted 2026-11-14; to be understood first, kept for later |
 | [F33](#f33-mpc-observation-export-and-find_orb) | MPC observation export and Find_Orb | Decided 2026-11-14: Asteroids & Comets window, five stages; stage 1 done, stage 2 next |
 | [F34](#f34-moving-object-light-curves-and-rotation-periods) | Moving-object light curves and rotation periods | Decided 2026-11-14: part of F33, with JTransient MP-1 (stage 5) |
+| [F35](#f35-bayer-metadata-and-seestar-presets) | Bayer metadata (BAYERPAT, ROWORDER) and Seestar presets | Decided 2026-11-24; implementation deferred |
 
 Registration quality is owned by JTransient: [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -267,3 +268,72 @@ For faint targets offer optional non-overlapping time bins with membership and e
 A short trend may remain useful even when no period is supported. Do not force a result from a fraction of a cycle or detrend away a slow rotation. For combined nights, preserve passbands and calibration offsets, establish the target identity, and account for changing distance/phase geometry and light travel time when ephemerides support them. Keep observed UTC times intact for F33 exports; any emission-time correction is a separate analysis coordinate. [PTF rotation and phase-function study](https://arxiv.org/abs/1504.04041)
 
 **Acceptance and staging.** Begin with MP-1's simple aperture/annulus checks and a useful relative light curve, then consider period estimation separately. Period tests need single/double peaks, irregular cadence, daily aliases, partial cycles, long exposures/bins and multi-night offsets. Establish period-quality limits from those checks rather than a universal frame count. Preserve detection results and document added time/memory cost.
+
+## F35. Bayer metadata and Seestar presets
+
+**Request (2026-11-24).** Read the `BAYERPAT` and `ROWORDER` keywords wherever SpacePixels handles colour FITS, and use them when they are present. They are not in the FITS standard, but common capture and processing software writes and reads them. Add the ZWO Seestar S30, S30 Pro, S50 and S50 Pro to the camera presets.
+
+**Decision (made, 2026-11-24):** Seestar presets take the pattern from the file and supply top-down: "Agreed with your recommendation." For the import: "If we try to import RAW color frames I agree with 4." For the API and the command line: "I agree with your recommendation for 5. We should refuse RAW color from the command line if we detect it." "Agreed with 6 and 8. I agree with the proposed scope (1-6 and 8)." Colour display of raw frames in the viewers (7) is left for later. The maintainer asked to record the feature now and implement it later.
+
+### Today
+
+- **Preparation window.** **From file metadata**, the default, uses `BAYERPAT`, `ROWORDER`, `XBAYROFF` and `YBAYROFF`, and Siril reads them (`use_bayer_header=true`). A preset or **Custom** writes its choice onto the working copies, and the prepared frames drop `BAYERPAT` and the offsets. The gaps:
+  - The camera interpretation starts empty. **Monochrome** on frames that carry `BAYERPAT` fails only once preparation runs ("CFA metadata was found").
+  - A FITS colour mosaic without `ROWORDER` keeps the window unready until Top-down or Bottom-up is chosen under the advanced options. Every Seestar file is such a mosaic.
+  - The readiness summary says "Resolve from metadata" and "From metadata", not the values.
+- **Everywhere else the keywords are not read.**
+  - The main window loads raw single-plane 16-bit frames as monochrome, without a question. When the quality check finds them misaligned, **Align with Siril** prepares them as Monochrome and fails with "CFA metadata was found".
+  - The API and `spacepixels-batch` accept them as monochrome.
+  - **Convert to Mono** skips them as "already mono", and **Batch Stretch** writes stretched mosaics.
+  - Detection would run on the undebayered mosaic, whose colour phases differ by 25–50% in sky level on the sessions below.
+
+### Seestar files
+
+- **Headers.** The maintainer's two Seestar sessions are both from an S30 Pro: M 45 (IR-cut filter, 304 × 10 s, firmware 8.46) and M16 (LP filter, 95 × 20 s, firmware 7.75).
+  - Both are 2160 × 3840 unsigned 16-bit, with `BAYERPAT = 'GRBG'`, no `ROWORDER` and no offsets.
+  - The model is in `CREATOR = 'ZWO Seestar S30 Pro'`. `INSTRUME` is absent (8.46) or the sensor name `'imx585'` (7.75).
+  - The S50 writes `CREATOR = 'ZWO Seestar S50'` and `INSTRUME = 'Seestar S50'`, kept in prepared S50 frames.
+- **Row order, measured.** In a raw frame the two green pixels of each 2 × 2 cell read alike. The medians of the four stored phases (row parity, column parity) were taken in a central window. The diagonal pair (0,0) and (1,1) agreed within 0.1% in both sessions, and the other pair differed by 25–50%. So the greens start on the first stored row, and the header's GRBG is read top-down, as Siril reads it by default when `ROWORDER` is missing.
+- **Other models, from published reports only.**
+  - The S30 writes GRBG and no `ROWORDER` ([Astro Pixel Processor forum](https://www.astropixelprocessor.com/community/rfcs-request-for-changes/seestar-s30-wrong-bayer-pattern-when-using-pattern-supported/), [blog](https://x-bit-astro-imaging.blogspot.com/2026/06/imaging-sun-with-dwarf-mini-smartscope.html?m=0)).
+  - The S50 writes GRBG ([AAVSO](https://archive.aavso.org/node/90658)). The BGGR some S50 users report is the same layout read bottom-up, for an even number of rows.
+  - The S50 Pro was released in August 2026 with a new sensor whose maker ZWO has not named ([ZWO](https://www.zwoastro.com/2026/08/25/seestar-s50-pro-now-available-50mm-aperture-revealing-more-of-the-universe/), [Astronomy.com](https://www.astronomy.com/observing/zwo-unveils-the-seestar-s50-pro/)). No file has been seen.
+  - Top-down is therefore unverified for the S30, S50 and S50 Pro. Check it with the same green-pair test when raw frames are available.
+
+### Agreed design
+
+1. **Seestar presets.** Four entries take the pattern and offsets from the file (every Seestar writes `BAYERPAT`) and supply top-down, listed as "ZWO Seestar S30 Pro — pattern from file, top-down".
+   - `CameraBayerPreset` now ties a metadata pattern to metadata row order, in `rowOrder()` and `toString()`. The preparation service already accepts a metadata pattern with an explicit row order and writes `ROWORDER` onto the working copies.
+   - A file without `BAYERPAT` gets the existing "pattern could not be resolved" message.
+2. **Choices filled from the headers after Inspect.**
+   - When the kept lights carry `BAYERPAT`, select **Colour (Bayer CFA)**.
+   - When `CREATOR` (or else `INSTRUME`) names a Seestar model, select its preset. Match the whole model name, so that S30 does not match S30 Pro.
+   - Fill them only while the observer has not chosen. Both stay editable, and a change invalidates the recipe confirmation, as now.
+3. **The readiness summary shows the resolved values and their source.**
+   - For example: "Bayer: GRBG (from the files) · Rows: top-down (Seestar S30 Pro preset; the files have no ROWORDER) · Offsets: 0, 0 (from the files)". For camera RAW: "decoded by Siril during conversion".
+   - A preset or **Custom** that differs from the files' `BAYERPAT`, `ROWORDER` or offsets adds a warning line, such as "The files say GRBG; RGGB overrides them". It does not block.
+4. **Main window import.** When the single-plane lights carry `BAYERPAT`, say so first: "These are raw colour (Bayer GRBG) exposures. Detection needs them calibrated, debayered and registered."
+   - The options are **Prepare observing session…** (opens the preparation window on the folder), **Import as monochrome anyway** and **Cancel**.
+   - When the quality check offers **Align with Siril**, it prepares colour frames as **Colour (Bayer CFA)**, with the file's pattern and the camera's row order. It is not offered while the row order is unknown.
+5. **The API and `spacepixels-batch` refuse raw colour frames.** The message names the pattern and points to preparation. This changes the accepted inputs: document it in API.md, the manual and the release notes.
+6. **Convert to Mono and Batch Stretch** say when the frames are raw colour and point to the preparation window, instead of skipping them as mono or writing stretched mosaics.
+7. **Left for later:** showing raw colour frames in colour in the viewers.
+8. **Each prepared frame records the interpretation** in its `HISTORY`, for example "SpacePixels preparation: Bayer GRBG (from the files), top-down (Seestar S30 Pro preset), offsets 0, 0". `preparation.json` already records it as `resolvedCfa`.
+
+**One reader.** A single header reader in `fits` decides what a raw colour mosaic is, and returns the pattern, row order, offsets and camera name. Preparation inspection, the import, the API and command line, and the batch operations all use it.
+- A raw colour mosaic has one image plane and a non-blank `BAYERPAT`.
+- A tile-compressed file is counted from `ZNAXIS`, as the preparation inventory does.
+- A three-plane file is never a mosaic, whatever its cards say.
+
+**Documentation.** Update MANUAL.md (preparing, import and the command line), API.md, and `docs/features/preparation-integrations.md` (the preset references and the green-pair measurement). Also update HIGH_LEVEL_DESIGN.md, whose sentence "a camera model never determines file row order" no longer holds for the Seestar presets.
+
+**Checks.**
+- **Unit tests:** the preset entries, and a metadata pattern with an explicit row order through the preparation service. The header reader, with one and three planes, compressed files, and missing or blank cards. Inspection's choices and the readiness text, including the warning. The import question, the API and command-line refusal, and Convert to Mono and Batch Stretch.
+- **GUI mechanics:** the preparation window's choices on a synthetic Seestar-like folder.
+- **Real data:**
+  - Prepare both S30 Pro sessions with the Seestar preset and with **Custom** GRBG, top-down. The outputs must be pixel-identical, and only the `HISTORY` text may differ.
+  - Import a raw session in the window, and run `spacepixels-batch` on it.
+
+**Open points.**
+- Whether **Align with Siril** should be offered in the raw colour question itself.
+- Whether the command line needs a way to accept a monochrome sequence that wrongly carries `BAYERPAT`. None is planned.
