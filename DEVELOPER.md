@@ -22,6 +22,7 @@ Machine-specific paths (tools, test datasets, scratch folders, memory limits) ar
 - [Design patterns in use](#design-patterns-in-use)
 - [How to add](#how-to-add)
 - [Working rules](#working-rules)
+  - [Writing the user documentation](#writing-the-user-documentation)
 - [Build and run](#build-and-run)
   - [Dependencies](#dependencies)
   - [Windows installer](#windows-installer)
@@ -136,6 +137,18 @@ These apply to everyone, including coding agents.
 - **Keep documentation current in the same change:** behaviour in MANUAL.md, design in this guide or HIGH_LEVEL_DESIGN.md, and pending work only in DESIGN-IMPROVEMENTS.md or FEATURE-REQUESTS.md. When an item is done, describe the result and remove the item; git history keeps the record.
 - **Experiment documentation:** default to a short decision, limitation or next step. Publish detailed protocols, result tables and experiment histories only when the maintainer explicitly asks. Keep algorithm references focused on current behavior; include research only when needed to explain a current design or limitation, without dataset-specific diaries. Existing evidence archives may remain linked separately.
 - **Diagnostic programs** go in a scratch folder outside the repository, never in it.
+
+### Writing the user documentation
+
+The README, the MANUAL and the website are read by astrophotographers, most of them not programmers. They should be able to read them with pleasure and understand them the first time.
+
+- **Lead with what the user can do,** in the order of the README's *Features for Your Observing Session*, kept the same in the MANUAL and on the website. For each feature: what it is for, how it works in a few sentences, the steps, what the result looks like, and its settings with their defaults.
+- **Plain words.** Short sentences, one idea to a paragraph, everyday words before technical ones. Explain a term the first time it appears, as the README does for "digital tracking, also called shift-and-stack". Name each control and menu exactly as the window shows it, in bold.
+- **Say what was measured, and no more.** No selling words ("powerful", "seamless"). Give numbers with their scope: which data, which version, which hardware, and what the number includes. A finding is a candidate for review, never a confirmed object or discovery. Say what has been tested and what has not.
+- **The README is brief, the MANUAL complete.** The README says what SpacePixels does, shows the main features, and says how to install and start. Every setting, limit, output and workflow belongs in the MANUAL, which the README links to.
+- **Every picture shows the feature and says what it is.** Prefer a real report or session. Label results from injected artificial stars or other test data as such in the caption. A caption says what to look at.
+- **Nothing private or incidental.** No dataset paths, local folder names or machine details in the text, the captions or the pictures (paths belong only in `LOCAL-ENVIRONMENT.txt`). Never the observer's coordinates (see *Working rules*).
+- **Keep the links working.** The application opens MANUAL sections by their heading's anchor: the Prepare Frames panel (checked by `PreparationPanelTest`) and the sky viewer. The website and the README link to them too. When a heading changes, update those links, and check that every image exists and every anchor resolves.
 
 ## Build and run
 
