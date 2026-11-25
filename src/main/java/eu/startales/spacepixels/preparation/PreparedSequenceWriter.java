@@ -132,8 +132,7 @@ public final class PreparedSequenceWriter {
             outputHeader.addValue("SPORIGIN", frame.original().getFileName().toString(), "Original exposure filename");
             Path output = folder.resolve(String.format(java.util.Locale.ROOT, "frame_%06d.fit", i + 1));
             try (Fits fits = FitsPixelConverter.createFitsFromData(pixels, outputHeader)) {
-                // The converter copies only the first card of each key, so the HISTORY cards go on the written header,
-                // complete with their continuation cards.
+                // Append SpacePixels' preparation HISTORY lines after the copied source header cards.
                 Header published = fits.getHDU(0).getHeader();
                 published.insertHistory("SpacePixels preparation: RGB mean; common image-data scaling; zero registration fill preserved.");
                 for (String line : interpretation) published.insertHistory("SpacePixels preparation: " + line);

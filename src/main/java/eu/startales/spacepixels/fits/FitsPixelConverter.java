@@ -39,8 +39,10 @@ public final class FitsPixelConverter {
     }
 
     /**
-     * Wraps converted pixels in a new FITS with the original's non-structural cards. A non-zero {@code addedOffset} is
-     * added to any offset the original already records, so the header always holds the total.
+     * Wraps converted pixels in a new FITS with the original's non-structural cards. Commentary cards ({@code HISTORY},
+     * {@code COMMENT} and blank-keyword cards) are copied every time they occur, in order; keyword cards keep the first
+     * occurrence. A non-zero {@code addedOffset} is added to any offset the original already records, so the header
+     * always holds the total.
      */
     public static Fits createFitsFromData(Object newData, Header originalHeader, int addedOffset) throws FitsException, IOException {
         Fits updatedFits = new Fits();
@@ -63,10 +65,12 @@ public final class FitsPixelConverter {
             HeaderCard card = originalCursor.next();
             String key = card.getKey();
 
-            if (key != null && !structuralKeys.contains(key) && !newHeader.containsKey(key)
+            if (isCommentaryCard(card)) {
+                newHeader.addLine(card.copy());
+            } else if (key != null && !structuralKeys.contains(key) && !newHeader.containsKey(key)
                     && !(monochromeFromColour && bayerKeys.contains(key))
                     && !(addedOffset > 0 && ADDED_OFFSET_KEY.equals(key))) {
-                newHeader.addLine(card);
+                newHeader.addLine(card.copy());
             }
         }
 
@@ -79,6 +83,14 @@ public final class FitsPixelConverter {
         }
 
         return updatedFits;
+    }
+
+    /** FITS commentary cards (HISTORY, COMMENT and blank-keyword cards) may repeat and carry no key-value binding. */
+    private static boolean isCommentaryCard(HeaderCard card) {
+        String key = card.getKey();
+        return card.isCommentStyleCard()
+                && key != null
+                && (key.isEmpty() || "HISTORY".equals(key) || "COMMENT".equals(key));
     }
 
     /** Whether the stored values can stand for pixels below zero once BZERO and BSCALE are applied. */

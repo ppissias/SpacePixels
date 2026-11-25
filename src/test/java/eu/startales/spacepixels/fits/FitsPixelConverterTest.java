@@ -179,6 +179,56 @@ public class FitsPixelConverterTest {
     }
 
     @Test
+    public void createFitsFromDataPreservesRepeatedCommentaryCardsAndKeepsFirstKeyword() throws Exception {
+        Header original = Fits.makeHDU(new short[2][2]).getHeader();
+        original.addValue("OBJECT", "M31", "first object card");
+        original.insertComment("FITS (Flexible Image Transport System) format is defined in 'Astronomy");
+        original.insertComment("and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H");
+        original.insertHistory("Step 1: calibrated");
+        original.insertHistory("Step 2: long preparation provenance that exceeds a single 72-character FITS HISTORY card line cleanly");
+        original.addLine(nom.tam.fits.HeaderCard.createUnkeyedCommentCard("Unkeyed provenance note"));
+        original.addLine(nom.tam.fits.HeaderCard.createUnkeyedCommentCard("Second unkeyed note"));
+        original.addLine(nom.tam.fits.HeaderCard.createCommentStyleCard("", ""));
+        original.addLine(nom.tam.fits.HeaderCard.createCommentStyleCard("CUSTOM", "first custom note"));
+
+        java.nio.file.Path file = java.nio.file.Files.createTempFile("spacepixels-f36-", ".fit");
+        try {
+            try (Fits converted = FitsPixelConverter.createFitsFromData(new short[2][2], original)) {
+                converted.write(file.toFile());
+            }
+            try (Fits readBack = new Fits(file.toFile())) {
+                Header header = readBack.getHDU(0).getHeader();
+                assertEquals("M31", header.getStringValue("OBJECT"));
+                assertEquals(1, countCards(header, "OBJECT"));
+                assertEquals(1, countCards(header, "CUSTOM"));
+                assertEquals("first custom note", header.findCard("CUSTOM").getComment());
+
+                java.util.List<String> comments = new java.util.ArrayList<>();
+                java.util.List<String> history = new java.util.ArrayList<>();
+                java.util.List<String> blank = new java.util.ArrayList<>();
+                nom.tam.util.Cursor<String, nom.tam.fits.HeaderCard> cursor = header.iterator();
+                while (cursor.hasNext()) {
+                    nom.tam.fits.HeaderCard card = cursor.next();
+                    if ("COMMENT".equals(card.getKey())) comments.add(card.getComment());
+                    else if ("HISTORY".equals(card.getKey())) history.add(card.getComment());
+                    else if ("".equals(card.getKey())) blank.add(card.getComment() == null ? "" : card.getComment());
+                }
+
+                assertEquals(java.util.List.of(
+                        "FITS (Flexible Image Transport System) format is defined in 'Astronomy",
+                        "and Astrophysics', volume 376, page 359; bibcode: 2001A&A...376..359H"), comments);
+                assertTrue("Expected initial HISTORY plus wrapped continuation cards, got " + history, history.size() >= 3);
+                assertEquals("Step 1: calibrated", history.get(0));
+                String joinedHistory = String.join("", history).replace("&", "").replace(" ", "");
+                assertTrue(joinedHistory, joinedHistory.contains("Step2:longpreparationprovenancethatexceedsasingle72-characterFITSHISTORYcardlinecleanly"));
+                assertEquals(java.util.List.of("Unkeyed provenance note", "Second unkeyed note", ""), blank);
+            }
+        } finally {
+            java.nio.file.Files.deleteIfExists(file);
+        }
+    }
+
+    @Test
     public void createFitsFromDataAddsTheOffsetToOneAlreadyRecorded() throws Exception {
         Header original = Fits.makeHDU(new short[2][2]).getHeader();
         original.addValue(FitsPixelConverter.ADDED_OFFSET_KEY, 30, null);

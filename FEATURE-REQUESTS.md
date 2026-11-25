@@ -14,7 +14,6 @@ A request is a proposal until the maintainer decides on it. A settled choice is 
 | [F33](#f33-mpc-observation-export-and-find_orb) | MPC observation export and Find_Orb | Decided 2026-11-14: Asteroids & Comets window, five stages; stage 1 done, stage 2 next |
 | [F34](#f34-moving-object-light-curves-and-rotation-periods) | Moving-object light curves and rotation periods | Decided 2026-11-14: part of F33, with JTransient MP-1 (stage 5) |
 | [F35](#f35-raw-colour-frames-in-the-viewers) | Raw colour frames in the viewers | Left for later (2026-11-24); the rest of the Bayer-metadata request is implemented |
-| [F36](#f36-converted-fits-keep-only-the-first-card-of-each-key) | Converted FITS keep only the first card of each key (bug) | Noted 2026-11-24; fix to be decided |
 
 Registration quality is owned by JTransient: [registration quality](../JTransient/FEATURE-REQUESTS.md#pt-5-registration-quality-and-shared-jitter-tolerances). ST-7 is closed: the maintainer confirmed that the [existing single faint-streak retention](../JTransient/ALGORITHM.md#135-faint-streak-search), using the shared elongation/size and shape checks, meets the request; no separate threshold is needed. The requested [plain-English scientific photometry overview](../JTransient/ALGORITHM.md#photometry-in-plain-english) is now in the algorithm reference. Application settings, reports and callers must follow any agreed engine changes in the same work.
 
@@ -278,13 +277,3 @@ A short trend may remain useful even when no period is supported. Do not force a
 - Whether **Align with Siril** should be offered in the raw colour question itself.
 - Whether the command line needs a way to accept a monochrome sequence that wrongly carries `BAYERPAT`. None is planned. SpacePixels' own monochrome copies of colour images no longer carry the card.
 - The S30, S50 and S50 Pro row order has not been checked on raw frames. Check it with the green-pair test in [preparation integrations](docs/features/preparation-integrations.md) when frames are available.
-
-## F36. Converted FITS keep only the first card of each key
-
-**Bug (found 2026-11-24, while implementing F35).** `FitsPixelConverter.createFitsFromData` copies a source card only when its key is not yet in the new header. So every repeated card after the first is dropped: further `HISTORY` and `COMMENT` cards, and the continuation of a long `HISTORY` text. Pixels are not affected.
-
-- **Where.** Every conversion that writes through it: the import conversions (`_16bit_converted`, `_16bit_mono`, `_16bit_color`), the API's automatic preparation, **Convert to Mono**, and the prepared frames of **Prepare Frames…**.
-- **Seen in real data.** In frames prepared from Siril output, the second line of Siril's standard two-line `COMMENT` was missing. SpacePixels' own preparation `HISTORY` stopped at "zero reg&".
-- **Already fixed for one case.** With F35, the prepared frames add their own `HISTORY` cards to the written header, so those are now complete. Cards from the source are still cut.
-- **Proposed fix.** Copy commentary cards (`HISTORY`, `COMMENT` and blank keywords) every time they occur, in order, and keep the first-wins rule for keyword cards. This changes the headers of every converted file, so it needs the maintainer's decision.
-- **Check.** A unit test with repeated `HISTORY` and `COMMENT` cards. On real data, convert one session both ways: pixels and keyword cards must be identical, and only commentary cards may be added.
