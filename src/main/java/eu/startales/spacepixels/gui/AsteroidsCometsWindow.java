@@ -114,8 +114,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JButton itfButton = new JButton("Check MPC ITF…");
     /** The running Identify all or MPC ITF check, while its button reads Cancel; null otherwise. EDT only. */
     private SwingWorker<?, ?> identifyWorker, itfWorker;
-    /** The running light-curve and sub-stack measurements, while their buttons read Cancel; null otherwise. EDT only. */
+    /** The running light-curve and sub-stack measurements, while their Cancel buttons are shown; null otherwise. EDT only. */
     private SwingWorker<?, ?> curveWorker, subStackWorker;
+    /** Object IDs currently being measured by {@link #curveWorker} and {@link #subStackWorker}. EDT only. */
+    private String curveTargetId, subStackTargetId;
+    /** Objects whose automatic sub-stack or light-curve measurement has already been started in this window. EDT only. */
+    private final Set<String> autoSubStackTried = new java.util.HashSet<>(), autoCurveTried = new java.util.HashSet<>();
+    /** Objects whose last sub-stack or light-curve measurement failed or was cancelled (offers Retry). EDT only. */
+    private final Set<String> subStackNeedsRetry = new java.util.HashSet<>(), curveNeedsRetry = new java.util.HashSet<>();
     /** The full result of the last Compare again, Identify all or MPC ITF check, which the ⓘ link shows; null before one. */
     private String comparisonDetails;
     private final JButton detailsLink = AccessibleControls.link("ⓘ", "Details of the last comparison", this::showComparisonDetails);
@@ -613,10 +619,17 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         buttons.add(spread);
         buttons.add(all);
         buttons.add(none);
-        measureButton.setToolTipText("Stacks the frames in three independent groups along the faint mover's motion and measures "
-                + "its centroid in each, for the MPC (noted K, stacked)");
-        measureButton.addActionListener(e -> measureSubStacks());
-        measureButton.setEnabled(false);
+        measureButton.setToolTipText("Cancel or retry stacking the frames in three independent groups along the faint mover's motion");
+        measureButton.addActionListener(e -> {
+            if (subStackWorker != null) {
+                subStackWorker.cancel(true);
+            } else if (shown != null) {
+                autoSubStackTried.remove(shown.id());
+                subStackNeedsRetry.remove(shown.id());
+                measureSubStacks(shown);
+            }
+        });
+        measureButton.setVisible(false);
         buttons.add(measureButton);
         fitLabel.setForeground(UiStyle.helpColor());
         buttons.add(fitLabel);
@@ -629,12 +642,19 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
 
     /** The light curve of the shown object: measure, summary, plot and CSV. */
     private JComponent lightCurvePanel() {
-        curveButton.setToolTipText("Measures the object's light in every frame with aperture photometry (1.5 FWHM, sky from 3 to "
-                + "5 FWHM), corrected with comparison stars from the sky catalogue when there are enough; with too few, fainter "
-                + "Gaia stars are fetched for this window");
+        curveButton.setToolTipText("Cancel or retry measuring the object's light curve across the session");
         binChoice.setToolTipText("Averages consecutive frames: less noise for a faint object, but a change faster than a bin is smoothed away");
         binChoice.addActionListener(e -> updateCurve());
-        curveButton.addActionListener(e -> measureLightCurve());
+        curveButton.addActionListener(e -> {
+            if (curveWorker != null) {
+                curveWorker.cancel(true);
+            } else if (shown != null) {
+                autoCurveTried.remove(shown.id());
+                curveNeedsRetry.remove(shown.id());
+                measureLightCurve(shown);
+            }
+        });
+        curveButton.setVisible(false);
         curveSaveButton.addActionListener(e -> saveCurve());
         curveSaveButton.setEnabled(false);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
@@ -653,19 +673,21 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return panel;
     }
 
-    /** Measures the shown object's light in each frame on a worker, with the comparison stars, and keeps the curve. */
-    private void measureLightCurve() {
-        if (curveWorker != null) {
-            curveWorker.cancel(true);
-            return;
-        }
-        var object = shown;
+    /** Measures {@code object}'s light in each frame on a worker, with the comparison stars, and keeps the curve. */
+    private void measureLightCurve(ReportedObjects.ReportedObject object) {
         if (object == null || object.positions().isEmpty()) return;
+        if (curveWorker != null) {
+            if (object.id().equals(curveTargetId)) return;
+            curveWorker.cancel(true);
+        }
+        autoCurveTried.add(object.id());
+        curveNeedsRetry.remove(object.id());
+        curveTargetId = object.id();
         double fwhm = LightCurve.fwhm(report, object);
         var samples = LightCurve.samples(report, object);
         double speed = LightCurve.pixelsPerMinute(object, samples);
-        curveButton.setText("Cancel light curve");
-        curveLabel.setText("Measuring " + object.id() + " in " + samples.size() + " frames…");
+        updateAutoMeasureButtons();
+        if (shown == object) curveLabel.setText("Measuring " + object.id() + "'s light curve in " + samples.size() + " frames…");
         curveWorker = new SwingWorker<LightCurve.Curve, String>() {
             @Override protected LightCurve.Curve doInBackground() throws Exception {
                 LightCurve.Frames frames = AsteroidsCometsWindow.this::readFrame;
@@ -706,11 +728,20 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
 
             @Override protected void done() {
-                if (curveWorker == this) curveWorker = null;
+                if (curveWorker == this) {
+                    curveWorker = null;
+                    curveTargetId = null;
+                }
                 if (closed) return;
-                curveButton.setText("Measure light curve");
                 if (isCancelled()) {
-                    curveLabel.setText(object.id() + "'s light curve was cancelled.");
+                    if (shown == object) {
+                        curveNeedsRetry.add(object.id());
+                        curveLabel.setText(object.id() + "'s light curve was cancelled.");
+                    } else {
+                        // Cancelled automatically when switching to another object: allow auto-measure if selected again.
+                        autoCurveTried.remove(object.id());
+                    }
+                    updateAutoMeasureButtons();
                     return;
                 }
                 try {
@@ -722,9 +753,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     }
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
-                    curveLabel.setText(object.id() + "'s light curve could not be measured: " + cause.getMessage());
+                    curveNeedsRetry.add(object.id());
+                    updateAutoMeasureButtons();
+                    if (shown == object) curveLabel.setText(object.id() + "'s light curve could not be measured: " + cause.getMessage());
                     return;
                 }
+                updateAutoMeasureButtons();
                 if (shown == object) updateCurve();
             }
         };
@@ -763,10 +797,16 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         curveSaveButton.setEnabled(curve != null);
         if (shown == null) { curveLabel.setText(" "); return; }
         if (curve == null) {
-            curveLabel.setHtml("Measure light curve measures " + shown.id() + "'s light in each frame"
-                    + (shown.measured() ? "" : " at its fitted positions; a faint mover's single-frame values are noisy")
-                    + (catalogue == null ? ". Without a sky catalogue the curve is not corrected for transparency." : ".")
-                    + catalogueWarning());
+            if (curveWorker != null && shown.id().equals(curveTargetId)) {
+                curveLabel.setText("Measuring " + shown.id() + "'s light curve…");
+            } else if (subStackWorker != null && shown.id().equals(subStackTargetId)) {
+                curveLabel.setText("Measuring " + shown.id() + " in sub-stacks first; light curve starts next…");
+            } else {
+                curveLabel.setHtml(shown.id() + "'s light curve is measured automatically when selected"
+                        + (shown.measured() ? "" : " (at its fitted positions; single-frame faint-mover values are noisy)")
+                        + (catalogue == null ? ". Without a sky catalogue the curve is not corrected for transparency." : ".")
+                        + catalogueWarning());
+            }
             return;
         }
         int size = binSize();
@@ -1058,12 +1098,63 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             identificationMatchesModel.setRows(List.of());
             updateIdentificationTableSizes();
             updateIdentificationLinks(null);
+            updateAutoMeasureButtons();
             return;
         }
-        measureButton.setEnabled(subStackWorker != null || !object.measured() && object.motion() != null && reduction.reduction() != null);
+        // Cancel any background sub-stack or light-curve measurement left over from a previously selected object.
+        if (subStackWorker != null && !object.id().equals(subStackTargetId)) {
+            subStackWorker.cancel(true);
+        }
+        if (curveWorker != null && !object.id().equals(curveTargetId)) {
+            curveWorker.cancel(true);
+        }
+        boolean needsSubStacks = !object.measured()
+                && !subStacks.containsKey(object.id())
+                && !autoSubStackTried.contains(object.id())
+                && object.motion() != null
+                && reduction.reduction() != null;
+        boolean needsCurve = !curves.containsKey(object.id())
+                && !autoCurveTried.contains(object.id())
+                && !object.positions().isEmpty();
+        if (needsSubStacks) {
+            measureSubStacks(object);
+            updateCurve();
+        } else if (needsCurve && subStackWorker == null) {
+            measureLightCurve(object);
+        }
+        updateAutoMeasureButtons();
         updateIdentificationTables(object);
         updateIdentificationLinks(object);
         loadPictures(object);
+    }
+
+    /** Shows Cancel only while a measurement is running, Retry only after cancellation/failure, and hides both when idle. */
+    private void updateAutoMeasureButtons() {
+        if (subStackWorker != null) {
+            measureButton.setText("Cancel sub-stacks");
+            measureButton.setVisible(true);
+            measureButton.setEnabled(true);
+        } else if (shown != null && !shown.measured() && !subStacks.containsKey(shown.id())
+                && subStackNeedsRetry.contains(shown.id()) && shown.motion() != null && reduction.reduction() != null) {
+            measureButton.setText("Retry sub-stacks");
+            measureButton.setVisible(true);
+            measureButton.setEnabled(true);
+        } else {
+            measureButton.setVisible(false);
+        }
+
+        if (curveWorker != null) {
+            curveButton.setText("Cancel light curve");
+            curveButton.setVisible(true);
+            curveButton.setEnabled(true);
+        } else if (shown != null && !curves.containsKey(shown.id())
+                && curveNeedsRetry.contains(shown.id()) && !shown.positions().isEmpty()) {
+            curveButton.setText("Retry light curve");
+            curveButton.setVisible(true);
+            curveButton.setEnabled(true);
+        } else {
+            curveButton.setVisible(false);
+        }
     }
 
     /** Prevents programmatic {@code setText} updates on bottom text areas from scrolling the outer right pane down. */
@@ -1165,8 +1256,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         if (!object.measured()) {
             var stacks = subStacks.get(object.id());
             if (stacks == null) {
-                rows.add(new String[]{"Sub-stacks", "Fitted only — click Measure in sub-stacks (" + SUB_STACKS
-                        + " independent groups) to measure for the MPC."});
+                if (subStackWorker != null && object.id().equals(subStackTargetId)) {
+                    rows.add(new String[]{"Sub-stacks", "Measuring in " + SUB_STACKS + " independent sub-stacks…"});
+                } else if (reduction.reduction() == null) {
+                    rows.add(new String[]{"Sub-stacks", "Plate solution needed before measuring sub-stacks."});
+                } else {
+                    rows.add(new String[]{"Sub-stacks", "Not measured (" + SUB_STACKS + " independent sub-stacks)."});
+                }
             } else {
                 var sb = new StringBuilder();
                 for (int k = 0; k < stacks.size(); k++) {
@@ -1973,7 +2069,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
             if (allSited.size() < 3) {
                 orbitLabel.setHtml(escape("An orbit needs at least three selected observations of " + shown.id()
-                        + (shown.measured() ? "." : " (use Measure in sub-stacks first).")));
+                        + (shown.measured() ? "." : " (wait for sub-stack measurement to finish).")));
                 return;
             }
             final int totalNights = nights;
@@ -2032,7 +2128,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         int nights = siteIssue == null ? 1 + (int) others.stream().filter(o -> !o.observations().isEmpty()).count() : 1;
         if (all.size() < 3) {
             orbitLabel.setHtml(escape("An orbit needs at least three selected observations of " + shown.id()
-                    + (shown.measured() ? "." : " (use Measure in sub-stacks first).")));
+                    + (shown.measured() ? "." : " (wait for sub-stack measurement to finish).")));
             return;
         }
         if (siteIssue != null) problemsArea.setText(siteIssue + " The orbit uses this night only.");
@@ -2879,13 +2975,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      * Reads the faint mover's frames once, cutting one region around its whole path from each, and measures it in
      * independent sub-stacks on a worker; the centroids become its observations, noted K.
      */
-    private void measureSubStacks() {
-        if (subStackWorker != null) {
-            subStackWorker.cancel(true);
-            return;
-        }
-        var object = shown;
+    private void measureSubStacks(ReportedObjects.ReportedObject object) {
         if (object == null || object.motion() == null || reduction.reduction() == null) return;
+        if (subStackWorker != null) {
+            if (object.id().equals(subStackTargetId)) return;
+            subStackWorker.cancel(true);
+        }
+        autoSubStackTried.add(object.id());
+        subStackNeedsRetry.remove(object.id());
         var motion = object.motion();
         double fwhm = report.faintMoverFwhm() == null ? 3 : report.faintMoverFwhm();
         int margin = (int) Math.ceil(Math.max(10, 5 * fwhm)) + 4;
@@ -2895,11 +2992,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         int width = (int) Math.ceil(positions.stream().mapToDouble(ReportedObjects.Position::x).max().orElse(0)) + margin - x0;
         int height = (int) Math.ceil(positions.stream().mapToDouble(ReportedObjects.Position::y).max().orElse(0)) + margin - y0;
         if ((long) width * height * positions.size() * 2 > MAX_SUB_STACK_BYTES) {
+            subStackNeedsRetry.add(object.id());
+            updateAutoMeasureButtons();
             problemsArea.setText(object.id() + "'s path is too long to stack here (" + width + " × " + height + " px over "
                     + positions.size() + " frames).");
             return;
         }
-        measureButton.setText("Cancel sub-stacks");
+        subStackTargetId = object.id();
+        updateAutoMeasureButtons();
         problemsArea.setText("Measuring " + object.id() + " in " + SUB_STACKS + " sub-stacks…");
         subStackWorker = new SwingWorker<List<SubStackAstrometry.Measurement>, Void>() {
             private final List<Integer> frameIndexes = new ArrayList<>();
@@ -2925,12 +3025,21 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
 
             @Override protected void done() {
-                if (subStackWorker == this) subStackWorker = null;
+                if (subStackWorker == this) {
+                    subStackWorker = null;
+                    subStackTargetId = null;
+                }
                 if (closed) return;
-                measureButton.setText("Measure in sub-stacks");
                 if (isCancelled()) {
-                    problemsArea.setText("Measuring " + object.id() + " in sub-stacks was cancelled.");
-                    if (shown != null) show(shown);
+                    if (shown == object) {
+                        subStackNeedsRetry.add(object.id());
+                        problemsArea.setText("Measuring " + object.id() + " in sub-stacks was cancelled.");
+                        updateIdentificationTables(object);
+                    } else {
+                        // Cancelled automatically when switching to another object: allow auto-measure if selected again.
+                        autoSubStackTried.remove(object.id());
+                    }
+                    updateAutoMeasureButtons();
                     return;
                 }
                 try {
@@ -2952,8 +3061,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     problemsArea.setText(" ");
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
+                    subStackNeedsRetry.add(object.id());
                     problemsArea.setText(object.id() + " could not be measured: " + cause.getMessage());
                 }
+                updateAutoMeasureButtons();
                 refreshObjects();
                 if (shown == object) show(object);
                 refreshExport();

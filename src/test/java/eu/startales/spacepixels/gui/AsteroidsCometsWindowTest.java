@@ -127,11 +127,16 @@ public class AsteroidsCometsWindowTest {
             // Find_Orb shows its program path ("Not set" initially), executable hint, and updates orbit status right in its section.
             assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("Program: Not set"))));
             assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("fo64.exe") && l.getText().contains("fo32.exe"))));
-            onEdt(() -> { objects.setRowSelectionInterval(1, 1); button(window, "Compute orbit").doClick(); return null; });
-            assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("needs at least three selected observations of FM1"))));
+            // Selecting faint mover FM1 automatically loads review assets and measures both sub-stacks and its light curve.
+            onEdt(() -> { objects.setRowSelectionInterval(1, 1); return null; });
             waitFor("FM1 frames and faint-mover assets loaded", () -> onEdt(() -> button(window, "Residual & stack").isVisible()));
             assertTrue(onEdt(() -> button(window, "Residual & stack").isSelected()));
-            onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
+            waitFor("FM1 sub-stacks measured automatically", () -> onEdt(() -> tableContains(idTable, "#1 ·")));
+            waitFor("FM1 light curve measured automatically", () -> onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("FM1 · 5 frames ·"))));
+            // Clearing FM1's selected observations and clicking Compute orbit reports the minimum-observation message.
+            onEdt(() -> { button(window, "None").doClick(); button(window, "Compute orbit").doClick(); return null; });
+            assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("needs at least three selected observations of FM1"))));
+            onEdt(() -> { button(window, "All").doClick(); objects.setRowSelectionInterval(0, 0); return null; });
             assertFalse("T1 track hides faint-mover Residual & stack toggle", onEdt(() -> button(window, "Residual & stack").isVisible()));
 
             // Unticking an observation keeps the table and the selected object (once it emptied the table).
@@ -174,8 +179,7 @@ public class AsteroidsCometsWindowTest {
             assertTrue("saved beside the report", new File(reportFolder, eu.startales.spacepixels.mpc.LaterIdentifications.FILE_NAME).isFile());
             onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
 
-            // A light curve, then the same curve in bins of 2.
-            onEdt(() -> { button(window, "Measure light curve").doClick(); return null; });
+            // T1's light curve is also measured automatically when selected, then switched to bins of 2.
             waitFor("the light curve", () -> onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("T1 · 5 frames ·"))));
             JLabel curveLabel = onEdt(() -> labelContaining(window, "T1 · 5 frames ·"));
             assertTrue(onEdt(curveLabel::getText), onEdt(curveLabel::getText).contains("uncorrected"));
@@ -308,8 +312,11 @@ public class AsteroidsCometsWindowTest {
         for (int k = 0; k < 5; k++) {
             short[][] pixels = new short[96][96];
             double ox = 30 + 4 * k, oy = 40;
+            double fx = 60, fy = 30 + 3 * k;
             for (int y = 0; y < 96; y++) for (int x = 0; x < 96; x++) {
-                double value = 1000 + 10 * random.nextGaussian() + 2000 * Math.exp(-((x - ox) * (x - ox) + (y - oy) * (y - oy)) / (2 * sigma * sigma));
+                double value = 1000 + 10 * random.nextGaussian()
+                        + 2000 * Math.exp(-((x - ox) * (x - ox) + (y - oy) * (y - oy)) / (2 * sigma * sigma))
+                        + 400 * Math.exp(-((x - fx) * (x - fx) + (y - fy) * (y - fy)) / (2 * sigma * sigma));
                 pixels[y][x] = io.github.ppissias.jtransient.core.PixelEncoding.fromShiftedPositiveInt((int) Math.round(value));
             }
             try (Fits fits = new Fits()) {

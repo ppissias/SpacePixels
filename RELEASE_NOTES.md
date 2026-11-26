@@ -69,6 +69,7 @@
 - **Synchronized faint-mover residual and shift stack.** For faint movers with saved report review assets, **Residual & stack** (on by default) displays the synchronized **PSF-filtered residual** (with an adjustable **Residual ±** scale) and the **Whole-session shift stack** beside the source frames.
 - **Loading progress and cache.** Reading an object's frames shows a determinate progress bar and current filename in the animation panel; loaded objects stay cached while the window is open so switching back is immediate.
 - **MPC Isolated Tracklet File (ITF) check.** **Check MPC ITF…** in **Asteroids & Comets** downloads and caches the MPC's public `itf.txt.gz` archive on demand (with conditional `If-Modified-Since` updates) and streams it offline in a few seconds to show which unmatched tracks are already reported to the MPC as unlinked tracklets on the same night and which unlinked tracklets on nearby nights (±15 days) match their linear motion.
+- **Automatic sub-stack & light-curve measurement and review layout.** Selecting an object in **Asteroids & Comets** now automatically measures faint-mover sub-stacks and per-frame light curves in the background (with **Cancel** while running and **Retry** only if cancelled or failed). **Identification** displays matches in structured tables, all three main panes resize freely, and the right pane opens scrolled to **Before you report**.
 
 ### Reports, SkyBoT lookups and FITS handling
 
