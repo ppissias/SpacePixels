@@ -120,5 +120,6 @@
   "faintMoverMaxSeconds": 600.0,
   "autoTuneMaxCandidateFrames": 30,
   "variableStarMaxCandidateCards": 40,
-  "variableStarSortOrder": "OBSERVED_CHANGES"
+  "variableStarSortOrder": "OBSERVED_CHANGES",
+  "faintMoverAutoMaxSpeed": true
 }

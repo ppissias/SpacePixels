@@ -85,7 +85,28 @@ public class SpacePixelsDetectionProfileIOTest {
         }
         assertEquals(SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, shipped.getAutoTuneMaxCandidateFrames());
         assertEquals(VariableStarReportOptions.DEFAULT, shipped.getVariableStarReportOptions());
+        assertEquals(SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED, shipped.isFaintMoverAutoMaxSpeed());
         assertFalse(SpacePixelsDetectionProfileIO.needsMigration(new StringReader(json)));
+    }
+
+    /** Automatic faint-mover fastest motion defaults on for older profiles, round-trips explicitly, and rejects non-booleans. */
+    @Test
+    public void faintMoverAutoMaxSpeedDefaultsRoundTripsAndValidates() throws Exception {
+        var old = SpacePixelsDetectionProfileIO.load(new StringReader("{\"detectionSigmaMultiplier\":6.5}"));
+        assertTrue(old.isFaintMoverAutoMaxSpeed());
+
+        StringWriter out = new StringWriter();
+        SpacePixelsDetectionProfileIO.write(out, new SpacePixelsDetectionProfile(
+                old.getDetectionConfig(), 30, VariableStarReportOptions.DEFAULT, false));
+        assertTrue(out.toString().contains("\"faintMoverAutoMaxSpeed\": false"));
+        var loaded = SpacePixelsDetectionProfileIO.load(new StringReader(out.toString()));
+        assertFalse(loaded.isFaintMoverAutoMaxSpeed());
+        assertFalse(SpacePixelsDetectionProfileIO.needsMigration(new StringReader(out.toString())));
+
+        try {
+            SpacePixelsDetectionProfileIO.load(new StringReader("{\"faintMoverAutoMaxSpeed\":\"yes\"}"));
+            org.junit.Assert.fail("Invalid boolean accepted");
+        } catch (java.io.IOException expected) { }
     }
 
     @Test

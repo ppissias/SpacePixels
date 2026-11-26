@@ -83,6 +83,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private volatile DetectionConfig jTransientConfig;
     private volatile int autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+    private volatile boolean faintMoverAutoMaxSpeed = SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED;
     // The visualization settings in use: the values of the visualization page and the variable-star report
     // presentation, which is saved with the detection profile. Runs capture it when they start; viewers draw with it.
     private VisualizationSettings visualization = VisualizationSettings.defaults();
@@ -93,8 +94,9 @@ public class DetectionConfigurationPanel extends JPanel {
     private JSpinner spinDetectionSigma, spinMinPixels, spinGrowSigma;
     private JCheckBox chkEnableSlowMovers;
     private JCheckBox chkEnableFaintMovers;
-    private JSpinner spinFaintMoverMinMotion, spinFaintMoverMaxSpeed;
-    private WrappingHelpLabel faintMoverMinInfo, faintMoverMaxInfo;
+    private JCheckBox chkFaintMoverAutoMaxSpeed;
+    private JSpinner spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, spinFaintMoverTimeLimit;
+    private WrappingHelpLabel faintMoverMinInfo, faintMoverAutoInfo, faintMoverMaxInfo, faintMoverTimeInfo;
     private WrappingHelpLabel faintMoverGpuStatus;
     private JLabel faintMoverEstimate;
     private SwingWorker<GpuDiagnostics.ProbeSummary, Void> faintMoverGpuProbeWorker;
@@ -192,6 +194,7 @@ public class DetectionConfigurationPanel extends JPanel {
     // Last saved state, for the unsaved-changes indicator and Revert.
     private DetectionConfig savedConfig;
     private int savedAutoTuneMaxCandidateFrames;
+    private boolean savedFaintMoverAutoMaxSpeed = SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED;
     private VisualizationSettings savedVisualization;
     private String savedSnapshot;
     private boolean suppressAutoApply;
@@ -604,7 +607,8 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private void rememberSavedState() {
-        rememberSavedState(new SpacePixelsDetectionProfile(jTransientConfig.clone(), autoTuneMaxCandidateFrames, reportOptions()),
+        rememberSavedState(new SpacePixelsDetectionProfile(jTransientConfig.clone(), autoTuneMaxCandidateFrames,
+                        reportOptions(), faintMoverAutoMaxSpeed),
                 SpacePixelsVisualizationPreferences.of(visualization), navigator.captureSavedState());
     }
 
@@ -612,6 +616,7 @@ public class DetectionConfigurationPanel extends JPanel {
                                     Runnable savedRows) {
         savedConfig = profile.getDetectionConfig().clone();
         savedAutoTuneMaxCandidateFrames = profile.getAutoTuneMaxCandidateFrames();
+        savedFaintMoverAutoMaxSpeed = profile.isFaintMoverAutoMaxSpeed();
         savedVisualization = preferences.applyTo(VisualizationSettings.defaults())
                 .withVariableStarReportOptions(profile.getVariableStarReportOptions());
         savedSnapshot = snapshot(profile, preferences);
@@ -620,7 +625,8 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     private String currentSnapshot() {
-        return snapshot(new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames, reportOptions()),
+        return snapshot(new SpacePixelsDetectionProfile(jTransientConfig, autoTuneMaxCandidateFrames,
+                        reportOptions(), faintMoverAutoMaxSpeed),
                 SpacePixelsVisualizationPreferences.of(visualization));
     }
 
@@ -655,6 +661,7 @@ public class DetectionConfigurationPanel extends JPanel {
             return;
         }
         jTransientConfig = savedConfig.clone();
+        faintMoverAutoMaxSpeed = savedFaintMoverAutoMaxSpeed;
         visualization = savedVisualization;
         // The visualization controls first: applying the detection settings applies every control.
         updateVisualizationSpinners();
@@ -724,11 +731,12 @@ public class DetectionConfigurationPanel extends JPanel {
                 SpacePixelsDetectionProfile detectionProfile = SpacePixelsDetectionProfileIO.load(reader);
                 jTransientConfig = detectionProfile.getDetectionConfig();
                 autoTuneMaxCandidateFrames = detectionProfile.getAutoTuneMaxCandidateFrames();
+                faintMoverAutoMaxSpeed = detectionProfile.isFaintMoverAutoMaxSpeed();
                 visualization = visualization.withVariableStarReportOptions(detectionProfile.getVariableStarReportOptions());
                 try (FileReader migrationReader = new FileReader(profileToLoad)) {
                     if (SpacePixelsDetectionProfileIO.needsMigration(migrationReader)) {
                         SpacePixelsDetectionProfile migrationProfile = new SpacePixelsDetectionProfile(jTransientConfig.clone(),
-                                autoTuneMaxCandidateFrames, reportOptions());
+                                autoTuneMaxCandidateFrames, reportOptions(), faintMoverAutoMaxSpeed);
                         SwingUtilities.invokeLater(() -> offerDetectionProfileMigration(profileToLoad, migrationProfile));
                     }
                 } catch (Exception e) {
@@ -741,6 +749,7 @@ public class DetectionConfigurationPanel extends JPanel {
         }
         jTransientConfig = new DetectionConfig();
         autoTuneMaxCandidateFrames = SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES;
+        faintMoverAutoMaxSpeed = SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED;
         visualization = visualization.withVariableStarReportOptions(VariableStarReportOptions.DEFAULT);
     }
 
@@ -795,12 +804,13 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private void savePersistedSettings() {
         if (closing.getAsBoolean() || !saveButton.isEnabled()) return;
-        DetectionConfig settings = checkedSettings("Not saved.");
+        DetectionConfig settings = checkedSettingsForSave("Not saved.");
         if (settings == null) {
             return;
         }
 
-        SpacePixelsDetectionProfile profile = new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames, reportOptions());
+        SpacePixelsDetectionProfile profile = new SpacePixelsDetectionProfile(settings, autoTuneMaxCandidateFrames,
+                reportOptions(), faintMoverAutoMaxSpeed);
         SpacePixelsVisualizationPreferences preferences = SpacePixelsVisualizationPreferences.of(visualization);
         Runnable savedRows = navigator.captureSavedState();
         ProcessingSession expectedSession = sessions.current();
@@ -831,6 +841,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private void loadDetectionDefaults() {
         jTransientConfig = new DetectionConfig();
+        faintMoverAutoMaxSpeed = SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED;
         visualization = visualization.withVariableStarReportOptions(VariableStarReportOptions.DEFAULT);
         updateSpinnersFromConfig(jTransientConfig);
         overviewPanel.forgetTunedValues();
@@ -838,12 +849,30 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /**
-     * The detection settings for a save or a run starting now: a copy of the session settings, hidden settings
-     * included, so later edits cannot change that run. When a field holds invalid text or the settings break a rule
-     * of the shared engine rules, nothing is copied: this tab shows why, starting with {@code refusedAction}
-     * (for example "Detect Moving Targets did not start."), the cursor goes into the field, and the result is null.
+     * The detection settings for a run starting now: a copy of the session settings, hidden settings included, with
+     * automatic faint-mover fastest motion resolved for the loaded session when enabled, so later edits cannot change
+     * that run. Returns {@code null} when a field holds invalid text or breaks a shared engine rule.
      */
     DetectionConfig checkedSettings(String refusedAction) {
+        DetectionConfig resolved = checkedSettingsForSave(refusedAction);
+        if (resolved == null) {
+            return null;
+        }
+        if (faintMoverAutoMaxSpeed) {
+            var owner = sessions.current();
+            var files = owner == null ? new FitsFileInformation[0] : owner.getFiles();
+            double starSize = faintMoverStarSize(owner);
+            int maxMotions = effectiveFaintMoverMaxMotions(resolveFaintMoverGpuStatus());
+            var auto = FaintMoverRuntimeEstimate.autoMaxSpeed(files, resolved, starSize, maxMotions);
+            if (auto != null) {
+                resolved.faintMoverMaxSpeedPixelsPerMinute = auto.speedPixelsPerMinute();
+            }
+        }
+        return resolved;
+    }
+
+    /** Validates and applies all controls, returning the raw stored {@link DetectionConfig} without session-specific auto overrides. */
+    private DetectionConfig checkedSettingsForSave(String refusedAction) {
         JSpinner invalid = invalidInputToShow();
         if (invalid != null) {
             showThisTab.run();
@@ -932,9 +961,9 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** The row of a setting on a detailed page, or null for a core setting on the Overview. */
-    private SettingRow rowOf(JSpinner spinner) {
+    private SettingRow rowOf(JComponent input) {
         for (SettingRow row : settingRows) {
-            if (row.input == spinner) {
+            if (row.input == input) {
                 return row;
             }
         }
@@ -1574,6 +1603,13 @@ public class DetectionConfigurationPanel extends JPanel {
         addSettingRow(panel, FaintMoversSettings.MIN_DISPLACEMENT.id(), FaintMoversSettings.MIN_DISPLACEMENT.title(),
                 FaintMoversSettings.MIN_DISPLACEMENT.help(), false, spinFaintMoverMinMotion);
         faintMoverMinInfo = addFaintMoverMotionInfo(spinFaintMoverMinMotion, "Slowest motion equivalents");
+        chkFaintMoverAutoMaxSpeed = addApplicationCheckbox(panel, reportBindings,
+                "faintMoverAutoMaxSpeed", "Automatic fastest motion (2 FWHM/frame)",
+                "Set the fastest searched motion automatically to the point-search limit (2 star widths per exposure), "
+                        + "clamped safely below the active CPU/GPU motion cap so short exposures do not skip. "
+                        + "Untick to enter a fixed manual speed below.",
+                false, () -> faintMoverAutoMaxSpeed, value -> faintMoverAutoMaxSpeed = value);
+        faintMoverAutoInfo = addFaintMoverMotionInfo(chkFaintMoverAutoMaxSpeed, "Automatic fastest motion status");
         spinFaintMoverMaxSpeed = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSpeedPixelsPerMinute), Double.MIN_VALUE, Double.MAX_VALUE, 0.001));
         registerTypedBinding(FaintMoversSettings.MAX_SPEED, spinFaintMoverMaxSpeed, () -> {
             double displayed = ((Number) spinFaintMoverMaxSpeed.getValue()).doubleValue();
@@ -1585,14 +1621,15 @@ public class DetectionConfigurationPanel extends JPanel {
         JSpinner score = addTypedDouble(panel, FaintMoversSettings.MIN_SCORE, Double.MIN_VALUE, Double.MAX_VALUE, 0.5);
         JCheckBox frameLimit = addTypedCheckbox(panel, FaintMoversSettings.FRAME_LIMIT);
         JComboBox<Integer> speed = addTypedChoice(panel, FaintMoversSettings.SEARCH_SPEED, FAINT_MOVER_SPEEDS);
-        JSpinner time = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSeconds / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
-        registerTypedBinding(FaintMoversSettings.TIME_LIMIT, time, () -> {
-            double displayed = ((Number) time.getValue()).doubleValue();
+        spinFaintMoverTimeLimit = createSpinner(doubleSpinnerModel(faintMoverDisplayNumber(jTransientConfig.faintMoverMaxSeconds / 60), Double.MIN_VALUE, Double.MAX_VALUE, 0.01));
+        registerTypedBinding(FaintMoversSettings.TIME_LIMIT, spinFaintMoverTimeLimit, () -> {
+            double displayed = ((Number) spinFaintMoverTimeLimit.getValue()).doubleValue();
             double current = jTransientConfig.faintMoverMaxSeconds;
             return storedFromDisplay(displayed, current, v -> v / 60, v -> v * 60);
-        }, value -> setSpinnerValueClamped(time, faintMoverDisplayNumber(value / 60)));
-        addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), FaintMoversSettings.TIME_LIMIT.title(), FaintMoversSettings.TIME_LIMIT.help(), false, time);
-        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, spinFaintMoverMaxSpeed, score, frameLimit, speed, time);
+        }, value -> setSpinnerValueClamped(spinFaintMoverTimeLimit, faintMoverDisplayNumber(value / 60)));
+        addSettingRow(panel, FaintMoversSettings.TIME_LIMIT.id(), FaintMoversSettings.TIME_LIMIT.title(), FaintMoversSettings.TIME_LIMIT.help(), false, spinFaintMoverTimeLimit);
+        faintMoverTimeInfo = addFaintMoverMotionInfo(spinFaintMoverTimeLimit, "Time limit warning");
+        showOnlyWhen(chkEnableFaintMovers, spinFaintMoverMinMotion, chkFaintMoverAutoMaxSpeed, spinFaintMoverMaxSpeed, score, frameLimit, speed, spinFaintMoverTimeLimit);
         faintMoverGpuStatus = new WrappingHelpLabel("", 560).fillParentWidth();
         faintMoverGpuStatus.setForeground(UiStyle.helpColor());
         faintMoverGpuStatus.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(4), 0, UiStyle.space(4), 0));
@@ -1609,7 +1646,7 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** Adds wrapping unit/rate information below a motion control without widening the shared input column. */
-    private WrappingHelpLabel addFaintMoverMotionInfo(JSpinner input, String name) {
+    private WrappingHelpLabel addFaintMoverMotionInfo(JComponent input, String name) {
         var info = new WrappingHelpLabel("", 160);
         info.getAccessibleContext().setAccessibleName(name);
         ((SettingsRowPanel) rowOf(input).row).setAccessory(info);
@@ -1686,22 +1723,51 @@ public class DetectionConfigurationPanel extends JPanel {
             } finally { suppressAutoApply = previous; }
         }
         double minimumRate = session.hasSpan() ? jTransientConfig.faintMoverMinDisplacementFwhm / displacementScale : Double.NaN;
-        double maximumRate = jTransientConfig.faintMoverMaxSpeedPixelsPerMinute;
         String rateUnit = Double.isFinite(faintMoverAngularScale) ? "arcsec/min" : "px/min";
         faintMoverMinInfo.setText("<html>" + (session.hasSpan() ? rateUnit + " (est.)<br>"
                 + faintMoverRate(minimumRate, "px/min", true) : "FWHM/session<br>Session times unavailable")
                 + "<br>Minimum: 2 FWHM/session</html>");
-        boolean belowSlowest = Double.isFinite(minimumRate) && !(maximumRate > minimumRate);
         GpuDiagnostics.ResolvedStatus gpuStatus = resolveFaintMoverGpuStatus();
         int maxMotions = effectiveFaintMoverMaxMotions(gpuStatus);
         double timeLimitSeconds = jTransientConfig.faintMoverMaxSeconds;
         double gpuSpeedup = effectiveFaintMoverGpuSpeedup(gpuStatus);
         updateFaintMoverGpuStatusLabel(gpuStatus);
-        var limit = FaintMoverRuntimeEstimate.motionLimit(files, jTransientConfig, starSize, maxMotions);
+
+        boolean autoEnabled = faintMoverAutoMaxSpeed;
+        spinFaintMoverMaxSpeed.setEnabled(!autoEnabled);
+        var autoSpeed = autoEnabled ? FaintMoverRuntimeEstimate.autoMaxSpeed(files, jTransientConfig, starSize, maxMotions) : null;
+        DetectionConfig effectiveConfig = jTransientConfig;
+        if (autoSpeed != null) {
+            effectiveConfig = jTransientConfig.clone();
+            effectiveConfig.faintMoverMaxSpeedPixelsPerMinute = autoSpeed.speedPixelsPerMinute();
+        }
+        double maximumRate = effectiveConfig.faintMoverMaxSpeedPixelsPerMinute;
+        if (faintMoverAutoInfo != null) {
+            if (!autoEnabled) {
+                faintMoverAutoInfo.setText("<html>Manual fastest motion below is used</html>");
+            } else if (autoSpeed == null) {
+                faintMoverAutoInfo.setText("<html>Import frames with exposure times to compute 2 FWHM/frame; manual speed below is used as fallback</html>");
+            } else {
+                String activeText = "Active: " + shortRate(autoSpeed.speedPixelsPerMinute() * maximumScale, rateUnit)
+                        + (Double.isFinite(faintMoverAngularScale)
+                        ? " (" + shortRate(autoSpeed.speedPixelsPerMinute(), "px/min") + ")" : "");
+                String detailText = autoSpeed.cappedByMotionLimit()
+                        ? String.format(java.util.Locale.ROOT, "<br>Capped below %,d-motion limit (2 FWHM/frame would be %s)",
+                                autoSpeed.maxMotions(), shortRate(autoSpeed.pointSpeedPixelsPerMinute() * maximumScale, rateUnit))
+                        : String.format(java.util.Locale.ROOT, "<br>At point-search limit (%.0f star widths/frame)",
+                                FaintMoverRuntimeEstimate.POINT_TRAIL_FWHM);
+                faintMoverAutoInfo.setText("<html>" + activeText + detailText + "</html>");
+            }
+        }
+
+        boolean belowSlowest = Double.isFinite(minimumRate) && !(maximumRate > minimumRate);
+        var limit = FaintMoverRuntimeEstimate.motionLimit(files, effectiveConfig, starSize, maxMotions);
         boolean tooFast = !belowSlowest && limit != null && limit.exceeded();
-        var trail = FaintMoverRuntimeEstimate.trail(files, jTransientConfig, starSize);
-        faintMoverMaxInfo.setText("<html>" + rateUnit + (Double.isFinite(faintMoverAngularScale)
-                ? "<br>" + faintMoverRate(maximumRate, "px/min", false) : "<br>No usable WCS")
+        var trail = FaintMoverRuntimeEstimate.trail(files, effectiveConfig, starSize);
+        faintMoverMaxInfo.setText("<html>" + rateUnit
+                + (autoEnabled ? " (manual fallback)" : "")
+                + (Double.isFinite(faintMoverAngularScale)
+                ? "<br>" + faintMoverRate(maximumRate, "px/min", autoSpeed != null) : "<br>No usable WCS")
                 + (belowSlowest ? "<br>Not above the slowest (est.): the run skips the search" : "")
                 + (tooFast ? "<br><font color='" + warningHex() + "'>Over the search limit (est.): the run skips the search. "
                         + "Highest ≈ " + shortRate(limit.highestSpeedPixelsPerMinute() * maximumScale, rateUnit) + "</font>" : "")
@@ -1711,11 +1777,28 @@ public class DetectionConfigurationPanel extends JPanel {
                         + shortRate(trail.pointSpeedPixelsPerMinute() * maximumScale, rateUnit)
                         + String.format(java.util.Locale.ROOT, " (%.0f star widths) much of a trail's light is lost</font>",
                         FaintMoverRuntimeEstimate.POINT_TRAIL_FWHM) : "") + "</html>");
+        if (faintMoverTimeInfo != null) {
+            var assessment = FaintMoverRuntimeEstimate.timeAssessment(files, effectiveConfig, starSize,
+                    maxMotions, timeLimitSeconds, gpuSpeedup);
+            if (assessment != null && assessment.likelyToExceed()) {
+                faintMoverTimeInfo.setText("<html><font color='" + warningHex() + "'>Likely to exceed limit (est. "
+                        + assessment.rangeText() + "): search may stop with partial coverage</font></html>");
+            } else if (assessment != null && assessment.mayExceed()) {
+                faintMoverTimeInfo.setText("<html><font color='" + warningHex() + "'>May approach or exceed limit (est. "
+                        + assessment.rangeText() + ")</font></html>");
+            } else {
+                faintMoverTimeInfo.setText("");
+            }
+        }
         spinFaintMoverMinMotion.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MIN_DISPLACEMENT.help()
                 + " " + faintMoverMinInfo.getText().replaceAll("<[^>]*>", " "));
         spinFaintMoverMaxSpeed.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.MAX_SPEED.help()
                 + " " + faintMoverMaxInfo.getText().replaceAll("<[^>]*>", " "));
-        faintMoverEstimate.setText(faintMoverEstimateText(files, starSize, maxMotions, timeLimitSeconds, gpuSpeedup));
+        if (spinFaintMoverTimeLimit != null && faintMoverTimeInfo != null) {
+            spinFaintMoverTimeLimit.getAccessibleContext().setAccessibleDescription(FaintMoversSettings.TIME_LIMIT.help()
+                    + " " + faintMoverTimeInfo.getText().replaceAll("<[^>]*>", " "));
+        }
+        faintMoverEstimate.setText(faintMoverEstimateText(files, effectiveConfig, starSize, maxMotions, timeLimitSeconds, gpuSpeedup));
     }
 
     /** Re-evaluates faint-mover compute status and runtime estimates after Astrometry/GPU config changes. */
@@ -1833,11 +1916,11 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /** Shows concise metadata-based runtime, memory, and pixel-scale guidance. */
-    private String faintMoverEstimateText(FitsFileInformation[] files, double starSize,
+    private String faintMoverEstimateText(FitsFileInformation[] files, DetectionConfig effectiveConfig, double starSize,
                                           int maxMotions, double timeLimitSeconds, double gpuSpeedup) {
         String scaleNote = !Double.isFinite(faintMoverAngularScale) ? "No usable WCS (using pixel rates)."
                 : String.format(java.util.Locale.ROOT, "WCS scale: %.4f″/px.", faintMoverAngularScale);
-        return "<html>" + FaintMoverRuntimeEstimate.describe(files, jTransientConfig, starSize,
+        return "<html>" + FaintMoverRuntimeEstimate.describe(files, effectiveConfig, starSize,
                 maxMotions, timeLimitSeconds, gpuSpeedup) + " " + scaleNote + "</html>";
     }
 

@@ -28,6 +28,31 @@ public final class FaintMoverRuntimeEstimate {
     public static final int MAX_MOTIONS = FaintMoverSearch.MAX_MOTIONS;
     /** The most first-pass trial motions when running the coarse pass on OpenCL ({@code FaintMoverSearch.MAX_MOTIONS_GPU}). */
     public static final int MAX_MOTIONS_GPU = FaintMoverSearch.MAX_MOTIONS_GPU;
+    /**
+     * Safety fraction of the active motion cap used by automatic fastest-motion sizing so small shifts in measured
+     * seeing or kept frame count do not push the run over the cap and skip the search.
+     */
+    public static final double AUTO_MAX_SPEED_MOTION_CAP_FRACTION = 0.90;
+
+    /**
+     * Automatic fastest motion for a session: {@link #POINT_TRAIL_FWHM} star widths per median exposure, clamped to
+     * stay within {@link #AUTO_MAX_SPEED_MOTION_CAP_FRACTION} of the active motion cap when session timing is known.
+     */
+    public record AutoMaxSpeed(double speedPixelsPerMinute, double pointSpeedPixelsPerMinute,
+                               boolean cappedByMotionLimit, int maxMotions) { }
+
+    /**
+     * Estimated runtime of the currently selected search speed compared against the configured time limit.
+     * {@code likelyToExceed} is true when the central estimate itself exceeds the limit; {@code mayExceed} is true
+     * when the upper range (2× the central estimate) exceeds the limit while the central estimate stays within it.
+     */
+    public record TimeAssessment(double estimatedSeconds, double lowSeconds, double highSeconds,
+                                 double timeLimitSeconds, boolean likelyToExceed, boolean mayExceed) {
+        /** Human-readable range string (0.5× to 2× the estimate) in minutes. */
+        public String rangeText() {
+            return minutes(estimatedSeconds);
+        }
+    }
 
     /**
      * The trial motions the fastest motion needs for these frames and the fastest motion that stays within
@@ -163,6 +188,58 @@ public final class FaintMoverRuntimeEstimate {
     }
 
     /**
+     * Computes the automatic fastest motion ({@link #POINT_TRAIL_FWHM} star widths per median exposure) for these
+     * frames, clamped to {@link #AUTO_MAX_SPEED_MOTION_CAP_FRACTION} of {@code maxMotions} when session timing is
+     * usable so short-exposure sessions do not skip the search. Returns {@code null} without positive exposure times.
+     */
+    public static AutoMaxSpeed autoMaxSpeed(FitsFileInformation[] files, DetectionConfig config,
+                                            double measuredStarSize, int maxMotions) {
+        Trail trail = trail(files, config, measuredStarSize);
+        if (trail == null) return null;
+        double pointSpeed = trail.pointSpeedPixelsPerMinute();
+        if (!Double.isFinite(pointSpeed) || pointSpeed <= 0) return null;
+        int capMotions = Math.max(1, maxMotions);
+        var session = importedSession(files);
+        if (session.unavailableReason() == null && session.frames() >= 8 && session.hasSpan()) {
+            double fwhm = Double.isFinite(measuredStarSize) && measuredStarSize > 0 ? measuredStarSize : ASSUMED_FWHM_PIXELS;
+            double step = fwhm / session.halfSpanMinutes();
+            double min = config.faintMoverMinDisplacementFwhm * fwhm / session.spanMinutes();
+            double capSpeed = Math.sqrt(AUTO_MAX_SPEED_MOTION_CAP_FRACTION * capMotions * step * step / Math.PI + min * min);
+            if (Double.isFinite(capSpeed) && capSpeed > 0 && pointSpeed > capSpeed) {
+                return new AutoMaxSpeed(capSpeed, pointSpeed, true, capMotions);
+            }
+        }
+        return new AutoMaxSpeed(pointSpeed, pointSpeed, false, capMotions);
+    }
+
+    /**
+     * Assesses whether the currently selected search speed is likely to exceed {@code timeLimitSeconds}. Returns
+     * {@code null} when timing is unavailable, fewer than 8 frames exist, or the motion cap itself is exceeded.
+     */
+    public static TimeAssessment timeAssessment(FitsFileInformation[] files, DetectionConfig config,
+                                                double measuredStarSize, int maxMotions,
+                                                double timeLimitSeconds, double gpuSpeedup) {
+        var session = importedSession(files);
+        if (session.unavailableReason() != null || session.frames() < 8 || !session.hasSpan()) return null;
+        double fwhm = Double.isFinite(measuredStarSize) && measuredStarSize > 0 ? measuredStarSize : ASSUMED_FWHM_PIXELS;
+        double maxSpeed = config.faintMoverMaxSpeedPixelsPerMinute;
+        double step = fwhm / session.halfSpanMinutes();
+        double min = config.faintMoverMinDisplacementFwhm * fwhm / session.spanMinutes();
+        double motions = Math.PI * Math.max(0, maxSpeed * maxSpeed - min * min) / (step * step);
+        if (motions > maxMotions) return null;
+        int selected = Math.max(0, Math.min(SPEED_NAMES.length - 1, config.faintMoverSearchSpeed));
+        double pixels = (double) files[0].getSizeWidth() * files[0].getSizeHeight();
+        double coarseFactor = Double.isFinite(gpuSpeedup) && gpuSpeedup > 0 ? 1.0 / gpuSpeedup : 1.0;
+        double seconds = estimateSeconds(selected, fwhm, session, maxSpeed, motions, pixels, coarseFactor);
+        double low = seconds * 0.5;
+        double high = seconds * 2.0;
+        boolean hasLimit = Double.isFinite(timeLimitSeconds) && timeLimitSeconds > 0;
+        boolean likely = hasLimit && seconds > timeLimitSeconds;
+        boolean may = hasLimit && !likely && high > timeLimitSeconds;
+        return new TimeAssessment(seconds, low, high, timeLimitSeconds, likely, may);
+    }
+
+    /**
      * Estimates the additional time of each search speed from headers and the star size using CPU defaults.
      */
     public static String describe(FitsFileInformation[] files, DetectionConfig config, double measuredStarSize) {
@@ -171,7 +248,7 @@ public final class FaintMoverRuntimeEstimate {
 
     /**
      * Estimates the additional time of each search speed from headers, star size, active motion limit and optional
-     * measured GPU speedup.
+     * measured GPU speedup, including a timeout warning when the selected speed is likely to exceed the limit.
      */
     public static String describe(FitsFileInformation[] files, DetectionConfig config, double measuredStarSize,
                                   int maxMotions, double timeLimitSeconds, double gpuSpeedup) {
@@ -188,11 +265,11 @@ public final class FaintMoverRuntimeEstimate {
         double pixels = (double) files[0].getSizeWidth() * files[0].getSizeHeight();
         double coarseFactor = Double.isFinite(gpuSpeedup) && gpuSpeedup > 0 ? 1.0 / gpuSpeedup : 1.0;
         StringBuilder times = new StringBuilder();
+        double[] speedSeconds = new double[SPEED_NAMES.length];
         for (int speed = 0; speed < SPEED_NAMES.length; speed++) {
             int[] shape = FaintMoverSearch.coarseSearchShape(speed, fwhm, session.midMinutes(), maxSpeed);
-            double coarseSeconds = (shape[0] == 1 ? FULL_ADD_SECONDS : BINNED_ADD_SECONDS) * motions * shape[1] * pixels
-                    / (shape[0] * shape[0]) * coarseFactor;
-            double seconds = coarseSeconds + PREPARE_SECONDS * n * pixels;
+            double seconds = estimateSeconds(shape, n, motions, pixels, coarseFactor);
+            speedSeconds[speed] = seconds;
             times.append(speed == 0 ? "" : " · ").append(SPEED_NAMES[speed]).append(' ').append(minutes(seconds));
             if (shape[0] > 1 || shape[1] < n) {
                 times.append(" (").append(shape[0] > 1 ? shape[0] + "×" + shape[0] + " pixels" : "")
@@ -211,12 +288,39 @@ public final class FaintMoverRuntimeEstimate {
         int selected = Math.max(0, Math.min(SPEED_NAMES.length - 1, config.faintMoverSearchSpeed));
         double margin = Math.ceil(maxSpeed * halfSpan) + 16;
         double mib = Math.pow(512 + 2 * margin, 2) * (4 * n + 12) / (1024 * 1024);
-        return String.format(Locale.ROOT,
+        String base = String.format(Locale.ROOT,
                 "Approximate extra time: %s. Selected: %s (limit %.1f min, ~%.0f MiB per search worker). "
                         + "Based on %d frames over %.1f min and %s (seeing, masks and kept frames vary actual time).",
                 times, SPEED_NAMES[selected], timeLimitSeconds / 60, mib, n, span,
                 measured ? String.format(Locale.ROOT, "%.2f px the last detection run measured", fwhm)
                         : "assumed " + fwhm + " px star size");
+        double selectedSeconds = speedSeconds[selected];
+        if (Double.isFinite(timeLimitSeconds) && timeLimitSeconds > 0) {
+            if (selectedSeconds > timeLimitSeconds) {
+                return base + String.format(Locale.ROOT,
+                        "<br><b>Warning:</b> Estimated time (%s) is likely to exceed the %.1f min time limit; the search may stop early with partial coverage. "
+                                + "Raise the time limit, use a faster Search speed, lower Fastest motion, or enable GPU acceleration.",
+                        minutes(selectedSeconds), timeLimitSeconds / 60.0);
+            }
+            if (selectedSeconds * 2.0 > timeLimitSeconds) {
+                return base + String.format(Locale.ROOT,
+                        "<br><b>Note:</b> Estimated time (%s) may approach or exceed the %.1f min time limit depending on seeing and kept frames.",
+                        minutes(selectedSeconds), timeLimitSeconds / 60.0);
+            }
+        }
+        return base;
+    }
+
+    private static double estimateSeconds(int speed, double fwhm, ImportedSession session, double maxSpeed,
+                                          double motions, double pixels, double coarseFactor) {
+        int[] shape = FaintMoverSearch.coarseSearchShape(speed, fwhm, session.midMinutes(), maxSpeed);
+        return estimateSeconds(shape, session.frames(), motions, pixels, coarseFactor);
+    }
+
+    private static double estimateSeconds(int[] shape, int frames, double motions, double pixels, double coarseFactor) {
+        double coarseSeconds = (shape[0] == 1 ? FULL_ADD_SECONDS : BINNED_ADD_SECONDS) * motions * shape[1] * pixels
+                / (shape[0] * shape[0]) * coarseFactor;
+        return coarseSeconds + PREPARE_SECONDS * frames * pixels;
     }
 
     /** A time range from half to twice the estimate, in minutes. */
