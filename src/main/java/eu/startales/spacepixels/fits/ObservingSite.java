@@ -19,11 +19,11 @@ public record ObservingSite(double latitudeDeg, double longitudeDeg, double alti
 
     /**
      * Header cards for the latitude, longitude and altitude, in order of preference, as capture programs, the FITS
-     * standard and professional pipelines (OBSLAT/OBSLON/OBSALT, for example the Zwicky Transient Facility) write
-     * them. Longitudes are east-positive in all of them.
+     * standard and professional pipelines (OBSLAT/OBSLON/OBSALT, for example the Zwicky Transient Facility, and
+     * LATITUDE/LONGITUD, for example CFHT MegaCam) write them. Longitudes are east-positive in all of them.
      */
-    public static final List<String> LATITUDE_KEYS = List.of("SITELAT", "OBSGEO-B", "LAT-OBS", "OBSLAT");
-    public static final List<String> LONGITUDE_KEYS = List.of("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS", "OBSLON");
+    public static final List<String> LATITUDE_KEYS = List.of("SITELAT", "OBSGEO-B", "LAT-OBS", "OBSLAT", "LATITUDE");
+    public static final List<String> LONGITUDE_KEYS = List.of("SITELONG", "SITELON", "OBSGEO-L", "LONG-OBS", "LON-OBS", "OBSLON", "LONGITUD");
     public static final List<String> ALTITUDE_KEYS = List.of("SITEELEV", "OBSGEO-H", "OBSALT", "ALT-OBS", "ELEVATIO");
 
     /**

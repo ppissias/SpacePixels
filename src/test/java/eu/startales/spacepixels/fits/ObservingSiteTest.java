@@ -78,6 +78,25 @@ public class ObservingSiteTest {
         assertNull(ObservingSite.fromConfiguration("37.9", null));
     }
 
+    /** Archives such as CFHT MegaCam write LATITUDE and LONGITUD (east-positive) without an altitude card. */
+    @Test
+    public void readsLatitudeAndLongitudFallbackCards() {
+        FitsFileInformation cfht = frame(Map.of("LATITUDE", "19.825252", "LONGITUD", "-155.468876"));
+        ObservingSite site = ObservingSite.fromHeaders(new FitsFileInformation[]{cfht});
+        assertEquals(19.825252, site.latitudeDeg(), 1e-12);
+        assertEquals(-155.468876, site.longitudeDeg(), 1e-12);
+        assertEquals(0, site.altitudeMeters(), 0);
+        assertEquals(ObservingSite.FROM_HEADER, site.source());
+
+        // More specific site keywords still win over generic LATITUDE/LONGITUD when both appear.
+        FitsFileInformation both = frame(Map.of(
+                "SITELAT", "33.3573", "SITELONG", "-116.8598",
+                "LATITUDE", "19.825252", "LONGITUD", "-155.468876"));
+        ObservingSite preferred = ObservingSite.fromHeaders(new FitsFileInformation[]{both});
+        assertEquals(33.3573, preferred.latitudeDeg(), 1e-12);
+        assertEquals(-116.8598, preferred.longitudeDeg(), 1e-12);
+    }
+
     private static FitsFileInformation frame(Map<String, String> site) {
         Map<String, String> header = new LinkedHashMap<>(site);
         header.put("NAXIS", "2");
