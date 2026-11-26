@@ -18,7 +18,7 @@ public class FindOrbTest {
               "elements": {"central body": "Sun", "frame": "J2000 ecliptic", "epoch_iso": "2022-08-24T00:00:00Z", "epoch": 2459815.5,
                 "M": 147.5649415278671, "M sigma": 120, "a": 2.3582387873187, "a sigma": 1.09, "e": 0.5497717331111, "e sigma": 0.269,
                 "q": 1.0617457621246, "q sigma": 1.45, "i": 6.0912041934883, "i sigma": 60, "arg_per": 188.5175831499691, "arg_per sigma": 60,
-                "asc_node": 352.4405741533652, "asc_node sigma": 21, "rms_residual": 0.011903, "n_resids": 12, "U": 11.6889, "p_NEO": 59.1876,
+                "asc_node": 352.4405741533652, "asc_node sigma": 21, "Tp": 2459090.125, "rms_residual": 0.011903, "n_resids": 12, "U": 11.6889, "p_NEO": 59.1876,
                 "MOIDs": {"Earth": 0.067368}},
               "observations": {"count": 2, "residuals": [
                 {"iso date": "2022-08-24T05:30:40.143Z", "obscode": "W84", "dRA": 0.00556, "dDec": 0.00206, "incl": 1},
@@ -34,6 +34,7 @@ public class FindOrbTest {
         assertEquals(0.5497717331111, orbit.e(), 0);
         assertEquals(59.1876, orbit.neoProbability(), 0);
         assertEquals(0.067368, orbit.earthMoid(), 0);
+        assertEquals(2459090.125, orbit.perihelionJd(), 0);
         assertNull("not in this result", orbit.absoluteMagnitude());
         assertEquals(2, orbit.residuals().size());
         assertTrue(orbit.residuals().get(0).used());

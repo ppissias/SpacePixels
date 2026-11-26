@@ -27,13 +27,25 @@ public final class FindOrb {
 
     /**
      * A fitted orbit: heliocentric elements in the J2000 ecliptic at {@code epochIso} (angles in degrees, distances in
-     * AU), each with its 1-sigma uncertainty where Find_Orb gives one (else null), and the fit's residuals.
+     * AU), each with its 1-sigma uncertainty where Find_Orb gives one (else null), optional perihelion passage time
+     * {@code perihelionJd} (JD, used to propagate unbound orbits), and the fit's residuals.
      */
     public record Orbit(String epochIso, double epochJd, double a, Double aSigma, double e, Double eSigma, double i, Double iSigma,
                         double ascendingNode, Double nodeSigma, double argumentOfPerihelion, Double perihelionSigma,
                         double meanAnomaly, Double meanAnomalySigma, double q, Double qSigma, Double absoluteMagnitude,
                         Double rmsArcsec, int residualCount, Double neoProbability, Double earthMoid, Double uncertainty,
-                        List<Residual> residuals, String version) {
+                        List<Residual> residuals, String version, Double perihelionJd) {
+        /** Creates an orbit without an explicit perihelion passage time. */
+        public Orbit(String epochIso, double epochJd, double a, Double aSigma, double e, Double eSigma, double i, Double iSigma,
+                     double ascendingNode, Double nodeSigma, double argumentOfPerihelion, Double perihelionSigma,
+                     double meanAnomaly, Double meanAnomalySigma, double q, Double qSigma, Double absoluteMagnitude,
+                     Double rmsArcsec, int residualCount, Double neoProbability, Double earthMoid, Double uncertainty,
+                     List<Residual> residuals, String version) {
+            this(epochIso, epochJd, a, aSigma, e, eSigma, i, iSigma, ascendingNode, nodeSigma, argumentOfPerihelion,
+                    perihelionSigma, meanAnomaly, meanAnomalySigma, q, qSigma, absoluteMagnitude, rmsArcsec,
+                    residualCount, neoProbability, earthMoid, uncertainty, residuals, version, null);
+        }
+
         /** Whether the orbit is bound (an ellipse). */
         public boolean bound() { return e < 1 && a > 0; }
     }
@@ -122,7 +134,7 @@ public final class FindOrb {
                 number(e, "q"), optional(e, "q sigma"), optional(e, "H"), optional(e, "rms_residual"),
                 e.has("n_resids") ? e.get("n_resids").getAsInt() : residuals.size(), optional(e, "p_NEO"),
                 moids == null ? null : optional(moids, "Earth"), optional(e, "U"), List.copyOf(residuals),
-                text(object, "Find_Orb_version_iso"));
+                text(object, "Find_Orb_version_iso"), optional(e, "Tp"));
     }
 
     /** An ISO time to whole seconds, so Find_Orb's rounding of milliseconds does not matter. */

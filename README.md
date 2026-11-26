@@ -1,6 +1,7 @@
 # <img src="src/main/resources/eu/startales/spacepixels/gui/icons/spacepixels-128.png" alt="" width="40" height="40" /> SpacePixels
 
-Find moving objects and brightness changes in your astrophotography exposures. SpacePixels analyzes aligned image sequences and produces an HTML report with tracks, image crops, animations and optional variable-star light curves.
+### Find moving objects and brightness changes in your astrophotography exposures. 
+SpacePixels analyzes aligned image sequences and produces an HTML report with tracks, image crops, animations and optional variable-star light curves.
 
 Use the individual exposures before stacking. Rejection during stacking can suppress moving objects and brief events; SpacePixels helps you inspect those signals. Findings are candidates for review, not automatic confirmation of an object's identity or a new discovery.
 
@@ -125,11 +126,11 @@ Examples from the [user manual](MANUAL.md) show how SpacePixels helps you inspec
 
 #### Finding Faint Movers with Digital Tracking
 
-*Experimental · Unverified candidate*
+*Experimental search · Confirmed asteroid*
 
 A moving object can be difficult to see in one exposure. Digital tracking, also called synthetic tracking or shift-and-stack, combines weak signals along trial motions so they can stand out together.
 
-This manual example compares a source exposure, a processed residual, the whole-session shift stack, and independent first/second half stacks. The processed views help inspect the candidate; the fitted path remains unverified. [Read the faint-mover guide](MANUAL.md#faint-movers-experimental).
+This manual example compares a source exposure, a processed residual, the whole-session shift stack, and independent first/second half stacks. The candidate has since been confirmed as the asteroid **74326 (1998 UU37)**, predicted magnitude 18.5. The report still calls it a possible identification, because SpacePixels never confirms an identity by itself. [Read the faint-mover guide](MANUAL.md#faint-movers-experimental).
 
 <a href="docs/images/manual/report-faint-mover.png">
   <img src="docs/images/manual/report-faint-mover.png" alt="Faint-mover report card showing source exposure, processed residual, whole-session shift stack, and first/second half stacks" width="760" />
@@ -158,7 +159,7 @@ Follow seeing, transparency and sky brightness through the session. Field maps r
 
 #### From Detection to Asteroid Follow-up
 
-Review object identifications and Gaia-based position measurements in **Asteroids & Comets**. Link observations across nights, fit preliminary orbits with Find_Orb, and prepare ADES files for the Minor Planet Center.
+In **Asteroids & Comets**, check which known object you found and measure its exact sky position in each frame against Gaia catalogue stars, which is what the Minor Planet Center needs. Link observations across nights, fit preliminary orbits with Find_Orb, and prepare the ADES file you submit.
 
 <table>
   <tr>
@@ -188,6 +189,29 @@ Review object identifications and Gaia-based position measurements in **Asteroid
   <br />
   <em>Measure relative brightness, compare frame bins and save the measurements as CSV. This example is not calibrated photometry or a rotation-period determination.</em>
 </details>
+
+#### Which Satellite Made This Trail?
+
+A trail across several exposures may come from a satellite. On a streak track, **Compare track with satellites** asks SatChecker which satellites crossed the field during each exposure, then compares their predicted paths with the measured pieces of the trail. [Read how to identify objects](MANUAL.md#5-identifying-objects).
+
+<a href="docs/images/manual/report-satellite-trail.png">
+  <img src="docs/images/manual/report-satellite-trail.png" alt="A star field with a faint satellite trail crossing the middle" width="560" />
+</a>
+
+*The trail in one exposure of a real session (data: Klangwolke at Cloudynights).*
+
+<a href="docs/images/manual/report-satellite-overlay.png">
+  <img src="docs/images/manual/report-satellite-overlay.png" alt="Six coloured line segments, the predicted path of USA 65 during each exposure, with the measured trail pieces as dots lying on them" width="760" />
+</a>
+
+*The same track in the report. Lines: the predicted path of USA 65 during each exposure. Dots: the measured pieces of the trail. Each colour is one exposure; north and east are as in the frames.*
+
+| Satellite | Typical distance from the trail | Exposures covered | Direction difference | Speed, predicted / measured |
+| --- | ---: | ---: | ---: | ---: |
+| USA 65 (NORAD 20929) | 11.4″ (7.4 px) | 6 of 6 | 0.06° | 15.03 / 15.01 ″/s |
+| Next candidate: THORAD AGENA D DEB (NORAD 4143) | 121,810″ | 6 of 6 | 86.7° | 340.17 / 15.01 ″/s |
+
+USA 65 follows the trail through all six exposures, in the same direction and at the same speed. A close fit like this is an association to inspect, not a confirmed identity.
 
 ### SpacePixels Main Interface
 

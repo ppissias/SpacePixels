@@ -21,6 +21,7 @@ import eu.startales.spacepixels.mpc.AdesPsv;
 import eu.startales.spacepixels.mpc.AstrometricReduction;
 import eu.startales.spacepixels.mpc.FindOrb;
 import eu.startales.spacepixels.mpc.LightCurve;
+import eu.startales.spacepixels.mpc.OrbitDetermination;
 import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
 import eu.startales.spacepixels.mpc.MpcObservation;
@@ -114,8 +115,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private String comparisonDetails;
     private final JButton detailsLink = AccessibleControls.link("ⓘ", "Details of the last comparison", this::showComparisonDetails);
     private final JButton showOrbitButton = new JButton("Show orbit");
-    /** The open orbit window, or null. */
-    private JDialog orbitWindow;
+    /** The open 3D orbit viewer window, or null. */
+    private OrbitViewerDialog orbitWindow;
     /** Known objects within 1′ of each object from the last Identify all, by object; empty before it. EDT only. */
     private final Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> nearby = new HashMap<>();
     private final JComboBox<String> binChoice = new JComboBox<>(new String[]{"Single frames", "Bins of 2", "Bins of 4"});
@@ -132,8 +133,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final Map<String, String> orbitProblems = new HashMap<>();
     /** The orbit from this night alone, by object, when the orbit in {@link #orbits} also uses linked nights. */
     private final Map<String, FindOrb.Orbit> singleNightOrbits = new HashMap<>();
+    /** Alternative sample orbits consistent with the observations (from the built-in solver), by object. */
+    private final Map<String, List<FindOrb.Orbit>> orbitSamples = new HashMap<>();
+    /** Short description of the site-coordinate source used by the built-in orbit fit, by object. */
+    private final Map<String, String> orbitSiteSources = new HashMap<>();
     /** How many nights each orbit in {@link #orbits} was fitted to. */
     private final Map<String, Integer> orbitNights = new HashMap<>();
+    private final JComboBox<String> orbitSolverCombo = new JComboBox<>(new String[]{"Built-in (SpacePixels)", "Find_Orb (external)"});
     /** This report as one night of a link: its objects, reduction and observing site. */
     private final NightLinks.Night thisNight;
     /** Each linked object's other nights, by object; an object without links is absent. EDT only. */
@@ -681,15 +687,22 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         panel.add(recordLabel);
         updateNights();
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
-        panel.add(title("Orbit · Find_Orb"));
+        panel.add(title("Orbit · Built-in & Find_Orb"));
+        orbitSolverCombo.setToolTipText("Built-in runs SpacePixels' own preliminary orbit solver with no external program; "
+                + "Find_Orb uses Bill Gray's local fo64/fo executable or opens the online Find_Orb page");
+        orbitSolverCombo.addActionListener(e -> updateOrbit());
+        JPanel solverRow = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
+        solverRow.add(new JLabel("Solver"));
+        solverRow.add(orbitSolverCombo);
+        solverRow.setAlignmentX(LEFT_ALIGNMENT);
+        panel.add(solverRow);
         JButton findOrb = new JButton("Compute orbit");
-        findOrb.setToolTipText("Fits a preliminary orbit to the selected observations with Find_Orb on this computer; when "
-                + "not installed, copies them (station code and positions, no names) to the clipboard and opens the online Find_Orb page to paste them");
+        findOrb.setToolTipText("Fits a preliminary orbit to the selected observations using the selected solver (Built-in or Find_Orb)");
         findOrb.addActionListener(e -> openFindOrb());
         JButton chooseFindOrb = new JButton("Find_Orb program…");
-        chooseFindOrb.setToolTipText("Choose fo64.exe or fo32.exe (Windows) or fo (Linux, BSD, macOS) in the console Find_Orb folder");
+        chooseFindOrb.setToolTipText("Optional: choose fo64.exe or fo32.exe (Windows) or fo (Linux, BSD, macOS) in the console Find_Orb folder");
         chooseFindOrb.addActionListener(e -> chooseFindOrb());
-        showOrbitButton.setToolTipText("Opens the fitted orbit, drawn from above the ecliptic, with its elements");
+        showOrbitButton.setToolTipText("Opens the interactive 3D orbit viewer with elements, zoom and time animation");
         showOrbitButton.addActionListener(e -> showOrbitWindow());
         JPanel orbitButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         orbitButtons.add(findOrb);
@@ -699,8 +712,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         panel.add(orbitButtons);
         panel.add(findOrbPathLabel);
         panel.add(orbitLabel);
-        panel.add(new WrappingHelpLabel("Find_Orb runs on this computer when installed (expected executable: fo64.exe or fo32.exe "
-                + "on Windows, or fo on Linux, BSD and macOS).", 320));
+        panel.add(new WrappingHelpLabel("Built-in fits preliminary short- and multi-night orbits directly in SpacePixels. "
+                + "Optional local Find_Orb (fo64.exe or fo32.exe on Windows, fo on Linux, BSD and macOS) adds full planetary perturbations.", 320));
         JButton getFindOrb = AccessibleControls.link("Get Find_Orb", "Open the Find_Orb download page", () -> browse(FIND_ORB_DOWNLOAD));
         getFindOrb.setToolTipText(FIND_ORB_DOWNLOAD);
         getFindOrb.setAlignmentX(LEFT_ALIGNMENT);
@@ -1269,25 +1282,139 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
     }
 
+    /** Whether the Orbit solver selector is set to SpacePixels' built-in solver (rather than external Find_Orb). */
+    private boolean useBuiltInOrbitSolver() {
+        return orbitSolverCombo.getSelectedIndex() == 0;
+    }
+
     /**
-     * Copies the shown object's selected observations, with the station code only, and opens Find_Orb's page, where the
-     * user pastes them. Find_Orb's online service did not read observations sent by a program in tests (it returned
-     * another user's earlier result), so the user submits them in the browser and sees the answer there.
+     * Resolves the current session's observing site: FITS header coordinates first, else the live configured site in
+     * Astrometry Config, else null (geocentric). Used by the built-in solver so an IAU observatory code is not needed.
+     */
+    private ObservingSite resolvedSite() {
+        if (site != null && ObservingSite.FROM_HEADER.equals(site.source())) return site;
+        AppConfig config = settings.getConfig();
+        ObservingSite live = ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
+        return live != null ? live : site;
+    }
+
+    /** Human-readable provenance label for an observing site (never exposing raw coordinates). */
+    private static String siteSourceLabel(ObservingSite resolved) {
+        if (resolved == null) return "geocentric (no site coordinates set)";
+        return ObservingSite.FROM_HEADER.equals(resolved.source()) ? "FITS header" : "Astrometry Config";
+    }
+
+    /** Summarises the site-coordinate sources across one or more linked nights for the built-in orbit summary. */
+    private static String combinedSiteSourceLabel(ObservingSite primarySite, List<OtherNight> others) {
+        boolean anyHeader = primarySite != null && ObservingSite.FROM_HEADER.equals(primarySite.source());
+        boolean anyConfig = primarySite != null && !ObservingSite.FROM_HEADER.equals(primarySite.source());
+        boolean anyGeocentric = primarySite == null;
+        boolean multiLocation = false;
+        for (var other : others) {
+            if (other.observations().isEmpty()) continue;
+            ObservingSite s = other.night().site() != null ? other.night().site() : primarySite;
+            if (s == null) anyGeocentric = true;
+            else if (ObservingSite.FROM_HEADER.equals(s.source())) anyHeader = true;
+            else anyConfig = true;
+            if (!NightLinks.sameSite(primarySite, s)) multiLocation = true;
+        }
+        String src = anyHeader && !anyConfig && !anyGeocentric ? "FITS headers"
+                : !anyHeader && anyConfig && !anyGeocentric ? "Astrometry Config"
+                : !anyHeader && !anyConfig ? "geocentric (no site coordinates)"
+                : "FITS headers & Astrometry Config";
+        return multiLocation ? src + " (multi-site)" : src;
+    }
+
+    /**
+     * Fits a preliminary orbit to the shown object's selected observations (plus linked nights) using either
+     * SpacePixels' built-in clean-room solver (which uses each night's FITS-header or configured coordinates with no
+     * observatory code required) or external Find_Orb (running locally when configured, else copying observations and
+     * opening the online Find_Orb web page).
      */
     private void openFindOrb() {
         if (shown == null) return;
         var chosen = chosenObservations(shown);
         var others = nightsOf(shown.id());
-        String site = others.isEmpty() ? null : siteProblem(shown.id());
+        var object = shown;
+
+        if (useBuiltInOrbitSolver()) {
+            ObservingSite thisSite = resolvedSite();
+            var allSited = new ArrayList<OrbitDetermination.SitedObservation>();
+            for (var o : chosen) allSited.add(new OrbitDetermination.SitedObservation(o, thisSite));
+            int nights = 1;
+            for (var other : others) {
+                var picked = SavedMeasurements.selectedOrDefault(other.observations(), other.saved());
+                if (picked.isEmpty()) continue;
+                nights++;
+                ObservingSite nightSite = other.night().site() != null ? other.night().site() : thisSite;
+                for (var o : picked) allSited.add(new OrbitDetermination.SitedObservation(o, nightSite));
+            }
+            if (allSited.size() < 3) {
+                orbitLabel.setHtml(escape("An orbit needs at least three selected observations of " + shown.id()
+                        + (shown.measured() ? "." : " (use Measure in sub-stacks first).")));
+                return;
+            }
+            final int totalNights = nights;
+            final String siteNote = totalNights > 1 ? combinedSiteSourceLabel(thisSite, others) : siteSourceLabel(thisSite);
+            List<OrbitDetermination.SitedObservation> allCopy = List.copyOf(allSited);
+            List<MpcObservation> singleCopy = totalNights > 1 && chosen.size() >= 3 ? List.copyOf(chosen) : null;
+            if (findOrbWorker != null) findOrbWorker.cancel(true);
+            orbitLabel.setText("Fitting " + object.id() + (totalNights > 1 ? " on " + totalNights + " nights" : "") + " with built-in solver…");
+            findOrbWorker = new SwingWorker<OrbitDetermination.Solution[], Void>() {
+                @Override protected OrbitDetermination.Solution[] doInBackground() {
+                    OrbitDetermination.Solution fit = OrbitDetermination.fitSited(allCopy);
+                    OrbitDetermination.Solution alone = null;
+                    if (singleCopy != null && !isCancelled()) {
+                        try {
+                            alone = OrbitDetermination.fit(singleCopy, thisSite);
+                        } catch (IllegalArgumentException noSingleNightOrbit) {
+                            // The comparison is optional: the orbit of all nights stands without it.
+                        }
+                    }
+                    return new OrbitDetermination.Solution[]{fit, alone};
+                }
+
+                @Override protected void done() {
+                    if (findOrbWorker == this) findOrbWorker = null;
+                    if (closed || isCancelled()) return;
+                    try {
+                        var fits = get();
+                        orbits.put(object.id(), fits[0].orbit());
+                        orbitSamples.put(object.id(), fits[0].sampleOrbits());
+                        orbitSiteSources.put(object.id(), siteNote);
+                        orbitNights.put(object.id(), totalNights);
+                        if (fits[1] == null) singleNightOrbits.remove(object.id()); else singleNightOrbits.put(object.id(), fits[1].orbit());
+                        orbitProblems.remove(object.id());
+                    } catch (Exception e) {
+                        Throwable cause = e.getCause() == null ? e : e.getCause();
+                        orbits.remove(object.id());
+                        orbitSamples.remove(object.id());
+                        orbitSiteSources.remove(object.id());
+                        singleNightOrbits.remove(object.id());
+                        orbitProblems.put(object.id(), cause.getMessage());
+                    }
+                    if (shown == object) {
+                        updateOrbit();
+                        if (orbits.containsKey(object.id())) showOrbitWindow();
+                    }
+                }
+            };
+            findOrbWorker.execute();
+            return;
+        }
+
+        String siteIssue = others.isEmpty() ? null : siteProblem(shown.id());
         var all = new ArrayList<>(chosen);
-        if (site == null) for (var other : others) all.addAll(SavedMeasurements.selectedOrDefault(other.observations(), other.saved()));
+        if (siteIssue == null) for (var other : others) all.addAll(SavedMeasurements.selectedOrDefault(other.observations(), other.saved()));
         all.sort(java.util.Comparator.comparingLong(MpcObservation::midpointMillis));
-        int nights = site == null ? 1 + (int) others.stream().filter(o -> !o.observations().isEmpty()).count() : 1;
+        int nights = siteIssue == null ? 1 + (int) others.stream().filter(o -> !o.observations().isEmpty()).count() : 1;
         if (all.size() < 3) {
             orbitLabel.setHtml(escape("An orbit needs at least three selected observations of " + shown.id()
                     + (shown.measured() ? "." : " (use Measure in sub-stacks first).")));
             return;
         }
+        if (siteIssue != null) problemsArea.setText(siteIssue + " The orbit uses this night only.");
+
         AppConfig details = settings.getConfig().copy();
         readDetails(details);
         AdesPsv.Context context = MpcExport.context(details);
@@ -1300,14 +1427,13 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         // With other nights, this night alone is fitted too, to show what they add.
         String single = nights > 1 && chosen.size() >= 3
                 ? AdesPsv.writeObservations(context, List.of(MpcExport.tracklet(shown, chosen, report.sessionStartMillis(), sequence))) : null;
-        if (site != null) problemsArea.setText(site + " The orbit uses this night only.");
         File program = details.findOrbExecutable == null || details.findOrbExecutable.isBlank() ? null : new File(details.findOrbExecutable);
         if (program == null || !program.isFile()) {
             Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null);
             String browserError = browseWithProblem(FIND_ORB);
             String note = "Copied " + all.size() + " observation" + (all.size() == 1 ? "" : "s") + " of " + shown.id()
                     + (nights > 1 ? " from " + nights + " nights" : "") + " to the clipboard";
-            if (site != null) note = site + " (using this night only). " + note;
+            if (siteIssue != null) note = siteIssue + " (using this night only). " + note;
             orbitLabel.setHtml(escape(browserError == null
                     ? note + " and opened the online Find_Orb web page: paste them into its box and click Compute."
                     : note + ", but the browser could not be opened (" + browserError + "). Open " + FIND_ORB + " and paste them."));
@@ -1315,7 +1441,6 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
         var times = all.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
         var singleTimes = chosen.stream().map(o -> Instant.ofEpochMilli(o.midpointMillis()).toString()).toList();
-        var object = shown;
         if (findOrbWorker != null) findOrbWorker.cancel(true);
         orbitLabel.setText("Fitting " + object.id() + (nights > 1 ? " on " + nights + " nights" : "") + " with Find_Orb…");
         findOrbWorker = new SwingWorker<FindOrb.Orbit[], Void>() {
@@ -1338,12 +1463,16 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 try {
                     var fits = get();
                     orbits.put(object.id(), fits[0]);
+                    orbitSamples.remove(object.id());
+                    orbitSiteSources.put(object.id(), "station " + context.stationCode().trim());
                     orbitNights.put(object.id(), nights);
                     if (fits[1] == null) singleNightOrbits.remove(object.id()); else singleNightOrbits.put(object.id(), fits[1]);
                     orbitProblems.remove(object.id());
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     orbits.remove(object.id());
+                    orbitSamples.remove(object.id());
+                    orbitSiteSources.remove(object.id());
                     singleNightOrbits.remove(object.id());
                     orbitProblems.put(object.id(), cause.getMessage());
                 }
@@ -1365,6 +1494,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
 
     private void forgetOrbit(String id) {
         orbits.remove(id);
+        orbitSamples.remove(id);
+        orbitSiteSources.remove(id);
         singleNightOrbits.remove(id);
         orbitNights.remove(id);
         orbitProblems.remove(id);
@@ -1378,6 +1509,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         chooser.setDialogTitle("Choose Find_Orb executable (fo64.exe / fo32.exe on Windows, fo on Linux/macOS)");
         if (chooser.showOpenDialog(this) != JFileChooser.APPROVE_OPTION) return;
         settings.getConfig().findOrbExecutable = chooser.getSelectedFile().getAbsolutePath();
+        orbitSolverCombo.setSelectedIndex(1);
         saveDetails();
         updateOrbit();
     }
@@ -1414,18 +1546,29 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         if (shown == null) { orbitLabel.setText(" "); return; }
         if (orbit == null) {
             String problem = orbitProblems.get(shown.id());
+            if (problem != null) {
+                orbitLabel.setHtml(escape(problem));
+                return;
+            }
+            if (useBuiltInOrbitSolver()) {
+                orbitLabel.setHtml(escape("Compute orbit fits the selected observations of " + shown.id()
+                        + " with SpacePixels' built-in solver (no observatory code needed; location: "
+                        + siteSourceLabel(resolvedSite()) + ")."));
+                return;
+            }
             String program = settings.getConfig().findOrbExecutable;
             boolean configured = program != null && !program.isBlank() && new File(program).isFile();
-            orbitLabel.setHtml(escape(problem != null ? problem : !configured
+            orbitLabel.setHtml(escape(!configured
                     ? "Local Find_Orb is not set: Compute orbit copies at least 3 selected observations to the clipboard "
                     + "and opens the online Find_Orb web page so you can paste them."
-                    : "Compute orbit fits the selected observations of " + shown.id() + "."));
+                    : "Compute orbit fits the selected observations of " + shown.id() + " with local Find_Orb."));
             return;
         }
         int nights = orbitNights.getOrDefault(shown.id(), 1);
         var alone = singleNightOrbits.get(shown.id());
-        orbitLabel.setHtml(String.format(Locale.US, "<b>Preliminary orbit%s</b> · a %s AU · e %s · i %s° · residual RMS %s.%s",
-                nights > 1 ? " from " + nights + " nights" : "",
+        String solver = OrbitDetermination.SOLVER_TAG.equals(orbit.version()) ? "built-in" : "Find_Orb";
+        orbitLabel.setHtml(String.format(Locale.US, "<b>Preliminary orbit (%s%s)</b> · a %s AU · e %s · i %s° · residual RMS %s.%s",
+                solver, nights > 1 ? ", " + nights + " nights" : "",
                 withSigma(orbit.a(), orbit.aSigma(), 3), withSigma(orbit.e(), orbit.eSigma(), 3), withSigma(orbit.i(), orbit.iSigma(), 1),
                 orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec()),
                 alone == null ? "" : "<br>This night alone: " + elements(alone) + "."));
@@ -1447,90 +1590,66 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
      * The full description of a fitted orbit, as HTML; with the orbit of this night alone ({@code alone}, else null)
      * when the fit also used {@code nights - 1} linked nights.
      */
-    private String orbitText(FindOrb.Orbit orbit, FindOrb.Orbit alone, int nights) {
+    private String orbitText(FindOrb.Orbit orbit, FindOrb.Orbit alone, int nights, String siteSource) {
         long used = orbit.residuals().stream().filter(FindOrb.Residual::used).count();
         double span = spanHours(orbit);
         String arc = span >= 48 ? String.format(Locale.US, "%.1f days", span / 24) : String.format(Locale.US, "%.1f h", span);
-        String comparison = alone == null ? "" : "<br><br><b>This night alone</b> (dashed) · " + elements(alone)
+        double periodDays = OrbitGeometry.orbitalPeriodDays(orbit);
+        String periodText = !Double.isFinite(periodDays) ? "unbound"
+                : periodDays >= 730 ? String.format(Locale.US, "%.2f yr", periodDays / 365.25)
+                : String.format(Locale.US, "%.1f d", periodDays);
+        String aphelionText = orbit.bound() ? String.format(Locale.US, " · Q %.3f AU", orbit.a() * (1 + orbit.e())) : "";
+        String solver = OrbitDetermination.SOLVER_TAG.equals(orbit.version()) ? "built-in" : "Find_Orb";
+        String locationLine = siteSource == null || siteSource.isBlank() ? "" : "<br>Location: " + escape(siteSource);
+        String comparison = alone == null ? "" : "<br><br><b>This night alone</b> (dashed violet) · " + elements(alone)
                 + String.format(Locale.US, "<br>%d observations over %.1f h. The ± values show what one night leaves open; a few nights still leave much of the orbit open.",
                 alone.residuals().size(), spanHours(alone));
-        return String.format(Locale.US, "<b>Preliminary</b> · %d of %d observations used%s over %s"
-                        + " · epoch %s<br>a %s AU · e %s · i %s°<br>q %s AU · node %s° · peri %s°<br>Residual RMS %s · P(NEO) %s · Earth MOID %s"
+        return String.format(Locale.US, "<b>Preliminary (%s)</b> · %s · %d of %d observations used%s over %s"
+                        + " · epoch %s%s<br>a %s AU · e %s · i %s°<br>q %s AU%s · P %s<br>node %s° · peri %s°"
+                        + "<br>Residual RMS %s · P(NEO) %s · Earth MOID %s"
                         + "<br>An orbit from a short arc is uncertain (±1σ shown); a good fit does not prove the object is real.%s",
-                used, orbit.residuals().size(), nights > 1 ? " from " + nights + " nights" : "", arc,
-                orbit.epochIso() == null ? "?" : orbit.epochIso().substring(0, 10),
+                solver, OrbitGeometry.orbitClass(orbit), used, orbit.residuals().size(), nights > 1 ? " from " + nights + " nights" : "", arc,
+                orbit.epochIso() == null ? "?" : orbit.epochIso().substring(0, 10), locationLine,
                 withSigma(orbit.a(), orbit.aSigma(), 3), withSigma(orbit.e(), orbit.eSigma(), 3), withSigma(orbit.i(), orbit.iSigma(), 1),
-                withSigma(orbit.q(), orbit.qSigma(), 3), withSigma(orbit.ascendingNode(), orbit.nodeSigma(), 1),
-                withSigma(orbit.argumentOfPerihelion(), orbit.perihelionSigma(), 1),
+                withSigma(orbit.q(), orbit.qSigma(), 3), aphelionText, periodText,
+                withSigma(orbit.ascendingNode(), orbit.nodeSigma(), 1), withSigma(orbit.argumentOfPerihelion(), orbit.perihelionSigma(), 1),
                 orbit.rmsArcsec() == null ? "?" : String.format(Locale.US, "%.2f″", orbit.rmsArcsec()),
-                orbit.neoProbability() == null ? "?" : String.format(Locale.US, "%.0f %%", orbit.neoProbability()),
-                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f AU", orbit.earthMoid()), comparison);
+                orbit.neoProbability() == null ? "?" : String.format(Locale.US, "%.0f%%", orbit.neoProbability()),
+                orbit.earthMoid() == null ? "?" : String.format(Locale.US, "%.3f&nbsp;AU", orbit.earthMoid()), comparison);
     }
 
     /**
-     * Opens, or brings forward, a small window with the shown object's fitted orbit drawn from above the ecliptic, its
-     * elements, and Save picture. It follows the shown object and closes when its orbit is dropped.
+     * Opens, or brings forward, the interactive 3D orbit viewer for the shown object, with its elements, zoom,
+     * animation in time, and Save picture. It follows the shown object and closes when its orbit is dropped.
      */
     private void showOrbitWindow() {
         var orbit = shown == null ? null : orbits.get(shown.id());
         if (orbit == null) return;
         if (orbitWindow == null) {
-            orbitWindow = new JDialog(this, "Orbit", false);
-            orbitWindow.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+            orbitWindow = new OrbitViewerDialog(this, report.folder(),
+                    (action, done) -> writeOnWorker(action::write, done),
+                    message -> orbitLabel.setHtml(escape(message)));
             orbitWindow.addWindowListener(new java.awt.event.WindowAdapter() {
                 @Override public void windowClosed(java.awt.event.WindowEvent e) {
                     if (e.getWindow() == orbitWindow) orbitWindow = null;
                 }
             });
-            fillOrbitWindow(orbitWindow, shown.id(), orbit);
-            orbitWindow.pack();
-            orbitWindow.setLocationRelativeTo(this);
-        } else {
-            fillOrbitWindow(orbitWindow, shown.id(), orbit);
         }
+        fillOrbitWindow(orbitWindow, shown.id(), orbit);
         orbitWindow.setVisible(true);
         orbitWindow.toFront();
     }
 
-    /** Puts one orbit's elements, drawing and Save picture into the orbit window. */
-    private void fillOrbitWindow(JDialog window, String id, FindOrb.Orbit orbit) {
-        window.setTitle("Orbit · " + id);
-        var diagram = new OrbitDiagram();
-        diagram.orbit = orbit;
-        diagram.alone = singleNightOrbits.get(id);
-        var text = new WrappingHelpLabel(orbitText(orbit, diagram.alone, orbitNights.getOrDefault(id, 1)), 320);
-        text.setForeground(UIManager.getColor("Label.foreground"));
-        JButton savePicture = new JButton("Save picture…");
-        savePicture.addActionListener(e -> saveOrbitPicture(id, diagram));
-        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
-        buttons.add(savePicture);
-        JPanel content = new JPanel(new BorderLayout(0, UiStyle.space(6)));
-        content.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(8), UiStyle.space(8), UiStyle.space(8), UiStyle.space(8)));
-        content.add(text, BorderLayout.NORTH);
-        content.add(diagram, BorderLayout.CENTER);
-        content.add(buttons, BorderLayout.SOUTH);
-        window.setContentPane(content);
-        window.revalidate();
-        window.repaint();
-    }
-
-    /** Saves the orbit drawing as a PNG where the user chooses, the file written on a worker. */
-    private void saveOrbitPicture(String id, OrbitDiagram diagram) {
-        int size = Math.max(UiStyle.space(300), Math.min(diagram.getWidth(), diagram.getHeight()));
-        BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
-        try {
-            diagram.setSize(size, size);
-            diagram.paint(g);
-        } finally {
-            g.dispose();
+    /** Updates the open 3D orbit viewer in place with one object's fitted orbit(s) and elements. */
+    private void fillOrbitWindow(OrbitViewerDialog window, String id, FindOrb.Orbit orbit) {
+        var alone = singleNightOrbits.get(id);
+        var samples = orbitSamples.getOrDefault(id, List.of());
+        int nights = orbitNights.getOrDefault(id, 1);
+        String label = id;
+        if (shown != null && id.equals(shown.id()) && !shown.names().isEmpty()) {
+            label = id + " (" + shown.names().getFirst() + ")";
         }
-        JFileChooser chooser = WindowSizing.fileChooser(report.folder());
-        chooser.setSelectedFile(new File(report.folder(), id.toLowerCase(Locale.ROOT) + "_orbit.png"));
-        if (chooser.showSaveDialog(orbitWindow == null ? this : orbitWindow) != JFileChooser.APPROVE_OPTION) return;
-        File target = chooser.getSelectedFile();
-        writeOnWorker(() -> javax.imageio.ImageIO.write(image, "png", target), problem -> orbitLabel.setHtml(escape(problem == null
-                ? "Saved " + target.getName() + "." : "The picture was not saved: " + problem)));
+        window.setOrbit(id, label, orbit, alone, samples, nights, orbitText(orbit, alone, nights, orbitSiteSources.get(id)));
     }
 
     /** An action that writes a file and may fail. */
@@ -2504,6 +2623,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             closed = true;
             generation.incrementAndGet();
             playTimer.stop();
+            if (orbitWindow != null) {
+                orbitWindow.dispose();
+                orbitWindow = null;
+            }
             if (worker != null) worker.cancel(true);
             worker = null;
             for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker, nightsWorker, findOrbWorker, stationWorker}) {
@@ -2587,80 +2710,6 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             refreshObjects();
             updateFit();
             refreshExport();
-        }
-    }
-
-    /**
-     * The fitted orbit seen from above the ecliptic: the Sun, the planets' mean orbits to Jupiter with their places on
-     * the epoch date, the orbit (the near part of an unbound one) and the object's place. Scaled to the orbit, at least
-     * to Mars and at most to Jupiter's distance.
-     */
-    private static final class OrbitDiagram extends JComponent {
-        FindOrb.Orbit orbit;
-        /** The orbit from this night alone, drawn dashed under {@link #orbit}; null when there is none. */
-        FindOrb.Orbit alone;
-
-        OrbitDiagram() {
-            setPreferredSize(new Dimension(UiStyle.space(300), UiStyle.space(300)));
-            setMaximumSize(new Dimension(UiStyle.space(320), UiStyle.space(320)));
-        }
-
-        @Override
-        protected void paintComponent(Graphics graphics) {
-            if (orbit == null) return;
-            Graphics2D g = (Graphics2D) graphics.create();
-            try {
-                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                int size = Math.min(getWidth(), getHeight());
-                g.setColor(new Color(16, 18, 24));
-                g.fillRect(0, 0, size, size);
-                double extent = Math.max(1.7, Math.min(5.6, orbit.bound() ? orbit.a() * (1 + orbit.e()) * 1.08 : 3));
-                double scale = size / 2.0 / extent, cx = size / 2.0, cy = size / 2.0;
-                g.setFont(UiStyle.bodyFont().deriveFont(UiStyle.bodyFont().getSize2D() - 2));
-                for (int p = 0; p < OrbitGeometry.PLANET_DISTANCES.length; p++) {
-                    double r = OrbitGeometry.PLANET_DISTANCES[p] * scale;
-                    if (OrbitGeometry.PLANET_DISTANCES[p] > extent * 1.02) continue;
-                    g.setColor(new Color(90, 100, 120));
-                    g.draw(new Ellipse2D.Double(cx - r, cy - r, 2 * r, 2 * r));
-                    double[] place = OrbitGeometry.planetAt(p, orbit.epochJd());
-                    double px = cx + place[0] * scale, py = cy - place[1] * scale;
-                    g.setColor(p == 2 ? new Color(90, 160, 255) : new Color(160, 170, 190));
-                    g.fill(new Ellipse2D.Double(px - 3, py - 3, 6, 6));
-                    if (p >= 2) g.drawString(OrbitGeometry.PLANET_NAMES[p], (float) px + 5, (float) py - 4);
-                }
-                g.setColor(new Color(255, 210, 90));
-                g.fill(new Ellipse2D.Double(cx - 4, cy - 4, 8, 8));
-                if (alone != null) {
-                    g.setColor(new Color(200, 160, 230));
-                    g.setStroke(new BasicStroke(1.2f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 10f, new float[]{5f, 4f}, 0f));
-                    g.draw(line(alone, extent, scale, cx, cy));
-                }
-                g.setColor(new Color(80, 225, 210));
-                g.setStroke(new BasicStroke(1.5f));
-                g.draw(line(orbit, extent, scale, cx, cy));
-                double[] object = OrbitGeometry.atEpoch(orbit);
-                if (object != null) {
-                    double ox = cx + object[0] * scale, oy = cy - object[1] * scale;
-                    g.fill(new Ellipse2D.Double(ox - 4, oy - 4, 8, 8));
-                }
-                g.setColor(new Color(170, 175, 190));
-                g.drawString("Ecliptic, from the north · planets on mean circular orbits", 6, size - 6);
-                if (alone != null) g.drawString("Solid: all nights · dashed: this night alone", 6, size - 6 - g.getFontMetrics().getHeight());
-            } finally {
-                g.dispose();
-            }
-        }
-
-        /** An orbit's path on the drawing: the whole ellipse, or the near part of an unbound orbit. */
-        private static java.awt.geom.Path2D line(FindOrb.Orbit orbit, double extent, double scale, double cx, double cy) {
-            double[][] path = OrbitGeometry.path(orbit, 240, extent * 1.5);
-            var line = new java.awt.geom.Path2D.Double();
-            for (int k = 0; k < path.length; k++) {
-                double x = cx + path[k][0] * scale, y = cy - path[k][1] * scale;
-                if (k == 0) line.moveTo(x, y); else line.lineTo(x, y);
-            }
-            if (orbit.bound()) line.closePath();
-            return line;
         }
     }
 
