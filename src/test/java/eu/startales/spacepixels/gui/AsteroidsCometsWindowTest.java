@@ -79,6 +79,45 @@ public class AsteroidsCometsWindowTest {
             assertTrue(onEdt(() -> button(window, "JPL details: 649341 (2011 DK30) ↗").isVisible()));
             assertEquals("https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=649341",
                     onEdt(() -> button(window, "JPL details: 649341 (2011 DK30) ↗").getToolTipText()));
+            // Identification details appear in a structured key/value table (Field / Details), and the right pane opens at the top ("Before you report").
+            JTable idTable = onEdt(() -> tables(window).get(2));
+            assertEquals("Field", onEdt(() -> idTable.getColumnName(0)));
+            assertEquals("Details", onEdt(() -> idTable.getColumnName(1)));
+            assertTrue("Identification table shows T1", onEdt(() -> tableContains(idTable, "T1 · Track")));
+            assertTrue("Identification table shows known name", onEdt(() -> tableContains(idTable, "649341 (2011 DK30)")));
+            JScrollPane sideScroll = onEdt(() -> {
+                JLabel beforeLabel = labelContaining(window, "Before you report");
+                return (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, beforeLabel);
+            });
+            waitFor("right scroll pane starts at top showing Before you report",
+                    () -> onEdt(() -> sideScroll.getVerticalScrollBar().getValue() == 0
+                            && sideScroll.getViewport().getViewPosition().y == 0));
+            // All three main panes have modest minimums so the horizontal splitters can be resized freely in either direction.
+            List<JSplitPane> splits = onEdt(() -> all(window.getContentPane(), JSplitPane.class, new ArrayList<>()));
+            assertEquals(3, splits.size());
+            onEdt(() -> {
+                JSplitPane mainSplit = splits.getFirst();
+                mainSplit.setDividerLocation(900);
+                mainSplit.validate();
+                assertTrue("Main split moves to 900", Math.abs(mainSplit.getDividerLocation() - 900) <= 5);
+                mainSplit.setDividerLocation(1100);
+                mainSplit.validate();
+                assertTrue("Main split moves to 1100", Math.abs(mainSplit.getDividerLocation() - 1100) <= 5);
+                return null;
+            });
+            // Applying MPC ITF results populates both the Identification summary table and the structured matches table.
+            onEdt(() -> {
+                var trk = new eu.startales.spacepixels.mpc.MpcItfCatalog.Tracklet("W84", "Iuja1KU", 4, 0L, 3_600_000L, 1_800_000L,
+                        56.0, 24.0, 24.8, 262.0, "23.2 V");
+                var same = new eu.startales.spacepixels.mpc.MpcItfCatalog.Match(trk, true, 0.0, 0.2, 0.1, 0.0);
+                var fm = new eu.startales.spacepixels.mpc.MpcItfCatalog.FindingMatches("T1", List.of(same), List.of());
+                window.applyItfResult(new eu.startales.spacepixels.mpc.MpcItfCatalog.SearchResult(
+                        java.time.Instant.parse("2026-11-26T00:00:00Z"), 100L, 1, Map.of("T1", fm)));
+                return null;
+            });
+            JTable matchTable = onEdt(() -> tables(window).get(3));
+            assertTrue("ITF match table becomes visible", onEdt(matchTable::isShowing));
+            assertTrue("ITF match table lists W84 Iuja1KU", onEdt(() -> tableContains(matchTable, "W84 Iuja1KU")));
             // Local per-frame Asinh stretch controls and loading progress bar are present.
             assertTrue(onEdt(() -> all(window.getContentPane(), JProgressBar.class, new ArrayList<>()).size() >= 1));
             assertEquals(eu.startales.spacepixels.fits.StretchAlgorithm.ASINH,
@@ -438,6 +477,16 @@ public class AsteroidsCometsWindowTest {
     }
 
     private static List<JTable> tables(JFrame window) { return all(window.getContentPane(), JTable.class, new ArrayList<>()); }
+
+    private static boolean tableContains(JTable table, String needle) {
+        for (int r = 0; r < table.getRowCount(); r++) {
+            for (int c = 0; c < table.getColumnCount(); c++) {
+                Object val = table.getValueAt(r, c);
+                if (val != null && val.toString().contains(needle)) return true;
+            }
+        }
+        return false;
+    }
 
     private static List<JTextArea> areas(JFrame window) { return all(window.getContentPane(), JTextArea.class, new ArrayList<>()); }
 

@@ -244,8 +244,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
     };
     private final JLabel fitLabel = new JLabel(" ");
-    private final WrappingHelpLabel identificationLabel = new WrappingHelpLabel(" ", 320);
+    private final IdentificationSummaryModel identificationModel = new IdentificationSummaryModel();
+    private final JTable identificationTable = new JTable(identificationModel);
+    private JScrollPane identificationScroll;
+    private final JLabel identificationMatchesTitle = new JLabel("Nearby & MPC ITF matches");
+    private final IdentificationMatchesModel identificationMatchesModel = new IdentificationMatchesModel();
+    private final JTable identificationMatchesTable = new JTable(identificationMatchesModel);
+    private JScrollPane identificationMatchesScroll;
     private final JPanel identificationLinksPanel = new JPanel();
+    private JScrollPane sideScroll;
     private final WrappingHelpLabel stationLabel = new WrappingHelpLabel(" ", 260);
     private final JTextArea problemsArea = new JTextArea(4, 30);
     private final JTextArea psvArea = new JTextArea(12, 30);
@@ -337,12 +344,24 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JTabbedPane lower = new JTabbedPane();
         lower.addTab("Observations", observationsPanel());
         lower.addTab("Light curve", lightCurvePanel());
-        JSplitPane centre = new JSplitPane(JSplitPane.VERTICAL_SPLIT, picturePanel(), lower);
+        lower.setMinimumSize(new Dimension(UiStyle.space(180), UiStyle.space(120)));
+        JComponent pictureComp = picturePanel();
+        pictureComp.setMinimumSize(new Dimension(UiStyle.space(180), UiStyle.space(140)));
+        JSplitPane centre = new JSplitPane(JSplitPane.VERTICAL_SPLIT, pictureComp, lower);
+        centre.setMinimumSize(new Dimension(UiStyle.space(200), UiStyle.space(200)));
         centre.setResizeWeight(0.55);
+        centre.setContinuousLayout(true);
+        centre.setOneTouchExpandable(true);
         JSplitPane left = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, objectsPanel(), centre);
-        left.setResizeWeight(0.3);
-        JSplitPane main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, WindowSizing.form(sidePanel()));
-        main.setResizeWeight(0.75);
+        left.setMinimumSize(new Dimension(UiStyle.space(360), UiStyle.space(200)));
+        left.setResizeWeight(0.32);
+        left.setContinuousLayout(true);
+        left.setOneTouchExpandable(true);
+        sideScroll = buildSideScroll(sidePanel());
+        JSplitPane main = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, left, sideScroll);
+        main.setResizeWeight(0.68);
+        main.setContinuousLayout(true);
+        main.setOneTouchExpandable(true);
         add(main, BorderLayout.CENTER);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
         Rectangle screen = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
@@ -356,6 +375,21 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         if (!report.objects().isEmpty()) objectsTable.setRowSelectionInterval(0, 0);
         refreshExport();
         readOtherNights();
+        scrollSideToTop();
+        addWindowListener(new java.awt.event.WindowAdapter() {
+            @Override public void windowOpened(java.awt.event.WindowEvent e) {
+                int totalW = main.getWidth();
+                if (totalW > UiStyle.space(600)) {
+                    main.setDividerLocation((int) Math.round(totalW * 0.68));
+                    left.setDividerLocation((int) Math.round(totalW * 0.25));
+                }
+                int centreH = centre.getHeight();
+                if (centreH > UiStyle.space(300)) {
+                    centre.setDividerLocation((int) Math.round(centreH * 0.55));
+                }
+                scrollSideToTop();
+            }
+        });
     }
 
     /** The steps and where the report came from. */
@@ -417,9 +451,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(north, BorderLayout.NORTH);
         panel.add(new JScrollPane(objectsTable), BorderLayout.CENTER);
-        // Wide enough for the five columns; the split panes would otherwise squeeze the list to a strip.
-        panel.setMinimumSize(new Dimension(UiStyle.space(340), UiStyle.space(200)));
-        panel.setPreferredSize(new Dimension(UiStyle.space(380), UiStyle.space(400)));
+        // Keep a modest minimum width so the three main split panes can always be dragged freely.
+        panel.setMinimumSize(new Dimension(UiStyle.space(180), UiStyle.space(140)));
+        panel.setPreferredSize(new Dimension(UiStyle.space(360), UiStyle.space(400)));
         return panel;
     }
 
@@ -770,6 +804,29 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 ? "Saved " + target.getName() + "." : "The light curve was not saved: " + problem));
     }
 
+    /** Wraps the right side panel in a resizable width-tracking scroll pane so splitters are never blocked. */
+    private static JScrollPane buildSideScroll(JComponent content) {
+        WidthTrackingPanel host = new WidthTrackingPanel();
+        host.add(content, BorderLayout.NORTH);
+        JScrollPane scroll = new JScrollPane(host);
+        scroll.setBorder(BorderFactory.createEmptyBorder());
+        scroll.setMinimumSize(new Dimension(UiStyle.space(180), UiStyle.space(160)));
+        scroll.setPreferredSize(new Dimension(UiStyle.space(440), UiStyle.space(600)));
+        scroll.getVerticalScrollBar().setUnitIncrement(UiStyle.space(20));
+        return scroll;
+    }
+
+    /** Scrolls the right panel cleanly back to the top ("Before you report"). */
+    private void scrollSideToTop() {
+        if (sideScroll == null) return;
+        SwingUtilities.invokeLater(() -> {
+            if (closed || sideScroll == null) return;
+            sideScroll.getViewport().setViewPosition(new Point(0, 0));
+            sideScroll.getVerticalScrollBar().setValue(0);
+            sideScroll.getHorizontalScrollBar().setValue(0);
+        });
+    }
+
     /** Identification, the submission details and the export. */
     private JComponent sidePanel() {
         JPanel panel = new JPanel();
@@ -784,13 +841,20 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         panel.add(guide);
         panel.add(Box.createVerticalStrut(UiStyle.space(10)));
         panel.add(title("Identification"));
-        identificationLabel.setForeground(UIManager.getColor("Label.foreground"));
-        panel.add(identificationLabel);
+        configureIdentificationTables();
+        panel.add(identificationScroll);
+        identificationMatchesTitle.setForeground(UiStyle.helpColor());
+        identificationMatchesTitle.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(6), UiStyle.space(2), UiStyle.space(2), 0));
+        identificationMatchesTitle.setAlignmentX(LEFT_ALIGNMENT);
+        identificationMatchesTitle.setVisible(false);
+        panel.add(identificationMatchesTitle);
+        panel.add(identificationMatchesScroll);
         identificationLinksPanel.setLayout(new BoxLayout(identificationLinksPanel, BoxLayout.Y_AXIS));
         identificationLinksPanel.setOpaque(false);
         identificationLinksPanel.setAlignmentX(LEFT_ALIGNMENT);
         identificationLinksPanel.setVisible(false);
         panel.add(identificationLinksPanel);
+        panel.add(Box.createVerticalStrut(UiStyle.space(4)));
         JButton mpchecker = new JButton("MPChecker…");
         mpchecker.setToolTipText("Copies the date, position and code of the middle selected observation and opens the MPC's MPChecker");
         mpchecker.addActionListener(e -> openMpchecker());
@@ -926,11 +990,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         problemsArea.setWrapStyleWord(true);
         problemsArea.setForeground(UiStyle.helpColor());
         problemsArea.setAlignmentX(LEFT_ALIGNMENT);
+        preventAutoScroll(problemsArea);
         panel.add(problemsArea);
         psvArea.setEditable(false);
         psvArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UiStyle.bodyFont().getSize() - 1));
+        preventAutoScroll(psvArea);
         JScrollPane psvScroll = new JScrollPane(psvArea);
         psvScroll.setAlignmentX(LEFT_ALIGNMENT);
+        psvScroll.setPreferredSize(new Dimension(UiStyle.space(320), UiStyle.space(180)));
         panel.add(psvScroll);
         copyButton.addActionListener(e -> Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(psvArea.getText()), null));
         saveButton.addActionListener(e -> savePsv());
@@ -987,23 +1054,230 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         updateCurve();
         updateNights();
         if (object == null) {
-            identificationLabel.setText(" ");
+            identificationModel.setRows(List.of());
+            identificationMatchesModel.setRows(List.of());
+            updateIdentificationTableSizes();
             updateIdentificationLinks(null);
             return;
         }
-        String names = object.names().isEmpty() ? "" : "<b>" + escape(String.join(" or ", object.names())) + "</b>"
-                + predictedMagnitudeSuffix(object) + "<br>";
         measureButton.setEnabled(subStackWorker != null || !object.measured() && object.motion() != null && reduction.reduction() != null);
-        String measure = object.measured() ? "" : subStackText(object);
-        String reduced = reduction.reduction() == null ? "<br>" + escape(reduction.problem()) : "";
-        var near = nearby.get(object.id());
-        String nearText = near == null ? "" : near.isEmpty() ? "<br>Identify all: no known object within 1′."
-                : "<br>Identify all, within 1′: " + escape(String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList())) + ".";
-        String itfText = itfHtmlFor(object);
-        identificationLabel.setHtml(object.id() + " · " + statusText(status(object)) + "<br>" + names
-                + escape(object.note() == null ? "" : object.note()) + nearText + itfText + measure + reduced);
+        updateIdentificationTables(object);
         updateIdentificationLinks(object);
         loadPictures(object);
+    }
+
+    /** Prevents programmatic {@code setText} updates on bottom text areas from scrolling the outer right pane down. */
+    private static void preventAutoScroll(JTextArea area) {
+        if (area.getCaret() instanceof javax.swing.text.DefaultCaret caret) {
+            caret.setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
+        }
+    }
+
+    /** Configures the structured Identification summary and candidate-matches tables with wrapped cells. */
+    private void configureIdentificationTables() {
+        var wrapRenderer = new WrappingTableCellRenderer();
+        identificationTable.setDefaultRenderer(Object.class, wrapRenderer);
+        identificationTable.setFillsViewportHeight(true);
+        identificationTable.setRowSelectionAllowed(true);
+        identificationTable.setShowHorizontalLines(true);
+        identificationTable.setAutoResizeMode(JTable.AUTO_RESIZE_LAST_COLUMN);
+        identificationTable.getTableHeader().setReorderingAllowed(false);
+        identificationTable.getColumnModel().getColumn(0).setPreferredWidth(UiStyle.space(115));
+        identificationTable.getColumnModel().getColumn(0).setMinWidth(UiStyle.space(90));
+        identificationTable.getColumnModel().getColumn(0).setMaxWidth(UiStyle.space(160));
+        identificationTable.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                adjustWrappedRowHeights(identificationTable);
+                updateIdentificationTableSizes();
+            }
+        });
+        identificationScroll = new JScrollPane(identificationTable);
+        identificationScroll.setAlignmentX(LEFT_ALIGNMENT);
+        identificationScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+
+        identificationMatchesTable.setDefaultRenderer(Object.class, wrapRenderer);
+        identificationMatchesTable.setFillsViewportHeight(true);
+        identificationMatchesTable.setRowSelectionAllowed(true);
+        identificationMatchesTable.setShowHorizontalLines(true);
+        identificationMatchesTable.setAutoResizeMode(JTable.AUTO_RESIZE_SUBSEQUENT_COLUMNS);
+        identificationMatchesTable.getTableHeader().setReorderingAllowed(false);
+        int[] widths = {88, 100, 96, 78, 62, 118};
+        for (int i = 0; i < widths.length; i++) {
+            var col = identificationMatchesTable.getColumnModel().getColumn(i);
+            col.setPreferredWidth(UiStyle.space(widths[i]));
+            col.setMinWidth(UiStyle.space(Math.min(54, widths[i])));
+        }
+        identificationMatchesTable.addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) {
+                adjustWrappedRowHeights(identificationMatchesTable);
+                updateIdentificationTableSizes();
+            }
+        });
+        identificationMatchesScroll = new JScrollPane(identificationMatchesTable);
+        identificationMatchesScroll.setAlignmentX(LEFT_ALIGNMENT);
+        identificationMatchesScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        identificationMatchesScroll.setVisible(false);
+    }
+
+    /** Populates both the Identification summary table and the nearby/MPC-ITF candidate matches table for {@code object}. */
+    private void updateIdentificationTables(ReportedObjects.ReportedObject object) {
+        var rows = new ArrayList<String[]>();
+        String kindLabel = object.measured() ? "Track" : "Faint mover";
+        rows.add(new String[]{"Object", object.id() + " · " + kindLabel});
+        rows.add(new String[]{"Status", statusText(status(object))});
+        if (!object.names().isEmpty()) {
+            rows.add(new String[]{"Known name", String.join(" or ", object.names()) + predictedMagnitudeSuffix(object)});
+        }
+        if (object.speedArcsecPerHour() != null && Double.isFinite(object.speedArcsecPerHour())) {
+            String motion = String.format(Locale.US, "%.1f″/h", object.speedArcsecPerHour())
+                    + (object.positionAngleDegrees() != null && Double.isFinite(object.positionAngleDegrees())
+                    ? String.format(Locale.US, " · PA %.1f°", object.positionAngleDegrees()) : "");
+            rows.add(new String[]{"Motion", motion});
+        }
+        if (object.note() != null && !object.note().isBlank()) {
+            rows.add(new String[]{"Report note", object.note()});
+        }
+        var near = nearby.get(object.id());
+        if (near != null) {
+            rows.add(new String[]{"Identify all", near.isEmpty() ? "No known object within 1′"
+                    : near.size() + " known object" + (near.size() == 1 ? "" : "s") + " within 1′ (see table below)"});
+        }
+        if (itfSnapshotTime != null) {
+            var fm = itfMatches.get(object.id());
+            String snapDate = itfSnapshotTime.atZone(ZoneOffset.UTC).toLocalDate().toString();
+            if (fm != null) {
+                if (fm.hasSameNight()) {
+                    rows.add(new String[]{"MPC ITF (same night)", "Already reported: "
+                            + String.join(", ", fm.sameNight().stream().map(m -> m.tracklet().label()).toList())
+                            + " (snapshot " + snapDate + ")"});
+                } else {
+                    rows.add(new String[]{"MPC ITF (same night)", "Not reported in ITF (snapshot " + snapDate + ")"});
+                }
+                if (fm.hasNearbyNights()) {
+                    rows.add(new String[]{"MPC ITF (±" + MpcItfCatalog.DEFAULT_NEARBY_DAYS + " d)",
+                            fm.nearbyNights().size() + " linear candidate" + (fm.nearbyNights().size() == 1 ? "" : "s")
+                                    + " — verify with orbit fit (see table below)"});
+                } else {
+                    rows.add(new String[]{"MPC ITF (±" + MpcItfCatalog.DEFAULT_NEARBY_DAYS + " d)", "No nearby-night candidates"});
+                }
+            }
+        }
+        if (!object.measured()) {
+            var stacks = subStacks.get(object.id());
+            if (stacks == null) {
+                rows.add(new String[]{"Sub-stacks", "Fitted only — click Measure in sub-stacks (" + SUB_STACKS
+                        + " independent groups) to measure for the MPC."});
+            } else {
+                var sb = new StringBuilder();
+                for (int k = 0; k < stacks.size(); k++) {
+                    var m = stacks.get(k);
+                    if (k > 0) sb.append('\n');
+                    sb.append(String.format(Locale.US, "#%d · %d fr · %s UTC · SNR %.1f · %s", k + 1, m.frames(),
+                            UTC.format(Instant.ofEpochMilli(m.midpointMillis())), m.snr(), m.clear() ? "clear" : m.problem()));
+                }
+                rows.add(new String[]{"Sub-stacks", sb.toString()});
+            }
+        }
+        if (reduction.reduction() == null && reduction.problem() != null && !reduction.problem().isBlank()) {
+            rows.add(new String[]{"Astrometry", reduction.problem()});
+        }
+        identificationModel.setRows(rows);
+
+        var matchRows = new ArrayList<String[]>();
+        if (near != null) {
+            for (var m : near) {
+                String mag = m.magnitude() == null ? "–" : String.format(Locale.US, "V %.1f", m.magnitude());
+                String offset = String.format(Locale.US, "%.0f″", m.offsetArcsec());
+                String motion = String.format(Locale.US, "%s (Δv %.1f″/h)%s",
+                        m.motionAgrees() ? "agreeing" : "differing", m.rateDifferenceArcsecPerHour(),
+                        m.nearerFinding() == null ? "" : String.format(Locale.US, "; %s nearer (%.0f″)", m.nearerFinding(), m.nearerOffsetArcsec()));
+                matchRows.add(new String[]{"Identify all", m.name(), "Mid-session", mag, offset, motion});
+            }
+        }
+        if (itfSnapshotTime != null) {
+            var fm = itfMatches.get(object.id());
+            if (fm != null) {
+                for (var m : fm.sameNight()) {
+                    matchRows.add(itfMatchRow("ITF same night", m));
+                }
+                for (var m : fm.nearbyNights()) {
+                    matchRows.add(itfMatchRow("ITF nearby", m));
+                }
+            }
+        }
+        identificationMatchesModel.setRows(matchRows);
+        boolean hasMatches = !matchRows.isEmpty();
+        identificationMatchesTitle.setVisible(hasMatches);
+        identificationMatchesScroll.setVisible(hasMatches);
+        adjustWrappedRowHeights(identificationTable);
+        if (hasMatches) adjustWrappedRowHeights(identificationMatchesTable);
+        updateIdentificationTableSizes();
+    }
+
+    private static String[] itfMatchRow(String source, MpcItfCatalog.Match m) {
+        var t = m.tracklet();
+        String dateCol = m.sameNight() ? t.midDateUtc()
+                : String.format(Locale.US, "%+.1fd (%s)", m.deltaDays(), t.midDateUtc());
+        String obsMag = t.observationCount() + " obs" + (t.magnitude().isEmpty() ? "" : " · " + t.magnitude());
+        String offset = m.offsetArcsec() < 120.0
+                ? String.format(Locale.US, "%.1f″", m.offsetArcsec())
+                : String.format(Locale.US, "%.2f′", m.offsetArcsec() / 60.0);
+        var motion = new StringBuilder();
+        if (m.speedDiffArcsecPerHour() != null) {
+            motion.append(String.format(Locale.US, "Δv %.1f″/h", m.speedDiffArcsecPerHour()));
+        }
+        if (m.paDiffDegrees() != null) {
+            if (!motion.isEmpty()) motion.append(", ");
+            motion.append(String.format(Locale.US, "ΔPA %.0f°", m.paDiffDegrees()));
+        }
+        if (motion.isEmpty()) motion.append("–");
+        return new String[]{source, t.label(), dateCol, obsMag, offset, motion.toString()};
+    }
+
+    /** Computes exact wrapped row heights for a multi-line table based on its current column widths. */
+    private static void adjustWrappedRowHeights(JTable table) {
+        int rows = table.getRowCount();
+        int cols = table.getColumnCount();
+        int baseHeight = Math.max(UiStyle.space(20), table.getFontMetrics(table.getFont()).getHeight() + UiStyle.space(6));
+        for (int r = 0; r < rows; r++) {
+            int maxH = baseHeight;
+            for (int c = 0; c < cols; c++) {
+                var renderer = table.getCellRenderer(r, c);
+                var comp = table.prepareRenderer(renderer, r, c);
+                int colW = Math.max(UiStyle.space(40), table.getColumnModel().getColumn(c).getWidth());
+                comp.setSize(new Dimension(colW, Short.MAX_VALUE));
+                int prefH = comp.getPreferredSize().height + UiStyle.space(4);
+                if (prefH > maxH) maxH = prefH;
+            }
+            if (table.getRowHeight(r) != maxH) table.setRowHeight(r, maxH);
+        }
+    }
+
+    /** Sizes the Identification table scroll panes neatly to their content (capped so long match lists scroll). */
+    private void updateIdentificationTableSizes() {
+        if (identificationScroll != null) {
+            int sumH = totalTableHeight(identificationTable, UiStyle.space(90), UiStyle.space(260));
+            identificationScroll.setPreferredSize(new Dimension(UiStyle.space(320), sumH));
+            identificationScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, sumH));
+            identificationScroll.revalidate();
+        }
+        if (identificationMatchesScroll != null && identificationMatchesScroll.isVisible()) {
+            int matchH = totalTableHeight(identificationMatchesTable, UiStyle.space(70), UiStyle.space(180));
+            identificationMatchesScroll.setPreferredSize(new Dimension(UiStyle.space(320), matchH));
+            identificationMatchesScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, matchH));
+            identificationMatchesScroll.revalidate();
+        }
+        if (sideScroll != null) {
+            sideScroll.revalidate();
+        }
+    }
+
+    private static int totalTableHeight(JTable table, int minHeight, int maxHeight) {
+        int headerH = table.getTableHeader() == null ? UiStyle.space(22) : Math.max(UiStyle.space(22), table.getTableHeader().getPreferredSize().height);
+        int rowsH = 0;
+        for (int r = 0; r < table.getRowCount(); r++) rowsH += table.getRowHeight(r);
+        int h = headerH + rowsH + UiStyle.space(8);
+        return Math.max(minHeight, Math.min(maxHeight, h));
     }
 
     /** Rebuilds the external JPL SBDB lookup link(s) for the selected object's identified names. */
@@ -1416,6 +1690,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 + " with " + tracklets.stream().mapToInt(t -> t.observations().size()).sum() + " observations."
                 + (notes.isEmpty() ? "" : "\n" + String.join("\n", notes))
                 : String.join("\n", problems));
+        problemsArea.setCaretPosition(0);
         boolean ready = problems.isEmpty();
         psvArea.setText(ready ? AdesPsv.write(context, tracklets) : "");
         psvArea.setCaretPosition(0);
@@ -2521,7 +2796,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return fallback;
     }
 
-    private void applyItfResult(MpcItfCatalog.SearchResult result) {
+    void applyItfResult(MpcItfCatalog.SearchResult result) {
         itfMatches.clear();
         itfMatches.putAll(result.byFinding());
         itfSnapshotTime = result.snapshotTime();
@@ -2578,29 +2853,6 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         if (shown != null) show(report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
     }
 
-    /** Formats the selected object's MPC ITF same-night and nearby-night results for the Identification panel. */
-    private String itfHtmlFor(ReportedObjects.ReportedObject object) {
-        if (itfSnapshotTime == null || object == null) return "";
-        var fm = itfMatches.get(object.id());
-        if (fm == null) return "";
-        String snapDate = itfSnapshotTime.atZone(ZoneOffset.UTC).toLocalDate().toString();
-        var sb = new StringBuilder();
-        if (fm.hasSameNight()) {
-            sb.append("<br><b>MPC ITF (same night, ").append(snapDate).append("):</b> already reported as ")
-                    .append(escape(String.join("; ", fm.sameNight().stream().map(MpcItfCatalog::describeMatch).toList())))
-                    .append(".");
-        } else {
-            sb.append("<br>MPC ITF (same night, ").append(snapDate).append("): not reported in ITF.");
-        }
-        if (fm.hasNearbyNights()) {
-            sb.append("<br>MPC ITF nearby (±").append(MpcItfCatalog.DEFAULT_NEARBY_DAYS)
-                    .append(" d, linear candidates — verify with orbit fit): ")
-                    .append(escape(String.join("; ", fm.nearbyNights().stream().map(MpcItfCatalog::describeMatch).toList())))
-                    .append(".");
-        }
-        return sb.toString();
-    }
-
     /** Shows a short result line and keeps the full text behind the ⓘ link. */
     private void showComparison(String summary, String details) {
         comparisonDetails = details;
@@ -2621,22 +2873,6 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private String status(ReportedObjects.ReportedObject object) {
         var stacks = subStacks.get(object.id());
         return stacks != null && stacks.stream().anyMatch(m -> !m.clear()) ? WEAK : object.status();
-    }
-
-    /** What the faint mover's sub-stacks showed, or how to measure them. */
-    private String subStackText(ReportedObjects.ReportedObject object) {
-        var stacks = subStacks.get(object.id());
-        if (stacks == null) {
-            return "<br>A faint mover's positions here are fitted, not measured. <b>Measure in sub-stacks</b> stacks its frames "
-                    + "in " + SUB_STACKS + " independent groups and measures it in each, as the MPC requires for stacked observations.";
-        }
-        var text = new StringBuilder("<br>Sub-stacks:");
-        for (int k = 0; k < stacks.size(); k++) {
-            var m = stacks.get(k);
-            text.append(String.format(Locale.US, "<br>%d · %d frames · %s UTC · SNR %.1f · %s", k + 1, m.frames(),
-                    UTC.format(Instant.ofEpochMilli(m.midpointMillis())), m.snr(), m.clear() ? "clear" : escape(m.problem())));
-        }
-        return text.toString();
     }
 
     /**
@@ -3212,6 +3448,66 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
         }
         super.dispose();
+    }
+
+    /** Two-column key/value table model for the selected object's Identification summary. */
+    private static final class IdentificationSummaryModel extends AbstractTableModel {
+        private final String[] columns = {"Field", "Details"};
+        private List<String[]> rows = List.of();
+
+        void setRows(List<String[]> next) {
+            this.rows = List.copyOf(next);
+            fireTableDataChanged();
+        }
+
+        @Override public int getRowCount() { return rows.size(); }
+        @Override public int getColumnCount() { return columns.length; }
+        @Override public String getColumnName(int column) { return columns[column]; }
+        @Override public Object getValueAt(int row, int column) { return rows.get(row)[column]; }
+    }
+
+    /** Structured table model for Identify all and MPC ITF (same-night &amp; nearby-night) candidate matches. */
+    private static final class IdentificationMatchesModel extends AbstractTableModel {
+        private final String[] columns = {"Source", "Object / Tracklet", "Date / Δd", "Obs / Mag", "Offset", "Motion"};
+        private List<String[]> rows = List.of();
+
+        void setRows(List<String[]> next) {
+            this.rows = List.copyOf(next);
+            fireTableDataChanged();
+        }
+
+        @Override public int getRowCount() { return rows.size(); }
+        @Override public int getColumnCount() { return columns.length; }
+        @Override public String getColumnName(int column) { return columns[column]; }
+        @Override public Object getValueAt(int row, int column) { return rows.get(row)[column]; }
+    }
+
+    /** Multi-line wrapping cell renderer for the Identification tables so long notes and match details never clip. */
+    private static final class WrappingTableCellRenderer extends JTextArea implements javax.swing.table.TableCellRenderer {
+        WrappingTableCellRenderer() {
+            setLineWrap(true);
+            setWrapStyleWord(true);
+            setOpaque(true);
+            setBorder(BorderFactory.createEmptyBorder(2, 4, 2, 4));
+        }
+
+        @Override
+        public Component getTableCellRendererComponent(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+            String text = value == null ? "" : value.toString();
+            setText(text);
+            setToolTipText(text.isEmpty() ? null : text);
+            setFont(column == 0 && table.getColumnCount() == 2
+                    ? table.getFont().deriveFont(Font.BOLD)
+                    : table.getFont());
+            if (isSelected) {
+                setBackground(table.getSelectionBackground());
+                setForeground(table.getSelectionForeground());
+            } else {
+                setBackground(table.getBackground());
+                setForeground(table.getForeground());
+            }
+            return this;
+        }
     }
 
     /** The objects: export mark, ID, status, identification and selected observations. */
