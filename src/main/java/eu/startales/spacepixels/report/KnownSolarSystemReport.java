@@ -3,12 +3,11 @@ package eu.startales.spacepixels.report;
 import eu.startales.spacepixels.mpc.MainBeltMotion;
 
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
+import eu.startales.spacepixels.solarsystem.JplSbdbLookup;
 import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 import eu.startales.spacepixels.util.SkyMath;
 
 import java.io.PrintWriter;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -695,18 +694,7 @@ final class KnownSolarSystemReport {
 
     /** Builds a JPL SBDB lookup from the saved designation; no network request or extra catalogue fetch is needed. */
     static String informationUrl(String name, boolean comet) {
-        if (name == null || name.isBlank()) return null;
-        String search = name.trim();
-        if (!comet && search.matches("\\(?\\d{4} (?:[A-Z]{2}\\d*|[PT]-[L123])\\)?")) {
-            search = search.replace("(", "").replace(")", "");
-        } else if (!comet && search.matches("\\d+(?: .*)?")) {
-            search = search.split(" ", 2)[0];
-        } else if (comet) {
-            search = search.split(" \\(", 2)[0];
-            if (search.matches("\\d+[PDCXAI](?:-[A-Z0-9]+)?/.*")) search = search.substring(0, search.indexOf('/'));
-        }
-        return "https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr="
-                + URLEncoder.encode(search, StandardCharsets.UTF_8).replace("+", "%20");
+        return JplSbdbLookup.informationUrl(name, comet);
     }
 
     /** Resolves only visible report identities so every generated link opens an exported finding. */

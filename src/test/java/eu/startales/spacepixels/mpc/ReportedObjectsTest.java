@@ -25,9 +25,13 @@ public class ReportedObjectsTest {
                          {"id":"T2","category":"Moving target","positions":[{"frameNumber":2,"x":50,"y":60}]},
                          {"id":"ST1","category":"Streak track","positions":[{"frameNumber":1,"x":1,"y":1}]}],
              "faintMovers":[{"id":"FM1","x":31.5,"y":40.5,"referenceTimeMillis":61000,"vxPixelsPerMinute":0.4,"vyPixelsPerMinute":-0.2,
+                           "cutout":"faint_movers/fm1_stack.png","review":{"data":"faint_movers/fm1_view.js"},
                            "fittedPositions":[{"frameNumber":1,"x":30.0,"y":40.0,"midpointMillis":61000}]}],
              "faintMoverSearch":{"fwhmPixels":3.2},
-             "knownSolarSystem":{"identifications":[
+             "knownSolarSystem":{
+               "bodies":[{"name":"649341 (2011 DK30)","comet":false,"minimumMagnitude":18.4,"maximumMagnitude":18.5,
+                          "informationUrl":"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=649341"}],
+               "identifications":[
                  {"id":"T1","kind":"track","status":"known","names":["649341 (2011 DK30)"],"note":"agrees",
                   "speedArcsecPerHour":31.7,"positionAngleDegrees":251.0},
                  {"id":"FM1","kind":"faint mover","status":"no-known-match","names":[],"note":"none"}]}}
@@ -58,6 +62,11 @@ public class ReportedObjectsTest {
         assertEquals(new ReportedObjects.Motion(31.5, 40.5, 61000, 0.4, -0.2), fm1.motion());
         assertNull("tracks have measured positions, not a fitted motion", t1.motion());
         assertEquals(3.2, report.faintMoverFwhm(), 0);
+        var body = report.knownBodies().get("649341 (2011 DK30)");
+        assertEquals("https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=649341", body.informationUrl());
+        assertEquals(18.4, body.minimumMagnitude(), 0);
+        assertEquals("faint_movers/fm1_stack.png", report.faintMoverAssets().get("FM1").cutout());
+        assertEquals("faint_movers/fm1_view.js", report.faintMoverAssets().get("FM1").reviewData());
     }
 
     /** A folder without report data is a clear error. */

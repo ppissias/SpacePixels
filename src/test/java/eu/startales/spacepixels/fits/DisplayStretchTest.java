@@ -154,6 +154,45 @@ public class DisplayStretchTest {
         assertTrue(black >= total * largest / 100);
     }
 
+    /** Valid-pixel histograms ignore registration fill and keep per-frame asinh brightness consistent across varying skies. */
+    @Test
+    public void validHistogramAndCreateDisplayImageKeepVaryingSkiesVisible() {
+        short[][] darkSky = syntheticFrame(11, 800);
+        short[][] brightSky = syntheticFrame(12, 9000);
+        // Add a registration-fill border on the left edge and a +500 ADU faint object at the centre of both frames.
+        for (int y = 0; y < HEIGHT; y++) {
+            for (int x = 0; x < 10; x++) {
+                darkSky[y][x] = Short.MIN_VALUE;
+                brightSky[y][x] = Short.MIN_VALUE;
+            }
+        }
+        darkSky[HEIGHT / 2][WIDTH / 2] = (short) ((800 + 3 * (WIDTH / 2) + 500) - 32768);
+        brightSky[HEIGHT / 2][WIDTH / 2] = (short) ((9000 + 3 * (WIDTH / 2) + 500) - 32768);
+
+        int[] darkHist = DisplayStretch.validHistogram(darkSky);
+        int[] brightHist = DisplayStretch.validHistogram(brightSky);
+        assertEquals("Registration fill must be excluded from validHistogram", 0, darkHist[0]);
+        assertEquals("Registration fill must be excluded from validHistogram", 0, brightHist[0]);
+
+        byte[] darkLut = DisplayStretch.lookupTable(darkHist, StretchAlgorithm.ASINH,
+                StretchAlgorithm.ASINH.getPrimaryDefault(), 50);
+        byte[] brightLut = DisplayStretch.lookupTable(brightHist, StretchAlgorithm.ASINH,
+                StretchAlgorithm.ASINH.getPrimaryDefault(), 50);
+
+        BufferedImage darkImg = DisplayStretch.createDisplayImage(darkSky, darkLut);
+        BufferedImage brightImg = DisplayStretch.createDisplayImage(brightSky, brightLut);
+
+        // Fill border stays black; the faint object stays clearly visible and consistent despite an 8,200 ADU sky jump.
+        assertEquals(0, darkImg.getRaster().getSample(0, HEIGHT / 2, 0));
+        assertEquals(0, brightImg.getRaster().getSample(0, HEIGHT / 2, 0));
+        int darkObj = darkImg.getRaster().getSample(WIDTH / 2, HEIGHT / 2, 0);
+        int brightObj = brightImg.getRaster().getSample(WIDTH / 2, HEIGHT / 2, 0);
+        assertTrue("Faint object in dark-sky frame must stay visible: " + darkObj, darkObj > 20);
+        assertTrue("Faint object in bright-sky frame must stay visible: " + brightObj, brightObj > 20);
+        assertTrue("Per-frame stretch keeps brightness consistent across varying skies: dark=" + darkObj
+                + ", bright=" + brightObj, Math.abs(darkObj - brightObj) <= 15);
+    }
+
     /**
      * Batch Stretch writes the same pixels as before the stretch tables: checksums of its output for every algorithm
      * at its smallest, default and largest settings on three mono frames, plus a colour frame at the defaults,

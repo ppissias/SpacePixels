@@ -75,12 +75,25 @@ public class AsteroidsCometsWindowTest {
             assertEquals("FM1", onEdt(() -> objects.getValueAt(1, 1)));
             assertEquals("Known", onEdt(() -> objects.getValueAt(0, 2)));
             assertEquals("Check", onEdt(() -> objects.getValueAt(1, 2)));
+            // External JPL SBDB details link is shown for the identified object T1 and hidden for unmatched FM1.
+            assertTrue(onEdt(() -> button(window, "JPL details: 649341 (2011 DK30) ↗").isVisible()));
+            assertEquals("https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=649341",
+                    onEdt(() -> button(window, "JPL details: 649341 (2011 DK30) ↗").getToolTipText()));
+            // Local per-frame Asinh stretch controls and loading progress bar are present.
+            assertTrue(onEdt(() -> all(window.getContentPane(), JProgressBar.class, new ArrayList<>()).size() >= 1));
+            assertEquals(eu.startales.spacepixels.fits.StretchAlgorithm.ASINH,
+                    onEdt(() -> combo(window, eu.startales.spacepixels.fits.StretchAlgorithm.ASINH).getSelectedItem()));
+            // Wait for T1 frames to load, then check FM1 faint-mover review assets (residual + shift stack).
+            waitFor("T1 frames loaded", () -> onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("T1 · frame 1"))));
             // Find_Orb shows its program path ("Not set" initially), executable hint, and updates orbit status right in its section.
             assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("Program: Not set"))));
             assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("fo64.exe") && l.getText().contains("fo32.exe"))));
             onEdt(() -> { objects.setRowSelectionInterval(1, 1); button(window, "Compute orbit").doClick(); return null; });
             assertTrue(onEdt(() -> labels(window).stream().anyMatch(l -> l.getText().contains("needs at least three selected observations of FM1"))));
+            waitFor("FM1 frames and faint-mover assets loaded", () -> onEdt(() -> button(window, "Residual & stack").isVisible()));
+            assertTrue(onEdt(() -> button(window, "Residual & stack").isSelected()));
             onEdt(() -> { objects.setRowSelectionInterval(0, 0); return null; });
+            assertFalse("T1 track hides faint-mover Residual & stack toggle", onEdt(() -> button(window, "Residual & stack").isVisible()));
 
             // Unticking an observation keeps the table and the selected object (once it emptied the table).
             JTable observationsTable = onEdt(() -> tables(window).get(1));
@@ -112,6 +125,10 @@ public class AsteroidsCometsWindowTest {
             onEdt(() -> { button(window, "Compare again").doClick(); return null; });
             assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
             assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+            onEdt(() -> { objects.setRowSelectionInterval(1, 1); return null; });
+            assertTrue(onEdt(() -> button(window, "JPL details: 2026 AB1 ↗").isVisible()));
+            assertEquals("https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2026%20AB1",
+                    onEdt(() -> button(window, "JPL details: 2026 AB1 ↗").getToolTipText()));
             String compared = onEdt(() -> labels(window).stream().map(JLabel::getText).filter(t -> t.contains("Compared with")).findFirst().orElse("none"));
             assertTrue(compared, compared.contains("FM1 Check → Known 2026 AB1") && compared.contains("Saved."));
             assertEquals("T1 keeps its identification", "Known", onEdt(() -> objects.getValueAt(0, 2)));
@@ -148,6 +165,10 @@ public class AsteroidsCometsWindowTest {
             JTable objects = onEdt(() -> tables(reopened).getFirst());
             assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
             assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+            onEdt(() -> { objects.setRowSelectionInterval(1, 1); return null; });
+            assertTrue(onEdt(() -> button(reopened, "JPL details: 2026 AB1 ↗").isVisible()));
+            assertEquals("https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2026%20AB1",
+                    onEdt(() -> button(reopened, "JPL details: 2026 AB1 ↗").getToolTipText()));
             assertTrue(onEdt(() -> labels(reopened).stream().anyMatch(l -> l.getText().contains("made after the report"))));
         } finally {
             onEdt(() -> { reopened.dispose(); return null; });
@@ -206,6 +227,10 @@ public class AsteroidsCometsWindowTest {
             JTable objects = onEdt(() -> tables(w1).getFirst());
             assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
             assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+            onEdt(() -> { objects.setRowSelectionInterval(1, 1); return null; });
+            assertTrue(onEdt(() -> button(w1, "JPL details: 2026 AB1 ↗").isVisible()));
+            assertEquals("https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=2026%20AB1",
+                    onEdt(() -> button(w1, "JPL details: 2026 AB1 ↗").getToolTipText()));
             waitFor("Identify all saved later_identifications",
                     () -> eu.startales.spacepixels.mpc.LaterIdentifications.load(reportFolder).containsKey("FM1"));
             assertEquals(ReportedObjects.KNOWN, eu.startales.spacepixels.mpc.LaterIdentifications.load(reportFolder).get("FM1").status);
@@ -309,12 +334,32 @@ public class AsteroidsCometsWindowTest {
         String json = "{\"inputFrames\":[" + frames + "],"
                 + "\"findings\":[{\"id\":\"T1\",\"positions\":[" + t1 + "]}],"
                 + "\"faintMovers\":[{\"id\":\"FM1\",\"x\":60,\"y\":30,\"referenceTimeMillis\":" + files[0].getObservationTimestamp()
-                + ",\"vxPixelsPerMinute\":0,\"vyPixelsPerMinute\":1.5,\"fittedPositions\":[" + fm1 + "]}],"
+                + ",\"vxPixelsPerMinute\":0,\"vyPixelsPerMinute\":1.5,\"cutout\":\"faint_movers/fm1_stack.png\","
+                + "\"review\":{\"data\":\"faint_movers/fm1_view.js\"},\"fittedPositions\":[" + fm1 + "]}],"
                 + "\"faintMoverSearch\":{\"fwhmPixels\":2.5},"
-                + "\"knownSolarSystem\":{\"identifications\":["
+                + "\"knownSolarSystem\":{\"bodies\":[{\"name\":\"649341 (2011 DK30)\",\"comet\":false,\"minimumMagnitude\":18.4,"
+                + "\"maximumMagnitude\":18.4,\"informationUrl\":\"https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html#/?sstr=649341\"}],"
+                + "\"identifications\":["
                 + "{\"id\":\"T1\",\"status\":\"known\",\"names\":[\"649341 (2011 DK30)\"],\"note\":\"Position and motion agree.\"},"
                 + "{\"id\":\"FM1\",\"status\":\"check\",\"names\":[],\"note\":\"No known object agrees.\",\"unusualMotion\":\"faster than a main-belt asteroid: possibly near Earth\"}]}}";
         Files.writeString(new File(folder, "report-data.json").toPath(), json, StandardCharsets.UTF_8);
+        File fmDir = new File(folder, "faint_movers");
+        assertTrue(fmDir.mkdirs());
+        var stack = new java.awt.image.BufferedImage(15, 15, java.awt.image.BufferedImage.TYPE_BYTE_GRAY);
+        stack.getRaster().setSample(7, 7, 0, 230);
+        javax.imageio.ImageIO.write(stack, "png", new File(fmDir, "fm1_stack.png"));
+        int rw = 15, rh = 15;
+        var buf = java.nio.ByteBuffer.allocate(rw * rh * files.length * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        var fmFrames = new StringBuilder();
+        for (int k = 0; k < files.length; k++) {
+            if (k > 0) fmFrames.append(",");
+            fmFrames.append(String.format(java.util.Locale.US, "{\"number\":%d,\"x\":7.0,\"y\":7.0,\"unmasked\":true}", k + 1));
+            for (int i = 0; i < rw * rh; i++) buf.putFloat(i == 7 * rw + 7 ? 2.5f : 0f);
+        }
+        String viewJs = "globalThis.SpacePixelsFaintMovers.accept(\"FM1\",{\"version\":1,\"width\":" + rw + ",\"height\":" + rh
+                + ",\"followsPath\":false,\"frames\":[" + fmFrames + "],\"residual\":\""
+                + java.util.Base64.getEncoder().encodeToString(buf.array()) + "\"});";
+        Files.writeString(new File(fmDir, "fm1_view.js").toPath(), viewJs, StandardCharsets.UTF_8);
         return folder;
     }
 
@@ -422,7 +467,7 @@ public class AsteroidsCometsWindowTest {
                 .findFirst().orElseThrow(() -> new AssertionError("no label with " + text));
     }
 
-    private static JComboBox<?> combo(JFrame window, String item) {
+    private static JComboBox<?> combo(JFrame window, Object item) {
         for (JComboBox<?> box : all(window.getContentPane(), JComboBox.class, new ArrayList<>())) {
             for (int i = 0; i < box.getItemCount(); i++) if (item.equals(box.getItemAt(i))) return box;
         }

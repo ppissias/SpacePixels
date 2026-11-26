@@ -12,13 +12,15 @@ package eu.startales.spacepixels.gui;
 import eu.startales.spacepixels.config.AppConfig;
 import eu.startales.spacepixels.config.ApplicationSettings;
 import eu.startales.spacepixels.config.VisualizationSettings;
-import eu.startales.spacepixels.fits.DisplayImageRenderer;
+import eu.startales.spacepixels.fits.DisplayStretch;
 import eu.startales.spacepixels.fits.FitsFileInformation;
 import eu.startales.spacepixels.fits.FitsInput;
 import eu.startales.spacepixels.fits.ObservingSite;
+import eu.startales.spacepixels.fits.StretchAlgorithm;
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.mpc.AdesPsv;
 import eu.startales.spacepixels.mpc.AstrometricReduction;
+import eu.startales.spacepixels.mpc.FaintMoverReviewAssets;
 import eu.startales.spacepixels.mpc.FindOrb;
 import eu.startales.spacepixels.mpc.LightCurve;
 import eu.startales.spacepixels.mpc.OrbitDetermination;
@@ -34,6 +36,7 @@ import eu.startales.spacepixels.platesolve.PlateSolutionCorrection;
 import eu.startales.spacepixels.session.ApplicationStorage;
 import eu.startales.spacepixels.skycatalog.PhotometryStars;
 import eu.startales.spacepixels.skycatalog.SkyCatalogue;
+import eu.startales.spacepixels.solarsystem.JplSbdbLookup;
 import eu.startales.spacepixels.solarsystem.SolarSystemClient;
 import nom.tam.fits.Fits;
 
@@ -173,8 +176,20 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     static final int SUB_STACKS = 3;
     private final WrappingHelpLabel findOrbPathLabel = new WrappingHelpLabel("Program: Not set", 320);
     private final WrappingHelpLabel orbitLabel = new WrappingHelpLabel(" ", 320);
+    private static final String CARD_PICTURE = "picture";
+    private static final String CARD_LOADING = "loading";
+    /** Maximum number of objects whose cutouts stay cached in memory while this window is open. */
+    private static final int MAX_CACHED_OBJECTS = 12;
+
+    /** Progress published while reading an object's frames on a background worker. */
+    private record LoadProgress(int completed, int total, String fileName) { }
+
+    /** Cutouts and optional faint-mover review evidence kept for one object while this window is open. */
+    private record ObjectPictures(List<short[][][]> crops, int[] fixedOrigin, boolean fixedAvailable,
+                                  FaintMoverReviewAssets reviewAssets) { }
+
     private final AtomicInteger generation = new AtomicInteger();
-    private SwingWorker<List<short[][][]>, Void> worker;
+    private SwingWorker<ObjectPictures, LoadProgress> worker;
     private boolean closed;
     private String checkedStationCode;
     private String stationProblem;
@@ -184,15 +199,47 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JTable objectsTable = new JTable(objectsModel);
     private final ObservationsModel observationsModel = new ObservationsModel();
     private final JTable observationsTable = new JTable(observationsModel);
+    private final CardLayout pictureCards = new CardLayout();
+    private final JPanel pictureStage = new JPanel(pictureCards);
+    private final JLabel loadTitleLabel = new JLabel(" ");
+    private final JProgressBar loadProgressBar = new JProgressBar();
+    private final JLabel loadFileLabel = new JLabel(" ");
     private final Picture picture = new Picture();
     private final JSlider frameSlider = new JSlider(0, 0, 0);
     private final JToggleButton playButton = new JToggleButton("Play");
     private final JRadioButton objectCentred = new JRadioButton("Object-centred", true);
     private final JRadioButton starCentred = new JRadioButton("Star-centred");
+    private final JCheckBox showFaintEvidenceBox = new JCheckBox("Residual & stack", true);
     private final JLabel pictureLabel = new JLabel(" ");
-    private final JLabel stretchLabel = new JLabel(" ");
+    private final JCheckBox stretchEnabledBox = new JCheckBox("Stretch", true);
+    private final JComboBox<StretchAlgorithm> stretchAlgorithmCombo = new JComboBox<>(StretchAlgorithm.values());
+    private final JLabel stretchPrimaryLabel = new JLabel();
+    private final JSlider stretchPrimarySlider = new JSlider();
+    private final JLabel stretchPrimaryValueLabel = new JLabel();
+    private final JLabel stretchSecondaryLabel = new JLabel();
+    private final JSlider stretchSecondarySlider = new JSlider();
+    private final JLabel stretchSecondaryValueLabel = new JLabel();
+    private final JButton stretchResetButton = new JButton("Reset");
+    private final JLabel residualRangeLabel = new JLabel("Residual ±");
+    private final JSlider residualRangeSlider = new JSlider(5, 80, (int) Math.round(FaintMoverReviewAssets.DEFAULT_RESIDUAL_BOUND * 10));
+    private final JLabel residualRangeValueLabel = new JLabel("3.0");
+    /** Local per-algorithm slider values remembered within this window only, independent of other viewers. */
+    private final Map<StretchAlgorithm, int[]> localStretchValues = new java.util.EnumMap<>(StretchAlgorithm.class);
+    private boolean adjustingStretch;
+    /** Cached per-frame valid-pixel histograms across the session so each FITS frame is histogrammed at most once. */
+    private final java.util.concurrent.atomic.AtomicReferenceArray<int[]> sessionFrameHistograms;
+    /** Cached per-frame display LUTs for the current local stretch; cleared whenever stretch controls change. */
+    private final Map<Integer, byte[]> frameLutCache = new HashMap<>();
+    /** Bounded LRU cache of loaded objects' cutouts and faint-mover review assets while this window stays open. */
+    private final Map<String, ObjectPictures> pictureCache = new java.util.LinkedHashMap<>(16, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, ObjectPictures> eldest) {
+            return size() > MAX_CACHED_OBJECTS;
+        }
+    };
     private final JLabel fitLabel = new JLabel(" ");
     private final WrappingHelpLabel identificationLabel = new WrappingHelpLabel(" ", 320);
+    private final JPanel identificationLinksPanel = new JPanel();
     private final WrappingHelpLabel stationLabel = new WrappingHelpLabel(" ", 260);
     private final JTextArea problemsArea = new JTextArea(4, 30);
     private final JTextArea psvArea = new JTextArea(12, 30);
@@ -201,10 +248,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final Timer playTimer;
     /** The shown object's cut-outs per frame: {object-centred, star-centred or null}, kept raw so the stretch can change. */
     private List<short[][][]> pictures = List.of();
-    /** Shared sky statistics of the object-centred and the star-centred cut-outs, for one stretch across the frames. */
-    private DisplayImageRenderer.DisplayStatistics[] pictureStatistics = new DisplayImageRenderer.DisplayStatistics[2];
-    private final JSlider blackSlider = new JSlider(0, 60, 20);
-    private final JSlider whiteSlider = new JSlider(10, 300, 60);
+    /** Optional faint-mover review assets (PSF-filtered residual cube and whole-session shift stack) for the shown object. */
+    private FaintMoverReviewAssets shownReviewAssets;
     private ReportedObjects.ReportedObject shown;
 
     private final JTextField submitter = new JTextField(16);
@@ -234,6 +279,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         super("Asteroids & Comets · " + report.folder().getName());
         AppIcon.apply(this);
         this.files = files.clone();
+        this.sessionFrameHistograms = new java.util.concurrent.atomic.AtomicReferenceArray<>(this.files.length);
         // Identifications made after the report (Compare again, Identify all) come back from the report folder.
         this.later = new java.util.LinkedHashMap<>(eu.startales.spacepixels.mpc.LaterIdentifications.load(report.folder()));
         this.report = later.isEmpty() ? report : report.withObjects(eu.startales.spacepixels.mpc.LaterIdentifications.apply(report.objects(), later));
@@ -363,13 +409,19 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return panel;
     }
 
-    /** The blink of the selected object. */
+    /** The blink of the selected object, with local per-frame stretch controls and a loading progress card. */
     private JComponent picturePanel() {
         ButtonGroup group = new ButtonGroup();
         group.add(objectCentred);
         group.add(starCentred);
         objectCentred.addActionListener(e -> picture.repaint());
         starCentred.addActionListener(e -> picture.repaint());
+        showFaintEvidenceBox.setToolTipText("Show the faint mover's synchronized PSF-filtered residual and whole-session shift stack beside the source frames");
+        showFaintEvidenceBox.setVisible(false);
+        showFaintEvidenceBox.addActionListener(e -> {
+            updateResidualRangeVisibility();
+            picture.repaint();
+        });
         playButton.addActionListener(e -> {
             if (playButton.isSelected()) playTimer.start(); else playTimer.stop();
             playButton.setText(playButton.isSelected() ? "Pause" : "Play");
@@ -382,38 +434,120 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             picture.repaint();
             updatePictureLabel();
         });
-        JPanel controls = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
-        for (JComponent c : new JComponent[]{playButton, previous, next, frameSlider, objectCentred, starCentred}) controls.add(c);
-        blackSlider.setValue((int) Math.round(10 * visualization.getAutoStretchBlackSigma()));
-        whiteSlider.setValue((int) Math.round(10 * visualization.getAutoStretchWhiteSigma()));
-        for (JSlider slider : new JSlider[]{blackSlider, whiteSlider}) {
-            slider.setPreferredSize(new Dimension(UiStyle.space(140), slider.getPreferredSize().height));
-            slider.addChangeListener(e -> { picture.repaint(); updateStretchLabel(); });
+        JPanel controls = new WrappingControlsPanel(UiStyle.space(6), UiStyle.space(2));
+        for (JComponent c : new JComponent[]{playButton, previous, next, frameSlider, objectCentred, starCentred, showFaintEvidenceBox}) {
+            controls.add(c);
         }
-        blackSlider.setToolTipText("Black point: the sky level minus this many noise sigmas shows as black");
-        whiteSlider.setToolTipText("White point: the sky level plus this many noise sigmas shows as white");
-        JButton resetStretch = new JButton("Reset");
-        resetStretch.addActionListener(e -> {
-            blackSlider.setValue((int) Math.round(10 * visualization.getAutoStretchBlackSigma()));
-            whiteSlider.setValue((int) Math.round(10 * visualization.getAutoStretchWhiteSigma()));
+
+        // Independent per-frame stretch controls (same algorithms as Preview Frame & Blink, never affecting other windows).
+        stretchEnabledBox.setToolTipText("Apply the per-frame display stretch in this window only (does not change Preview Frame, Blink or Image Stretch). Untick for a linear view.");
+        stretchEnabledBox.addActionListener(e -> {
+            frameLutCache.clear();
+            updateStretchControlStates();
+            picture.repaint();
         });
-        JPanel stretch = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
-        stretch.add(new JLabel("Black"));
-        stretch.add(blackSlider);
-        stretch.add(new JLabel("White"));
-        stretch.add(whiteSlider);
-        stretch.add(stretchLabel);
-        stretch.add(resetStretch);
-        stretchLabel.setForeground(UiStyle.helpColor());
-        updateStretchLabel();
+        stretchAlgorithmCombo.setSelectedItem(StretchAlgorithm.ASINH);
+        stretchAlgorithmCombo.setToolTipText("Display stretch function for this window only; applied per frame so sky background changes do not darken frames.");
+        stretchAlgorithmCombo.setRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
+                Component c = super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                list.setToolTipText(value == null ? null : StretchPanel.algorithmDescription((StretchAlgorithm) value));
+                return c;
+            }
+        });
+        stretchAlgorithmCombo.addActionListener(e -> {
+            if (adjustingStretch) return;
+            applyStretchAlgorithm(false);
+            frameLutCache.clear();
+            picture.repaint();
+        });
+        for (JSlider slider : new JSlider[]{stretchPrimarySlider, stretchSecondarySlider}) {
+            slider.setPreferredSize(new Dimension(UiStyle.space(110), slider.getPreferredSize().height));
+            slider.addChangeListener(e -> {
+                if (adjustingStretch) return;
+                StretchAlgorithm algorithm = selectedStretchAlgorithm();
+                localStretchValues.put(algorithm, new int[]{stretchPrimarySlider.getValue(), stretchSecondarySlider.getValue()});
+                updateStretchValueLabels();
+                frameLutCache.clear();
+                picture.repaint();
+            });
+        }
+        stretchResetButton.setToolTipText("Return the sliders to the defaults of the selected stretch function.");
+        stretchResetButton.addActionListener(e -> {
+            applyStretchAlgorithm(true);
+            frameLutCache.clear();
+            picture.repaint();
+        });
+        residualRangeSlider.setPreferredSize(new Dimension(UiStyle.space(90), residualRangeSlider.getPreferredSize().height));
+        residualRangeSlider.setToolTipText("Symmetric display scale for the PSF-filtered residual panel (± processed units).");
+        residualRangeSlider.addChangeListener(e -> {
+            residualRangeValueLabel.setText(String.format(Locale.US, "%.1f", residualRangeSlider.getValue() / 10.0));
+            picture.repaint();
+        });
+        stretchPrimaryValueLabel.setForeground(UiStyle.helpColor());
+        stretchSecondaryValueLabel.setForeground(UiStyle.helpColor());
+        residualRangeValueLabel.setForeground(UiStyle.helpColor());
+        applyStretchAlgorithm(false);
+        updateStretchControlStates();
+        updateResidualRangeVisibility();
+
+        JPanel stretch = new WrappingControlsPanel(UiStyle.space(6), UiStyle.space(2));
+        stretch.add(stretchEnabledBox);
+        stretch.add(stretchAlgorithmCombo);
+        stretch.add(stretchPrimaryLabel);
+        stretch.add(stretchPrimarySlider);
+        stretch.add(stretchPrimaryValueLabel);
+        stretch.add(stretchSecondaryLabel);
+        stretch.add(stretchSecondarySlider);
+        stretch.add(stretchSecondaryValueLabel);
+        stretch.add(stretchResetButton);
+        stretch.add(residualRangeLabel);
+        stretch.add(residualRangeSlider);
+        stretch.add(residualRangeValueLabel);
+
         pictureLabel.setForeground(UiStyle.helpColor());
-        JPanel south = new JPanel(new BorderLayout());
+        JPanel south = new JPanel(new BorderLayout(0, UiStyle.space(2)));
         south.add(stretch, BorderLayout.NORTH);
         south.add(pictureLabel, BorderLayout.SOUTH);
+
+        pictureStage.add(picture, CARD_PICTURE);
+        pictureStage.add(buildPictureLoadingPanel(), CARD_LOADING);
+        pictureCards.show(pictureStage, CARD_PICTURE);
+
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(controls, BorderLayout.NORTH);
-        panel.add(picture, BorderLayout.CENTER);
+        panel.add(pictureStage, BorderLayout.CENTER);
         panel.add(south, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    /** Centred progress card shown in the animation area while frames are read from disk, matching BlinkFrame. */
+    private JComponent buildPictureLoadingPanel() {
+        loadTitleLabel.setFont(loadTitleLabel.getFont().deriveFont(Font.BOLD, loadTitleLabel.getFont().getSize2D() + 2f));
+        loadProgressBar.setStringPainted(true);
+        Dimension barSize = new Dimension(UiStyle.space(320), loadProgressBar.getPreferredSize().height);
+        loadProgressBar.setPreferredSize(barSize);
+        loadProgressBar.setMaximumSize(barSize);
+        loadFileLabel.setForeground(UiStyle.helpColor());
+        JLabel note = new JLabel("Each frame is read once per object; the animation then plays from memory.");
+        note.setForeground(UiStyle.helpColor());
+
+        JPanel column = new JPanel();
+        column.setLayout(new BoxLayout(column, BoxLayout.Y_AXIS));
+        for (JComponent component : new JComponent[]{loadTitleLabel, loadProgressBar, loadFileLabel, note}) {
+            component.setAlignmentX(Component.CENTER_ALIGNMENT);
+        }
+        column.add(loadTitleLabel);
+        column.add(Box.createVerticalStrut(UiStyle.space(8)));
+        column.add(loadProgressBar);
+        column.add(Box.createVerticalStrut(UiStyle.space(6)));
+        column.add(loadFileLabel);
+        column.add(Box.createVerticalStrut(UiStyle.space(12)));
+        column.add(note);
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.add(column);
         return panel;
     }
 
@@ -638,6 +772,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         panel.add(title("Identification"));
         identificationLabel.setForeground(UIManager.getColor("Label.foreground"));
         panel.add(identificationLabel);
+        identificationLinksPanel.setLayout(new BoxLayout(identificationLinksPanel, BoxLayout.Y_AXIS));
+        identificationLinksPanel.setOpaque(false);
+        identificationLinksPanel.setAlignmentX(LEFT_ALIGNMENT);
+        identificationLinksPanel.setVisible(false);
+        panel.add(identificationLinksPanel);
         JButton mpchecker = new JButton("MPChecker…");
         mpchecker.setToolTipText("Copies the date, position and code of the middle selected observation and opens the MPC's MPChecker");
         mpchecker.addActionListener(e -> openMpchecker());
@@ -835,9 +974,11 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         updateNights();
         if (object == null) {
             identificationLabel.setText(" ");
+            updateIdentificationLinks(null);
             return;
         }
-        String names = object.names().isEmpty() ? "" : "<b>" + escape(String.join(" or ", object.names())) + "</b><br>";
+        String names = object.names().isEmpty() ? "" : "<b>" + escape(String.join(" or ", object.names())) + "</b>"
+                + predictedMagnitudeSuffix(object) + "<br>";
         measureButton.setEnabled(subStackWorker != null || !object.measured() && object.motion() != null && reduction.reduction() != null);
         String measure = object.measured() ? "" : subStackText(object);
         String reduced = reduction.reduction() == null ? "<br>" + escape(reduction.problem()) : "";
@@ -846,16 +987,81 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 : "<br>Identify all, within 1′: " + escape(String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList())) + ".";
         identificationLabel.setHtml(object.id() + " · " + statusText(status(object)) + "<br>" + names
                 + escape(object.note() == null ? "" : object.note()) + nearText + measure + reduced);
+        updateIdentificationLinks(object);
         loadPictures(object);
     }
 
-    /** Reads each frame of the object once, cutting its object-centred and star-centred pictures. */
+    /** Rebuilds the external JPL SBDB lookup link(s) for the selected object's identified names. */
+    private void updateIdentificationLinks(ReportedObjects.ReportedObject object) {
+        identificationLinksPanel.removeAll();
+        boolean hasLinks = false;
+        if (object != null && !object.names().isEmpty()) {
+            for (String name : object.names()) {
+                String url = informationUrlFor(report, name);
+                if (url == null) continue;
+                JButton link = AccessibleControls.link(
+                        "JPL details: " + name + " ↗",
+                        "Open " + name + " in JPL Small-Body Database (magnitude, orbit and physical data)",
+                        () -> browse(url));
+                link.setToolTipText(url);
+                link.setAlignmentX(LEFT_ALIGNMENT);
+                identificationLinksPanel.add(link);
+                hasLinks = true;
+            }
+        }
+        identificationLinksPanel.setVisible(hasLinks);
+        identificationLinksPanel.revalidate();
+        identificationLinksPanel.repaint();
+    }
+
+    /** Resolves the external JPL Small-Body Database URL for an identified object name, matching the HTML report. */
+    static String informationUrlFor(ReportedObjects.Report report, String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        if (report != null && report.knownBodies() != null) {
+            ReportedObjects.KnownBody body = report.knownBodies().get(name);
+            if (body != null) {
+                if (body.informationUrl() != null && !body.informationUrl().isBlank()) {
+                    return body.informationUrl();
+                }
+                return JplSbdbLookup.informationUrl(name, body.comet());
+            }
+        }
+        return JplSbdbLookup.informationUrl(name);
+    }
+
+    /** Short predicted V-magnitude suffix from {@code report-data.json}, or empty when unavailable. */
+    private String predictedMagnitudeSuffix(ReportedObjects.ReportedObject object) {
+        if (object == null || object.names().size() != 1 || report.knownBodies() == null) {
+            return "";
+        }
+        ReportedObjects.KnownBody body = report.knownBodies().get(object.names().getFirst());
+        if (body == null || body.minimumMagnitude() == null || !Double.isFinite(body.minimumMagnitude())) {
+            return "";
+        }
+        double min = body.minimumMagnitude();
+        Double maxObj = body.maximumMagnitude();
+        if (maxObj != null && Double.isFinite(maxObj) && Math.abs(maxObj - min) >= 0.05) {
+            return String.format(Locale.US, " (predicted V %.1f–%.1f)", min, maxObj);
+        }
+        return String.format(Locale.US, " (predicted V %.1f)", min);
+    }
+
+    /** Reads each frame of the object once (with progress feedback and session cache), plus faint-mover review assets. */
     private void loadPictures(ReportedObjects.ReportedObject object) {
         int request = generation.incrementAndGet();
         if (worker != null) worker.cancel(true);
         pictures = List.of();
-        picture.repaint();
-        pictureLabel.setText("Reading the frames…");
+        shownReviewAssets = null;
+
+        ObjectPictures cached = pictureCache.get(object.id());
+        if (cached != null) {
+            applyObjectPictures(cached);
+            pictureCards.show(pictureStage, CARD_PICTURE);
+            return;
+        }
+
         var positions = object.positions();
         double minX = positions.stream().mapToDouble(ReportedObjects.Position::x).min().orElse(0);
         double maxX = positions.stream().mapToDouble(ReportedObjects.Position::x).max().orElse(0);
@@ -866,51 +1072,104 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         boolean fixed = fw <= MAX_FIXED && fh <= MAX_FIXED;
         starCentred.setEnabled(fixed);
         if (!fixed) objectCentred.setSelected(true);
-        var statistics = new DisplayImageRenderer.DisplayStatistics[2];
+        showFaintEvidenceBox.setVisible(false);
+        updateResidualRangeVisibility();
+
+        int total = positions.size();
+        loadTitleLabel.setText("Reading frames for " + object.id() + "…");
+        loadProgressBar.setIndeterminate(total == 0);
+        loadProgressBar.setMinimum(0);
+        loadProgressBar.setMaximum(Math.max(1, total));
+        loadProgressBar.setValue(0);
+        loadProgressBar.setString(total == 0 ? "Reading…" : "0 / " + total + " frames");
+        loadFileLabel.setText(" ");
+        pictureCards.show(pictureStage, CARD_LOADING);
+        pictureLabel.setText(total == 0 ? "Reading frames for " + object.id() + "…"
+                : "Reading " + total + " frames for " + object.id() + "…");
+
+        ReportedObjects.FaintMoverAssetPaths assetPaths = object.measured() ? null : report.faintMoverAssets().get(object.id());
+        File reportFolder = report.folder();
         worker = new SwingWorker<>() {
             @Override
-            protected List<short[][][]> doInBackground() throws Exception {
-                var objectCrops = new ArrayList<short[][]>();
-                var fixedCrops = new ArrayList<short[][]>();
-                for (var p : positions) {
-                    if (isCancelled()) return List.of();
+            protected ObjectPictures doInBackground() throws Exception {
+                var objectCrops = new ArrayList<short[][]>(total);
+                var fixedCrops = new ArrayList<short[][]>(fixed ? total : 0);
+                for (int k = 0; k < total; k++) {
+                    if (isCancelled()) return null;
+                    var p = positions.get(k);
                     int index = p.frameNumber() - 1;
-                    if (index < 0 || index >= files.length) throw new java.io.IOException("frame " + p.frameNumber() + " is not in this session");
+                    if (index < 0 || index >= files.length) {
+                        throw new java.io.IOException("frame " + p.frameNumber() + " is not in this session");
+                    }
+                    String fileName = files[index].getFileName();
+                    publish(new LoadProgress(k, total, fileName));
                     short[][] frame;
                     try (Fits fits = new Fits(new File(files[index].getFilePath()))) {
                         Object kernel = FitsInput.getImageHDU(fits).getKernel();
                         if (!(kernel instanceof short[][] pixels)) {
-                            throw new java.io.IOException(files[index].getFileName() + " is not a 16-bit monochrome frame");
+                            throw new java.io.IOException(fileName + " is not a 16-bit monochrome frame");
                         }
                         frame = pixels;
                     }
+                    if (sessionFrameHistograms.get(index) == null) {
+                        sessionFrameHistograms.compareAndSet(index, null, DisplayStretch.validHistogram(frame));
+                    }
                     objectCrops.add(crop(frame, (int) Math.round(p.x()) - CROP / 2, (int) Math.round(p.y()) - CROP / 2, CROP, CROP));
                     if (fixed) fixedCrops.add(crop(frame, fx, fy, fw, fh));
+                    publish(new LoadProgress(k + 1, total, fileName));
                 }
-                statistics[0] = DisplayImageRenderer.sharedDisplayStatistics(objectCrops);
-                statistics[1] = fixed ? DisplayImageRenderer.sharedDisplayStatistics(fixedCrops) : null;
-                var crops = new ArrayList<short[][][]>();
-                for (int i = 0; i < objectCrops.size(); i++) crops.add(new short[][][]{objectCrops.get(i), fixed ? fixedCrops.get(i) : null});
-                return crops;
+                if (isCancelled()) return null;
+                FaintMoverReviewAssets reviewAssets = object.measured()
+                        ? null : FaintMoverReviewAssets.load(reportFolder, object.id(), assetPaths);
+                var crops = new ArrayList<short[][][]>(objectCrops.size());
+                for (int i = 0; i < objectCrops.size(); i++) {
+                    crops.add(new short[][][]{objectCrops.get(i), fixed ? fixedCrops.get(i) : null});
+                }
+                return new ObjectPictures(List.copyOf(crops), new int[]{fx, fy}, fixed, reviewAssets);
+            }
+
+            @Override
+            protected void process(List<LoadProgress> chunks) {
+                if (closed || request != generation.get() || isCancelled() || chunks.isEmpty()) return;
+                LoadProgress latest = chunks.getLast();
+                loadProgressBar.setValue(latest.completed());
+                loadProgressBar.setString(latest.completed() + " / " + latest.total() + " frames");
+                loadFileLabel.setText(latest.fileName());
             }
 
             @Override
             protected void done() {
                 if (closed || request != generation.get() || isCancelled()) return;
                 try {
-                    pictures = get();
-                    pictureStatistics = statistics;
-                    picture.fixedOrigin = new int[]{fx, fy};
-                    frameSlider.setMaximum(Math.max(0, pictures.size() - 1));
-                    frameSlider.setValue(0);
-                    updatePictureLabel();
-                    picture.repaint();
+                    ObjectPictures loaded = get();
+                    if (loaded == null) return;
+                    pictureCache.put(object.id(), loaded);
+                    applyObjectPictures(loaded);
+                    pictureCards.show(pictureStage, CARD_PICTURE);
                 } catch (Exception e) {
-                    pictureLabel.setText("The frames could not be read: " + e.getMessage());
+                    pictureCards.show(pictureStage, CARD_PICTURE);
+                    picture.repaint();
+                    pictureLabel.setText("The frames could not be read: " + message(e));
                 }
             }
         };
         worker.execute();
+    }
+
+    /** Displays loaded (or cached) cutouts and optional faint-mover review assets for the current object. */
+    private void applyObjectPictures(ObjectPictures loaded) {
+        pictures = loaded.crops();
+        shownReviewAssets = loaded.reviewAssets();
+        picture.fixedOrigin = loaded.fixedOrigin();
+        starCentred.setEnabled(loaded.fixedAvailable());
+        if (!loaded.fixedAvailable()) objectCentred.setSelected(true);
+        boolean hasEvidence = shownReviewAssets != null && shownReviewAssets.hasAny();
+        showFaintEvidenceBox.setVisible(hasEvidence);
+        updateResidualRangeVisibility();
+        frameSlider.setMaximum(Math.max(0, pictures.size() - 1));
+        frameSlider.setValue(0);
+        updatePictureLabel();
+        picture.repaint();
     }
 
     /** A copy of a rectangle of a frame; outside the frame is registration fill. */
@@ -918,9 +1177,74 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return LightCurve.crop(frame, x, y, width, height);
     }
 
-    /** Names the stretch the sliders set, in sky noise sigmas. */
-    private void updateStretchLabel() {
-        stretchLabel.setText(String.format(Locale.US, "sky −%.1fσ to +%.1fσ", blackSlider.getValue() / 10.0, whiteSlider.getValue() / 10.0));
+    private StretchAlgorithm selectedStretchAlgorithm() {
+        StretchAlgorithm algorithm = (StretchAlgorithm) stretchAlgorithmCombo.getSelectedItem();
+        return algorithm == null ? StretchAlgorithm.ASINH : algorithm;
+    }
+
+    /** Configures the local stretch sliders for the selected algorithm (or restores its defaults when {@code reset}). */
+    private void applyStretchAlgorithm(boolean reset) {
+        StretchAlgorithm algorithm = selectedStretchAlgorithm();
+        int[] saved = reset ? null : localStretchValues.get(algorithm);
+        int primary = saved != null ? saved[0] : algorithm.getPrimaryDefault();
+        int secondary = saved != null ? saved[1] : algorithm.getSecondaryDefault();
+        adjustingStretch = true;
+        try {
+            stretchPrimarySlider.setMinimum(algorithm.getPrimaryMinimum());
+            stretchPrimarySlider.setMaximum(algorithm.getPrimaryMaximum());
+            stretchPrimarySlider.setValue(Math.max(algorithm.getPrimaryMinimum(), Math.min(algorithm.getPrimaryMaximum(), primary)));
+            stretchSecondarySlider.setMinimum(algorithm.getSecondaryMinimum());
+            stretchSecondarySlider.setMaximum(algorithm.getSecondaryMaximum());
+            stretchSecondarySlider.setValue(Math.max(algorithm.getSecondaryMinimum(), Math.min(algorithm.getSecondaryMaximum(), secondary)));
+            stretchPrimaryLabel.setText(algorithm.getPrimaryParameterLabel());
+            stretchSecondaryLabel.setText(algorithm.getSecondaryParameterLabel());
+        } finally {
+            adjustingStretch = false;
+        }
+        localStretchValues.put(algorithm, new int[]{stretchPrimarySlider.getValue(), stretchSecondarySlider.getValue()});
+        updateStretchValueLabels();
+    }
+
+    private void updateStretchControlStates() {
+        boolean enabled = stretchEnabledBox.isSelected();
+        stretchAlgorithmCombo.setEnabled(enabled);
+        stretchPrimaryLabel.setEnabled(enabled);
+        stretchPrimarySlider.setEnabled(enabled);
+        stretchPrimaryValueLabel.setEnabled(enabled);
+        stretchSecondaryLabel.setEnabled(enabled);
+        stretchSecondarySlider.setEnabled(enabled);
+        stretchSecondaryValueLabel.setEnabled(enabled);
+        stretchResetButton.setEnabled(enabled);
+    }
+
+    private void updateStretchValueLabels() {
+        StretchAlgorithm algorithm = selectedStretchAlgorithm();
+        stretchPrimaryValueLabel.setText(algorithm == StretchAlgorithm.ASINH
+                ? stretchPrimarySlider.getValue() + "%" : Integer.toString(stretchPrimarySlider.getValue()));
+        stretchSecondaryValueLabel.setText(Integer.toString(stretchSecondarySlider.getValue()));
+    }
+
+    private void updateResidualRangeVisibility() {
+        boolean visible = showFaintEvidenceBox.isVisible() && showFaintEvidenceBox.isSelected()
+                && shownReviewAssets != null && shownReviewAssets.residuals() != null;
+        residualRangeLabel.setVisible(visible);
+        residualRangeSlider.setVisible(visible);
+        residualRangeValueLabel.setVisible(visible);
+    }
+
+    /** Computes (or returns cached) per-frame lookup table for the current independent stretch controls. */
+    private byte[] currentStretchLut(int fileIndex, short[][] fallbackCrop) {
+        if (!stretchEnabledBox.isSelected()) {
+            return DisplayStretch.linearLookupTable();
+        }
+        return frameLutCache.computeIfAbsent(fileIndex, idx -> {
+            int[] histogram = idx >= 0 && idx < sessionFrameHistograms.length() ? sessionFrameHistograms.get(idx) : null;
+            if (histogram == null) {
+                histogram = DisplayStretch.validHistogram(fallbackCrop);
+            }
+            return DisplayStretch.lookupTable(histogram, selectedStretchAlgorithm(),
+                    stretchPrimarySlider.getValue(), stretchSecondarySlider.getValue());
+        });
     }
 
     private void step(int delta) {
@@ -935,9 +1259,17 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         var p = shown.positions().get(i);
         var file = p.frameNumber() - 1 < files.length ? files[p.frameNumber() - 1] : null;
         long time = file == null ? 0 : file.getObservationTimestamp() + Math.max(0, file.getExposureDurationMillis()) / 2;
-        pictureLabel.setText(String.format(Locale.US, "%s · frame %d of the session · %s UTC · %d of %d · %s", shown.id(),
+        String maskNote = "";
+        if (showFaintEvidenceBox.isVisible() && showFaintEvidenceBox.isSelected()
+                && shownReviewAssets != null && shownReviewAssets.residuals() != null) {
+            var resFrame = shownReviewAssets.residuals().frameForNumber(p.frameNumber());
+            if (resFrame != null) {
+                maskNote = resFrame.unmasked() ? " · centre unmasked" : " · centre masked";
+            }
+        }
+        pictureLabel.setText(String.format(Locale.US, "%s · frame %d of the session · %s UTC · %d of %d · %s%s", shown.id(),
                 p.frameNumber(), time > 0 ? UTC.format(Instant.ofEpochMilli(time)) : "time unknown", i + 1, pictures.size(),
-                shown.measured() ? "measured centroid" : "fitted position"));
+                shown.measured() ? "measured centroid" : "fitted position", maskNote));
     }
 
     /** Applies a new selection rule to the shown object's observations. */
@@ -2634,6 +2966,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
             identifyWorker = curveWorker = subStackWorker = nightsWorker = findOrbWorker = stationWorker = null;
             pictures = List.of();
+            shownReviewAssets = null;
+            pictureCache.clear();
+            frameLutCache.clear();
+            for (int i = 0; i < sessionFrameHistograms.length(); i++) {
+                sessionFrameHistograms.set(i, null);
+            }
         }
         super.dispose();
     }
@@ -2787,8 +3125,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
     }
 
-    /** Draws the shown picture, enlarged without smoothing, with a ring at the object. */
+    /**
+     * Draws the shown source picture (per-frame DisplayStretch, enlarged without smoothing, with a cyan ring at the
+     * object) and, for faint movers with saved report assets, the synchronized PSF-filtered residual and whole-session
+     * shift stack side by side.
+     */
     private final class Picture extends JComponent {
+        private static final Color OVERLAY_CYAN = new Color(80, 225, 210);
+        private static final Color CAPTION_COLOR = new Color(185, 192, 204);
         int[] fixedOrigin = {0, 0};
 
         Picture() {
@@ -2803,27 +3147,142 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 g.fillRect(0, 0, getWidth(), getHeight());
                 if (pictures.isEmpty() || shown == null) return;
                 int i = Math.min(frameSlider.getValue(), pictures.size() - 1);
-                boolean fixed = starCentred.isSelected() && pictures.get(i)[1] != null;
-                var statistics = pictureStatistics[fixed ? 1 : 0];
-                if (statistics == null) return;
-                double[] levels = statistics.levels(blackSlider.getValue() / 10.0, whiteSlider.getValue() / 10.0);
-                BufferedImage image = DisplayImageRenderer.createDisplayImageAtLevels(pictures.get(i)[fixed ? 1 : 0], levels[0], levels[1]);
-                double scale = Math.min(getWidth() / (double) image.getWidth(), getHeight() / (double) image.getHeight());
-                int w = (int) (image.getWidth() * scale), h = (int) (image.getHeight() * scale);
-                int left = (getWidth() - w) / 2, top = (getHeight() - h) / 2;
-                g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
-                g.drawImage(image, left, top, w, h, null);
                 var p = shown.positions().get(Math.min(i, shown.positions().size() - 1));
+                boolean fixed = starCentred.isSelected() && pictures.get(i)[1] != null;
+                short[][] crop = pictures.get(i)[fixed ? 1 : 0];
+                if (crop == null) return;
+
+                byte[] lut = currentStretchLut(p.frameNumber() - 1, crop);
+                BufferedImage sourceImage = DisplayStretch.createDisplayImage(crop, lut);
                 double px = fixed ? p.x() - fixedOrigin[0] : p.x() - (Math.round(p.x()) - CROP / 2);
                 double py = fixed ? p.y() - fixedOrigin[1] : p.y() - (Math.round(p.y()) - CROP / 2);
-                double r = Math.max(6, 4 * scale);
-                g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-                g.setColor(new Color(80, 225, 210));
-                g.setStroke(new BasicStroke(1.5f));
-                g.draw(new Ellipse2D.Double(left + (px + 0.5) * scale - r, top + (py + 0.5) * scale - r, 2 * r, 2 * r));
+
+                boolean showEvidence = showFaintEvidenceBox.isVisible() && showFaintEvidenceBox.isSelected()
+                        && shownReviewAssets != null && shownReviewAssets.hasAny();
+                FaintMoverReviewAssets.ResidualCube cube = showEvidence ? shownReviewAssets.residuals() : null;
+                FaintMoverReviewAssets.ResidualFrame resFrame = cube == null ? null : cube.frameForNumber(p.frameNumber());
+                BufferedImage stackImage = showEvidence ? shownReviewAssets.shiftStack() : null;
+
+                int panelCount = 1 + (resFrame != null ? 1 : 0) + (stackImage != null ? 1 : 0);
+                if (panelCount == 1) {
+                    drawSourceTile(g, 0, 0, getWidth(), getHeight(), null, sourceImage, px, py);
+                    return;
+                }
+
+                int gap = UiStyle.space(8);
+                int pad = UiStyle.space(4);
+                int tileW = Math.max(20, (getWidth() - 2 * pad - (panelCount - 1) * gap) / panelCount);
+                int tileH = Math.max(20, getHeight() - 2 * pad);
+                int slot = 0;
+                drawSourceTile(g, pad + slot * (tileW + gap), pad, tileW, tileH, "Source frames", sourceImage, px, py);
+                slot++;
+                if (resFrame != null) {
+                    drawResidualTile(g, pad + slot * (tileW + gap), pad, tileW, tileH,
+                            "PSF-filtered residual", cube, resFrame, !fixed);
+                    slot++;
+                }
+                if (stackImage != null) {
+                    drawShiftStackTile(g, pad + slot * (tileW + gap), pad, tileW, tileH,
+                            "Whole-session shift stack", stackImage);
+                }
             } finally {
                 g.dispose();
             }
+        }
+
+        private void drawSourceTile(Graphics2D g, int x, int y, int width, int height, String caption,
+                                    BufferedImage image, double px, double py) {
+            int topOffset = drawCaption(g, x, y, width, caption);
+            int availH = Math.max(1, height - topOffset);
+            double scale = Math.min(width / (double) image.getWidth(), availH / (double) image.getHeight());
+            int w = Math.max(1, (int) Math.round(image.getWidth() * scale));
+            int h = Math.max(1, (int) Math.round(image.getHeight() * scale));
+            int left = x + (width - w) / 2;
+            int top = y + topOffset + (availH - h) / 2;
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g.drawImage(image, left, top, w, h, null);
+            double r = Math.max(6, 4 * scale);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(OVERLAY_CYAN);
+            g.setStroke(new BasicStroke(1.5f));
+            g.draw(new Ellipse2D.Double(left + (px + 0.5) * scale - r, top + (py + 0.5) * scale - r, 2 * r, 2 * r));
+        }
+
+        private void drawResidualTile(Graphics2D g, int x, int y, int width, int height, String caption,
+                                      FaintMoverReviewAssets.ResidualCube cube,
+                                      FaintMoverReviewAssets.ResidualFrame frame, boolean objectCentredMode) {
+            int topOffset = drawCaption(g, x, y, width, caption);
+            int availH = Math.max(1, height - topOffset);
+            double bound = residualRangeSlider.getValue() / 10.0;
+            BufferedImage image = cube.render(frame, objectCentredMode, bound);
+            double scale = Math.min(width / (double) image.getWidth(), availH / (double) image.getHeight());
+            int w = Math.max(1, (int) Math.round(image.getWidth() * scale));
+            int h = Math.max(1, (int) Math.round(image.getHeight() * scale));
+            int left = x + (width - w) / 2;
+            int top = y + topOffset + (availH - h) / 2;
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g.drawImage(image, left, top, w, h, null);
+
+            Shape previousClip = g.getClip();
+            g.clipRect(left, top, w, h);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(OVERLAY_CYAN);
+            double dx = objectCentredMode ? frame.x() - (cube.width() - 1) / 2.0 : 0.0;
+            double dy = objectCentredMode ? frame.y() - (cube.height() - 1) / 2.0 : 0.0;
+            if (cube.frames().size() >= 2) {
+                var first = cube.frames().getFirst();
+                var last = cube.frames().getLast();
+                double x0 = first.x() + (cube.followsPath() ? first.originX() - frame.originX() : 0) - dx;
+                double y0 = first.y() + (cube.followsPath() ? first.originY() - frame.originY() : 0) - dy;
+                double x1 = last.x() + (cube.followsPath() ? last.originX() - frame.originX() : 0) - dx;
+                double y1 = last.y() + (cube.followsPath() ? last.originY() - frame.originY() : 0) - dy;
+                g.setStroke(new BasicStroke(1.0f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_ROUND, 1f, new float[]{4f, 4f}, 0f));
+                g.draw(new java.awt.geom.Line2D.Double(
+                        left + (x0 + 0.5) * scale, top + (y0 + 0.5) * scale,
+                        left + (x1 + 0.5) * scale, top + (y1 + 0.5) * scale));
+            }
+            double cx = frame.x() - dx;
+            double cy = frame.y() - dy;
+            double r = Math.max(6, 4 * scale);
+            g.setStroke(new BasicStroke(1.5f));
+            g.draw(new Ellipse2D.Double(left + (cx + 0.5) * scale - r, top + (cy + 0.5) * scale - r, 2 * r, 2 * r));
+            g.setClip(previousClip);
+        }
+
+        private void drawShiftStackTile(Graphics2D g, int x, int y, int width, int height, String caption,
+                                        BufferedImage image) {
+            int topOffset = drawCaption(g, x, y, width, caption);
+            int availH = Math.max(1, height - topOffset);
+            double scale = Math.min(width / (double) image.getWidth(), availH / (double) image.getHeight());
+            int w = Math.max(1, (int) Math.round(image.getWidth() * scale));
+            int h = Math.max(1, (int) Math.round(image.getHeight() * scale));
+            int left = x + (width - w) / 2;
+            int top = y + topOffset + (availH - h) / 2;
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR);
+            g.drawImage(image, left, top, w, h, null);
+
+            double cx = left + w / 2.0;
+            double cy = top + h / 2.0;
+            double arm = Math.max(8, 3.5 * scale);
+            double inner = Math.max(3, 1.2 * scale);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(OVERLAY_CYAN);
+            g.setStroke(new BasicStroke(1.3f));
+            g.draw(new java.awt.geom.Line2D.Double(cx - arm, cy, cx - inner, cy));
+            g.draw(new java.awt.geom.Line2D.Double(cx + inner, cy, cx + arm, cy));
+            g.draw(new java.awt.geom.Line2D.Double(cx, cy - arm, cx, cy - inner));
+            g.draw(new java.awt.geom.Line2D.Double(cx, cy + inner, cx, cy + arm));
+        }
+
+        private int drawCaption(Graphics2D g, int x, int y, int width, String caption) {
+            if (caption == null) return 0;
+            Font font = UiStyle.bodyFont().deriveFont(Font.PLAIN, Math.max(10f, UiStyle.bodyFont().getSize2D() - 1f));
+            g.setFont(font);
+            FontMetrics fm = g.getFontMetrics();
+            int textW = fm.stringWidth(caption);
+            g.setColor(CAPTION_COLOR);
+            g.drawString(caption, x + Math.max(0, (width - textW) / 2), y + fm.getAscent());
+            return fm.getHeight() + UiStyle.space(4);
         }
     }
 }

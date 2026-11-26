@@ -50,14 +50,27 @@ public final class ReportedObjects {
     /** One frame of the report, as the report recorded it. */
     public record Frame(String fileName, int width, int height, long timestampMillis, long exposureMillis) { }
 
+    /** Predicted body metadata captured in {@code report-data.json} for external links and predicted brightness. */
+    public record KnownBody(String name, boolean comet, Double minimumMagnitude, Double maximumMagnitude, String informationUrl) { }
+
+    /** Relative report asset paths for a faint mover's shift stack and interactive review cube. */
+    public record FaintMoverAssetPaths(String cutout, String reviewData) { }
+
     /**
-     * The report's frames, in its one-based order, its objects (tracks first, then faint movers), and the stars' FWHM
-     * in pixels the faint-mover search used (null without that search).
+     * The report's frames, in its one-based order, its objects (tracks first, then faint movers), the stars' FWHM
+     * in pixels the faint-mover search used (null without that search), plus optional known-body metadata and
+     * faint-mover review asset paths.
      */
-    public record Report(File folder, List<Frame> frames, List<ReportedObject> objects, Double faintMoverFwhm) {
+    public record Report(File folder, List<Frame> frames, List<ReportedObject> objects, Double faintMoverFwhm,
+                         Map<String, KnownBody> knownBodies, Map<String, FaintMoverAssetPaths> faintMoverAssets) {
+        /** Convenience constructor for reports without extra known-body metadata or faint-mover asset paths. */
+        public Report(File folder, List<Frame> frames, List<ReportedObject> objects, Double faintMoverFwhm) {
+            this(folder, frames, objects, faintMoverFwhm, Map.of(), Map.of());
+        }
+
         /** The same report with other objects, for identifications made after it was written. */
         public Report withObjects(List<ReportedObject> replaced) {
-            return new Report(folder, frames, List.copyOf(replaced), faintMoverFwhm);
+            return new Report(folder, frames, List.copyOf(replaced), faintMoverFwhm, knownBodies, faintMoverAssets);
         }
 
         /**
@@ -98,12 +111,24 @@ public final class ReportedObjects {
                     (long) number(f, "timestampMillis", 0), (long) number(f, "exposureMillis", 0)));
         }
         Map<String, JsonObject> identifications = new HashMap<>();
+        Map<String, KnownBody> knownBodies = new HashMap<>();
         JsonObject known = data.has("knownSolarSystem") && data.get("knownSolarSystem").isJsonObject()
                 ? data.getAsJsonObject("knownSolarSystem") : null;
         for (JsonElement element : known == null ? new JsonArray() : array(known, "identifications")) {
             identifications.put(text(element.getAsJsonObject(), "id"), element.getAsJsonObject());
         }
+        for (JsonElement element : known == null ? new JsonArray() : array(known, "bodies")) {
+            if (!element.isJsonObject()) continue;
+            JsonObject b = element.getAsJsonObject();
+            String name = text(b, "name");
+            if (name != null && !name.isBlank()) {
+                boolean comet = b.has("comet") && b.get("comet").isJsonPrimitive() && b.get("comet").getAsBoolean();
+                knownBodies.put(name, new KnownBody(name, comet, optional(b, "minimumMagnitude"),
+                        optional(b, "maximumMagnitude"), text(b, "informationUrl")));
+            }
+        }
         var objects = new ArrayList<ReportedObject>();
+        var faintMoverAssets = new HashMap<String, FaintMoverAssetPaths>();
         for (JsonElement element : array(data, "findings")) {
             JsonObject finding = element.getAsJsonObject();
             String id = text(finding, "id");
@@ -129,10 +154,20 @@ public final class ReportedObjects {
                     (long) number(entry, "referenceTimeMillis", 0), number(entry, "vxPixelsPerMinute", Double.NaN),
                     number(entry, "vyPixelsPerMinute", Double.NaN));
             objects.add(object(id, FAINT_MOVER, identifications.get(id), positions, motion));
+            if (id != null) {
+                String cutout = text(entry, "cutout");
+                JsonObject review = entry.has("review") && entry.get("review").isJsonObject()
+                        ? entry.getAsJsonObject("review") : null;
+                String reviewData = review == null ? null : text(review, "data");
+                if (cutout != null || reviewData != null) {
+                    faintMoverAssets.put(id, new FaintMoverAssetPaths(cutout, reviewData));
+                }
+            }
         }
         JsonObject search = data.has("faintMoverSearch") && data.get("faintMoverSearch").isJsonObject()
                 ? data.getAsJsonObject("faintMoverSearch") : null;
-        return new Report(folder, List.copyOf(frames), List.copyOf(objects), search == null ? null : optional(search, "fwhmPixels"));
+        return new Report(folder, List.copyOf(frames), List.copyOf(objects), search == null ? null : optional(search, "fwhmPixels"),
+                Map.copyOf(knownBodies), Map.copyOf(faintMoverAssets));
     }
 
     /** One object with the report's identification, or "not compared" when the report had no predictions. */

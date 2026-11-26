@@ -9,6 +9,11 @@
  */
 package eu.startales.spacepixels.fits;
 
+import io.github.ppissias.jtransient.core.DataArea;
+
+import java.awt.image.BufferedImage;
+import java.awt.image.WritableRaster;
+
 /**
  * The display stretch as a lookup table: the 16-bit stretched value and 8-bit grey level (0 to 255) of every 16-bit
  * value of one channel.
@@ -72,6 +77,47 @@ public final class DisplayStretch {
             }
         }
         return histogram;
+    }
+
+    /**
+     * Histogram of valid (non-fill) pixels in a 2D channel, excluding registration fill
+     * ({@code value <= DataArea.FILL_THRESHOLD}) so empty borders do not skew percentile stretches. Falls back to all
+     * pixels if no valid pixel is present.
+     */
+    public static int[] validHistogram(short[][] data) {
+        int[] histogram = new int[VALUES];
+        long valid = 0;
+        for (short[] row : data) {
+            for (short value : row) {
+                if (value > DataArea.FILL_THRESHOLD) {
+                    histogram[value - Short.MIN_VALUE]++;
+                    valid++;
+                }
+            }
+        }
+        return valid > 0 ? histogram : histogram(data);
+    }
+
+    /**
+     * Renders a 16-bit signed monochrome 2D cutout using a 65,536-entry grey lookup table from
+     * {@link #lookupTable} or {@link #linearLookupTable}. Registration fill pixels
+     * ({@code value <= DataArea.FILL_THRESHOLD}) are drawn black.
+     */
+    public static BufferedImage createDisplayImage(short[][] imageData, byte[] lookupTable) {
+        int height = imageData.length;
+        int width = imageData[0].length;
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+        WritableRaster raster = image.getRaster();
+        int[] rowPixels = new int[width];
+        for (int y = 0; y < height; y++) {
+            short[] row = imageData[y];
+            for (int x = 0; x < width; x++) {
+                short raw = row[x];
+                rowPixels[x] = raw <= DataArea.FILL_THRESHOLD ? 0 : (lookupTable[raw - Short.MIN_VALUE] & 0xFF);
+            }
+            raster.setSamples(0, y, width, 1, 0, rowPixels);
+        }
+        return image;
     }
 
     /** Stretched 16-bit FITS value of every input value of a channel with this histogram. */
