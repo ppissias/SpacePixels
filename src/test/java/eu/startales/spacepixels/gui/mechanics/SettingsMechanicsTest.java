@@ -113,8 +113,9 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
     }
 
     /**
-     * The search is on by default, and a fastest motion below the short session's slowest stays valid with a note. The
-     * page shares its Overview switch and saves minutes in canonical engine seconds.
+     * The search and automatic fastest motion are on by default; unticking automatic enables manual fastest motion, and
+     * a manual value below the short session's slowest stays valid with a note. The page shares its Overview switch and
+     * saves minutes in canonical engine seconds.
      */
     @Test(timeout = 180_000)
     public void faintMoversAreOnByDefaultAndSettingsSurviveSaveAndReopen() throws Exception {
@@ -122,12 +123,17 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
         window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
+        window().checkBox(VisibleText.checkBox("Automatic fastest motion (2 FWHM/frame)")).requireSelected();
+        assertFalse(GuiActionRunner.execute(() -> spinner("Fastest motion").isEnabled()));
+        assertTrue(motionInfo("Automatic fastest motion status").contains("Active:"));
         double originalScale = faintMoverDisplayScale();
         assertEquals(originalScale, number(spinner("Fastest motion")), originalScale * 0.000005);
+        window().checkBox(VisibleText.checkBox("Automatic fastest motion (2 FWHM/frame)")).uncheck();
+        assertTrue(GuiActionRunner.execute(() -> spinner("Fastest motion").isEnabled()));
         assertTrue(motionInfo("Slowest motion equivalents").contains("FWHM/session"));
         assertTrue(motionInfo("Fastest motion equivalents").contains("px/min"));
         assertTrue(motionInfo("Fastest motion equivalents").contains("No usable WCS"));
-        assertTrue("the short fixture session is slower than the default fastest motion allows",
+        assertTrue("the short fixture session is slower than the manual default fastest motion allows",
                 motionInfo("Fastest motion equivalents").contains("skips the search"));
         assertEquals(10.0, number(spinner("Time limit (minutes)")), 0.001);
         field(spinner("Time limit (minutes)")).setText("0.5");
@@ -138,8 +144,10 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
                 motionInfo("Fastest motion equivalents").contains("skips the search"));
         try (var reader = java.nio.file.Files.newBufferedReader(java.nio.file.Path.of(System.getProperty("user.home"),
                 eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.DEFAULT_FILENAME))) {
-            var config = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader).getDetectionConfig();
+            var profile = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader);
+            var config = profile.getDetectionConfig();
             assertTrue(config.enableFaintMoverSearch);
+            assertFalse(profile.isFaintMoverAutoMaxSpeed());
             assertEquals(30, config.faintMoverMaxSeconds, 1e-9);
             assertEquals(123.123 / originalScale, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
         }
@@ -154,6 +162,8 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
         window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
+        window().checkBox(VisibleText.checkBox("Automatic fastest motion (2 FWHM/frame)")).requireNotSelected();
+        assertTrue(GuiActionRunner.execute(() -> spinner("Fastest motion").isEnabled()));
         assertEquals(0.5, number(spinner("Time limit (minutes)")), 1e-9);
         assertEquals(123.123, number(spinner("Fastest motion")), 1e-9);
         var solved = eu.startales.spacepixels.testsupport.SyntheticDatasetFactory.createSolvedMono16FitsSequence(
