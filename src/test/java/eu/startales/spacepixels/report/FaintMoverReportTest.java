@@ -279,6 +279,14 @@ public class FaintMoverReportTest {
         assertTrue(html.contains("Stellarium Web (RA/Dec)"));
         assertTrue(html.contains("faint-mover-jpl-FM1"));
         assertTrue(html.contains("not an individual frame detection"));
+        int summaryIdx = html.indexOf("Whole-stack score");
+        int reviewIdx = html.indexOf("<div class='fm-review'");
+        int scoreDetailsIdx = html.indexOf("Scores, timing and fitted motion");
+        int catalogueIdx = html.indexOf("Catalogue position and motion comparisons");
+        int lookupIdx = html.indexOf("Reference epoch for fitted-path lookup");
+        assertTrue("Review controls and animations should appear directly below the stack score summary",
+                summaryIdx > 0 && summaryIdx < reviewIdx && reviewIdx < scoreDetailsIdx
+                        && scoreDetailsIdx < catalogueIdx && catalogueIdx < lookupIdx);
     }
 
     /** In-field rows cover the whole sequence, while a fetched border object stays available only in the saved inventory. */

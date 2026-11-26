@@ -88,7 +88,10 @@ final class FaintMoverSectionWriter {
                     out.println("<div class='detection-card' id='" + anchor + "' style='border-left-color:var(--sp-finding-fm)'>");
                     out.println("<div class='detection-title'>Faint mover " + entry.id() + " · Unverified</div>");
                     KnownSolarSystemReport.writeFaintMoverIdentification(out, c, entry);
-                    writeSummary(out, c, entry);
+                    writeSummaryMetrics(out, c, entry);
+                    if (entry.blink() != null) writeBlink(c, entry);
+                    FaintMoverReviewWriter.write(out, c, entry, candidate);
+                    writeScoreDetails(out, entry);
                     if (entry.catalogueComparisons().isEmpty()) out.println("<p>Possible catalogue matches: " + (!entry.catalogueComparisonAvailable()
                             ? "unavailable for this field or reference time" : comparisons.isEmpty()
                             ? "none within the comparison tolerances" : escape(comparisons)) + ".</p>");
@@ -104,9 +107,7 @@ final class FaintMoverSectionWriter {
                         }
                         out.println("</details>");
                     }
-                    if (entry.blink() != null) writeBlink(c, entry);
                     c.lightCurves.write(out, entry.id());
-                    FaintMoverReviewWriter.write(out, c, entry, candidate);
                     out.print(DetectionReportAstrometry.buildFaintMoverIdentificationHtml(c.astrometryContext, entry));
                     out.println("</div>");
                 }
@@ -126,8 +127,8 @@ final class FaintMoverSectionWriter {
         }
     }
 
-    /** Presents fitted motion and existing scores with the same summary and coordinate conventions as other cards. */
-    private static void writeSummary(PrintWriter out, DetectionReportContext c, FaintMoverPresentation.Entry e) {
+    /** Presents the compact top summary metrics and reference coordinate right above the review panels. */
+    private static void writeSummaryMetrics(PrintWriter out, DetectionReportContext c, FaintMoverPresentation.Entry e) {
         var t = c.pipelineTelemetry.faintMoverSearchTelemetry;
         var first = e.fittedPositions().stream().min(java.util.Comparator.comparingLong(FaintMoverPresentation.Position::midpointMillis));
         var last = e.fittedPositions().stream().max(java.util.Comparator.comparingLong(FaintMoverPresentation.Position::midpointMillis));
@@ -147,6 +148,12 @@ final class FaintMoverSectionWriter {
         metric(out, "First pass", computeMetricValue(t));
         out.println("</dl><div class='coord-line'>" + escape(DetectionReportAstrometry.formatPixelCoordinateWithSky(c.astrometryContext, e.x(), e.y()))
                 + " · reference " + Instant.ofEpochMilli(e.referenceTimeMillis()) + "</div>");
+    }
+
+    /** Presents the expandable score, timing and fitted-motion breakdown below the review panels. */
+    private static void writeScoreDetails(PrintWriter out, FaintMoverPresentation.Entry e) {
+        var first = e.fittedPositions().stream().min(java.util.Comparator.comparingLong(FaintMoverPresentation.Position::midpointMillis));
+        var last = e.fittedPositions().stream().max(java.util.Comparator.comparingLong(FaintMoverPresentation.Position::midpointMillis));
         out.println("<details><summary>Scores, timing and fitted motion</summary><dl class='anomaly-summary fm-summary'>");
         metric(out, "First / second half", number(e.firstHalfScore()) + " / " + number(e.secondHalfScore()));
         metric(out, "Stationary score", number(e.stationaryScore()));
