@@ -68,6 +68,7 @@
 - **Per-frame Asinh stretch.** The object animation now uses local per-frame **Stretch** controls (**Asinh** by default, matching Preview Frame and Blink without affecting other viewers) computed from each frame's own valid-pixel histogram, so sky background changes during a session no longer clip frames to black.
 - **Synchronized faint-mover residual and shift stack.** For faint movers with saved report review assets, **Residual & stack** (on by default) displays the synchronized **PSF-filtered residual** (with an adjustable **Residual ±** scale) and the **Whole-session shift stack** beside the source frames.
 - **Loading progress and cache.** Reading an object's frames shows a determinate progress bar and current filename in the animation panel; loaded objects stay cached while the window is open so switching back is immediate.
+- **MPC Isolated Tracklet File (ITF) check.** **Check MPC ITF…** in **Asteroids & Comets** downloads and caches the MPC's public `itf.txt.gz` archive on demand (with conditional `If-Modified-Since` updates) and streams it offline in a few seconds to show which unmatched tracks are already reported to the MPC as unlinked tracklets on the same night and which unlinked tracklets on nearby nights (±15 days) match their linear motion.
 
 ### Reports, SkyBoT lookups and FITS handling
 

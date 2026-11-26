@@ -26,6 +26,7 @@ import eu.startales.spacepixels.mpc.LightCurve;
 import eu.startales.spacepixels.mpc.OrbitDetermination;
 import eu.startales.spacepixels.mpc.OrbitGeometry;
 import eu.startales.spacepixels.mpc.MpcExport;
+import eu.startales.spacepixels.mpc.MpcItfCatalog;
 import eu.startales.spacepixels.mpc.MpcObservation;
 import eu.startales.spacepixels.mpc.MpcRecords;
 import eu.startales.spacepixels.mpc.NightLinks;
@@ -110,11 +111,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     /** Identifications made after the report, by object, as saved beside it. EDT only. */
     private final Map<String, eu.startales.spacepixels.mpc.LaterIdentifications.Entry> later;
     private final JButton identifyAllButton = new JButton("Identify all…");
-    /** The running Identify all, while its button reads Cancel; null otherwise. EDT only. */
-    private SwingWorker<?, ?> identifyWorker;
+    private final JButton itfButton = new JButton("Check MPC ITF…");
+    /** The running Identify all or MPC ITF check, while its button reads Cancel; null otherwise. EDT only. */
+    private SwingWorker<?, ?> identifyWorker, itfWorker;
     /** The running light-curve and sub-stack measurements, while their buttons read Cancel; null otherwise. EDT only. */
     private SwingWorker<?, ?> curveWorker, subStackWorker;
-    /** The full result of the last Compare again or Identify all, which the ⓘ link shows; null before one. */
+    /** The full result of the last Compare again, Identify all or MPC ITF check, which the ⓘ link shows; null before one. */
     private String comparisonDetails;
     private final JButton detailsLink = AccessibleControls.link("ⓘ", "Details of the last comparison", this::showComparisonDetails);
     private final JButton showOrbitButton = new JButton("Show orbit");
@@ -122,6 +124,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private OrbitViewerDialog orbitWindow;
     /** Known objects within 1′ of each object from the last Identify all, by object; empty before it. EDT only. */
     private final Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> nearby = new HashMap<>();
+    /** Unlinked MPC Isolated Tracklet File matches by object from the last Check MPC ITF; empty before it. EDT only. */
+    private final Map<String, MpcItfCatalog.FindingMatches> itfMatches = new HashMap<>();
+    /** Timestamp of the cached MPC ITF snapshot used for {@link #itfMatches}; null before Check MPC ITF. EDT only. */
+    private Instant itfSnapshotTime;
     private final JComboBox<String> binChoice = new JComboBox<>(new String[]{"Single frames", "Bins of 2", "Bins of 4"});
     private final Map<String, LightCurve.Curve> curves = new HashMap<>();
     private final LightCurvePlot curvePlot = new LightCurvePlot();
@@ -385,12 +391,19 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 + "without a magnitude limit, and lists those within 1′ of each object, as MPChecker would. Sends the field, the time "
                 + "and the observatory code.");
         identifyAllButton.addActionListener(e -> identifyAll());
+        itfButton.setToolTipText("Checks every object against the Minor Planet Center's Isolated Tracklet File (ITF) — "
+                + "unlinked tracklets already submitted worldwide (same night and ±" + MpcItfCatalog.DEFAULT_NEARBY_DAYS
+                + " days). Downloads and caches itf.txt.gz (~130 MB) on demand; the MPC has no online cone-search API for the ITF.");
+        itfButton.addActionListener(e -> checkMpcItf());
         JPanel identifyButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), 0));
         identifyButtons.add(compare);
         identifyButtons.add(identifyAllButton);
-        detailsLink.setVisible(false);
-        identifyButtons.add(detailsLink);
         identifyButtons.setAlignmentX(LEFT_ALIGNMENT);
+        JPanel itfButtons = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(6), UiStyle.space(3)));
+        itfButtons.add(itfButton);
+        detailsLink.setVisible(false);
+        itfButtons.add(detailsLink);
+        itfButtons.setAlignmentX(LEFT_ALIGNMENT);
         compareLabel.setForeground(UiStyle.helpColor());
         compareLabel.setAlignmentX(LEFT_ALIGNMENT);
         JLabel heading = title("Objects · " + report.objects().size());
@@ -399,6 +412,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
         north.add(heading);
         north.add(identifyButtons);
+        north.add(itfButtons);
         north.add(compareLabel);
         JPanel panel = new JPanel(new BorderLayout());
         panel.add(north, BorderLayout.NORTH);
@@ -985,8 +999,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         var near = nearby.get(object.id());
         String nearText = near == null ? "" : near.isEmpty() ? "<br>Identify all: no known object within 1′."
                 : "<br>Identify all, within 1′: " + escape(String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList())) + ".";
+        String itfText = itfHtmlFor(object);
         identificationLabel.setHtml(object.id() + " · " + statusText(status(object)) + "<br>" + names
-                + escape(object.note() == null ? "" : object.note()) + nearText + measure + reduced);
+                + escape(object.note() == null ? "" : object.note()) + nearText + itfText + measure + reduced);
         updateIdentificationLinks(object);
         loadPictures(object);
     }
@@ -2352,7 +2367,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         });
     }
 
-    /** Shows the full result of the last Compare again or Identify all. */
+    /** Shows the full result of the last Compare again, Identify all or MPC ITF check. */
     private void showComparisonDetails() {
         if (comparisonDetails == null) return;
         JTextArea text = new JTextArea(comparisonDetails, Math.min(24, comparisonDetails.split("\n").length + 1), 70);
@@ -2361,6 +2376,229 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         text.setWrapStyleWord(true);
         text.setCaretPosition(0);
         JOptionPane.showMessageDialog(this, new JScrollPane(text), "Identification details", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    /**
+     * Checks every object in this report against the Minor Planet Center's Isolated Tracklet File (ITF) — both
+     * same-night tracklets (already reported to the MPC as unlinked observations) and nearby-night candidates
+     * (±{@link MpcItfCatalog#DEFAULT_NEARBY_DAYS} days). Prompts before downloading or updating the ~130 MB file.
+     */
+    private void checkMpcItf() {
+        if (itfWorker != null) {
+            itfWorker.cancel(true);
+            return;
+        }
+        if (header == null || report.frames().isEmpty()) {
+            compareLabel.setHtml("The frames have no plate solution to compare with the MPC ITF.");
+            return;
+        }
+        long first = report.frames().stream().mapToLong(ReportedObjects.Frame::timestampMillis).filter(t -> t > 0).min().orElse(0);
+        long last = report.frames().stream().filter(f -> f.timestampMillis() > 0)
+                .mapToLong(f -> f.timestampMillis() + Math.max(0, f.exposureMillis())).max().orElse(0);
+        if (first <= 0) {
+            compareLabel.setHtml("The frames have no times to compare with the MPC ITF.");
+            return;
+        }
+        long sessionMid = first + (last - first) / 2;
+        var queries = new ArrayList<MpcItfCatalog.FindingQuery>();
+        for (var object : report.objects()) {
+            var samples = LightCurve.samples(report, object);
+            long objEpoch = findingMidEpoch(samples, object.motion(), sessionMid);
+            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(samples, object.motion(), objEpoch, header);
+            if (place != null) {
+                queries.add(new MpcItfCatalog.FindingQuery(object.id(), objEpoch,
+                        place.ra(), place.dec(), place.raRateArcsecPerHour(), place.decRateArcsecPerHour()));
+            }
+        }
+        if (queries.isEmpty()) {
+            compareLabel.setHtml("No objects have a sky position and motion to compare with the MPC ITF.");
+            return;
+        }
+
+        java.nio.file.Path home = java.nio.file.Path.of(System.getProperty("user.home"));
+        MpcItfCatalog.CacheStatus cache = MpcItfCatalog.cacheStatus(home);
+        boolean shouldDownload;
+        if (!cache.exists()) {
+            Object[] options = {"Download & check", "Cancel"};
+            int choice = JOptionPane.showOptionDialog(this,
+                    "The Minor Planet Center Isolated Tracklet File (ITF) is a public ~130 MB gzipped archive\n"
+                            + "(itf.txt.gz) of all unlinked tracklets submitted worldwide; the MPC has no online\n"
+                            + "cone-search API for it.\n\n"
+                            + "Download and cache it locally at:\n" + cache.file() + "\n\n"
+                            + "Once cached, checking takes a few seconds offline (same night and ±"
+                            + MpcItfCatalog.DEFAULT_NEARBY_DAYS + " days).",
+                    "Download MPC Isolated Tracklet File",
+                    JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+            if (choice != 0) return;
+            shouldDownload = true;
+        } else {
+            String cachedDate = cache.lastModified() == null ? "unknown date"
+                    : cache.lastModified().atZone(ZoneOffset.UTC).toLocalDate().toString();
+            String cachedSize = String.format(Locale.US, "%.1f MB", cache.sizeBytes() / (1024.0 * 1024.0));
+            Object[] options = {"Use cached", "Update & check", "Cancel"};
+            int choice = JOptionPane.showOptionDialog(this,
+                    "Cached MPC Isolated Tracklet File found (" + cachedSize + ", snapshot " + cachedDate + " UTC).\n\n"
+                            + "Use the cached copy (offline, ~2–4 s), or check the MPC for a newer daily snapshot first?",
+                    "Check MPC Isolated Tracklet File",
+                    JOptionPane.YES_NO_CANCEL_OPTION, JOptionPane.QUESTION_MESSAGE, null, options, options[0]);
+            if (choice != 0 && choice != 1) return;
+            shouldDownload = (choice == 1);
+        }
+
+        itfButton.setText("Cancel ITF");
+        compareLabel.setText(shouldDownload ? "Connecting to Minor Planet Center for itf.txt.gz…" : "Scanning cached MPC ITF…");
+        itfWorker = new SwingWorker<MpcItfCatalog.SearchResult, String>() {
+            @Override protected MpcItfCatalog.SearchResult doInBackground() throws Exception {
+                java.nio.file.Path itfFile = cache.file();
+                if (shouldDownload) {
+                    long[] lastUi = {0L};
+                    MpcItfCatalog.DownloadResult dl = MpcItfCatalog.download(home, false, (read, total) -> {
+                        long now = System.nanoTime();
+                        if (now - lastUi[0] >= 150_000_000L || (total > 0 && read >= total)) {
+                            lastUi[0] = now;
+                            if (total > 0) {
+                                int pct = (int) Math.min(100, (read * 100L) / total);
+                                publish(String.format(Locale.US, "Downloading MPC ITF… %.1f / %.1f MB (%d%%)",
+                                        read / (1024.0 * 1024.0), total / (1024.0 * 1024.0), pct));
+                            } else {
+                                publish(String.format(Locale.US, "Downloading MPC ITF… %.1f MB", read / (1024.0 * 1024.0)));
+                            }
+                        }
+                    });
+                    itfFile = dl.file();
+                    publish(dl.updated() ? "MPC ITF downloaded. Scanning tracklets…" : "MPC ITF is already up to date. Scanning tracklets…");
+                }
+                long[] lastScanUi = {0L};
+                return MpcItfCatalog.search(itfFile, queries, MpcItfCatalog.DEFAULT_NEARBY_DAYS, lines -> {
+                    long now = System.nanoTime();
+                    if (now - lastScanUi[0] >= 150_000_000L) {
+                        lastScanUi[0] = now;
+                        publish(String.format(Locale.US, "Scanning MPC ITF… %.1fM lines", lines / 1_000_000.0));
+                    }
+                });
+            }
+
+            @Override protected void process(List<String> chunks) {
+                if (!closed && !chunks.isEmpty() && itfWorker == this) {
+                    compareLabel.setText(chunks.getLast());
+                }
+            }
+
+            @Override protected void done() {
+                if (itfWorker == this) itfWorker = null;
+                if (closed) return;
+                itfButton.setText("Check MPC ITF…");
+                if (isCancelled()) {
+                    compareLabel.setText("MPC ITF check was cancelled.");
+                    return;
+                }
+                MpcItfCatalog.SearchResult result;
+                try {
+                    result = get();
+                } catch (Exception e) {
+                    Throwable cause = e.getCause() == null ? e : e.getCause();
+                    compareLabel.setHtml("MPC ITF check failed: " + escape(String.valueOf(cause.getMessage())));
+                    return;
+                }
+                applyItfResult(result);
+            }
+        };
+        itfWorker.execute();
+    }
+
+    private static long findingMidEpoch(List<LightCurve.Sample> samples, ReportedObjects.Motion motion, long fallback) {
+        if (samples != null && !samples.isEmpty()) {
+            long min = Long.MAX_VALUE, max = Long.MIN_VALUE;
+            for (var s : samples) {
+                if (s.midpointMillis() > 0) {
+                    min = Math.min(min, s.midpointMillis());
+                    max = Math.max(max, s.midpointMillis());
+                }
+            }
+            if (min <= max) return min + (max - min) / 2;
+        }
+        if (motion != null && motion.referenceMillis() > 0) return motion.referenceMillis();
+        return fallback;
+    }
+
+    private void applyItfResult(MpcItfCatalog.SearchResult result) {
+        itfMatches.clear();
+        itfMatches.putAll(result.byFinding());
+        itfSnapshotTime = result.snapshotTime();
+        String snapDate = itfSnapshotTime == null ? "cached"
+                : itfSnapshotTime.atZone(ZoneOffset.UTC).toLocalDate().toString();
+
+        int sameNightCount = 0;
+        int nearbyOnlyCount = 0;
+        int unmatchedTotal = 0;
+        int unmatchedInItf = 0;
+        for (var object : report.objects()) {
+            var fm = itfMatches.get(object.id());
+            boolean isUnmatched = !ReportedObjects.KNOWN.equals(object.status()) && object.names().isEmpty();
+            if (isUnmatched) unmatchedTotal++;
+            if (fm != null && fm.hasSameNight()) {
+                sameNightCount++;
+                if (isUnmatched) unmatchedInItf++;
+            } else if (fm != null && fm.hasNearbyNights()) {
+                nearbyOnlyCount++;
+            }
+        }
+        int unreported = Math.max(0, unmatchedTotal - unmatchedInItf);
+        String summary = String.format(Locale.US,
+                "MPC ITF (%s, %d nearby-window tracklets): %d reported same-night (%d of %d unmatched); %d unmatched not in ITF%s.",
+                snapDate, result.candidateTracklets(), sameNightCount, unmatchedInItf, unmatchedTotal, unreported,
+                nearbyOnlyCount > 0 ? "; " + nearbyOnlyCount + " more with nearby-night candidates" : "");
+
+        var details = new StringBuilder(summary);
+        details.append(String.format(Locale.US, "\nScanned %,d MPC ITF observation lines (window ±%d days).",
+                result.linesScanned(), MpcItfCatalog.DEFAULT_NEARBY_DAYS));
+        details.append("\n\nSame-night ITF matches (already reported as unlinked tracklets) and nearby-night candidates:\n");
+        for (var object : report.objects()) {
+            var fm = itfMatches.get(object.id());
+            details.append("\n").append(object.id()).append(" (").append(statusText(status(object)));
+            if (!object.names().isEmpty()) details.append(": ").append(String.join(" or ", object.names()));
+            details.append("):");
+            if (fm == null) {
+                details.append(" not checked (no sky motion)");
+                continue;
+            }
+            if (fm.hasSameNight()) {
+                details.append(" REPORTED SAME NIGHT → ")
+                        .append(String.join("; ", fm.sameNight().stream().map(MpcItfCatalog::describeMatch).toList()));
+            } else {
+                details.append(" not in ITF on this night");
+            }
+            if (fm.hasNearbyNights()) {
+                details.append("\n    Nearby nights (±").append(MpcItfCatalog.DEFAULT_NEARBY_DAYS).append(" d): ")
+                        .append(String.join("; ", fm.nearbyNights().stream().map(MpcItfCatalog::describeMatch).toList()));
+            }
+        }
+        showComparison(summary, details.toString());
+        refreshObjects();
+        if (shown != null) show(report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
+    }
+
+    /** Formats the selected object's MPC ITF same-night and nearby-night results for the Identification panel. */
+    private String itfHtmlFor(ReportedObjects.ReportedObject object) {
+        if (itfSnapshotTime == null || object == null) return "";
+        var fm = itfMatches.get(object.id());
+        if (fm == null) return "";
+        String snapDate = itfSnapshotTime.atZone(ZoneOffset.UTC).toLocalDate().toString();
+        var sb = new StringBuilder();
+        if (fm.hasSameNight()) {
+            sb.append("<br><b>MPC ITF (same night, ").append(snapDate).append("):</b> already reported as ")
+                    .append(escape(String.join("; ", fm.sameNight().stream().map(MpcItfCatalog::describeMatch).toList())))
+                    .append(".");
+        } else {
+            sb.append("<br>MPC ITF (same night, ").append(snapDate).append("): not reported in ITF.");
+        }
+        if (fm.hasNearbyNights()) {
+            sb.append("<br>MPC ITF nearby (±").append(MpcItfCatalog.DEFAULT_NEARBY_DAYS)
+                    .append(" d, linear candidates — verify with orbit fit): ")
+                    .append(escape(String.join("; ", fm.nearbyNights().stream().map(MpcItfCatalog::describeMatch).toList())))
+                    .append(".");
+        }
+        return sb.toString();
     }
 
     /** Shows a short result line and keeps the full text behind the ⓘ link. */
@@ -2961,10 +3199,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
             if (worker != null) worker.cancel(true);
             worker = null;
-            for (var running : new SwingWorker<?, ?>[]{identifyWorker, curveWorker, subStackWorker, nightsWorker, findOrbWorker, stationWorker}) {
+            for (var running : new SwingWorker<?, ?>[]{identifyWorker, itfWorker, curveWorker, subStackWorker, nightsWorker, findOrbWorker, stationWorker}) {
                 if (running != null) running.cancel(true);
             }
-            identifyWorker = curveWorker = subStackWorker = nightsWorker = findOrbWorker = stationWorker = null;
+            identifyWorker = itfWorker = curveWorker = subStackWorker = nightsWorker = findOrbWorker = stationWorker = null;
             pictures = List.of();
             shownReviewAssets = null;
             pictureCache.clear();
@@ -2995,7 +3233,20 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 case 0 -> exported.get(object.id());
                 case 1 -> object.id();
                 case 2 -> statusText(status(object));
-                case 3 -> String.join(" or ", object.names());
+                case 3 -> {
+                    if (!object.names().isEmpty()) {
+                        yield String.join(" or ", object.names());
+                    }
+                    var fm = itfMatches.get(object.id());
+                    if (fm != null && fm.hasSameNight()) {
+                        yield "ITF: " + fm.sameNight().getFirst().tracklet().label()
+                                + (fm.hasNearbyNights() ? " (+" + fm.nearbyNights().size() + " nearby)" : "");
+                    }
+                    if (fm != null && fm.hasNearbyNights()) {
+                        yield "ITF nearby (" + fm.nearbyNights().size() + ")";
+                    }
+                    yield "";
+                }
                 default -> (object.measured() ? selected.get(object.id()).size() + " of " + observations.get(object.id()).size()
                         : subStacks.containsKey(object.id()) ? subStacks.get(object.id()).size() + " sub-stacks" : "fitted only")
                         + linkedNightsSuffix(nightsOf(object.id()).size(), includedLinkedNightsCount(object));
