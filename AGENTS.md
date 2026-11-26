@@ -24,4 +24,5 @@ When changing this file, update all three sibling copies together and verify tha
 - Give a brief progress update at least every minute during ongoing work, and sooner when there is a meaningful finding, problem or change of direction.
 - Keep diagnostic programs, test outputs and harnesses in a scratch folder outside the repositories.
 - Stage only your own changes; leave unrelated working-tree edits alone.
+- Always commit and push your own completed, verified changes following the commit rules in [DEVELOPER.md](DEVELOPER.md), unless waiting on a required pre-commit check (such as reporting real-data regression differences) or told otherwise.
 - When you are unsure whether something is wanted, ask rather than guess.
