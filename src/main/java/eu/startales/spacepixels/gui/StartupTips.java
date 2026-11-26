@@ -25,8 +25,10 @@ final class StartupTips {
     private static final String IDENTIFYING = "5-identifying-objects";
     private static final String STAR_MASK = "star-mask-explorer";
     private static final String ASTEROIDS_WINDOW = "asteroids--comets";
+    private static final String LINKED_NIGHTS = "objects-seen-on-more-than-one-night";
     private static final String LIGHT_CURVES = "light-curves-of-moving-objects";
     private static final String ORBITS = "orbits-built-in-solver-and-optional-find_orb";
+    private static final String QUALITY_CONTROL = "frame-quality-control";
 
     static final List<Tip> ALL = List.of(
             new Tip("After a detection, you can draw what it found on the frames themselves in <b>Preview Frame</b> and "
@@ -46,10 +48,14 @@ final class StartupTips {
                     + "movers</b> under <b>Detection Settings → Faint Movers (experimental)</b>. It adds up the frames along "
                     + "many trial motions, so a faint mover builds up while the noise does not. It is on by default, takes "
                     + "extra time, and its candidates are unverified; switch it off there for quicker runs.", FAINT_MOVERS),
-            new Tip("You choose what the faint-mover search looks for: <b>Slowest motion</b>, <b>Fastest motion</b> and a "
-                    + "<b>Time limit</b>. As a guide, main-belt asteroids typically move about 0.2 to 0.7 arcsec/min, Jupiter "
-                    + "Trojans about 0.2 to 0.3, Kuiper belt objects about 0.05, and near-Earth objects from about 1 to tens "
-                    + "of arcsec/min. A higher maximum costs much more time: roughly the square of the speed.", FAINT_MOVERS),
+            new Tip("You can let <b>Automatic fastest motion</b> size the faint-mover search to your exposures, or set "
+                    + "<b>Slowest motion</b>, <b>Fastest motion</b> and a <b>Time limit</b> yourself. As a guide, main-belt "
+                    + "asteroids typically move about 0.2 to 0.7 arcsec/min, Jupiter Trojans about 0.2 to 0.3, Kuiper belt "
+                    + "objects about 0.05, and near-Earth objects from about 1 to tens of arcsec/min. A higher maximum costs "
+                    + "much more time: roughly the square of the speed.", FAINT_MOVERS),
+            new Tip("A compatible OpenCL graphics card can speed up the faint-mover search's first pass and raise its limit "
+                    + "from 100,000 to 400,000 trial motions. Leave <b>First pass compute</b> on <b>Auto (recommended)</b> "
+                    + "under <b>Astrometry Config → GPU acceleration</b>, or pick a device and run <b>Test GPU</b>.", FAINT_MOVERS),
             new Tip("Plate-solving just one frame unlocks a lot in the report: sky coordinates on every track card, and "
                     + "buttons to identify objects with SkyBoT, JPL and SatChecker and to find them in Stellarium.", IDENTIFYING),
             new Tip("If your FITS headers do not record where you observed from, enter your observing site or IAU "
@@ -67,12 +73,20 @@ final class StartupTips {
             new Tip("In <b>Asteroids &amp; Comets</b>, <b>Identify all…</b> asks JPL and SkyBoT for every known asteroid and comet "
                     + "near each of your objects, without a magnitude limit, as MPChecker would. <b>Compare again</b> re-identifies "
                     + "the objects after a new <b>Fetch Asteroids and Comets</b>, without detecting again.", ASTEROIDS_WINDOW),
+            new Tip("In <b>Asteroids &amp; Comets</b>, <b>Check MPC ITF…</b> downloads and caches the Minor Planet Center's "
+                    + "Isolated Tracklet File so you can scan unmatched tracks offline in a few seconds. It shows which tracks "
+                    + "were already reported on the same night as unlinked tracklets and flags linear candidates on nearby nights "
+                    + "(±15 days).", ASTEROIDS_WINDOW),
+            new Tip("Observed the same moving object on another night? In <b>Asteroids &amp; Comets</b>, use <b>Link another "
+                    + "night…</b> to connect the two reports: <b>Compute orbit</b> then fits both nights together alongside one "
+                    + "night alone, and ADES export can combine an unidentified object's nights into one tracklet.", LINKED_NIGHTS),
             new Tip("The <b>Light curve</b> tab of <b>Asteroids &amp; Comets</b> measures a moving object's brightness in every "
                     + "frame, with the fixed stars subtracted and comparison stars correcting for clouds and haze. Bins of 2 or 4 "
                     + "frames help with faint objects; the report draws a curve on every track and faint-mover card too.", LIGHT_CURVES),
             new Tip("In <b>Asteroids &amp; Comets</b>, <b>Compute orbit</b> fits a preliminary heliocentric orbit directly with "
                     + "SpacePixels' built-in solver (or optional local Find_Orb) and opens an interactive 3D orbit viewer. "
-                    + "One night leaves a wide uncertainty cloud, and linking another night narrows it.", ORBITS),
+                    + "Drag to rotate, zoom, animate the object and planets in time, inspect the <b>Uncertainty cloud</b>, and "
+                    + "link another night to see how much the orbit narrows.", ORBITS),
             new Tip("Double-click a frame in the main window's list to show it in <b>Preview Frame</b> and see what the "
                     + "detector picks up in it.", PREVIEW),
             new Tip("In <b>Preview Frame</b> you can try <b>Detection Sigma</b> and the other per-frame settings on the frame "
@@ -89,7 +103,32 @@ final class StartupTips {
                     + "keeps the ones you like.", STAR_MASK),
             new Tip("<b>Run quality control</b>, above the frame list, shows which frames a detection would reject and why, "
                     + "before you run one. Right-click a frame to see its measurements beside the session's limits.",
-                    "frame-quality-control"),
+                    QUALITY_CONTROL),
+            new Tip("<b>Run quality control</b> also checks star alignment across a 4 × 4 grid. It rejects frames with a sudden "
+                    + "registration jump and shows <b>⚠ Registration</b> when stars creep at the edges; click it to inspect the "
+                    + "drift map or add drifting corners to your excluded areas with <b>Exclude these areas</b>.",
+                    QUALITY_CONTROL),
+            new Tip("Blurred corners, bad columns or bright artifacts causing false detections? Open <b>Excluded areas</b> in "
+                    + "<b>Preview Frame</b> and click <b>Draw areas</b> (or right-click a frame and choose <b>Exclude Areas…</b>) "
+                    + "to leave them out of quality control, Auto-Tune and detection. Saved areas return whenever you reopen the "
+                    + "session.", "excluded-areas"),
+            new Tip("When you run <b>Fetch Sky Catalogue</b> on a plate-solved session, SpacePixels also fits a Gaia DR3 plate "
+                    + "correction to refine sky coordinates across the field. Keep <b>Apply</b> ticked for more accurate "
+                    + "annotations and to enable MPC astrometric reduction in <b>Asteroids &amp; Comets</b>.",
+                    "correct-plate-solution"),
+            new Tip("Open <b>Image Stretch…</b> under <b>3 Inspect</b> to compare the linear and stretched frame side by side "
+                    + "with 16-bit histograms and clipping percentages. Adjustments update <b>Blink</b>, <b>Preview Frame</b> and "
+                    + "<b>Manual Transient Inspection</b> live while leaving the linear pixels used for detection untouched.",
+                    "image-stretch"),
+            new Tip("Every HTML report includes a <b>Night &amp; Equipment</b> section tracking seeing, transparency and sky "
+                    + "brightness through the session, alongside field maps of star size, shape, coma and flat-field illumination "
+                    + "to help spot focus drift, tilt or optical spacing issues.", "night--equipment"),
+            new Tip("Looking for an object that did not link into a track? Open the report's <b>Unclassified Transient "
+                    + "Inspector</b> to browse every leftover detection coloured by time, filter by frame or peak sigma, and click "
+                    + "any marker for a five-frame animation.", "unclassified-transient-inspector"),
+            new Tip("Want larger text or a brighter workspace? Open the <b>Appearance</b> tab to switch between <b>Dark</b>, "
+                    + "<b>High contrast dark</b> and <b>Light</b> themes, scale the interface from 100 % to 300 %, or load a custom "
+                    + "FlatLaf style file.", "appearance-and-readable-text"),
             new Tip("Reports can be dark or light, with four text sizes: see <b>Theme</b> and <b>Text</b> in the report's "
                     + "toolbar. To go further, give them your own colours with <b>Report Style File</b> under <b>Report "
                     + "Visualization</b>, an expert setting.", "overview"),

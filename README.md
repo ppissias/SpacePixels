@@ -44,8 +44,8 @@ From frame preparation and GPU-assisted faint-mover searches to photometry, visu
 - **Frame Quality & Equipment Diagnostics.** Check frame quality before a full run and inspect rejection reasons. Reports measure seeing, transparency, field depth, sky brightness, drift and dithering, with maps of star size, shape, coma and flat-field patterns where the required calibration is available.
 - **Astrometry & Object Identification.** Plate-solve with ASTAP or Astrometry.net for sky coordinates. Compare tracks and faint movers with JPL and SkyBoT asteroid/comet predictions, check satellite exposure paths with SatChecker, and explore sky context in Stellarium Web or Local.
 - **Sky Annotations & Plate Correction.** Overlay Gaia stars, SIMBAD deep-sky objects, VSX variables and predicted asteroid/comet paths in the viewers. Gaia-based plate correction refines the session's sky coordinates. Saved catalogues and report findings return when you reopen a compatible session.
-- **Asteroid Measurements & MPC Export.** Use Asteroids & Comets to review identifications and reduce positions against Gaia DR3. Measure faint movers in independent sub-stacks, select observations, export ADES PSV files for the Minor Planet Center, and check the schema or MPC test service. You submit the final observations yourself.
-- **Other Nights, Orbits & Light Curves.** Link an object's observations across nights and fit preliminary orbits with Find_Orb. Measure relative moving-object light curves with transparency correction, frame binning and CSV export. Compare observed motion with expected main-belt motion to guide follow-up.
+- **Asteroid Measurements & MPC Export.** Use Asteroids & Comets to review identifications, check unmatched tracks against the MPC Isolated Tracklet File (ITF), and reduce positions against Gaia DR3. Measure faint movers in independent sub-stacks, select observations, export ADES PSV files for the Minor Planet Center, and check the schema or MPC test service. You submit the final observations yourself.
+- **Other Nights, Orbits & Light Curves.** Link an object's observations across nights, fit preliminary heliocentric orbits with SpacePixels' built-in solver (or optional Find_Orb), and explore them in an interactive 3D orbit viewer with time animation and uncertainty clouds. Measure relative moving-object light curves with transparency correction, frame binning and CSV export. Compare observed motion with expected main-belt motion to guide follow-up.
 - **Variable-Star Photometry.** Measure stationary stars with differential ensemble photometry and review variable candidates with light curves, comparison stars, readiness checks, noise diagnostics and CSV exports. AAVSO VSX matching and Gaia, VizieR and SIMBAD links support follow-up. Requires at least 20 frames after quality control.
 - **Interactive Reports & Exports.** Review HTML reports with animated crops, adjustable playback, finding navigation, trajectory maps and an interactive Unclassified Transient Inspector. Share the complete report folder for offline review, or export GIFs, CSV/JSON data and a noise-weighted enhanced FITS stack. Dark/light themes and text-size controls aid reading.
 - **Visual Inspection & Mask Tools.** Blink frames with report and catalogue overlays, export a region as a GIF, preview detections or inspect unlinked transients manually. Explore the star mask, exclude unusable image areas, and adjust display stretch with histograms. A separate export writes stretched copies.
@@ -159,23 +159,33 @@ Follow seeing, transparency and sky brightness through the session. Field maps r
 
 #### From Detection to Asteroid Follow-up
 
-In **Asteroids & Comets**, check which known object you found and measure its exact sky position in each frame against Gaia catalogue stars, which is what the Minor Planet Center needs. Link observations across nights, fit preliminary orbits with Find_Orb, and prepare the ADES file you submit.
+In **Asteroids & Comets**, check which known object you found, scan unmatched tracks against the MPC Isolated Tracklet File (ITF), and measure exact sky positions in each frame against Gaia DR3 stars, which is what the Minor Planet Center needs. Link observations across nights, fit preliminary orbits with SpacePixels' built-in solver (or optional Find_Orb), and prepare the ADES file you submit.
+
+<a href="docs/images/manual/ui-asteroids-comets.png">
+  <img src="docs/images/manual/ui-asteroids-comets.png" alt="Asteroids and Comets workspace showing object identifications, an object-centred image and measured positions" width="840" />
+</a>
+
+*Identify objects, review measured Gaia DR3 positions and prepare the ADES observations you will export.*
+
+#### Interactive 3D Orbit Viewer
+
+**Compute orbit** fits a preliminary heliocentric orbit directly inside SpacePixels with no external download required (optional local **Find_Orb** is also supported) and opens an interactive 3D viewer. Rotate, zoom and animate the object and planets through time, inspect the short-arc **Uncertainty cloud**, and compare one night alone against linked multi-night observations. [Read the orbit guide](MANUAL.md#orbits-built-in-solver-and-optional-find_orb).
 
 <table>
   <tr>
-    <td width="72%" valign="top">
-      <a href="docs/images/manual/ui-asteroids-comets.png">
-        <img src="docs/images/manual/ui-asteroids-comets.png" alt="Asteroids and Comets workspace showing object identifications, an object-centred image and measured positions" />
-      </a>
-      <br />
-      <em>Identify objects and review the observations you will export.</em>
-    </td>
-    <td width="28%" valign="top">
+    <td width="50%" valign="top">
       <a href="docs/images/manual/ui-asteroids-orbit.png">
-        <img src="docs/images/manual/ui-asteroids-orbit.png" alt="Find_Orb preliminary asteroid orbit with the Sun, planetary orbits, fitted elements and uncertainties" />
+        <img src="docs/images/manual/ui-asteroids-orbit.png" alt="Interactive 3D orbit viewer showing the preliminary single-night orbit of 2022 QJ95 with planets, Earth-object sightline, sample uncertainty cloud, orbital elements and animation bar" />
       </a>
       <br />
-      <em>A preliminary orbit from one night remains uncertain.</em>
+      <em>Single night (4.3 h): preliminary 3D orbit of 2022 QJ95 with its uncertainty cloud. One night leaves the orbit wide open.</em>
+    </td>
+    <td width="50%" valign="top">
+      <a href="docs/images/manual/ui-asteroids-orbit-2nights.png">
+        <img src="docs/images/manual/ui-asteroids-orbit-2nights.png" alt="Interactive 3D orbit viewer comparing the two-night linked orbit of 2320 Blarney in cyan against one night alone in dashed violet, with Jupiter, inner planets and orbital elements" />
+      </a>
+      <br />
+      <em>Two linked nights (3.1 days): revised orbit of 2320 Blarney (cyan) compared with one night alone (dashed violet).</em>
     </td>
   </tr>
 </table>
@@ -517,7 +527,7 @@ These optional tools are installed separately and used when configured:
 
 **Stellarium** by the Stellarium Team — Report buttons send sky position, time, observer location and field of view to the local planetarium's Remote Control plugin ([Stellarium](https://stellarium.org/)).
 
-**Find_Orb** by Bill Gray (Project Pluto) — Orbit determination software. In the Asteroids & Comets window, the command-line Find_Orb fits a preliminary orbit to an object's selected observations when it is installed; otherwise the observations are copied for the online Find_Orb ([Find_Orb](https://www.projectpluto.com/find_orb.htm)). Find_Orb is not part of SpacePixels and is installed separately.
+**Find_Orb** by Bill Gray (Project Pluto) — Optional orbit determination software. Alongside SpacePixels' built-in orbit solver, the command-line Find_Orb can fit a preliminary orbit to an object's selected observations in the Asteroids & Comets window when installed; otherwise the observations can be copied for the online Find_Orb ([Find_Orb](https://www.projectpluto.com/find_orb.htm)). Find_Orb is not part of SpacePixels and is installed separately.
 
 #### Open Source Software & Libraries
 
