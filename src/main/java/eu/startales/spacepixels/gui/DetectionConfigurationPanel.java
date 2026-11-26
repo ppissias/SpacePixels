@@ -804,7 +804,7 @@ public class DetectionConfigurationPanel extends JPanel {
 
     private void savePersistedSettings() {
         if (closing.getAsBoolean() || !saveButton.isEnabled()) return;
-        DetectionConfig settings = checkedSettingsForSave("Not saved.");
+        DetectionConfig settings = checkedSettings("Not saved.");
         if (settings == null) {
             return;
         }
@@ -849,12 +849,13 @@ public class DetectionConfigurationPanel extends JPanel {
     }
 
     /**
-     * The detection settings for a run starting now: a copy of the session settings, hidden settings included, with
-     * automatic faint-mover fastest motion resolved for the loaded session when enabled, so later edits cannot change
-     * that run. Returns {@code null} when a field holds invalid text or breaks a shared engine rule.
+     * The detection settings for a full detection run starting now: a validated copy of the session settings, hidden
+     * settings included, with automatic faint-mover fastest motion resolved for the loaded session when enabled, so
+     * later edits cannot change that run. Returns {@code null} when a field holds invalid text or breaks a shared
+     * engine rule.
      */
-    DetectionConfig checkedSettings(String refusedAction) {
-        DetectionConfig resolved = checkedSettingsForSave(refusedAction);
+    DetectionConfig checkedDetectionSettings(String refusedAction) {
+        DetectionConfig resolved = checkedSettings(refusedAction);
         if (resolved == null) {
             return null;
         }
@@ -871,8 +872,12 @@ public class DetectionConfigurationPanel extends JPanel {
         return resolved;
     }
 
-    /** Validates and applies all controls, returning the raw stored {@link DetectionConfig} without session-specific auto overrides. */
-    private DetectionConfig checkedSettingsForSave(String refusedAction) {
+    /**
+     * Validates and applies all controls, returning a copy of the stored {@link DetectionConfig} without
+     * session-specific automatic faint-mover overrides (so quality-control keys, saved profiles, and rule reviews
+     * match the active configuration). Returns {@code null} when a field holds invalid text or breaks an engine rule.
+     */
+    DetectionConfig checkedSettings(String refusedAction) {
         JSpinner invalid = invalidInputToShow();
         if (invalid != null) {
             showThisTab.run();

@@ -813,7 +813,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
     /** Detect Moving Targets, with the detection settings as they are now; a setting with invalid text stops it. */
     private void startDetection() {
         DetectionConfigurationPanel configuration = detectionSettings;
-        DetectionConfig settings = configuration.checkedSettings("Detect Moving Targets did not start.");
+        DetectionConfig settings = configuration.checkedDetectionSettings("Detect Moving Targets did not start.");
         if (settings == null) {
             return;
         }
@@ -1019,7 +1019,7 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         IterativeDetectionDialog.Selection selected = dialog.selection();
         if (selected == null) return;
         DetectionConfigurationPanel configuration = detectionSettings;
-        DetectionConfig settings = configuration.checkedSettings("Detect Iteratively did not start.");
+        DetectionConfig settings = configuration.checkedDetectionSettings("Detect Iteratively did not start.");
         if (settings == null) return;
         AppConfig application = applicationSettings.getConfig().copy();
         IterativeDetectionRequest request = new IterativeDetectionRequest(selected.directory(), settings, application,
