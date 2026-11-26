@@ -4,6 +4,10 @@
 ## Contents
 
 - [2026.11-05](#202611-05)
+  - [Built-in orbit solver and 3D orbit viewer](#built-in-orbit-solver-and-3d-orbit-viewer)
+  - [Asteroids & Comets review and links](#asteroids--comets-review-and-links)
+  - [Reports, SkyBoT lookups and FITS handling](#reports-skybot-lookups-and-fits-handling)
+  - [Windows installer and libraries](#windows-installer-and-libraries)
 - [2026.11-04](#202611-04)
   - [GPU acceleration for digital tracking](#gpu-acceleration-for-digital-tracking)
   - [Detection and quality control](#detection-and-quality-control)
@@ -53,6 +57,29 @@
 
 ## 2026.11-05
 
+### Built-in orbit solver and 3D orbit viewer
+
+- **Built-in preliminary orbit solver.** **Compute orbit** in **Asteroids & Comets** now defaults to **Built-in (SpacePixels)**, fitting preliminary heliocentric orbits directly on Windows, Linux and macOS with no external download or IAU observatory code required. Single-night and weakly constrained two-night arcs use topocentric Statistical Ranging with a Solar System orbital prior; multi-night arcs use Gauss and Herget/Lambert initial orbit determination refined with N-body Levenberg–Marquardt (Sun plus Venus, Earth–Moon, Mars, Jupiter and Saturn). Optional local **Find_Orb (external)** remains available via the **Solver** selector. [Orbits (built-in solver and optional Find_Orb)](MANUAL.md#orbits-built-in-solver-and-optional-find_orb)
+- **Interactive 3D orbit viewer.** **Show orbit** opens a resizable 3D viewer with zoom, drag rotation, time animation, and an **Uncertainty cloud** overlay showing representative sample orbits consistent with the observations (and how linking another night collapses the uncertainty).
+
+### Asteroids & Comets review and links
+
+- **External JPL object links.** Under **Identification**, each identified object name now includes a clickable **JPL details** link opening JPL's Small-Body Database Lookup (the same link used in the HTML report), alongside the session's predicted `V` magnitude when present in `report-data.json`.
+- **Per-frame Asinh stretch.** The object animation now uses local per-frame **Stretch** controls (**Asinh** by default, matching Preview Frame and Blink without affecting other viewers) computed from each frame's own valid-pixel histogram, so sky background changes during a session no longer clip frames to black.
+- **Synchronized faint-mover residual and shift stack.** For faint movers with saved report review assets, **Residual & stack** (on by default) displays the synchronized **PSF-filtered residual** (with an adjustable **Residual ±** scale) and the **Whole-session shift stack** beside the source frames.
+- **Loading progress and cache.** Reading an object's frames shows a determinate progress bar and current filename in the animation panel; loaded objects stay cached while the window is open so switching back is immediate.
+
+### Reports, SkyBoT lookups and FITS handling
+
+- **In-report SkyBoT results and Chromium compatibility.** Report browser links to IMCCE's SkyBoT now use plain-text output (`-mime=text`) to avoid Chromium's XSLT deprecation warning, and track/faint-mover cards add **Render SkyBoT Results Here** and **Render SkyBoT Wide Cone Here** buttons that fetch and display SkyBoT JSON results directly inside the report.
+- **Faint-mover card layout.** Interactive faint-mover review controls and the three-panel animation now sit at the top of each faint-mover card, directly below the stack score.
+- **Bayer colour metadata and Seestar presets.** SpacePixels reads Bayer CFA metadata from FITS headers, adds ZWO Seestar presets for session preparation, and stops un-debayered raw colour frames before monochrome detection with a clear explanation.
+- **Preserved FITS commentary cards during conversion.** 16-bit conversion now preserves repeated `HISTORY`, `COMMENT`, and blank-keyword FITS header cards in their original order.
+- **`LATITUDE` / `LONGITUD` observing-site support.** FITS headers using `LATITUDE` and `LONGITUD` (such as CFHT MegaCam archive exposures) are now read automatically for observing-site resolution while keeping more specific site keywords ahead in precedence.
+
+### Windows installer and libraries
+
+- **Updated Windows installer.** The per-user Windows EXE installer now uses SpacePixels dialog and banner artwork, `Segoe UI` wizard typography, and an optional **Launch SpacePixels** checkbox on the completion screen.
 - **Faint-mover star mask unchanged.** The search keeps the 2026.11-04 star mask, which also finds star cores above the local background. On fields with gradients or nebulosity this removes many false paths. A faint asteroid passing close to a star can lose part of its signal. [Faint-mover settings](MANUAL.md#faint-movers-experimental) · [Investigation](docs/research/README.md#faint-mover-star-mask)
 - **Libraries.** This release uses **JTransient 1.1.2**, which detects the same as 1.1.1, and **JPlateSolve 1.0.3**.
 
@@ -104,7 +131,7 @@ This release takes a moving object from detection to a report for the Minor Plan
 - **Observation uncertainties.** Each observation is the detection's centroid through the frame's plate solution and its Gaia-fitted correction, at the exposure midpoint. Its uncertainty combines the centroid error from the detection's size and signal-to-noise with the plate fit's star residuals. A plate solution whose correction was never fitted is refused. On a DECam session, three known asteroids reduced to within 0.07–0.17″ RMS of their JPL predictions.
 - **Before you report, and MPChecker.** The window explains in two sentences who may report and under which code, with a link to the MPC's reporting guide. **MPChecker** copies the date, position and code of the middle selected observation and opens the MPC's form.
 - **Checking the ADES file.** **Check schema** validates the file against the ADES submission schema, which is downloaded once from the IAU's ADES repository into `spacepixels_ades_schema` in your home folder. **Test with the MPC** sends the file and your e-mail address, after you confirm, to the MPC's test service, which checks it like a submission without processing it. The e-mail address is kept in the settings and never written into the file.
-- **Orbits with Find_Orb.** **Compute orbit** fits a preliminary orbit to the selected observations (at least three) with Bill Gray's [Find_Orb](https://www.projectpluto.com/find_orb.htm). Choose **Find_Orb program…** to use a local Find_Orb (`fo64.exe` on Windows; `fo` built from source elsewhere, untested): the fit runs on your computer, and a small **Orbit** window shows the elements with their uncertainties, the residuals, the probability of a near-Earth orbit and the Earth MOID, draws the orbit and saves the picture. Without it, the observations (station and positions, no names) are copied and the online Find_Orb opens to paste them. See [Orbits with Find_Orb](MANUAL.md#orbits-with-find_orb).
+- **Orbits with Find_Orb.** **Compute orbit** fits a preliminary orbit to the selected observations (at least three) with Bill Gray's [Find_Orb](https://www.projectpluto.com/find_orb.htm). Choose **Find_Orb program…** to use a local Find_Orb (`fo64.exe` on Windows; `fo` built from source elsewhere, untested): the fit runs on your computer, and a small **Orbit** window shows the elements with their uncertainties, the residuals, the probability of a near-Earth orbit and the Earth MOID, draws the orbit and saves the picture. Without it, the observations (station and positions, no names) are copied and the online Find_Orb opens to paste them. See [Orbits (built-in solver and optional Find_Orb)](MANUAL.md#orbits-built-in-solver-and-optional-find_orb).
 - **Objects seen on more than one night.** **Link another night…** links the selected object to an object in another night's report, suggesting the one with the same identification or the one nearest where this night's motion leads; the link is saved beside both reports as `linked_nights.json`, and **Unlink** removes it. **Compute orbit** then fits all the linked nights and this night alone, and the Orbit window draws both. On a test asteroid observed three days apart, the second night narrowed the semi-major axis from ±0.98 to ±0.20 AU. An unidentified object's linked nights are exported in one tracklet under its first night's tracklet ID, since the MPC gives one object's nights the same temporary designation only within one submission; **This night only** exports the night alone. Under **At the MPC**, **Submitted from this night** records that you sent a night (it is then left out of a linked night's file and not ticked for export again), and **MPC designation** takes the provisional or NEO Confirmation Page designation the MPC gave the object, which then names it on every linked night. See [Objects seen on more than one night](MANUAL.md#objects-seen-on-more-than-one-night).
 - **Faint movers measured in sub-stacks.** **Measure in sub-stacks** measures a faint mover in three independent sub-stacks along its path, which gives it observations for the MPC; a marginal sub-stack marks it Weak and blocks its export.
 - **Light curves.** The **Light curve** tab measures the shown object in every frame, on the frames' median where the cut-outs fit in memory so that fixed stars cancel. Comparison stars are chosen by measurement on a frame of the session: unsaturated, unflagged stars with a signal-to-noise of at least 20, at most 30 of them. With fewer than 10, the window fetches Gaia stars to G 20 once (fields up to one square degree). Points whose shape departs from the object's usual one are marked as contaminated and left out of the summary (median, amplitude, scatter). Bins of 2 or 4 frames can be shown, and the curve saves as CSV. See [Light curves of moving objects](MANUAL.md#light-curves-of-moving-objects).

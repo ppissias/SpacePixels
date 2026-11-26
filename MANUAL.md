@@ -1171,7 +1171,7 @@ Siril's registered frames are 32-bit. SpacePixels then writes the sequence detec
 - One scale and one offset serve the whole sequence. Frames are not scaled one by one.
 - Registration margins that are zero stay zero, including when the offset keeps ordinary negative values.
 - For colour lights, `HISTORY` cards record the Bayer interpretation and where each part came from, for example `Bayer row order top-down (ZWO Seestar S30 Pro preset)`. `preparation.json` records the same values as `resolvedCfa`, and the preset as `cameraPreset`.
-- Normalized values inside `[-0.5, 1.5]` are stored directly. Values outside that headroom open the dialog in the preparing section: **Clip extremes**, **Preserve all values**, or **Cancel**. Floating-point frames count as 0 to 1, or as ADU when their level shows they hold detector counts (see [Import](#import)).
+- Normalized values inside `[-0.5, 1.5]` are stored directly. Values outside that headroom open the dialog in the preparing section: **Clip extremes**, **Preserve all values**, or **Cancel**. Floating-point frames count as 0 to 1, or as ADU when their level shows they hold detector counts (see [Import](#step-1-import-the-frames)).
 
 The detection engine reads 16-bit samples. The 32-bit working files exist so that calibration, registration and this final scale are not rounded at every step.
 

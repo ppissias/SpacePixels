@@ -26,7 +26,7 @@ final class StartupTips {
     private static final String STAR_MASK = "star-mask-explorer";
     private static final String ASTEROIDS_WINDOW = "asteroids--comets";
     private static final String LIGHT_CURVES = "light-curves-of-moving-objects";
-    private static final String ORBITS = "orbits-with-find_orb";
+    private static final String ORBITS = "orbits-built-in-solver-and-optional-find_orb";
 
     static final List<Tip> ALL = List.of(
             new Tip("After a detection, you can draw what it found on the frames themselves in <b>Preview Frame</b> and "
@@ -70,9 +70,9 @@ final class StartupTips {
             new Tip("The <b>Light curve</b> tab of <b>Asteroids &amp; Comets</b> measures a moving object's brightness in every "
                     + "frame, with the fixed stars subtracted and comparison stars correcting for clouds and haze. Bins of 2 or 4 "
                     + "frames help with faint objects; the report draws a curve on every track and faint-mover card too.", LIGHT_CURVES),
-            new Tip("With Bill Gray's Find_Orb on your computer, <b>Compute orbit</b> in <b>Asteroids &amp; Comets</b> fits a "
-                    + "preliminary orbit to an object's observations and draws it from above the ecliptic. One night gives a very "
-                    + "uncertain orbit, but it shows roughly where the object belongs.", ORBITS),
+            new Tip("In <b>Asteroids &amp; Comets</b>, <b>Compute orbit</b> fits a preliminary heliocentric orbit directly with "
+                    + "SpacePixels' built-in solver (or optional local Find_Orb) and opens an interactive 3D orbit viewer. "
+                    + "One night leaves a wide uncertainty cloud, and linking another night narrows it.", ORBITS),
             new Tip("Double-click a frame in the main window's list to show it in <b>Preview Frame</b> and see what the "
                     + "detector picks up in it.", PREVIEW),
             new Tip("In <b>Preview Frame</b> you can try <b>Detection Sigma</b> and the other per-frame settings on the frame "
