@@ -1043,15 +1043,26 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         problemsArea.setLineWrap(true);
         problemsArea.setWrapStyleWord(true);
         problemsArea.setForeground(UiStyle.helpColor());
-        problemsArea.setAlignmentX(LEFT_ALIGNMENT);
         preventAutoScroll(problemsArea);
-        panel.add(problemsArea);
+        JScrollPane problemsScroll = new JScrollPane(problemsArea,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        int problemsHeight = UiStyle.space(84);
+        problemsScroll.setAlignmentX(LEFT_ALIGNMENT);
+        problemsScroll.setMinimumSize(new Dimension(UiStyle.space(120), problemsHeight));
+        problemsScroll.setPreferredSize(new Dimension(UiStyle.space(320), problemsHeight));
+        problemsScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, problemsHeight));
+        panel.add(problemsScroll);
+        panel.add(Box.createVerticalStrut(UiStyle.space(4)));
         psvArea.setEditable(false);
         psvArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, UiStyle.bodyFont().getSize() - 1));
         preventAutoScroll(psvArea);
-        JScrollPane psvScroll = new JScrollPane(psvArea);
+        JScrollPane psvScroll = new JScrollPane(psvArea,
+                ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED, ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        int psvHeight = UiStyle.space(180);
         psvScroll.setAlignmentX(LEFT_ALIGNMENT);
-        psvScroll.setPreferredSize(new Dimension(UiStyle.space(320), UiStyle.space(180)));
+        psvScroll.setMinimumSize(new Dimension(UiStyle.space(120), psvHeight));
+        psvScroll.setPreferredSize(new Dimension(UiStyle.space(320), psvHeight));
+        psvScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, psvHeight));
         panel.add(psvScroll);
         copyButton.addActionListener(e -> Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(psvArea.getText()), null));
         saveButton.addActionListener(e -> savePsv());

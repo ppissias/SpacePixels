@@ -151,9 +151,22 @@ public class AsteroidsCometsWindowTest {
             assertEquals(5, (int) onEdt(observationsTable::getRowCount));
             assertEquals(0, (int) onEdt(objects::getSelectedRow));
 
-            // The export shows the known object by its number; a missing detail is named instead of a file.
+            // The export shows the known object by its number; both status and PSV boxes are read-only, self-scrolling and fixed-height.
             JTextArea psv = onEdt(() -> areas(window).stream().filter(a -> !a.isEditable() && a.getFont().getFamily().equals(Font.MONOSPACED))
                     .findFirst().orElseThrow());
+            JTextArea problems = onEdt(() -> areas(window).stream().filter(a -> !a.isEditable() && a != psv)
+                    .findFirst().orElseThrow());
+            onEdt(() -> {
+                JScrollPane psvScroll = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, psv);
+                JScrollPane problemsScroll = (JScrollPane) SwingUtilities.getAncestorOfClass(JScrollPane.class, problems);
+                assertTrue("PSV area sits in its own JScrollPane", psvScroll != null && psvScroll.getViewport().getView() == psv);
+                assertTrue("Problems area sits in its own JScrollPane", problemsScroll != null && problemsScroll.getViewport().getView() == problems);
+                assertEquals("PSV scroll height is fixed (min == pref)", psvScroll.getMinimumSize().height, psvScroll.getPreferredSize().height);
+                assertEquals("PSV scroll height is fixed (max == pref)", psvScroll.getMaximumSize().height, psvScroll.getPreferredSize().height);
+                assertEquals("Problems scroll height is fixed (min == pref)", problemsScroll.getMinimumSize().height, problemsScroll.getPreferredSize().height);
+                assertEquals("Problems scroll height is fixed (max == pref)", problemsScroll.getMaximumSize().height, problemsScroll.getPreferredSize().height);
+                return null;
+            });
             waitFor("the ADES file", () -> onEdt(psv::getText).contains("649341 |"));
             assertTrue(onEdt(psv::getText).contains("! mpcCode W84"));
             assertTrue(onEdt(() -> button(window, "Check schema").isEnabled()));
