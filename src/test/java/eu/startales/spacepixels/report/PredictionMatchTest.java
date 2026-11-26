@@ -71,4 +71,20 @@ public class PredictionMatchTest {
         var fast = PredictionMatch.faintMover(100, 200, T0, 2.5, 0, fitted, objects(body("FM object", 0.5)), wcs, 3, 566);
         assertEquals("motion 0.5 px/min off", "no-known-match", fast.status());
     }
+
+    /** Duplicate numbered and provisional entries for one asteroid must resolve as Known, not ambiguous Check. */
+    @Test
+    public void deduplicatesRecentlyNumberedDuplicatesInSavedPredictions() {
+        var wcs = LightCurveTestAccess.wcs();
+        var duplicated = objects(body("841917 (2015 RS113)", 0), body("(2015 RS113)", 0));
+        var trackResult = PredictionMatch.track(track(), duplicated, wcs, 1, 566);
+        assertEquals("known", trackResult.status());
+        assertEquals(List.of("841917 (2015 RS113)"), trackResult.names());
+
+        var fitted = new ArrayList<PredictionMatch.Point>();
+        for (int k = 0; k < 6; k++) fitted.add(new PredictionMatch.Point(k + 1, T0 + k * 300_000L, 100 + 10 * k, 200));
+        var fmResult = PredictionMatch.faintMover(100, 200, T0, 2, 0, fitted, duplicated, wcs, 3, 566);
+        assertEquals("known", fmResult.status());
+        assertEquals(List.of("841917 (2015 RS113)"), fmResult.names());
+    }
 }

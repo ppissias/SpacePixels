@@ -254,6 +254,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final JTable identificationTable = new JTable(identificationModel);
     private JScrollPane identificationScroll;
     private final JLabel identificationMatchesTitle = new JLabel("Nearby & MPC ITF matches");
+    private final JButton identificationMatchesInfoLink = AccessibleControls.link(
+            "ⓘ", "How Nearby and MPC ITF Offset and Motion are calculated", this::showNearbyMatchesInfo);
+    private final JPanel identificationMatchesHeader = new JPanel(new FlowLayout(FlowLayout.LEFT, UiStyle.space(4), 0)) {
+        @Override public Dimension getMaximumSize() {
+            Dimension pref = getPreferredSize();
+            return new Dimension(Integer.MAX_VALUE, pref.height);
+        }
+    };
     private final IdentificationMatchesModel identificationMatchesModel = new IdentificationMatchesModel();
     private final JTable identificationMatchesTable = new JTable(identificationMatchesModel);
     private JScrollPane identificationMatchesScroll;
@@ -884,10 +892,16 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         configureIdentificationTables();
         panel.add(identificationScroll);
         identificationMatchesTitle.setForeground(UiStyle.helpColor());
-        identificationMatchesTitle.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(6), UiStyle.space(2), UiStyle.space(2), 0));
-        identificationMatchesTitle.setAlignmentX(LEFT_ALIGNMENT);
-        identificationMatchesTitle.setVisible(false);
-        panel.add(identificationMatchesTitle);
+        identificationMatchesInfoLink.setToolTipText(
+                "How Offset and Motion are calculated for Nearby & MPC ITF matches, and possible uncertainties");
+        identificationMatchesInfoLink.setMargin(new Insets(0, UiStyle.space(2), 0, UiStyle.space(2)));
+        identificationMatchesHeader.setOpaque(false);
+        identificationMatchesHeader.setBorder(BorderFactory.createEmptyBorder(UiStyle.space(6), UiStyle.space(2), UiStyle.space(2), 0));
+        identificationMatchesHeader.setAlignmentX(LEFT_ALIGNMENT);
+        identificationMatchesHeader.add(identificationMatchesTitle);
+        identificationMatchesHeader.add(identificationMatchesInfoLink);
+        identificationMatchesHeader.setVisible(false);
+        panel.add(identificationMatchesHeader);
         panel.add(identificationMatchesScroll);
         identificationLinksPanel.setLayout(new BoxLayout(identificationLinksPanel, BoxLayout.Y_AXIS));
         identificationLinksPanel.setOpaque(false);
@@ -1303,7 +1317,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
         identificationMatchesModel.setRows(matchRows);
         boolean hasMatches = !matchRows.isEmpty();
-        identificationMatchesTitle.setVisible(hasMatches);
+        identificationMatchesHeader.setVisible(hasMatches);
         identificationMatchesScroll.setVisible(hasMatches);
         adjustWrappedRowHeights(identificationTable);
         if (hasMatches) adjustWrappedRowHeights(identificationMatchesTable);
@@ -2747,6 +2761,77 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         text.setWrapStyleWord(true);
         text.setCaretPosition(0);
         JOptionPane.showMessageDialog(this, new JScrollPane(text), "Identification details", JOptionPane.PLAIN_MESSAGE);
+    }
+
+    /** Explains how Offset and Motion are calculated in the Nearby &amp; MPC ITF matches table, and their uncertainties. */
+    private void showNearbyMatchesInfo() {
+        String explanation = nearbyMatchesExplanationText();
+        JTextArea text = new JTextArea(explanation, 22, 68);
+        text.setEditable(false);
+        text.setLineWrap(true);
+        text.setWrapStyleWord(true);
+        text.setCaretPosition(0);
+        JOptionPane.showMessageDialog(this, new JScrollPane(text),
+                "Nearby & MPC ITF matches — Offset & Motion", JOptionPane.INFORMATION_MESSAGE);
+    }
+
+    /** Plain-language explanation of how Offset, Motion and uncertainties work for Identify all and MPC ITF matches. */
+    static String nearbyMatchesExplanationText() {
+        int nearbyRatePct = (int) Math.round(eu.startales.spacepixels.mpc.NearbyKnown.RATE_FRACTION * 100);
+        int itfSamePct = (int) Math.round(MpcItfCatalog.SAME_NIGHT_RATE_FRACTION * 100);
+        int itfNearPct = (int) Math.round(MpcItfCatalog.NEARBY_RATE_FRACTION * 100);
+        return String.format(Locale.US,
+                "HOW OFFSET AND MOTION ARE CALCULATED\n\n"
+                + "1. Identify all (JPL SB-Ident & IMCCE SkyBoT — mid-session check)\n"
+                + "• Finding position & motion: a track's measured pixel positions are fitted with a straight line "
+                + "against frame midpoint times (a faint mover uses its fitted shift-and-stack motion), evaluated at "
+                + "mid-session UTC and projected to sky coordinates (RA, Dec) and sky velocity (dRA·cos Dec, dDec) "
+                + "through the session's plate solution.\n"
+                + "• Offset (″): angular separation on the sky at mid-session between the finding and the known object's "
+                + "predicted position. Known objects within %.0f″ (1′) are listed, nearest first.\n"
+                + "• Motion (agreeing / differing, Δv): magnitude of the 2D sky-velocity vector difference between the "
+                + "finding and the known object (combining both speed and direction). Motion is marked agreeing when "
+                + "Δv ≤ max(%.0f″/h, %d%% of the known object's speed). If another finding in this report lies closer "
+                + "to the same known object, that is noted (two findings near one object are often pieces of one track).\n\n"
+                + "2. MPC ITF — same night and nearby nights (±%d days)\n"
+                + "• Tracklet summary: each 80-column MPC ITF tracklet is summarized by its midpoint time, mean (RA, Dec), "
+                + "and—when it has at least 2 observations spanning ≥ 60 s—its sky speed and position angle (PA, east of "
+                + "north) from its first to last observation.\n"
+                + "• Offset (″ or ′): the finding's position at its own mid-epoch is linearly extrapolated at constant "
+                + "(dRA/dt, dDec/dt) to the ITF tracklet's midpoint time (Δt). Offset is the angular separation between "
+                + "that straight-line prediction and the ITF tracklet's midpoint.\n"
+                + "  – Same night (|Δt| ≤ %.0f h): shown within %.0f″ (or %.0f″ if the ITF tracklet has no rate).\n"
+                + "  – Nearby nights (|Δt| ≤ %d d, up to %d nearest): requires a measured ITF rate, within "
+                + "%.2f′ + %.1f′/day × |Δd| to allow for orbital curvature.\n"
+                + "• Motion (Δv, ΔPA): Δv is the scalar sky-speed difference and ΔPA is the direction difference "
+                + "(checked when finding speed ≥ 2″/h; shown as – when the ITF tracklet has no rate). Accepted within "
+                + "max(%.0f″/h, %d%%) and %.0f° on the same night, or max(%.0f″/h, %d%%) and %.0f° on nearby nights.\n\n"
+                + "POSSIBLE UNCERTAINTIES & LIMITATIONS\n"
+                + "• Linear extrapolation & orbital curvature: real sky motion curves over time—especially for near-Earth "
+                + "objects, near stationary points, or over several days. Small single-night rate errors also grow "
+                + "linearly with time (for example, a 1″/h rate error becomes 24″ per day, or 6′ after 15 days).\n"
+                + "• Single-epoch field search & orbit uncertainty: Identify all's 1′ screen uses single-epoch field-search "
+                + "positions and does not model ephemeris 3σ orbit uncertainties. Poorly known orbits can sit tens of "
+                + "arcseconds off; agreeing candidates for unidentified findings are verified against full multi-frame "
+                + "JPL Horizons ephemerides before being promoted to Known.\n"
+                + "• Topocentric parallax: MPC ITF tracklets may come from another observatory on Earth (different MPC "
+                + "code), and SkyBoT falls back to the geocentre (code 500) when no observatory code is configured. For "
+                + "closer asteroids, parallax shifts both apparent position and rate.\n"
+                + "• Measurement & timing errors: short observing arcs, faint centroids, plate-solution distortion, or "
+                + "frame clock offsets increase the uncertainty of the finding's position and motion. Short ITF "
+                + "tracklets (only a few minutes long) can also have noisy end-to-end speeds and position angles.\n"
+                + "• Candidate screen only: a nearby-night ITF match or a 1′ Possible match is a geometric candidate, not "
+                + "a confirmed identification or linkage. Always verify multi-night linkages with an orbit fit, and keep "
+                + "in mind that ITF results reflect the cached itf.txt.gz snapshot date.",
+                eu.startales.spacepixels.mpc.NearbyKnown.RADIUS_ARCSEC,
+                eu.startales.spacepixels.mpc.NearbyKnown.MIN_RATE_TOLERANCE, nearbyRatePct,
+                MpcItfCatalog.DEFAULT_NEARBY_DAYS,
+                MpcItfCatalog.SAME_NIGHT_MAX_HOURS,
+                MpcItfCatalog.SAME_NIGHT_RADIUS_ARCSEC, MpcItfCatalog.SAME_NIGHT_NO_RATE_RADIUS_ARCSEC,
+                MpcItfCatalog.DEFAULT_NEARBY_DAYS, MpcItfCatalog.MAX_NEARBY_MATCHES,
+                MpcItfCatalog.NEARBY_BASE_RADIUS_ARCMIN, MpcItfCatalog.NEARBY_RADIUS_PER_DAY_ARCMIN,
+                MpcItfCatalog.SAME_NIGHT_RATE_FLOOR, itfSamePct, MpcItfCatalog.SAME_NIGHT_PA_TOLERANCE_DEG,
+                MpcItfCatalog.NEARBY_RATE_FLOOR, itfNearPct, MpcItfCatalog.NEARBY_PA_TOLERANCE_DEG);
     }
 
     /**

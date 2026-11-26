@@ -33,10 +33,12 @@ import java.time.format.DateTimeFormatterBuilder;
 import java.time.temporal.ChronoField;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.BiFunction;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -140,6 +142,55 @@ public final class SolarSystemClient {
     /** An object found by the field search: its position at {@code epochMillis} and its rates on the sky. */
     record Candidate(String name, boolean comet, double ra, double dec, Double magnitude,
                      double raRateArcsecPerHour, double decRateArcsecPerHour, long epochMillis) {
+        Candidate withName(String updatedName) {
+            return new Candidate(updatedName, comet, ra, dec, magnitude, raRateArcsecPerHour, decRateArcsecPerHour, epochMillis);
+        }
+    }
+
+    /**
+     * Insertion-ordered collection deduplicated across all designation keys of each object (for example both the
+     * permanent number and parenthesized provisional designation of {@code "841917 (2015 RS113)"}). When a later
+     * catalogue supplies a permanent asteroid number for an already-indexed provisional entry, the existing entry's
+     * name is upgraded while keeping its original coordinates and rates.
+     */
+    private static final class DesignationIndex<T> {
+        private final List<T> items = new ArrayList<>();
+        private final List<String> names = new ArrayList<>();
+        private final Map<String, Integer> keyToIndex = new HashMap<>();
+
+        boolean add(T item, String name, BiFunction<T, String, T> rename) {
+            List<String> keys = SolarSystemObjects.designationKeys(name);
+            Integer existingIndex = null;
+            for (String key : keys) {
+                Integer idx = keyToIndex.get(key);
+                if (idx != null) {
+                    existingIndex = idx;
+                    break;
+                }
+            }
+            if (existingIndex == null) {
+                int idx = items.size();
+                items.add(item);
+                names.add(name);
+                for (String key : keys) {
+                    keyToIndex.put(key, idx);
+                }
+                return true;
+            }
+            String existingName = names.get(existingIndex);
+            if (SolarSystemObjects.prefersName(name, existingName)) {
+                items.set(existingIndex, rename.apply(items.get(existingIndex), name));
+                names.set(existingIndex, name);
+            }
+            for (String key : keys) {
+                keyToIndex.putIfAbsent(key, existingIndex);
+            }
+            return false;
+        }
+
+        List<T> values() {
+            return items;
+        }
     }
 
     /** The objects of one field search and the API version that answered. */
@@ -175,14 +226,14 @@ public final class SolarSystemClient {
         try {
             long middle = query.startMillis() + (query.endMillis() - query.startMillis()) / 2;
             double halfSpanDays = ((query.endMillis() - query.startMillis()) / 2.0 + PAD_MILLIS) / 86_400_000.0;
-            Map<String, Candidate> found = new LinkedHashMap<>();
+            DesignationIndex<Candidate> found = new DesignationIndex<>();
             String fieldVersion = null;
             progress.stage("asteroids and comets in the field (JPL)");
             String fieldUrl = fieldSearchUrl(query, result.field, middle,
                     Math.max(MIN_MARGIN_DEG, GENERAL_RATE_DEG_PER_DAY * halfSpanDays), null);
             try {
                 Search search = loadField(fieldUrl, middle);
-                search.candidates().forEach(candidate -> found.putIfAbsent(designationKey(candidate.name()), candidate));
+                search.candidates().forEach(candidate -> found.add(candidate, candidate.name(), Candidate::withName));
                 fieldVersion = search.version();
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Field search", FetchStep.Status.SUCCEEDED,
                         count(search.candidates().size(), "object"), "", fieldUrl, null));
@@ -205,7 +256,7 @@ public final class SolarSystemClient {
             String neoUrl = fieldSearchUrl(query, result.field, middle, NEO_MARGIN_DEG, "neo");
             try {
                 Search search = loadField(neoUrl, middle);
-                search.candidates().forEach(candidate -> found.putIfAbsent(designationKey(candidate.name()), candidate));
+                search.candidates().forEach(candidate -> found.add(candidate, candidate.name(), Candidate::withName));
                 fieldVersion = fieldVersion == null ? search.version() : fieldVersion;
                 addStep(result, progress, FetchStep.of("JPL SB-Ident", "Near-Earth objects", FetchStep.Status.SUCCEEDED,
                         count(search.candidates().size(), "object"), "", neoUrl, null));
@@ -223,7 +274,7 @@ public final class SolarSystemClient {
                 List<Candidate> listed = parseSkybot(http.get(URI.create(skybotUrl), SKYBOT_TIMEOUT), middle, query.magnitudeLimit());
                 int added = 0;
                 for (Candidate candidate : listed) {
-                    if (found.putIfAbsent(designationKey(candidate.name()), candidate) == null) {
+                    if (found.add(candidate, candidate.name(), Candidate::withName)) {
                         added++;
                     }
                 }
@@ -245,17 +296,20 @@ public final class SolarSystemClient {
             crossing.sort(Comparator.comparingDouble(candidate -> candidate.magnitude() == null ? Double.MAX_VALUE : candidate.magnitude()));
             refined = Math.min(maxRefined, crossing.size());
             String horizonsVersion = null;
+            Map<String, Integer> bodyKeys = new HashMap<>();
             for (int i = 0; i < crossing.size(); i++) {
                 if (Thread.interrupted()) {
                     throw new InterruptedException();
                 }
                 Candidate candidate = crossing.get(i);
                 SolarSystemObjects.Body body = null;
+                String targetName = null;
                 if (i < refined) {
                     progress.stage(String.format(Locale.US, "positions of object %d of %d (JPL Horizons): %s", i + 1, refined, candidate.name()));
                     HorizonsReply reply = askHorizons(query, candidate);
                     if (reply.failure() == null) {
                         body = reply.body();
+                        targetName = reply.targetName();
                         if (reply.version() != null) horizonsVersion = reply.version();
                         horizonsOk++;
                     } else {
@@ -269,7 +323,7 @@ public final class SolarSystemClient {
                 }
                 if (crossesFrame(query, body.samples.stream().filter(sample -> sample.timeMillis >= query.startMillis() - PAD_MILLIS
                         && sample.timeMillis <= query.endMillis() + PAD_MILLIS).toList())) {
-                    result.bodies.add(body);
+                    addUniqueBody(result.bodies, bodyKeys, body, candidate.name(), targetName);
                 }
             }
             result.fetchSteps.add(horizonsSummary(horizonsOk, refined, false));
@@ -380,7 +434,11 @@ public final class SolarSystemClient {
 
     /** A known object near the field at one time: name, position (degrees), V magnitude and rates on the sky ("/h). */
     public record Known(String name, boolean comet, double ra, double dec, Double magnitude,
-                        double raRateArcsecPerHour, double decRateArcsecPerHour) { }
+                        double raRateArcsecPerHour, double decRateArcsecPerHour) {
+        Known withName(String updatedName) {
+            return new Known(updatedName, comet, ra, dec, magnitude, raRateArcsecPerHour, decRateArcsecPerHour);
+        }
+    }
 
     /** Every known object found, the problems of a service that failed, and the questions asked. */
     public record FieldObjects(List<Known> objects, List<String> problems, List<String> addresses) { }
@@ -393,7 +451,7 @@ public final class SolarSystemClient {
      */
     public FieldObjects knownInField(SkyField field, long epochMillis, String observatoryCode, ObservingSite site, double marginDeg)
             throws InterruptedException {
-        Map<String, Known> found = new LinkedHashMap<>();
+        DesignationIndex<Known> found = new DesignationIndex<>();
         List<String> problems = new ArrayList<>();
         List<String> addresses = new ArrayList<>();
         double[] box = searchBox(field, marginDeg);
@@ -402,7 +460,7 @@ public final class SolarSystemClient {
                 box[0], box[1], box[2], box[3], null, null);
         try {
             addresses.add(jpl);
-            for (Candidate c : loadField(jpl, epochMillis).candidates()) found.putIfAbsent(designationKey(c.name()), known(c));
+            for (Candidate c : loadField(jpl, epochMillis).candidates()) found.add(known(c), c.name(), Known::withName);
         } catch (IOException problem) {
             problems.add("JPL SB-Ident: " + problem.getMessage());
         }
@@ -413,7 +471,7 @@ public final class SolarSystemClient {
         try {
             addresses.add(skybot);
             for (Candidate c : parseSkybot(http.get(URI.create(skybot), SKYBOT_TIMEOUT), epochMillis, Double.POSITIVE_INFINITY)) {
-                found.putIfAbsent(designationKey(c.name()), known(c));
+                found.add(known(c), c.name(), Known::withName);
             }
         } catch (IOException problem) {
             problems.add("IMCCE SkyBoT: " + problem.getMessage());
@@ -439,17 +497,18 @@ public final class SolarSystemClient {
             result.source = "";
             return result;
         }
-        Map<String, Candidate> unique = new LinkedHashMap<>();
+        DesignationIndex<Candidate> unique = new DesignationIndex<>();
         for (Known known : matches) {
             if (known == null || known.name() == null) continue;
-            unique.putIfAbsent(designationKey(known.name()),
-                    new Candidate(known.name(), known.comet(), known.ra(), known.dec(), known.magnitude(),
-                            known.raRateArcsecPerHour(), known.decRateArcsecPerHour(), epochMillis));
+            unique.add(new Candidate(known.name(), known.comet(), known.ra(), known.dec(), known.magnitude(),
+                    known.raRateArcsecPerHour(), known.decRateArcsecPerHour(), epochMillis),
+                    known.name(), Candidate::withName);
         }
         int asked = 0;
         int ok = 0;
         String horizonsVersion = null;
         List<FetchStep> failures = new ArrayList<>();
+        Map<String, Integer> bodyKeys = new HashMap<>();
         for (Candidate candidate : unique.values()) {
             if (Thread.interrupted()) {
                 throw new InterruptedException();
@@ -464,7 +523,7 @@ public final class SolarSystemClient {
                 body = straightLine(candidate, query);
                 failures.add(reply.failure());
             }
-            result.bodies.add(body);
+            addUniqueBody(result.bodies, bodyKeys, body, candidate.name(), reply.targetName());
         }
         result.fetchSteps.add(horizonsSummary(ok, asked, false));
         result.fetchSteps.addAll(failures);
@@ -477,7 +536,54 @@ public final class SolarSystemClient {
         return result;
     }
 
-    private record HorizonsReply(SolarSystemObjects.Body body, String version, FetchStep failure) {
+    private record HorizonsReply(SolarSystemObjects.Body body, String targetName, String version, FetchStep failure) {
+    }
+
+    /**
+     * Appends {@code body} to {@code bodies} unless any designation key of {@code body.name}, {@code candidateName}
+     * or Horizons' canonical {@code targetName} is already present, in which case the existing entry is upgraded if
+     * the new one has an orbit solution or a permanently numbered asteroid name.
+     */
+    private static void addUniqueBody(List<SolarSystemObjects.Body> bodies, Map<String, Integer> keyToIndex,
+                                      SolarSystemObjects.Body body, String candidateName, String targetName) {
+        List<String> keys = new ArrayList<>();
+        keys.addAll(SolarSystemObjects.designationKeys(body.name));
+        if (candidateName != null && !candidateName.equals(body.name)) {
+            keys.addAll(SolarSystemObjects.designationKeys(candidateName));
+        }
+        if (targetName != null) {
+            keys.addAll(SolarSystemObjects.designationKeys(targetName));
+        }
+        Integer existingIndex = null;
+        for (String key : keys) {
+            Integer idx = keyToIndex.get(key);
+            if (idx != null) {
+                existingIndex = idx;
+                break;
+            }
+        }
+        if (existingIndex == null) {
+            int idx = bodies.size();
+            bodies.add(body);
+            for (String key : keys) {
+                keyToIndex.put(key, idx);
+            }
+            return;
+        }
+        SolarSystemObjects.Body existing = bodies.get(existingIndex);
+        boolean existingHasOrbit = existing.orbitSolution != null && !existing.orbitSolution.isBlank();
+        boolean incomingHasOrbit = body.orbitSolution != null && !body.orbitSolution.isBlank();
+        if (incomingHasOrbit && !existingHasOrbit) {
+            if (SolarSystemObjects.prefersName(existing.name, body.name)) {
+                body.name = existing.name;
+            }
+            bodies.set(existingIndex, body);
+        } else if (SolarSystemObjects.prefersName(body.name, existing.name)) {
+            existing.name = body.name;
+        }
+        for (String key : keys) {
+            keyToIndex.putIfAbsent(key, existingIndex);
+        }
     }
 
     private static SolarSystemObjects baseResult(SolarSystemQuery query) {
@@ -495,12 +601,13 @@ public final class SolarSystemClient {
         String url = horizonsUri(query, candidate).toString();
         try {
             String answer = http.get(URI.create(url), HORIZONS_TIMEOUT);
-            return new HorizonsReply(parseHorizons(answer, candidate), version(answer), null);
+            SolarSystemObjects.Body body = parseHorizons(answer, candidate);
+            return new HorizonsReply(body, parseHorizonsTargetName(answer), version(answer), null);
         } catch (IOException problem) {
             FetchStep failure = FetchStep.of("JPL Horizons", candidate.name(), FetchStep.Status.FAILED,
                     "Kept with the field search's straight-line motion, without an uncertainty.",
                     problem.getMessage(), url, null);
-            return new HorizonsReply(null, null, failure);
+            return new HorizonsReply(null, null, null, failure);
         }
     }
 
@@ -685,28 +792,11 @@ public final class SolarSystemClient {
     }
 
     /**
-     * The key that identifies one object across JPL and SkyBoT names: the number of a numbered asteroid, the
+     * The primary key that identifies one object across JPL and SkyBoT names: the number of a numbered asteroid, the
      * designation of an unnumbered one, and a comet's designation without its name.
      */
     static String designationKey(String name) {
-        String trimmed = name.trim();
-        Matcher matcher = NUMBERED_COMET.matcher(trimmed);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        matcher = PROVISIONAL_COMET.matcher(trimmed);
-        if (matcher.find()) {
-            return matcher.group(1);
-        }
-        matcher = PROVISIONAL_ASTEROID.matcher(trimmed);
-        if (matcher.matches()) {
-            return matcher.group(1);
-        }
-        matcher = NUMBERED_ASTEROID.matcher(trimmed);
-        if (matcher.matches()) {
-            return matcher.group(1);
-        }
-        return trimmed;
+        return SolarSystemObjects.primaryDesignationKey(name);
     }
 
     // ==========================================
@@ -859,6 +949,25 @@ public final class SolarSystemClient {
     }
 
     private static final Pattern SOLUTION = Pattern.compile("Target body name:.*\\{source:\\s*([^}]+)}");
+    private static final Pattern TARGET_BODY_NAME = Pattern.compile("Target body name:\\s*([^\\r\\n{]+)");
+
+    /** Extracts Horizons' canonical {@code Target body name:} value (trimmed), or null when absent. */
+    static String parseHorizonsTargetName(String answer) {
+        try {
+            JsonObject root = json(answer);
+            if (!root.has("result")) {
+                return null;
+            }
+            Matcher matcher = TARGET_BODY_NAME.matcher(root.get("result").getAsString());
+            if (matcher.find()) {
+                String name = matcher.group(1).trim().replaceAll("\\s+", " ");
+                return name.isEmpty() ? null : name;
+            }
+        } catch (IOException ignored) {
+            // Caller handles malformed Horizons replies via parseHorizons.
+        }
+        return null;
+    }
 
     /** The body of a Horizons answer: its positions, magnitudes and uncertainties, and the orbit solution. */
     static SolarSystemObjects.Body parseHorizons(String answer, Candidate candidate) throws IOException {
@@ -898,6 +1007,13 @@ public final class SolarSystemClient {
         SolarSystemObjects.Body body = new SolarSystemObjects.Body();
         body.name = candidate.name();
         body.comet = candidate.comet();
+        Matcher targetMatcher = TARGET_BODY_NAME.matcher(result);
+        if (!body.comet && targetMatcher.find()) {
+            String canonical = targetMatcher.group(1).trim().replaceAll("\\s+", " ");
+            if (SolarSystemObjects.prefersName(canonical, body.name)) {
+                body.name = canonical;
+            }
+        }
         Matcher solution = SOLUTION.matcher(result);
         body.orbitSolution = solution.find() ? solution.group(1).trim() : "JPL Horizons";
         for (String line : result.substring(startOfTable + 5, endOfTable).split("\\R")) {

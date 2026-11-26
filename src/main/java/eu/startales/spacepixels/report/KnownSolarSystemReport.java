@@ -69,7 +69,7 @@ final class KnownSolarSystemReport {
         var rejectedFrames = new java.util.HashSet<>(UnclassifiedTransientSectionWriter.rejectedFrameIndices(c.pipelineTelemetry));
         if (c.pipelineTelemetry != null) for (var f : c.pipelineTelemetry.frameQualityStats) if (f.rejected) rejectedFrames.add(f.frameIndex);
         var bodies = new ArrayList<Body>();
-        for (var body : catalogue.bodies) {
+        for (var body : SolarSystemObjects.deduplicateBodies(catalogue.bodies)) {
             io.github.ppissias.jtransient.execution.CancellationScope.check();
             if (body == null || body.samples == null || body.samples.isEmpty()) continue;
             int predicted = 0, inField = 0, usable = 0, masked = 0;

@@ -118,6 +118,11 @@ public class AsteroidsCometsWindowTest {
             JTable matchTable = onEdt(() -> tables(window).get(3));
             assertTrue("ITF match table becomes visible", onEdt(matchTable::isShowing));
             assertTrue("ITF match table lists W84 Iuja1KU", onEdt(() -> tableContains(matchTable, "W84 Iuja1KU")));
+            assertTrue("Nearby & MPC ITF info icon becomes visible beside the matches header",
+                    onEdt(() -> all(window.getContentPane(), AbstractButton.class, new ArrayList<>()).stream()
+                            .anyMatch(b -> "ⓘ".equals(b.getText())
+                                    && "How Nearby and MPC ITF Offset and Motion are calculated".equals(b.getAccessibleContext().getAccessibleName())
+                                    && b.isShowing())));
             // Local per-frame Asinh stretch controls and loading progress bar are present.
             assertTrue(onEdt(() -> all(window.getContentPane(), JProgressBar.class, new ArrayList<>()).size() >= 1));
             assertEquals(eu.startales.spacepixels.fits.StretchAlgorithm.ASINH,

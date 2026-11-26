@@ -62,6 +62,7 @@ public final class SolarSystemStore {
                 objects.bodies = new ArrayList<>();
             }
             objects.bodies.removeIf(body -> body == null || body.samples == null || body.samples.isEmpty());
+            objects.bodies = new ArrayList<>(SolarSystemObjects.deduplicateBodies(objects.bodies));
             if (objects.problems == null) {
                 objects.problems = new ArrayList<>();
             }

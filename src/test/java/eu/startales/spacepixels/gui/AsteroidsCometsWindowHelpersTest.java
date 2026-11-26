@@ -3,6 +3,7 @@ package eu.startales.spacepixels.gui;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 /**
  * Unit tests for linked-night table and export-note formatting in {@link AsteroidsCometsWindow}.
@@ -31,5 +32,22 @@ public class AsteroidsCometsWindowHelpersTest {
                 AsteroidsCometsWindow.omittedNightsPhrase(1));
         assertEquals("this night only; 2 linked nights are not in this file",
                 AsteroidsCometsWindow.omittedNightsPhrase(2));
+    }
+
+    /**
+     * Nearby &amp; MPC ITF matches info text explains both Offset and Motion calculations and key uncertainties.
+     */
+    @Test
+    public void nearbyMatchesExplanationCoversOffsetMotionAndUncertainties() {
+        String text = AsteroidsCometsWindow.nearbyMatchesExplanationText();
+        assertTrue(text.contains("Identify all"));
+        assertTrue(text.contains("MPC ITF"));
+        assertTrue(text.contains("Offset"));
+        assertTrue(text.contains("Δv"));
+        assertTrue(text.contains("ΔPA"));
+        assertTrue(text.contains("curvature"));
+        assertTrue(text.contains("parallax"));
+        assertTrue(text.contains("3σ"));
+        assertTrue(text.contains("itf.txt.gz"));
     }
 }

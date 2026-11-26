@@ -172,7 +172,7 @@ final class FaintMoverPresentation {
         if (wcs == null || objects == null || objects.bodies == null || positions.size() < 2
                 || !Double.isFinite(fwhm) || fwhm <= 0) return List.of();
         var matches = new ArrayList<Match>();
-        for (var body : objects.bodies) {
+        for (var body : SolarSystemObjects.deduplicateBodies(objects.bodies)) {
             if (body == null || body.samples == null || body.samples.isEmpty()) continue;
             var p = KnownSolarSystemReport.position(body, referenceMillis);
             if (p == null) continue;

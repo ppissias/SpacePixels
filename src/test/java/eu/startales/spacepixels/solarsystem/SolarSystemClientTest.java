@@ -613,6 +613,72 @@ public class SolarSystemClientTest {
         assertTrue(step(result.fetchSteps, "JPL Horizons", "Positions").detail.contains("No object crosses"));
     }
 
+    /**
+     * A recently numbered asteroid returned with its number by JPL ("841917 (2015 RS113)") and still unnumbered by
+     * SkyBoT ("2015 RS113") must be merged into one object, queried from Horizons once, and never duplicated.
+     */
+    @Test
+    public void mergesRecentlyNumberedAsteroidAcrossJplAndSkybot() throws Exception {
+        List<String> asked = new ArrayList<>();
+        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            asked.add(url);
+            if (url.startsWith(SolarSystemClient.SKYBOT)) {
+                return "[" + skybotRow(null, "2015 RS113", "10 00 00.00", "+20 00 00.0", "18.4", "MB>Outer") + "]";
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of()
+                        : List.of(row("841917 (2015 RS113)", "10:00:00.00", "+20 00'00.0\"", "18.4", "0", "0")));
+            }
+            if (url.contains("COMMAND='841917;'")) {
+                return horizonsAnswer("841917 (2015 RS113)", "JPL#13", "APmag", List.of(
+                        new double[]{0, 150, 20, 18.4, 0.05, 0.05}, new double[]{60, 150, 20, 18.4, 0.05, 0.05}));
+            }
+            throw new AssertionError("Unexpected request: " + url);
+        });
+        SolarSystemObjects result = client.fetch(query(), text -> { });
+        assertEquals(List.of("841917 (2015 RS113)"), result.bodies.stream().map(b -> b.name).toList());
+        assertEquals("queried Horizons only once", 1, asked.stream().filter(u -> u.contains("horizons.api")).count());
+        assertEquals("1 object", step(result.fetchSteps, "IMCCE SkyBoT", "Field search").outcome);
+
+        // Reverse direction in knownInField: JPL unnumbered, SkyBoT numbered -> keeps JPL's coordinates under numbered name.
+        SolarSystemClient reverse = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.startsWith(SolarSystemClient.SKYBOT)) {
+                return "[" + skybotRow("841917", "2015 RS113", "10 00 05.00", "+20 00 00.0", "18.4", "MB>Outer") + "]";
+            }
+            return fieldAnswer(List.of(row("(2015 RS113)", "10:00:00.00", "+20 00'00.0\"", "18.4", "0", "0")));
+        });
+        SkyField field = SkyField.of(TRANSFORMER, 2000, 1600);
+        SolarSystemClient.FieldObjects known = reverse.knownInField(field, START, "568", null, 0.05);
+        assertEquals(1, known.objects().size());
+        assertEquals("841917 (2015 RS113)", known.objects().get(0).name());
+        assertEquals("keeps JPL's coordinates when upgrading name", 150.0, known.objects().get(0).ra(), 1e-6);
+    }
+
+    /**
+     * When two distinct catalogue strings (for example a named numbered asteroid without its provisional designation
+     * and the bare provisional designation) resolve to the same Horizons target body name, only one body is kept.
+     */
+    @Test
+    public void horizonsCanonicalTargetDeduplicatesDistinctAliases() throws Exception {
+        SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            if (url.startsWith(SolarSystemClient.SKYBOT)) {
+                return "[" + skybotRow(null, "A879 FA", "10 00 00.00", "+20 00 00.0", "14.1", "MB>Middle") + "]";
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(url.contains("sb-group=neo") ? List.of()
+                        : List.of(row("194 Prokne", "10:00:00.00", "+20 00'00.0\"", "14.1", "0", "0")));
+            }
+            return horizonsAnswer("194 Prokne (A879 FA)", "JPL#172", "APmag", List.of(
+                    new double[]{0, 150, 20, 14.1, 0.01, 0.01}, new double[]{60, 150, 20, 14.1, 0.01, 0.01}));
+        });
+        SolarSystemObjects result = client.fetch(query(), text -> { });
+        assertEquals(1, result.bodies.size());
+        assertEquals("194 Prokne", result.bodies.get(0).name);
+    }
+
     @Test
     public void ephemeridesForDeduplicatesQueriesAndFallsBackToStraightLineOnHorizonsError() throws Exception {
         List<String> requestedCommands = new ArrayList<>();
@@ -630,9 +696,10 @@ public class SolarSystemClientTest {
         long mid = START + 30 * 60_000L;
         SolarSystemClient.Known confirmed = new SolarSystemClient.Known("1001 Gaussia", false, 150.008, 20.004, 20.4, 27.0, 14.4);
         SolarSystemClient.Known duplicate = new SolarSystemClient.Known("1001 (1923 OA)", false, 150.008, 20.004, 20.4, 27.0, 14.4);
+        SolarSystemClient.Known provDuplicate = new SolarSystemClient.Known("(1923 OA)", false, 150.008, 20.004, 20.4, 27.0, 14.4);
         SolarSystemClient.Known fallback = new SolarSystemClient.Known("2022 QJ95", false, 150.02, 20.01, 21.1, 25.0, 10.0);
 
-        SolarSystemObjects result = client.ephemeridesFor(query(), mid, List.of(confirmed, duplicate, fallback));
+        SolarSystemObjects result = client.ephemeridesFor(query(), mid, List.of(confirmed, duplicate, provDuplicate, fallback));
 
         assertEquals(2, requestedCommands.size());
         assertTrue(Double.isNaN(result.magnitudeLimit));

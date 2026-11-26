@@ -43,7 +43,7 @@ public final class PredictionMatch {
         sorted.sort(Comparator.comparingLong(Point::midpointMillis));
         var reportPoints = sorted.stream().map(p -> new ReportTrackMotion.Point(p.frameNumber() - 1, p.midpointMillis(), p.x(), p.y())).toList();
         var comparisons = new ArrayList<Map.Entry<String, KnownSolarSystemReport.Comparison>>();
-        for (var body : objects.bodies) {
+        for (var body : SolarSystemObjects.deduplicateBodies(objects.bodies)) {
             var comparison = KnownSolarSystemReport.compare("", reportPoints, body, wcs, reviewFloorPixels, fieldDiagonalPixels);
             if (comparison != null) comparisons.add(Map.entry(body.name == null ? "Unnamed catalogue object" : body.name, comparison));
         }

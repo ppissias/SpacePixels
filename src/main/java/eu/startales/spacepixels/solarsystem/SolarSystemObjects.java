@@ -13,8 +13,13 @@ import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyField;
 
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The known asteroids and comets predicted in the field of a session, fetched once by {@link SolarSystemClient} and
@@ -154,6 +159,182 @@ public final class SolarSystemObjects {
     private static double wrap180(double degrees) {
         double wrapped = ((degrees + 180.0) % 360.0 + 360.0) % 360.0 - 180.0;
         return wrapped == -180.0 ? 180.0 : wrapped;
+    }
+
+    private static final Pattern NUMBERED_COMET = Pattern.compile("^(\\d+[PDI](?:-[A-Z]+)?)/");
+    private static final Pattern PAREN_NUMBERED_COMET = Pattern.compile("\\((\\d+[PDI](?:-[A-Z]+)?)\\)");
+    private static final Pattern PROVISIONAL_COMET = Pattern.compile("^([PCDXI]/\\d{4} [A-Z]{1,2}\\d*(?:-[A-Z]+)?)");
+    private static final Pattern PAREN_PROVISIONAL_COMET = Pattern.compile("\\(([PCDXI]/\\d{4} [A-Z]{1,2}\\d*(?:-[A-Z]+)?)\\)");
+    private static final Pattern A_DESIGNATION = Pattern.compile("^(A/\\d{4} [A-Z]{1,2}\\d*)");
+    private static final String PROVISIONAL_ASTEROID_CORE = "(?:\\d{4} (?:[A-Z]{2}\\d*|[PT]-[L123])|A\\d{3} [A-Z]{2})";
+    private static final Pattern PROVISIONAL_ASTEROID = Pattern.compile("^\\(?(" + PROVISIONAL_ASTEROID_CORE + ")\\)?$");
+    private static final Pattern PAREN_PROVISIONAL_ASTEROID = Pattern.compile("\\((" + PROVISIONAL_ASTEROID_CORE + ")\\)");
+    private static final Pattern NUMBERED_ASTEROID = Pattern.compile("^(\\d+)(?: .*)?$");
+
+    /**
+     * All designation keys that identify one asteroid or comet across JPL SB-Ident, IMCCE SkyBoT and JPL Horizons:
+     * a numbered asteroid yields both its permanent number and any parenthesized provisional designation (so
+     * {@code "841917 (2015 RS113)"} matches {@code "(2015 RS113)"} when one catalogue has not yet numbered it), an
+     * unnumbered asteroid yields its provisional designation, and a comet yields its designation without its name.
+     */
+    public static List<String> designationKeys(String name) {
+        if (name == null) {
+            return List.of();
+        }
+        String trimmed = name.trim().replaceAll("\\s+", " ");
+        if (trimmed.isEmpty()) {
+            return List.of();
+        }
+        LinkedHashSet<String> keys = new LinkedHashSet<>();
+        Matcher matcher = NUMBERED_COMET.matcher(trimmed);
+        if (matcher.find()) {
+            keys.add(matcher.group(1));
+            Matcher parenComet = PAREN_PROVISIONAL_COMET.matcher(trimmed);
+            if (parenComet.find()) {
+                keys.add(parenComet.group(1));
+            }
+            return List.copyOf(keys);
+        }
+        matcher = PROVISIONAL_COMET.matcher(trimmed);
+        if (matcher.find()) {
+            keys.add(matcher.group(1));
+            return List.copyOf(keys);
+        }
+        matcher = PAREN_PROVISIONAL_COMET.matcher(trimmed);
+        if (matcher.find()) {
+            keys.add(matcher.group(1));
+            return List.copyOf(keys);
+        }
+        matcher = PAREN_NUMBERED_COMET.matcher(trimmed);
+        if (matcher.find()) {
+            keys.add(matcher.group(1));
+            return List.copyOf(keys);
+        }
+        matcher = A_DESIGNATION.matcher(trimmed);
+        if (matcher.find()) {
+            keys.add(matcher.group(1));
+            return List.copyOf(keys);
+        }
+        matcher = PROVISIONAL_ASTEROID.matcher(trimmed);
+        if (matcher.matches()) {
+            keys.add(matcher.group(1));
+            return List.copyOf(keys);
+        }
+        matcher = NUMBERED_ASTEROID.matcher(trimmed);
+        if (matcher.matches()) {
+            keys.add(matcher.group(1));
+            Matcher parenProv = PAREN_PROVISIONAL_ASTEROID.matcher(trimmed);
+            while (parenProv.find()) {
+                keys.add(parenProv.group(1));
+            }
+            return List.copyOf(keys);
+        }
+        return List.of(trimmed);
+    }
+
+    /** The primary designation key (first entry of {@link #designationKeys(String)}), or empty for blank input. */
+    public static String primaryDesignationKey(String name) {
+        List<String> keys = designationKeys(name);
+        return keys.isEmpty() ? "" : keys.getFirst();
+    }
+
+    /** Whether {@code name} is a permanently numbered asteroid (not a comet or provisional-only designation). */
+    public static boolean isNumberedAsteroid(String name) {
+        if (name == null) {
+            return false;
+        }
+        String trimmed = name.trim().replaceAll("\\s+", " ");
+        if (trimmed.isEmpty() || NUMBERED_COMET.matcher(trimmed).find() || PROVISIONAL_COMET.matcher(trimmed).find()
+                || PAREN_PROVISIONAL_COMET.matcher(trimmed).find() || PAREN_NUMBERED_COMET.matcher(trimmed).find()
+                || A_DESIGNATION.matcher(trimmed).find() || PROVISIONAL_ASTEROID.matcher(trimmed).matches()) {
+            return false;
+        }
+        return NUMBERED_ASTEROID.matcher(trimmed).matches();
+    }
+
+    /** Whether {@code candidateName} should replace {@code existingName} for the same physical object. */
+    public static boolean prefersName(String candidateName, String existingName) {
+        return !isNumberedAsteroid(existingName) && isNumberedAsteroid(candidateName);
+    }
+
+    /**
+     * Deduplicates predicted bodies that refer to the same physical object under different designations (for example
+     * {@code "841917 (2015 RS113)"} from JPL and {@code "(2015 RS113)"} from SkyBoT in an existing saved file).
+     * Prefers an entry with a Horizons orbit solution over straight-line motion and a permanently numbered asteroid
+     * name over an unnumbered provisional designation, without mutating the caller's {@link Body} instances.
+     */
+    public static List<Body> deduplicateBodies(List<Body> bodies) {
+        if (bodies == null || bodies.isEmpty()) {
+            return List.of();
+        }
+        List<Body> unique = new ArrayList<>(bodies.size());
+        Map<String, Integer> keyToIndex = new HashMap<>();
+        for (Body body : bodies) {
+            if (body == null) {
+                continue;
+            }
+            List<String> keys = designationKeys(body.name);
+            Integer existingIndex = null;
+            for (String key : keys) {
+                Integer found = keyToIndex.get(key);
+                if (found != null) {
+                    existingIndex = found;
+                    break;
+                }
+            }
+            if (existingIndex == null) {
+                int idx = unique.size();
+                unique.add(body);
+                for (String key : keys) {
+                    keyToIndex.put(key, idx);
+                }
+            } else {
+                Body existing = unique.get(existingIndex);
+                Body merged = mergeBodies(existing, body);
+                unique.set(existingIndex, merged);
+                for (String key : keys) {
+                    keyToIndex.putIfAbsent(key, existingIndex);
+                }
+                for (String key : designationKeys(merged.name)) {
+                    keyToIndex.putIfAbsent(key, existingIndex);
+                }
+            }
+        }
+        return List.copyOf(unique);
+    }
+
+    private static Body mergeBodies(Body existing, Body incoming) {
+        boolean existingHasOrbit = existing.orbitSolution != null && !existing.orbitSolution.isBlank();
+        boolean incomingHasOrbit = incoming.orbitSolution != null && !incoming.orbitSolution.isBlank();
+        Body chosen;
+        Body other;
+        if (incomingHasOrbit && !existingHasOrbit) {
+            chosen = incoming;
+            other = existing;
+        } else if (existingHasOrbit && !incomingHasOrbit) {
+            chosen = existing;
+            other = incoming;
+        } else if (prefersName(incoming.name, existing.name)) {
+            chosen = incoming;
+            other = existing;
+        } else if (!prefersName(existing.name, incoming.name)
+                && incoming.samples != null && existing.samples != null
+                && incoming.samples.size() > existing.samples.size()) {
+            chosen = incoming;
+            other = existing;
+        } else {
+            chosen = existing;
+            other = incoming;
+        }
+        if (prefersName(other.name, chosen.name)) {
+            Body copy = new Body();
+            copy.name = other.name;
+            copy.comet = chosen.comet;
+            copy.orbitSolution = chosen.orbitSolution;
+            copy.samples = chosen.samples;
+            return copy;
+        }
+        return chosen;
     }
 
     /** The short name drawn on the frame: "194 Prokne", "(2014 QV125)" or "C/2018 Y1 (Iwamoto)". */

@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
@@ -74,6 +75,58 @@ public class SolarSystemObjectsTest {
         objects.bodies.add(body("(2014 QV125)", false));
         objects.bodies.add(body("C/2018 Y1 (Iwamoto)", true));
         assertEquals("2 asteroids and 1 comet", objects.summary());
+    }
+
+    @Test
+    public void designationKeysAndBodyDeduplication() throws Exception {
+        assertEquals(List.of("841917", "2015 RS113"), SolarSystemObjects.designationKeys("841917 (2015 RS113)"));
+        assertEquals(List.of("2015 RS113"), SolarSystemObjects.designationKeys("(2015 RS113)"));
+        assertEquals(List.of("194", "A879 FA"), SolarSystemObjects.designationKeys("194 Prokne (A879 FA)"));
+        assertEquals(List.of("C/2018 Y1"), SolarSystemObjects.designationKeys("Iwamoto (C/2018 Y1)"));
+        assertEquals(List.of("41P"), SolarSystemObjects.designationKeys("Tuttle-Giacobini-Kresak (41P)"));
+
+        assertTrue(SolarSystemObjects.isNumberedAsteroid("841917 (2015 RS113)"));
+        assertTrue(SolarSystemObjects.isNumberedAsteroid("194 Prokne"));
+        assertFalse(SolarSystemObjects.isNumberedAsteroid("(2015 RS113)"));
+        assertFalse(SolarSystemObjects.isNumberedAsteroid("2015 RS113"));
+        assertFalse(SolarSystemObjects.isNumberedAsteroid("6344 P-L"));
+        assertFalse(SolarSystemObjects.isNumberedAsteroid("C/2018 Y1 (Iwamoto)"));
+        assertFalse(SolarSystemObjects.isNumberedAsteroid("41P/Tuttle-Giacobini-Kresak"));
+
+        SolarSystemObjects.Body numbered = body("841917 (2015 RS113)", false);
+        numbered.orbitSolution = "JPL#13";
+        numbered.samples.add(sample(T0, 150, 20, 22.4, 0.2));
+        SolarSystemObjects.Body provisional = body("(2015 RS113)", false);
+        provisional.orbitSolution = "JPL#13";
+        provisional.samples.add(sample(T0, 150, 20, 22.4, 0.2));
+        SolarSystemObjects.Body other = body("(2022 QJ95)", false);
+        other.samples.add(sample(T0, 150.1, 20.1, 21.8, 0.3));
+
+        List<SolarSystemObjects.Body> deduped = SolarSystemObjects.deduplicateBodies(List.of(numbered, provisional, other));
+        assertEquals(List.of("841917 (2015 RS113)", "(2022 QJ95)"), deduped.stream().map(b -> b.name).toList());
+
+        // When the provisional entry has a Horizons orbit solution and the numbered one is straight-line, keep the
+        // orbit solution under the numbered name without mutating the caller's Body instances.
+        SolarSystemObjects.Body straightNumbered = body("841917 (2015 RS113)", false);
+        straightNumbered.samples.add(sample(T0, 150, 20, 22.4, null));
+        List<SolarSystemObjects.Body> merged = SolarSystemObjects.deduplicateBodies(List.of(provisional, straightNumbered));
+        assertEquals(1, merged.size());
+        assertEquals("841917 (2015 RS113)", merged.get(0).name);
+        assertEquals("JPL#13", merged.get(0).orbitSolution);
+        assertEquals("(2015 RS113)", provisional.name);
+
+        // SolarSystemStore.load deduplicates legacy cached solar_system.json files on read.
+        File session = folder.newFolder("legacy-dup");
+        SolarSystemObjects saved = new SolarSystemObjects();
+        saved.field = SkyField.of(SolarSystemClientTest.TRANSFORMER, 2000, 1600);
+        saved.startMillis = T0;
+        saved.endMillis = T0 + HOUR;
+        saved.bodies.add(numbered);
+        saved.bodies.add(provisional);
+        SolarSystemStore.save(session, saved);
+        SolarSystemObjects loaded = SolarSystemStore.load(session);
+        assertEquals(1, loaded.bodies.size());
+        assertEquals("841917 (2015 RS113)", loaded.bodies.get(0).name);
     }
 
     @Test
