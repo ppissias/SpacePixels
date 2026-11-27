@@ -249,6 +249,37 @@ public class SolarSystemObjectsTest {
         return new FitsFileInformation(name, name, true, 2000, 1600).withFitsHeader(header);
     }
 
+    /**
+     * Identify all's objects join the saved predictions without changing them: only those the predictions do not have
+     * (under any designation), marked as added; the fetch's limit and source stay.
+     */
+    @Test
+    public void addedObjectsJoinAPredictionsCopyMarkedAsAdded() {
+        SolarSystemObjects saved = new SolarSystemObjects();
+        saved.magnitudeLimit = 20;
+        saved.source = "JPL SB-Ident API 1.1, JPL Horizons API 1.2";
+        saved.bodies.add(body("194 Prokne (A879 FA)", false));
+        SolarSystemObjects near = new SolarSystemObjects();
+        near.magnitudeLimit = Double.NaN;
+        near.bodies.add(body("194 Prokne", false));
+        SolarSystemObjects.Body faint = body("222169 (2000 AR152)", false);
+        faint.orbitSolution = "JPL#30";
+        faint.samples.add(sample(T0, 100, 8, 20.2, 0.1));
+        near.bodies.add(faint);
+
+        SolarSystemObjects merged = saved.withAdded(near, "Identify all");
+
+        assertEquals(List.of("194 Prokne (A879 FA)", "222169 (2000 AR152)"), merged.bodies.stream().map(b -> b.name).toList());
+        assertNull(merged.bodies.get(0).addedBy);
+        assertEquals("Identify all", merged.bodies.get(1).addedBy);
+        assertEquals("JPL#30", merged.bodies.get(1).orbitSolution);
+        assertEquals(1, merged.bodies.get(1).samples.size());
+        assertEquals(20, merged.magnitudeLimit, 0);
+        assertEquals(saved.source, merged.source);
+        assertEquals("the saved predictions are not changed", 1, saved.bodies.size());
+        assertNull("nor the fetched object", faint.addedBy);
+    }
+
     private static SolarSystemObjects.Body body(String name, boolean comet) {
         SolarSystemObjects.Body body = new SolarSystemObjects.Body();
         body.name = name;

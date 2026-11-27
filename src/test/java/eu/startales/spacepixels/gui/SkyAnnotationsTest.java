@@ -17,6 +17,32 @@ import eu.startales.spacepixels.fits.FitsFileInformation;
 
 public class SkyAnnotationsTest {
 
+    /** The asteroid slider spans the predicted magnitudes in half magnitudes, rounded outwards; none without any. */
+    @Test
+    public void theAsteroidSliderSpansThePredictedMagnitudes() {
+        var objects = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+        assertEquals(null, SkyAnnotations.magnitudeRange(objects));
+        assertEquals(null, SkyAnnotations.magnitudeRange(null));
+        objects.bodies.add(asteroid(13.33, 13.34));
+        objects.bodies.add(asteroid(20.21, null));
+        assertEquals(List.of(26, 41), java.util.Arrays.stream(SkyAnnotations.magnitudeRange(objects)).boxed().toList());
+        var one = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+        one.bodies.add(asteroid(18.0, 18.0));
+        assertEquals("at least half a magnitude", List.of(36, 37),
+                java.util.Arrays.stream(SkyAnnotations.magnitudeRange(one)).boxed().toList());
+    }
+
+    private static eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body asteroid(Double first, Double second) {
+        var body = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
+        body.name = "test";
+        for (Double magnitude : new Double[]{first, second}) {
+            var sample = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Sample();
+            sample.magnitude = magnitude;
+            body.samples.add(sample);
+        }
+        return body;
+    }
+
     @Test
     public void viewersListenOnlyToTheirOwnSessionAndDetachIndependently() throws Exception {
         javax.swing.SwingUtilities.invokeAndWait(() -> {

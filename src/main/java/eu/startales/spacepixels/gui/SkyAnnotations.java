@@ -59,6 +59,14 @@ final class SkyAnnotations {
     private final JCheckBox correctBox = new JCheckBox("Align markers to corrected plate solution");
     private final JLabel correctHint = new JLabel("Uses the plate solution corrected to the Gaia stars.");
     private final JLabel notice = new JLabel(" ");
+    /** The faintest asteroid or comet shown, in half magnitudes over the range predicted; rightmost shows them all. */
+    private final JSlider solarSlider = new JSlider(0, 1, 1);
+    private final JLabel solarLimit = new JLabel(" ");
+    private final JPanel solarFilter = new JPanel();
+    /** The predicted magnitudes, {brightest, faintest} in half magnitudes; null without any. */
+    private int[] solarRange;
+    /** Set while the slider is moved by the code, not by the user. */
+    private boolean settingSlider;
     private final SidePanelSection section;
     private final Runnable catalogueListener = this::catalogueChanged;
     private final Runnable correctionListener = this::correctionChanged;
@@ -113,7 +121,9 @@ final class SkyAnnotations {
             LayerRow row = new LayerRow(layer, state, null, 0);
             rows.put(layer, row);
             addLeft(body, row);
+            if (layer == ViewerLayer.SOLAR_SYSTEM) addLeft(body, solarFilter);
         }
+        buildSolarFilter();
         body.add(Box.createVerticalStrut(UiStyle.space(6)));
         addLeft(body, correctBox);
         addLeft(body, correctHint);
@@ -123,6 +133,92 @@ final class SkyAnnotations {
                 .addHeaderControl(annotateSwitch);
         updateEnabled();
         updateRows(null);
+    }
+
+    /** The faintest-magnitude slider under the asteroids and comets row. */
+    private void buildSolarFilter() {
+        JLabel title = new JLabel("Faintest");
+        title.setForeground(UiStyle.helpColor());
+        title.setLabelFor(solarSlider);
+        solarLimit.setForeground(UiStyle.helpColor());
+        solarSlider.setOpaque(false);
+        solarSlider.setFocusable(false);
+        solarSlider.getAccessibleContext().setAccessibleName("Faintest asteroid or comet shown");
+        String tip = "<html>The faintest asteroids and comets shown, by predicted V (a comet's total magnitude).<br>"
+                + "Rightmost shows every object fetched; unknown magnitudes stay visible.<br>"
+                + "A display filter: the predictions, detection and reports are not changed.</html>";
+        solarSlider.setToolTipText(tip);
+        title.setToolTipText(tip);
+        solarSlider.addChangeListener(e -> solarSliderMoved());
+        solarFilter.setOpaque(false);
+        solarFilter.setLayout(new BoxLayout(solarFilter, BoxLayout.X_AXIS));
+        solarFilter.setBorder(BorderFactory.createEmptyBorder(0, UiStyle.space(28), UiStyle.space(2), 0));
+        solarFilter.add(title);
+        solarFilter.add(Box.createHorizontalStrut(UiStyle.space(6)));
+        solarFilter.add(solarSlider);
+        solarFilter.add(Box.createHorizontalStrut(UiStyle.space(6)));
+        solarFilter.add(solarLimit);
+        solarFilter.setVisible(false);
+    }
+
+    /**
+     * The predicted magnitudes of {@code objects}, {brightest, faintest} in half magnitudes (rounded outwards, at
+     * least half a magnitude apart); null without predictions or without any magnitude.
+     */
+    static int[] magnitudeRange(SolarSystemObjects objects) {
+        if (objects == null || objects.bodies == null) return null;
+        double brightest = Double.POSITIVE_INFINITY, faintest = Double.NEGATIVE_INFINITY;
+        for (SolarSystemObjects.Body body : objects.bodies) {
+            if (body == null || body.samples == null) continue;
+            for (SolarSystemObjects.Sample sample : body.samples) {
+                if (sample.magnitude == null || !Double.isFinite(sample.magnitude)) continue;
+                brightest = Math.min(brightest, sample.magnitude);
+                faintest = Math.max(faintest, sample.magnitude);
+            }
+        }
+        if (!Double.isFinite(brightest)) return null;
+        int low = (int) Math.floor(brightest * 2), high = (int) Math.ceil(faintest * 2);
+        return new int[]{low, Math.max(high, low + 1)};
+    }
+
+    /** Puts the slider over the magnitudes of the predictions shown, at the saved limit. */
+    private void refreshSolarFilter() {
+        solarRange = magnitudeRange(solarSystem);
+        solarFilter.setVisible(solarRange != null);
+        if (solarRange == null) return;
+        double limit = preferences.faintestSolarSystem();
+        settingSlider = true;
+        try {
+            solarSlider.setMinimum(solarRange[0]);
+            solarSlider.setMaximum(solarRange[1]);
+            solarSlider.setValue(limit >= ViewerAnnotationPreferences.NO_LIMIT ? solarRange[1]
+                    : (int) Math.max(solarRange[0], Math.min(solarRange[1], Math.round(limit * 2))));
+        } finally {
+            settingSlider = false;
+        }
+        showSolarLimit();
+    }
+
+    /** The user moved the slider: the marks follow at once, and the choice is saved when the slider is let go. */
+    private void solarSliderMoved() {
+        if (settingSlider || solarRange == null) return;
+        int value = solarSlider.getValue();
+        double limit = value >= solarRange[1] ? ViewerAnnotationPreferences.NO_LIMIT : value / 2.0;
+        showSolarLimit();
+        ViewerAnnotationPreferences updated = preferences.withFaintestSolarSystem(limit);
+        if (solarSlider.getValueIsAdjusting()) {
+            preferences = updated;
+            view.setSkyPreferences(preferences);
+            apply();
+        } else {
+            updatePreferences(updated);
+        }
+    }
+
+    private void showSolarLimit() {
+        int value = solarSlider.getValue();
+        solarLimit.setText(value >= solarRange[1] ? String.format(Locale.US, "all (to %.1f)", solarRange[1] / 2.0)
+                : String.format(Locale.US, "%.1f", value / 2.0));
     }
 
     private static void addLeft(JPanel panel, JComponent component) {
@@ -159,6 +255,7 @@ final class SkyAnnotations {
         solarSystem = model.getSolarSystem();
         marksBySolution.clear();
         notice.setText(" ");
+        refreshSolarFilter();
         updateEnabled();
     }
 
@@ -172,6 +269,7 @@ final class SkyAnnotations {
         catalogue = null;
         solarSystem = null;
         marksBySolution.clear();
+        refreshSolarFilter();
         view.setSkyMarks(null, 0);
         updateRows(null);
     }
@@ -341,7 +439,7 @@ final class SkyAnnotations {
                 stars.commitEdit();
                 variables.commitEdit();
                 updatePreferences(new ViewerAnnotationPreferences(((Number) stars.getValue()).doubleValue(),
-                        ((Number) variables.getValue()).doubleValue()));
+                        ((Number) variables.getValue()).doubleValue(), preferences.faintestSolarSystem()));
                 return;
             } catch (java.text.ParseException | IllegalArgumentException invalid) {
                 JOptionPane.showMessageDialog(view, "Enter a magnitude between -10 and 99.",
@@ -368,6 +466,7 @@ final class SkyAnnotations {
         catalogue = model.get();
         solarSystem = model.getSolarSystem();
         marksBySolution.clear();
+        refreshSolarFilter();
         updateEnabled();
         // Labels already on are replaced in place; otherwise the frame stays as it is and the note offers them.
         apply();
@@ -436,6 +535,7 @@ final class SkyAnnotations {
         annotateSwitch.setEnabled(available);
         annotateSwitch.setSelected(showing);
         settingsButton.setEnabled(available && showing);
+        solarSlider.setEnabled(solarSystem != null && showing);
         settingsButton.setToolTipText(available && !showing ? SWITCH_ON_FIRST.formatted(SETTINGS_TIP) : SETTINGS_TIP);
         hint.setText(available ? "Known objects in this field." : "Nothing fetched for this session yet.");
         if (!available) {
@@ -668,6 +768,7 @@ final class SkyAnnotations {
         }
         text.append(body.orbitSolution == null ? " · predicted from JPL's field search (straight-line motion)"
                 : " · predicted by JPL Horizons, orbit " + body.orbitSolution);
+        if (body.addedBy != null) text.append(" · added by ").append(body.addedBy);
         return text.toString();
     }
 

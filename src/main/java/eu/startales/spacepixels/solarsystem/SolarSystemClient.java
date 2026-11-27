@@ -16,6 +16,7 @@ import com.google.gson.JsonParser;
 import eu.startales.spacepixels.fits.ObservingSite;
 import eu.startales.spacepixels.skycatalog.FetchStep;
 import eu.startales.spacepixels.skycatalog.SkyField;
+import eu.startales.spacepixels.util.SkyMath;
 
 import java.io.IOException;
 import java.net.URI;
@@ -205,6 +206,26 @@ public final class SolarSystemClient {
      * @throws InterruptedException when the thread is interrupted, which cancels the fetch
      */
     public SolarSystemObjects fetch(SolarSystemQuery query, Progress progress) throws InterruptedException {
+        return fetch(query, null, 0, progress);
+    }
+
+    /**
+     * Fetches the predictions of the objects near some places, as {@link #fetch} does for the whole field (the same
+     * searches, observer and Horizons positions), but only for the objects that the field search puts within
+     * {@code radiusArcsec} of one of {@code places} at the middle of the observing span, and all of them: there is no
+     * limit on their number. "Identify all" asks this, without a magnitude limit, around the report's findings.
+     *
+     * @param places {RA, Dec} in degrees at the middle of the query's span
+     * @throws InterruptedException when the thread is interrupted, which cancels the fetch
+     */
+    public SolarSystemObjects fetchNear(SolarSystemQuery query, List<double[]> places, double radiusArcsec, Progress progress)
+            throws InterruptedException {
+        return fetch(query, List.copyOf(places), radiusArcsec, progress);
+    }
+
+    /** {@link #fetch} for the whole field when {@code near} is null, else {@link #fetchNear}. */
+    private SolarSystemObjects fetch(SolarSystemQuery query, List<double[]> near, double radiusArcsec, Progress progress)
+            throws InterruptedException {
         SolarSystemObjects result = baseResult(query);
         ObservingSite site = query.observer().site();
         String horizon = site == null ? null : site.horizonProblem(result.field.centerRa, result.field.centerDec,
@@ -289,12 +310,13 @@ public final class SolarSystemClient {
             skybotDone = true;
 
             for (Candidate candidate : found.values()) {
-                if (crossesFrame(query, straightLine(candidate, query).samples)) {
+                if (near == null ? crossesFrame(query, straightLine(candidate, query).samples)
+                        : isNear(candidate, near, radiusArcsec)) {
                     crossing.add(candidate);
                 }
             }
             crossing.sort(Comparator.comparingDouble(candidate -> candidate.magnitude() == null ? Double.MAX_VALUE : candidate.magnitude()));
-            refined = Math.min(maxRefined, crossing.size());
+            refined = near == null ? Math.min(maxRefined, crossing.size()) : crossing.size();
             String horizonsVersion = null;
             Map<String, Integer> bodyKeys = new HashMap<>();
             for (int i = 0; i < crossing.size(); i++) {
@@ -429,10 +451,10 @@ public final class SolarSystemClient {
     }
 
     // ==========================================
-    // IDENTIFY ALL (NO MAGNITUDE LIMIT)
+    // OBJECTS NEAR PLACES (IDENTIFY ALL)
     // ==========================================
 
-    /** A known object near the field at one time: name, position (degrees), V magnitude and rates on the sky ("/h). */
+    /** A known object at one time: name, position (degrees), V magnitude and rates on the sky ("/h). */
     public record Known(String name, boolean comet, double ra, double dec, Double magnitude,
                         double raRateArcsecPerHour, double decRateArcsecPerHour) {
         Known withName(String updatedName) {
@@ -440,100 +462,14 @@ public final class SolarSystemClient {
         }
     }
 
-    /** Every known object found, the problems of a service that failed, and the questions asked. */
-    public record FieldObjects(List<Known> objects, List<String> problems, List<String> addresses) { }
-
-    /**
-     * Every known asteroid and comet in the field widened by {@code marginDeg}, at {@code epochMillis}, without a
-     * magnitude limit, as MPChecker lists them: JPL SB-Ident and IMCCE SkyBoT, each object once. The observer is the
-     * observatory code, or else the site (JPL) and the geocentre (SkyBoT). A service that fails is a problem, not a
-     * failure, while the other answers.
-     */
-    public FieldObjects knownInField(SkyField field, long epochMillis, String observatoryCode, ObservingSite site, double marginDeg)
-            throws InterruptedException {
-        DesignationIndex<Known> found = new DesignationIndex<>();
-        List<String> problems = new ArrayList<>();
-        List<String> addresses = new ArrayList<>();
-        double[] box = searchBox(field, marginDeg);
-        String jpl = JplSbIdentUrlBuilder.buildField(observatoryCode, site == null ? null : site.latitudeDeg(),
-                site == null ? null : site.longitudeDeg(), site == null ? null : site.altitudeMeters(), epochMillis,
-                box[0], box[1], box[2], box[3], null, null);
-        try {
-            addresses.add(jpl);
-            for (Candidate c : loadField(jpl, epochMillis).candidates()) found.add(known(c), c.name(), Known::withName);
-        } catch (IOException problem) {
-            problems.add("JPL SB-Ident: " + problem.getMessage());
-        }
-        String code = observatoryCode == null || observatoryCode.isBlank() ? GEOCENTRE : observatoryCode.trim();
-        var query = new SolarSystemQuery(null, 0, 0, epochMillis, epochMillis, Double.POSITIVE_INFINITY,
-                new SolarSystemQuery.Observer(code, null, ""));
-        String skybot = skybotUrl(query, field, epochMillis, marginDeg);
-        try {
-            addresses.add(skybot);
-            for (Candidate c : parseSkybot(http.get(URI.create(skybot), SKYBOT_TIMEOUT), epochMillis, Double.POSITIVE_INFINITY)) {
-                found.add(known(c), c.name(), Known::withName);
+    /** Whether the field search puts {@code candidate} within {@code radiusArcsec} of one of {@code places} ({RA, Dec}). */
+    static boolean isNear(Candidate candidate, List<double[]> places, double radiusArcsec) {
+        for (double[] place : places) {
+            if (place != null && SkyMath.separationArcsec(candidate.ra(), candidate.dec(), place[0], place[1]) <= radiusArcsec) {
+                return true;
             }
-        } catch (IOException problem) {
-            problems.add("IMCCE SkyBoT: " + problem.getMessage());
         }
-        return new FieldObjects(List.copyOf(found.values()), List.copyOf(problems), List.copyOf(addresses));
-    }
-
-    /**
-     * Fetches multi-frame JPL Horizons ephemerides (with uncertainties, falling back to straight-line motion if
-     * Horizons fails) for {@code matches} returned by {@link #knownInField}, returning {@link SolarSystemObjects}
-     * suitable for {@link eu.startales.spacepixels.report.PredictionMatch}.
-     *
-     * @throws InterruptedException when the thread is interrupted, which cancels the fetch
-     */
-    public SolarSystemObjects ephemeridesFor(SolarSystemQuery query, long epochMillis, List<Known> matches)
-            throws InterruptedException {
-        if (query == null) {
-            throw new IllegalArgumentException("query must not be null");
-        }
-        SolarSystemObjects result = baseResult(query);
-        result.magnitudeLimit = Double.NaN;
-        if (matches == null || matches.isEmpty()) {
-            result.source = "";
-            return result;
-        }
-        DesignationIndex<Candidate> unique = new DesignationIndex<>();
-        for (Known known : matches) {
-            if (known == null || known.name() == null) continue;
-            unique.add(new Candidate(known.name(), known.comet(), known.ra(), known.dec(), known.magnitude(),
-                    known.raRateArcsecPerHour(), known.decRateArcsecPerHour(), epochMillis),
-                    known.name(), Candidate::withName);
-        }
-        int asked = 0;
-        int ok = 0;
-        String horizonsVersion = null;
-        List<FetchStep> failures = new ArrayList<>();
-        Map<String, Integer> bodyKeys = new HashMap<>();
-        for (Candidate candidate : unique.values()) {
-            if (Thread.interrupted()) {
-                throw new InterruptedException();
-            }
-            asked++;
-            HorizonsReply reply = askHorizons(query, candidate);
-            SolarSystemObjects.Body body = reply.body();
-            if (body != null) {
-                if (reply.version() != null) horizonsVersion = reply.version();
-                ok++;
-            } else {
-                body = straightLine(candidate, query);
-                failures.add(reply.failure());
-            }
-            addUniqueBody(result.bodies, bodyKeys, body, candidate.name(), reply.targetName());
-        }
-        result.fetchSteps.add(horizonsSummary(ok, asked, false));
-        result.fetchSteps.addAll(failures);
-        if (!failures.isEmpty()) {
-            result.problems.add(String.format(Locale.US, "JPL Horizons could not give positions for %d of %d objects; "
-                    + "they use the field search's position and rate as straight-line motion, without an uncertainty.",
-                    failures.size(), asked));
-        }
-        result.source = horizonsVersion == null ? "Field search" : "JPL Horizons API " + horizonsVersion;
-        return result;
+        return false;
     }
 
     private record HorizonsReply(SolarSystemObjects.Body body, String targetName, String version, FetchStep failure) {
@@ -611,10 +547,6 @@ public final class SolarSystemClient {
         }
     }
 
-    private static Known known(Candidate c) {
-        return new Known(c.name(), c.comet(), c.ra(), c.dec(), c.magnitude(), c.raRateArcsecPerHour(), c.decRateArcsecPerHour());
-    }
-
     // ==========================================
     // FIELD SEARCH (SB-IDENT)
     // ==========================================
@@ -627,7 +559,7 @@ public final class SolarSystemClient {
         return JplSbIdentUrlBuilder.buildField(observer.observatoryCode(),
                 site == null ? null : site.latitudeDeg(), site == null ? null : site.longitudeDeg(),
                 site == null ? null : site.altitudeMeters(), epochMillis, box[0], box[1], box[2], box[3],
-                query.magnitudeLimit(), group);
+                Double.isFinite(query.magnitudeLimit()) ? query.magnitudeLimit() : null, group);
     }
 
     /** The objects of one SB-Ident request. A missing address is the same failure as a search that cannot be formed. */

@@ -104,11 +104,14 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final ObservingSite site;
     private final WcsCoordinateTransformer header;
     /**
-     * The header solution with the session's plate correction while it is switched on, as the report and the viewers
-     * use it: for places on the sky (Identify all, Compare again, the MPC ITF check, comparison stars). The MPC
-     * reduction applies the correction itself, frame by frame, to {@link #header}.
+     * The session's plate correction now, which a sky catalogue fetched while this window is open fits again; null
+     * without one. {@link #sky()} follows it. The MPC reduction keeps {@link #openedCorrection}.
      */
-    private final WcsCoordinateTransformer sky;
+    private final java.util.function.Supplier<PlateSolutionCorrection> correction;
+    /** The plate correction when the window opened, which {@link #reduction} applies; null without one. */
+    private final PlateSolutionCorrection openedCorrection;
+    /** Saves and installs the session's predictions after Identify all added objects to them. EDT only. */
+    private final java.util.function.Consumer<eu.startales.spacepixels.solarsystem.SolarSystemObjects> savePredictions;
     /** The session's sky catalogue, for comparison stars; null without one. */
     private final SkyCatalogue catalogue;
     /** Fainter Gaia stars fetched for comparison stars when the saved catalogue had too few usable ones; empty until then. */
@@ -309,6 +312,19 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                           PlateSolutionCorrection correction, ApplicationSettings settings, ApplicationStorage storage,
                           VisualizationSettings visualization, ObservingSite site, SkyCatalogue catalogue,
                           java.util.function.Supplier<eu.startales.spacepixels.solarsystem.SolarSystemObjects> predictions) {
+        this(owner, files, report, header, () -> correction, settings, storage, visualization, site, catalogue, predictions, null);
+    }
+
+    /**
+     * @param correction       the session's plate correction now (null when none), followed while the window is open
+     * @param savePredictions  saves and installs the session's predictions with the objects Identify all added; null
+     *                         keeps them in this window only
+     */
+    AsteroidsCometsWindow(Window owner, FitsFileInformation[] files, ReportedObjects.Report report, WcsCoordinateTransformer header,
+                          java.util.function.Supplier<PlateSolutionCorrection> correction, ApplicationSettings settings,
+                          ApplicationStorage storage, VisualizationSettings visualization, ObservingSite site, SkyCatalogue catalogue,
+                          java.util.function.Supplier<eu.startales.spacepixels.solarsystem.SolarSystemObjects> predictions,
+                          java.util.function.Consumer<eu.startales.spacepixels.solarsystem.SolarSystemObjects> savePredictions) {
         super("Asteroids & Comets · " + report.folder().getName());
         AppIcon.apply(this);
         this.files = files.clone();
@@ -323,13 +339,15 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
         this.records = new java.util.LinkedHashMap<>(MpcRecords.load(report.folder()));
         this.measurements = new java.util.LinkedHashMap<>(SavedMeasurements.load(report.folder()));
-        this.reduction = AstrometricReduction.create(header, correction, this.files);
+        this.correction = correction == null ? () -> null : correction;
+        this.openedCorrection = this.correction.get();
+        this.savePredictions = savePredictions;
+        this.reduction = AstrometricReduction.create(header, openedCorrection, this.files);
         this.settings = settings;
         this.storage = storage;
         this.visualization = visualization;
         this.site = site;
         this.header = header;
-        this.sky = sessionSolution(header, correction, this.files);
         this.catalogue = catalogue;
         this.predictions = predictions == null ? () -> null : predictions;
         for (var object : report.objects()) {
@@ -701,6 +719,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         double fwhm = LightCurve.fwhm(report, object);
         var samples = LightCurve.samples(report, object);
         double speed = LightCurve.pixelsPerMinute(object, samples);
+        WcsCoordinateTransformer sky = sky();
         updateAutoMeasureButtons();
         if (shown == object) curveLabel.setText("Measuring " + object.id() + "'s light curve in " + samples.size() + " frames…");
         curveWorker = new SwingWorker<LightCurve.Curve, String>() {
@@ -1807,6 +1826,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
         }
         if (reduction.reduction() == null) problems.add(reduction.problem());
+        else if (correctionChangedSinceOpening()) problems.add("The plate correction was fitted again after this window opened: "
+                + "close and reopen the window, so the positions are reduced with the new one.");
         String currentCode = context.stationCode() == null ? "" : context.stationCode().trim().toUpperCase(Locale.ROOT);
         if (stationProblem != null && currentCode.equals(checkedStationCode)) {
             problems.add(stationProblem);
@@ -2531,6 +2552,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         double diagonal = report.frames().isEmpty() ? 0 : Math.hypot(report.frames().getFirst().width(), report.frames().getFirst().height());
         double floor = report.reviewFloorPixels();
         double fwhm = report.faintMoverFwhm() == null ? Double.NaN : report.faintMoverFwhm();
+        WcsCoordinateTransformer solution = sky();
         var replaced = new ArrayList<ReportedObjects.ReportedObject>();
         var changes = new ArrayList<String>();
         for (var object : sourceObjects) {
@@ -2544,9 +2566,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
             var motion = object.motion();
             var result = object.measured()
-                    ? eu.startales.spacepixels.report.PredictionMatch.track(points, objects, sky, floor, diagonal)
+                    ? eu.startales.spacepixels.report.PredictionMatch.track(points, objects, solution, floor, diagonal)
                     : motion == null ? null : eu.startales.spacepixels.report.PredictionMatch.faintMover(motion.x(), motion.y(),
-                    motion.referenceMillis(), motion.vxPerMinute(), motion.vyPerMinute(), points, objects, sky, fwhm, diagonal);
+                    motion.referenceMillis(), motion.vxPerMinute(), motion.vyPerMinute(), points, objects, solution, fwhm, diagonal);
             if (result == null
                     || (onlyPromoteUnidentified && ReportedObjects.NO_KNOWN_MATCH.equals(result.status()))
                     || (result.status().equals(object.status()) && result.names().equals(object.names()))) {
@@ -2575,9 +2597,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     }
 
     /**
-     * Asks JPL and SkyBoT, on a worker, for every known object in the field at mid-session without a magnitude limit,
-     * fetches full JPL Horizons ephemerides for any agreeing candidates near unidentified findings, and runs the same
-     * prediction match as initial detection / Compare again before falling back to Possible for looser nearby matches.
+     * Identify all: the predictions of every known object near the findings, without a magnitude limit, fetched as the
+     * main window fetches the field (the same searches, observer and Horizons positions:
+     * {@link SolarSystemClient#fetchNear}), then the same match as the report and Compare again. The objects found are
+     * added to the session's predictions, so the report, the viewers and Compare again know them too; without saved
+     * predictions they are used in this window only. A finding that no prediction confirms becomes Possible when a known
+     * object lies within 1′ of it with agreeing motion.
      */
     private void identifyAll() {
         if (identifyWorker != null) {
@@ -2595,37 +2620,41 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             compareLabel.setHtml("The frames have no times to search at.");
             return;
         }
-        long epoch = first + (last - first) / 2;
-        var field = eu.startales.spacepixels.skycatalog.SkyField.of(header, report.frames().getFirst().width(), report.frames().getFirst().height());
-        String code = settings.getConfig().observatoryCode;
-        var query = identifyQuery(first, last, code);
-        var objects = report.objects();
+        // The fetch's field search is at the middle of the span: the findings' places are taken there too.
+        long epoch = first + (Math.max(first, last) - first) / 2;
+        eu.startales.spacepixels.solarsystem.SolarSystemQuery.Observer observer;
+        try {
+            observer = eu.startales.spacepixels.solarsystem.SolarSystemQuery.observer(files, settings.getConfig());
+        } catch (IllegalArgumentException noSite) {
+            compareLabel.setHtml(escape(noSite.getMessage()));
+            return;
+        }
+        var query = new eu.startales.spacepixels.solarsystem.SolarSystemQuery(header,
+                report.frames().getFirst().width(), report.frames().getFirst().height(),
+                first, Math.max(first, last), Double.POSITIVE_INFINITY, observer);
+        WcsCoordinateTransformer solution = sky();
+        var places = new java.util.LinkedHashMap<String, eu.startales.spacepixels.mpc.NearbyKnown.Place>();
+        for (var object : report.objects()) {
+            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(LightCurve.samples(report, object), object.motion(), epoch, solution);
+            if (place != null) places.put(object.id(), place);
+        }
+        if (places.isEmpty()) {
+            compareLabel.setHtml("No object has a place on the sky to search around.");
+            return;
+        }
+        List<double[]> around = places.values().stream().map(p -> new double[]{p.ra(), p.dec()}).toList();
         identifyAllButton.setText("Cancel Identify all");
-        compareLabel.setText("Asking JPL and SkyBoT for every known object in the field…");
-        identifyWorker = new SwingWorker<IdentifyOutcome, Void>() {
-            @Override protected IdentifyOutcome doInBackground() throws Exception {
-                SolarSystemClient client = new SolarSystemClient();
-                var known = client.knownInField(field, epoch, code, site,
-                        eu.startales.spacepixels.mpc.NearbyKnown.RADIUS_ARCSEC / 3600 * 2);
-                var rawNearby = new java.util.LinkedHashMap<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>>();
-                for (var object : objects) {
-                    var place = eu.startales.spacepixels.mpc.NearbyKnown.place(LightCurve.samples(report, object), object.motion(), epoch, sky);
-                    rawNearby.put(object.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(place, known.objects()));
+        compareLabel.setText("Asking JPL and SkyBoT for the known objects near the findings…");
+        identifyWorker = new SwingWorker<eu.startales.spacepixels.solarsystem.SolarSystemObjects, String>() {
+            @Override protected eu.startales.spacepixels.solarsystem.SolarSystemObjects doInBackground() throws Exception {
+                return new SolarSystemClient().fetchNear(query, around, eu.startales.spacepixels.mpc.NearbyKnown.RADIUS_ARCSEC,
+                        text -> publish(text));
+            }
+
+            @Override protected void process(List<String> stages) {
+                if (!closed && identifyWorker == this && !stages.isEmpty()) {
+                    compareLabel.setText("Identify all: " + stages.getLast() + "…");
                 }
-                var byFinding = eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(rawNearby);
-                var toFetch = agreeingKnownForUnidentified(objects, known.objects(), byFinding);
-                eu.startales.spacepixels.solarsystem.SolarSystemObjects ephemerides = null;
-                if (!toFetch.isEmpty()) {
-                    int n = toFetch.size();
-                    SwingUtilities.invokeLater(() -> {
-                        if (!closed && identifyWorker == this) {
-                            compareLabel.setText(String.format(Locale.US,
-                                    "Asking JPL Horizons for %d candidate position%s…", n, n == 1 ? "" : "s"));
-                        }
-                    });
-                    ephemerides = client.ephemeridesFor(query, epoch, toFetch);
-                }
-                return new IdentifyOutcome(known, byFinding, ephemerides);
             }
 
             @Override protected void done() {
@@ -2636,37 +2665,37 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     compareLabel.setText("Identify all was cancelled.");
                     return;
                 }
-                IdentifyOutcome outcome;
+                eu.startales.spacepixels.solarsystem.SolarSystemObjects fetched;
                 try {
-                    outcome = get();
+                    fetched = get();
                 } catch (Exception e) {
                     Throwable cause = e.getCause() == null ? e : e.getCause();
                     compareLabel.setHtml("Identify all could not ask the services: " + escape(String.valueOf(cause.getMessage())));
                     return;
                 }
-                applyIdentifyOutcome(outcome);
+                applyIdentifyOutcome(new IdentifyOutcome(fetched, places, epoch));
             }
         };
         identifyWorker.execute();
     }
 
-    record IdentifyOutcome(SolarSystemClient.FieldObjects known,
-                           Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> byFinding,
-                           eu.startales.spacepixels.solarsystem.SolarSystemObjects ephemerides) { }
+    /**
+     * What Identify all fetched (the predictions of the objects near the findings), the findings' places on the sky at
+     * the middle of the span by object, and that time.
+     */
+    record IdentifyOutcome(eu.startales.spacepixels.solarsystem.SolarSystemObjects fetched,
+                           Map<String, eu.startales.spacepixels.mpc.NearbyKnown.Place> places, long epochMillis) { }
 
-    private eu.startales.spacepixels.solarsystem.SolarSystemQuery identifyQuery(long first, long last, String rawCode) {
-        String code = eu.startales.spacepixels.solarsystem.JplSbIdentUrlBuilder.normalizeObservatoryCode(rawCode);
-        eu.startales.spacepixels.solarsystem.SolarSystemQuery.Observer observer;
-        if (eu.startales.spacepixels.solarsystem.JplSbIdentUrlBuilder.isJplCompatibleObservatoryCode(code)) {
-            observer = new eu.startales.spacepixels.solarsystem.SolarSystemQuery.Observer(code, null, "IAU code " + code);
-        } else if (site != null) {
-            observer = new eu.startales.spacepixels.solarsystem.SolarSystemQuery.Observer(null, site, "observing site");
-        } else {
-            observer = new eu.startales.spacepixels.solarsystem.SolarSystemQuery.Observer("500", null, "geocentre");
-        }
-        return new eu.startales.spacepixels.solarsystem.SolarSystemQuery(header,
-                report.frames().getFirst().width(), report.frames().getFirst().height(),
-                first, Math.max(first, last), Double.NaN, observer);
+    /** The plate solution for places on the sky now: the header's, with the session's current correction while it is on. */
+    private WcsCoordinateTransformer sky() {
+        return sessionSolution(header, correction.get(), files);
+    }
+
+    /** Whether the session's correction was fitted again since this window opened, so its MPC reduction is out of date. */
+    private boolean correctionChangedSinceOpening() {
+        PlateSolutionCorrection now = correction.get();
+        return now != openedCorrection && (now == null || openedCorrection == null
+                || !java.util.Objects.equals(now.fittedAtUtc, openedCorrection.fittedAtUtc));
     }
 
     /**
@@ -2680,31 +2709,32 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return correction.apply(header, null, files[0].getSizeWidth(), files[0].getSizeHeight());
     }
 
-    static List<SolarSystemClient.Known> agreeingKnownForUnidentified(
-            List<ReportedObjects.ReportedObject> objects,
-            List<SolarSystemClient.Known> known,
-            Map<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>> byFinding) {
-        if (known == null || known.isEmpty() || byFinding == null || byFinding.isEmpty()) return List.of();
-        var byName = new java.util.LinkedHashMap<String, SolarSystemClient.Known>();
-        for (SolarSystemClient.Known item : known) {
-            if (item != null && item.name() != null) byName.putIfAbsent(item.name(), item);
-        }
-        var selected = new java.util.LinkedHashMap<String, SolarSystemClient.Known>();
-        for (var object : objects) {
-            if (ReportedObjects.KNOWN.equals(object.status())) continue;
-            for (var match : byFinding.getOrDefault(object.id(), List.of())) {
-                if (!match.motionAgrees()) continue;
-                SolarSystemClient.Known candidate = byName.get(match.name());
-                if (candidate != null) selected.putIfAbsent(candidate.name(), candidate);
-            }
-        }
-        return List.copyOf(selected.values());
-    }
-
+    /**
+     * Applies what Identify all fetched: adds the objects to the session's predictions (when there are saved ones),
+     * matches every finding as the report and Compare again do, and marks Possible the unconfirmed findings with a known
+     * object within 1′ and agreeing motion. EDT only.
+     */
     void applyIdentifyOutcome(IdentifyOutcome outcome) {
-        var known = outcome.known();
+        var fetched = outcome.fetched();
+        if (fetched == null || fetched.source == null || fetched.source.isEmpty()) {
+            String why = fetched == null || fetched.problems == null || fetched.problems.isEmpty() ? "JPL did not answer."
+                    : String.join("; ", fetched.problems);
+            compareLabel.setHtml("Identify all could not ask the services: " + escape(why));
+            return;
+        }
+        var saved = predictions.get();
+        boolean merged = saved != null && saved.bodies != null;
+        var used = merged ? saved.withAdded(fetched, "Identify all") : fetched;
+        int added = merged ? used.bodies.size() - saved.bodies.size() : 0;
+        if (added > 0 && savePredictions != null) savePredictions.accept(used);
+
+        var known = eu.startales.spacepixels.mpc.NearbyKnown.at(fetched.bodies, outcome.epochMillis());
+        var rawNearby = new java.util.LinkedHashMap<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>>();
+        for (var object : report.objects()) {
+            rawNearby.put(object.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(outcome.places().get(object.id()), known));
+        }
         nearby.clear();
-        nearby.putAll(outcome.byFinding());
+        nearby.putAll(eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(rawNearby));
         int empty = 0;
         int alreadyKnownAgree = 0;
         for (var object : report.objects()) {
@@ -2715,7 +2745,8 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         }
         String today = java.time.LocalDate.now(java.time.ZoneOffset.UTC).toString();
         String suffix = " (Identify all, " + today + ", JPL and SkyBoT without a magnitude limit)";
-        PredictionUpdate confirmed = applyPredictions(outcome.ephemerides(), report.objects(), "Identify all", suffix, true);
+        // With the session's predictions this is Compare again with the objects added; without them only promotions count.
+        PredictionUpdate confirmed = applyPredictions(used, report.objects(), "Identify all", suffix, !merged);
         var beforePossible = confirmed.replaced();
         var marked = eu.startales.spacepixels.mpc.NearbyKnown.markPossible(beforePossible, nearby,
                 today, AsteroidsCometsWindow::nearbyText);
@@ -2729,30 +2760,30 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         report = report.withObjects(marked);
         refreshObjects();
         refreshExport();
-        var allProblems = new ArrayList<String>(known.problems());
-        if (outcome.ephemerides() != null && outcome.ephemerides().problems != null) {
-            allProblems.addAll(outcome.ephemerides().problems);
-        }
-        boolean saved = !confirmed.changes().isEmpty() || !possible.isEmpty();
-        if (saved) saveLater();
+        var problems = fetched.problems == null ? List.<String>of() : fetched.problems;
+        boolean changed = !confirmed.changes().isEmpty() || !possible.isEmpty();
+        if (changed) saveLater();
         // A short summary: each object's matches are in its identification.
-        String summary = String.format(Locale.US, "Identify all (%d known objects%s): ", known.objects().size(),
-                allProblems.isEmpty() ? "" : "; " + String.join("; ", allProblems))
+        String summary = String.format(Locale.US, "Identify all (%d known object%s near the findings%s): ", fetched.bodies.size(),
+                fetched.bodies.size() == 1 ? "" : "s", problems.isEmpty() ? "" : "; " + String.join("; ", problems))
                 + (confirmed.changes().isEmpty() ? "" : String.join("; ", confirmed.changes()) + "; ")
                 + (possible.isEmpty() ? "" : "Possible " + String.join(", ", possible) + "; ")
                 + (alreadyKnownAgree > 0 ? alreadyKnownAgree + " known agree; " : "")
-                + empty + " with none within 1′.";
+                + empty + " with none within 1′."
+                + (added > 0 ? String.format(Locale.US, " %d added to the session's predictions.", added) : "")
+                + (merged ? "" : " Fetch Asteroids and Comets in the main window to keep predictions of the whole field;"
+                + " these are used in this window only.");
         var details = new StringBuilder(summary);
         if (!confirmed.changes().isEmpty()) {
             details.append("\n\nConfirmed by ephemeris comparison:\n").append(String.join("\n", confirmed.changes()));
         }
-        details.append("\n\nKnown objects within 1′ of each object at mid-session:\n");
+        details.append("\n\nKnown objects within 1′ of each object at mid-session (JPL Horizons positions):\n");
         for (var object : report.objects()) {
             var near = nearby.getOrDefault(object.id(), List.of());
             details.append("\n").append(object.id()).append(" (").append(statusText(object.status())).append("): ")
                     .append(near.isEmpty() ? "none" : String.join("; ", near.stream().map(AsteroidsCometsWindow::nearbyText).toList()));
         }
-        showComparison(summary + (saved ? " Saved." : ""), details.toString());
+        showComparison(summary + (changed ? " Saved." : ""), details.toString());
         if (shown != null) show(report.objects().stream().filter(o -> o.id().equals(shown.id())).findFirst().orElse(null));
     }
 
@@ -2811,13 +2842,19 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         int itfNearPct = (int) Math.round(MpcItfCatalog.NEARBY_RATE_FRACTION * 100);
         return String.format(Locale.US,
                 "HOW OFFSET AND MOTION ARE CALCULATED\n\n"
-                + "1. Identify all (JPL SB-Ident & IMCCE SkyBoT — mid-session check)\n"
+                + "1. Identify all (JPL SB-Ident, IMCCE SkyBoT and JPL Horizons, as Fetch Asteroids and Comets)\n"
+                + "• Known objects: the field search finds every known object near the findings, without a magnitude "
+                + "limit, and JPL Horizons gives each its positions over the session for the observing site, as the main "
+                + "window's fetch does. Each finding is then matched as the report and Compare again match it: Known "
+                + "when it follows one prediction in every frame within the ephemeris uncertainty. The objects found are "
+                + "added to the session's predictions.\n"
                 + "• Finding position & motion: a track's measured pixel positions are fitted with a straight line "
                 + "against frame midpoint times (a faint mover uses its fitted shift-and-stack motion), evaluated at "
                 + "mid-session UTC and projected to sky coordinates (RA, Dec) and sky velocity (dRA·cos Dec, dDec) "
                 + "through the session's plate solution.\n"
                 + "• Offset (″): angular separation on the sky at mid-session between the finding and the known object's "
-                + "predicted position. Known objects within %.0f″ (1′) are listed, nearest first.\n"
+                + "JPL Horizons position. Known objects within %.0f″ (1′) are listed, nearest first; one with "
+                + "agreeing motion makes an unconfirmed finding Possible.\n"
                 + "• Motion (agreeing / differing, Δv): magnitude of the 2D sky-velocity vector difference between the "
                 + "finding and the known object (combining both speed and direction). Motion is marked agreeing when "
                 + "Δv ≤ max(%.0f″/h, %d%% of the known object's speed). If another finding in this report lies closer "
@@ -2839,13 +2876,10 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 + "• Linear extrapolation & orbital curvature: real sky motion curves over time—especially for near-Earth "
                 + "objects, near stationary points, or over several days. Small single-night rate errors also grow "
                 + "linearly with time (for example, a 1″/h rate error becomes 24″ per day, or 6′ after 15 days).\n"
-                + "• Single-epoch field search & orbit uncertainty: Identify all's 1′ screen uses single-epoch field-search "
-                + "positions and does not model ephemeris 3σ orbit uncertainties. Poorly known orbits can sit tens of "
-                + "arcseconds off; agreeing candidates for unidentified findings are verified against full multi-frame "
-                + "JPL Horizons ephemerides before being promoted to Known.\n"
+                + "• Orbit uncertainty: the 1′ list does not model the ephemeris 3σ uncertainty. A poorly known "
+                + "orbit can sit tens of arcseconds off, so a Possible match is a candidate to check, not an identity.\n"
                 + "• Topocentric parallax: MPC ITF tracklets may come from another observatory on Earth (different MPC "
-                + "code), and SkyBoT falls back to the geocentre (code 500) when no observatory code is configured. For "
-                + "closer asteroids, parallax shifts both apparent position and rate.\n"
+                + "code). For closer asteroids, parallax shifts both apparent position and rate.\n"
                 + "• Measurement & timing errors: short observing arcs, faint centroids, plate-solution distortion, or "
                 + "frame clock offsets increase the uncertainty of the finding's position and motion. Short ITF "
                 + "tracklets (only a few minutes long) can also have noisy end-to-end speeds and position angles.\n"
@@ -2889,7 +2923,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         for (var object : report.objects()) {
             var samples = LightCurve.samples(report, object);
             long objEpoch = findingMidEpoch(samples, object.motion(), sessionMid);
-            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(samples, object.motion(), objEpoch, sky);
+            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(samples, object.motion(), objEpoch, sky());
             if (place != null) {
                 queries.add(new MpcItfCatalog.FindingQuery(object.id(), objEpoch,
                         place.ra(), place.dec(), place.raRateArcsecPerHour(), place.decRateArcsecPerHour()));

@@ -2,18 +2,19 @@ package eu.startales.spacepixels.mpc;
 
 import eu.startales.spacepixels.fits.WcsCoordinateTransformer;
 import eu.startales.spacepixels.solarsystem.SolarSystemClient;
+import eu.startales.spacepixels.solarsystem.SolarSystemObjects;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 /**
- * "Identify all", as MPChecker does it: the known objects near a finding at one time, from a field search without a
- * magnitude limit. A known object is near when it lies within {@value #RADIUS_ARCSEC}″ of the finding's place at that
- * time; its motion agrees when its rate differs by at most the larger of {@value #MIN_RATE_TOLERANCE}″/h and
- * {@value #RATE_FRACTION} of its speed. This is looser than the report's identification, which follows every frame
- * within the ephemeris uncertainty: an object near with agreeing motion is a possible identification to check, for
- * example of a poorly known orbit, not an identity.
+ * "Identify all", as MPChecker does it: the known objects near a finding at one time, from JPL Horizons positions of
+ * every object the field search finds near the findings, without a magnitude limit. A known object is near when it
+ * lies within {@value #RADIUS_ARCSEC}" of the finding's place at that time; its motion agrees when its rate differs by
+ * at most the larger of {@value #MIN_RATE_TOLERANCE}"/h and {@value #RATE_FRACTION} of its speed. This is looser than
+ * the report's identification, which follows every frame within the ephemeris uncertainty: an object near with
+ * agreeing motion is a possible identification to check, for example of a poorly known orbit, not an identity.
  */
 public final class NearbyKnown {
     /** Search radius around the finding, arcseconds (MPChecker's usual one arcminute). */
@@ -76,6 +77,28 @@ public final class NearbyKnown {
         if (dRa > 180) dRa -= 360;
         if (dRa < -180) dRa += 360;
         return new Place(here.getRaDegrees(), here.getDecDegrees(), dRa * cos * 3600, (hourLater.getDecDegrees() - here.getDecDegrees()) * 3600);
+    }
+
+    /**
+     * The predicted objects at {@code epochMillis}: each one's position there and its rates on the sky over the hour
+     * around it, from its predicted positions; an object not predicted over that hour is left out.
+     */
+    public static List<SolarSystemClient.Known> at(List<SolarSystemObjects.Body> bodies, long epochMillis) {
+        var known = new ArrayList<SolarSystemClient.Known>();
+        if (bodies == null) return known;
+        for (var body : bodies) {
+            if (body == null || body.name == null) continue;
+            var here = SolarSystemObjects.positionAt(body, epochMillis);
+            var before = SolarSystemObjects.positionAt(body, epochMillis - 1_800_000L);
+            var after = SolarSystemObjects.positionAt(body, epochMillis + 1_800_000L);
+            if (here == null || before == null || after == null) continue;
+            double dRa = after.ra() - before.ra();
+            if (dRa > 180) dRa -= 360;
+            if (dRa < -180) dRa += 360;
+            known.add(new SolarSystemClient.Known(body.name, body.comet, here.ra(), here.dec(), here.magnitude(),
+                    dRa * Math.cos(Math.toRadians(here.dec())) * 3600, (after.dec() - before.dec()) * 3600));
+        }
+        return known;
     }
 
     /** The known objects within {@value #RADIUS_ARCSEC}″ of the place, nearest first. */

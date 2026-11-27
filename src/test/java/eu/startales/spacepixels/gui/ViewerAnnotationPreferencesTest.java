@@ -21,12 +21,13 @@ public class ViewerAnnotationPreferencesTest {
         Preferences storage = Preferences.userRoot().node("spacepixels-test/" + UUID.randomUUID());
         try {
             assertEquals(ViewerAnnotationPreferences.DEFAULT, ViewerAnnotationPreferences.load(storage));
-            ViewerAnnotationPreferences chosen = new ViewerAnnotationPreferences(14.5, 12);
+            ViewerAnnotationPreferences chosen = new ViewerAnnotationPreferences(14.5, 12, 18.5);
             chosen.save(storage);
             assertEquals(chosen, ViewerAnnotationPreferences.load(storage));
             storage.putDouble("faintestStar", Double.NaN);
             storage.putDouble("faintestVariable", 100);
-            assertEquals(new ViewerAnnotationPreferences(99, 99), ViewerAnnotationPreferences.load(storage));
+            storage.putDouble("faintestSolarSystem", Double.POSITIVE_INFINITY);
+            assertEquals(new ViewerAnnotationPreferences(99, 99, 99), ViewerAnnotationPreferences.load(storage));
         } finally {
             storage.removeNode();
         }
@@ -34,12 +35,16 @@ public class ViewerAnnotationPreferencesTest {
 
     /** Limits affect the intended layers, include boundary/unknown values and keep deep-sky objects visible. */
     @Test public void magnitudeLimitsRespectCategoriesAndUnknownValues() {
-        ViewerAnnotationPreferences filters = new ViewerAnnotationPreferences(14, 12);
+        ViewerAnnotationPreferences filters = new ViewerAnnotationPreferences(14, 12, 18);
         assertTrue(filters.includes(mark(SkyMark.Kind.STAR, 14, 10)));
         assertFalse(filters.includes(mark(SkyMark.Kind.NAMED_STAR, 14.1, 10)));
         assertFalse(filters.includes(mark(SkyMark.Kind.VARIABLE, 13, 10)));
         assertTrue(filters.includes(mark(SkyMark.Kind.VARIABLE, Double.NaN, 10)));
         assertTrue(filters.includes(mark(SkyMark.Kind.DEEP_SKY, 20, 10)));
+        assertTrue(filters.includes(mark(SkyMark.Kind.SOLAR_SYSTEM, 18, 10)));
+        assertFalse(filters.includes(mark(SkyMark.Kind.SOLAR_SYSTEM, 18.4, 10)));
+        assertTrue("an asteroid without a magnitude stays", filters.includes(mark(SkyMark.Kind.SOLAR_SYSTEM, Double.NaN, 10)));
+        assertTrue(filters.withFaintestSolarSystem(99).includes(mark(SkyMark.Kind.SOLAR_SYSTEM, 30, 10)));
         assertTrue(ViewerAnnotationPreferences.DEFAULT.includes(mark(SkyMark.Kind.VARIABLE, 100, 10)));
     }
 
@@ -51,10 +56,10 @@ public class ViewerAnnotationPreferencesTest {
             FitsFileInformation info = new FitsFileInformation("test.fit", "test.fit", true, 200, 160);
             view.showFrame(BlinkSequence.fromMono(info, new short[160][200]), new byte[1][65536], false);
             view.setSkyMarks(List.of(mark(SkyMark.Kind.STAR, 15, 100)), 18);
-            view.setSkyPreferences(new ViewerAnnotationPreferences(16, 99));
+            view.setSkyPreferences(new ViewerAnnotationPreferences(16, 99, 99));
             paint(view);
             assertNotNull(view.skyMarkAt(new Point(100, 80)));
-            view.setSkyPreferences(new ViewerAnnotationPreferences(14, 99));
+            view.setSkyPreferences(new ViewerAnnotationPreferences(14, 99, 99));
             assertNull(view.skyMarkAt(new Point(100, 80)));
             paint(view);
             assertNull(view.skyMarkAt(new Point(100, 80)));

@@ -2,14 +2,17 @@ package eu.startales.spacepixels.gui;
 
 import java.util.prefs.Preferences;
 
-/** Immutable viewer-only catalogue filters; magnitudes use each catalogue's band, and 99 means no limit. */
-record ViewerAnnotationPreferences(double faintestStar, double faintestVariable) {
+/**
+ * Immutable viewer-only catalogue filters; magnitudes use each catalogue's band (V for asteroids, a comet's total
+ * magnitude), and 99 means no limit.
+ */
+record ViewerAnnotationPreferences(double faintestStar, double faintestVariable, double faintestSolarSystem) {
     static final double NO_LIMIT = 99;
-    static final ViewerAnnotationPreferences DEFAULT = new ViewerAnnotationPreferences(NO_LIMIT, NO_LIMIT);
+    static final ViewerAnnotationPreferences DEFAULT = new ViewerAnnotationPreferences(NO_LIMIT, NO_LIMIT, NO_LIMIT);
 
     /** Rejects invalid limits rather than allowing a corrupt preference to hide the catalogue. */
     ViewerAnnotationPreferences {
-        if (!valid(faintestStar) || !valid(faintestVariable)) {
+        if (!valid(faintestStar) || !valid(faintestVariable) || !valid(faintestSolarSystem)) {
             throw new IllegalArgumentException("Magnitude limits must be finite and between -10 and 99.");
         }
     }
@@ -23,25 +26,33 @@ record ViewerAnnotationPreferences(double faintestStar, double faintestVariable)
     static ViewerAnnotationPreferences load(Preferences storage) {
         double stars = storage.getDouble("faintestStar", NO_LIMIT);
         double variables = storage.getDouble("faintestVariable", NO_LIMIT);
+        double solarSystem = storage.getDouble("faintestSolarSystem", NO_LIMIT);
         return new ViewerAnnotationPreferences(valid(stars) ? stars : NO_LIMIT,
-                valid(variables) ? variables : NO_LIMIT);
+                valid(variables) ? variables : NO_LIMIT, valid(solarSystem) ? solarSystem : NO_LIMIT);
     }
 
     /** Saves display choices for subsequently opened viewers without modifying detection or export settings. */
     void save(Preferences storage) {
         storage.putDouble("faintestStar", faintestStar);
         storage.putDouble("faintestVariable", faintestVariable);
+        storage.putDouble("faintestSolarSystem", faintestSolarSystem);
+    }
+
+    /** These preferences with another limit for the asteroids and comets. */
+    ViewerAnnotationPreferences withFaintestSolarSystem(double magnitude) {
+        return new ViewerAnnotationPreferences(faintestStar, faintestVariable, magnitude);
     }
 
     /**
-     * Applies independent star/variable limits; deep-sky objects, asteroids and comets (limited when fetched) and
-     * unknown magnitudes remain available.
+     * Applies independent star, variable and asteroid-and-comet limits; deep-sky objects and unknown magnitudes remain
+     * available.
      */
     boolean includes(SkyMark mark) {
         double limit = switch (mark.kind) {
             case STAR, NAMED_STAR -> faintestStar;
             case VARIABLE -> faintestVariable;
-            case DEEP_SKY, SOLAR_SYSTEM -> NO_LIMIT;
+            case SOLAR_SYSTEM -> faintestSolarSystem;
+            case DEEP_SKY -> NO_LIMIT;
         };
         return limit == NO_LIMIT || !Double.isFinite(mark.magnitude) || mark.magnitude <= limit;
     }

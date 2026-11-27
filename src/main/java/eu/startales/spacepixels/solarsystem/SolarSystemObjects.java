@@ -68,6 +68,12 @@ public final class SolarSystemObjects {
         public boolean comet;
         /** JPL's orbit solution, for example "JPL#172"; null when only the field search's straight-line motion is known. */
         public String orbitSolution;
+        /**
+         * What added the object after the fetch of the field, for example "Identify all"; null for an object of that
+         * fetch. Such an object can be fainter than {@link SolarSystemObjects#magnitudeLimit}: the field is complete
+         * only to that limit.
+         */
+        public String addedBy;
         /** Positions in time order. */
         public List<Sample> samples = new ArrayList<>();
     }
@@ -348,6 +354,44 @@ public final class SolarSystemObjects {
     }
 
     /** "7 asteroids and 1 comet", or "no asteroids or comets". */
+    /**
+     * These predictions with the objects of {@code extra} that they do not have yet (by any designation), each marked
+     * as added by {@code addedBy}: a new object, so saved predictions are never changed in place. The field, span,
+     * magnitude limit, observer and source stay those of this fetch, which is complete only to its limit.
+     */
+    public SolarSystemObjects withAdded(SolarSystemObjects extra, String addedBy) {
+        SolarSystemObjects merged = new SolarSystemObjects();
+        merged.version = version;
+        merged.fetchedAtUtc = fetchedAtUtc;
+        merged.field = field;
+        merged.startMillis = startMillis;
+        merged.endMillis = endMillis;
+        merged.magnitudeLimit = magnitudeLimit;
+        merged.observer = observer;
+        merged.source = source;
+        merged.bodies = new ArrayList<>(bodies == null ? List.of() : bodies);
+        merged.problems = problems == null ? new ArrayList<>() : new ArrayList<>(problems);
+        merged.fetchSteps = fetchSteps == null ? new ArrayList<>() : new ArrayList<>(fetchSteps);
+        java.util.Set<String> keys = new java.util.HashSet<>();
+        for (Body body : merged.bodies) keys.addAll(designationKeys(body.name));
+        if (extra != null && extra.bodies != null) {
+            for (Body body : extra.bodies) {
+                if (body == null || body.name == null) continue;
+                List<String> bodyKeys = designationKeys(body.name);
+                if (bodyKeys.stream().anyMatch(keys::contains)) continue;
+                Body added = new Body();
+                added.name = body.name;
+                added.comet = body.comet;
+                added.orbitSolution = body.orbitSolution;
+                added.samples = new ArrayList<>(body.samples);
+                added.addedBy = addedBy;
+                merged.bodies.add(added);
+                keys.addAll(bodyKeys);
+            }
+        }
+        return merged;
+    }
+
     public String summary() {
         long comets = bodies.stream().filter(body -> body.comet).count();
         long asteroids = bodies.size() - comets;

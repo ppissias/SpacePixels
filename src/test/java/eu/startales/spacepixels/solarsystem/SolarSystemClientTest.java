@@ -640,20 +640,6 @@ public class SolarSystemClientTest {
         assertEquals(List.of("841917 (2015 RS113)"), result.bodies.stream().map(b -> b.name).toList());
         assertEquals("queried Horizons only once", 1, asked.stream().filter(u -> u.contains("horizons.api")).count());
         assertEquals("1 object", step(result.fetchSteps, "IMCCE SkyBoT", "Field search").outcome);
-
-        // Reverse direction in knownInField: JPL unnumbered, SkyBoT numbered -> keeps JPL's coordinates under numbered name.
-        SolarSystemClient reverse = new SolarSystemClient((uri, timeout) -> {
-            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
-            if (url.startsWith(SolarSystemClient.SKYBOT)) {
-                return "[" + skybotRow("841917", "2015 RS113", "10 00 05.00", "+20 00 00.0", "18.4", "MB>Outer") + "]";
-            }
-            return fieldAnswer(List.of(row("(2015 RS113)", "10:00:00.00", "+20 00'00.0\"", "18.4", "0", "0")));
-        });
-        SkyField field = SkyField.of(TRANSFORMER, 2000, 1600);
-        SolarSystemClient.FieldObjects known = reverse.knownInField(field, START, "568", null, 0.05);
-        assertEquals(1, known.objects().size());
-        assertEquals("841917 (2015 RS113)", known.objects().get(0).name());
-        assertEquals("keeps JPL's coordinates when upgrading name", 150.0, known.objects().get(0).ra(), 1e-6);
     }
 
     /**
@@ -679,37 +665,60 @@ public class SolarSystemClientTest {
         assertEquals("194 Prokne", result.bodies.get(0).name);
     }
 
+    /**
+     * Identify all's fetch: the same searches as the field's, without a magnitude limit, and Horizons positions for
+     * every object within the radius of a place (however faint, and however many), none for the others.
+     */
     @Test
-    public void ephemeridesForDeduplicatesQueriesAndFallsBackToStraightLineOnHorizonsError() throws Exception {
-        List<String> requestedCommands = new ArrayList<>();
+    public void fetchNearAsksHorizonsForEveryObjectNearThePlacesOnly() throws Exception {
+        List<String> asked = new ArrayList<>();
         SolarSystemClient client = new SolarSystemClient((uri, timeout) -> {
-            String decoded = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
-            requestedCommands.add(decoded);
-            if (decoded.contains("COMMAND='1001;'") || decoded.contains("COMMAND='1001'")) {
-                return horizonsAnswer("1001 Gaussia", "JPL#42", "V", List.of(
-                        new double[]{0, 150.0, 20.0, 20.4, 0.3, 0.3},
-                        new double[]{30, 150.008, 20.004, 20.4, 0.3, 0.3},
-                        new double[]{60, 150.016, 20.008, 20.4, 0.3, 0.3}));
+            String url = URLDecoder.decode(uri.toString(), StandardCharsets.UTF_8);
+            asked.add(url);
+            if (url.startsWith(SolarSystemClient.SKYBOT)) {
+                // Also listed by JPL: one object, under JPL's name and position.
+                return "[" + skybotRow("1001", "Gaussia", "10 00 01.00", "+20 00 00.0", "20.4", "MB>Middle") + "]";
             }
-            throw new IOException("Horizons timeout");
+            if (url.contains("sb_ident.api") && url.contains("sb-group=neo")) {
+                return fieldAnswer(List.of());
+            }
+            if (url.contains("sb_ident.api")) {
+                return fieldAnswer(List.of(
+                        row("1001 Gaussia (1923 OA)", "10:00:00.00", "+20 00'00.0\"", "20.4", "27.0", "14.4"),
+                        row("(2022 QJ95)", "10:00:00.00", "+20 00'20.0\"", "23.1", "25.0", "10.0"),
+                        row("194 Prokne (A879 FA)", "10:00:00.00", "+20 05'00.0\"", "14.1", "4.4", "-1.2")));
+            }
+            if (url.contains("COMMAND='1001;'")) {
+                return horizonsAnswer("1001 Gaussia (1923 OA)", "JPL#42", "APmag", List.of(
+                        new double[]{-10, 150.0, 20.0, 20.4, 0.3, 0.3}, new double[]{70, 150.016, 20.008, 20.4, 0.3, 0.3}));
+            }
+            if (url.contains("COMMAND='DES=2022 QJ95;'")) {
+                throw new IOException("Horizons timeout");
+            }
+            throw new AssertionError("Unexpected request: " + url);
         });
-        long mid = START + 30 * 60_000L;
-        SolarSystemClient.Known confirmed = new SolarSystemClient.Known("1001 Gaussia", false, 150.008, 20.004, 20.4, 27.0, 14.4);
-        SolarSystemClient.Known duplicate = new SolarSystemClient.Known("1001 (1923 OA)", false, 150.008, 20.004, 20.4, 27.0, 14.4);
-        SolarSystemClient.Known provDuplicate = new SolarSystemClient.Known("(1923 OA)", false, 150.008, 20.004, 20.4, 27.0, 14.4);
-        SolarSystemClient.Known fallback = new SolarSystemClient.Known("2022 QJ95", false, 150.02, 20.01, 21.1, 25.0, 10.0);
+        SolarSystemQuery unlimited = new SolarSystemQuery(TRANSFORMER, 2000, 1600, START, END, Double.POSITIVE_INFINITY,
+                query().observer());
+        SolarSystemObjects result = client.fetchNear(unlimited, List.of(new double[]{150.0, 20.0}), 60, text -> { });
 
-        SolarSystemObjects result = client.ephemeridesFor(query(), mid, List.of(confirmed, duplicate, provDuplicate, fallback));
-
-        assertEquals(2, requestedCommands.size());
-        assertTrue(Double.isNaN(result.magnitudeLimit));
-        assertEquals(2, result.bodies.size());
+        assertTrue(asked.get(0), asked.get(0).contains("sb_ident.api") && !asked.get(0).contains("vmag-lim"));
+        assertTrue("the near-Earth search is asked too", asked.stream().anyMatch(url -> url.contains("sb-group=neo")));
+        assertEquals("both near objects, also the one Horizons could not give",
+                List.of("1001 Gaussia (1923 OA)", "(2022 QJ95)"), result.bodies.stream().map(b -> b.name).toList());
         assertEquals("JPL#42", result.bodies.get(0).orbitSolution);
-        assertEquals(3, result.bodies.get(0).samples.size());
-        assertEquals(0.3, result.bodies.get(0).samples.get(0).raSigmaArcsec, 1e-6);
         assertNull(result.bodies.get(1).orbitSolution);
-        assertEquals(1, result.problems.size());
-        assertTrue(result.problems.get(0).contains("1 of 2"));
+        assertTrue("Prokne, 5' away, is not asked", asked.stream().noneMatch(url -> url.contains("COMMAND='194;'")));
+        assertEquals("2 objects in all: the near ones", 2, asked.stream().filter(url -> url.contains("horizons.api")).count());
+        assertTrue(result.problems.toString(), result.problems.stream().anyMatch(p -> p.contains("1 of 2")));
+        assertEquals("JPL SB-Ident API 1.1, IMCCE SkyBoT, JPL Horizons API 1.2", result.source);
+    }
+
+    @Test
+    public void nearMeansWithinTheRadiusOfAnyPlace() {
+        var candidate = candidate("1001 Gaussia", 150.0, 20.0, 0, 0);
+        assertTrue(SolarSystemClient.isNear(candidate, List.of(new double[]{10, 10}, new double[]{150.0, 20.0 + 59 / 3600.0}), 60));
+        assertFalse(SolarSystemClient.isNear(candidate, List.of(new double[]{150.0, 20.0 + 61 / 3600.0}), 60));
+        assertFalse(SolarSystemClient.isNear(candidate, List.of(), 60));
     }
 
     /** The recorded step for this service and question. */

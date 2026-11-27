@@ -4,6 +4,7 @@
 ## Contents
 
 - [2026.12-01](#202612-01)
+  - [Identify all and the asteroid filter](#identify-all-and-the-asteroid-filter)
   - [Fixes](#fixes)
 - [2026.11-05](#202611-05)
   - [Built-in orbit solver and 3D orbit viewer](#built-in-orbit-solver-and-3d-orbit-viewer)
@@ -61,8 +62,15 @@
 
 ## 2026.12-01
 
+### Identify all and the asteroid filter
+
+- **Identify all works like Fetch Asteroids and Comets.** **Identify all…** in **Asteroids & Comets** now asks the same searches as the main window's fetch, for the same observer, and JPL Horizons for the positions over the session, about every known object within 1′ of your objects and without a magnitude limit. Each object is then compared by the report's own rules, as **Compare again** does: **Known** means it follows one prediction in every frame. **Possible** remains for an unconfirmed object with a known one within 1′ and agreeing motion, now measured from the Horizons positions. Before, it used one field-search position at mid-session, asked SkyBoT for the geocentre, and checked only some candidates with Horizons. [Asteroids & Comets](MANUAL.md#asteroids--comets)
+- **Identify all adds what it finds to the session's predictions.** The objects it finds that the saved predictions lack, often fainter than the fetch's limit, are added to `solar_system.json`, marked as added by Identify all, so Preview, Blink, **Compare again** and the next report know them too. The predictions stay complete only to the magnitude of the fetch, which the report's notes keep quoting.
+- **Faintest asteroids and comets in Preview and Blink.** A **Faintest** slider under **Known asteroids & comets** in **Catalog annotations** limits the asteroids and comets shown by their predicted V, from the brightest to the faintest fetched; its right end shows them all. Like **Faintest magnitude…**, it is remembered for viewers opened later and changes only the display.
+
 ### Fixes
 
+- **Asteroids & Comets follows a new plate correction.** The window kept the plate correction it was opened with. When the sky catalogue was fetched again while it was open, the correction fitted again was not used. **Identify all**, **Compare again**, **Check MPC ITF…** and the comparison stars now use the session's current correction, and the MPC export asks to reopen the window so its positions are reduced with the new one.
 - **Asteroids & Comets uses the plate correction.** **Identify all**, **Compare again**, **Check MPC ITF…** and the choice of light-curve comparison stars used the frames' header plate solution without the correction fitted to the Gaia stars, while the report, Preview and Blink use it. Where the header solution is several pixels off the stars, real identifications read 5–20″ away and stayed **Possible** instead of **Known**, and comparison-star apertures could miss their stars. They now use the corrected solution. The MPC export was not affected: it always applied the correction, frame by frame.
 
 ## 2026.11-05

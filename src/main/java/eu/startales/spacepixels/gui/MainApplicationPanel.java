@@ -2245,7 +2245,6 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         }
         File chosen = folder;
         FitsFileInformation[] files = session.getFiles();
-        PlateSolutionCorrection correction = skyCatalogue().getCorrection();
         var config = applicationSettings.getConfig();
         var site = eu.startales.spacepixels.fits.ObservingSite.resolve(files, config.siteLat, config.siteLong, config.siteAltitude);
         var visualization = detectionSettings.visualizationSettings();
@@ -2275,12 +2274,31 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
                     return;
                 }
                 var resolved = WcsSolutionResolver.resolveUncorrected(null, files);
+                var model = session.getSkyCatalogue();
                 var window = viewers.register(new AsteroidsCometsWindow(windowFrame, files, report,
-                        resolved == null ? null : resolved.getTransformer(), correction, applicationSettings, storage, visualization, site,
-                        catalogue, () -> skyCatalogue().getSolarSystem()));
+                        resolved == null ? null : resolved.getTransformer(), model::getCorrection, applicationSettings, storage,
+                        visualization, site, catalogue, model::getSolarSystem, merged -> savePredictions(session, merged)));
                 window.setVisible(true);
             }
         }.execute();
+    }
+
+    /**
+     * Installs and saves {@code session}'s predictions with the objects Identify all added in Asteroids &amp; Comets, so
+     * the viewers, the next report and Compare again know them; a session closed since is left alone.
+     */
+    private void savePredictions(ProcessingSession session, SolarSystemObjects merged) {
+        if (session.isClosed()) return;
+        session.getSkyCatalogue().setSolarSystem(merged);
+        if (!session.hasStorage()) return;
+        session.saveSolarSystem(merged, problem -> {
+            if (problem == null) return;
+            LOGGER.log(Level.WARNING, "Cannot save the asteroid and comet predictions", problem);
+            if (sessions.current() == session) {
+                statusLabel.setText("The asteroid and comet predictions could not be saved (" + problem.getMessage()
+                        + "); they last until SpacePixels closes.");
+            }
+        });
     }
 
     /** Opens the current session's completed output directory without starting or changing any analysis. */

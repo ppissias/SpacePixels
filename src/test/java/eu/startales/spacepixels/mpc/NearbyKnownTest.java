@@ -43,6 +43,32 @@ public class NearbyKnownTest {
         assertNull(NearbyKnown.place(samples.subList(0, 1), null, epoch, wcs));
     }
 
+    /** The known objects at one time come from their predicted positions: the place there and the rates over an hour. */
+    @Test
+    public void knownObjectsAtATimeFromTheirPredictions() {
+        var body = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
+        body.name = "1001 Gaussia (1923 OA)";
+        // 36″/h east in RA on the sky at Dec 0 and 18″/h north, sampled every 30 minutes over two hours.
+        for (int k = 0; k <= 4; k++) {
+            var sample = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Sample();
+            sample.timeMillis = T0 + k * 1_800_000L;
+            sample.ra = 150 + k * 18 / 3600.0;
+            sample.dec = k * 9 / 3600.0;
+            sample.magnitude = 20.4;
+            body.samples.add(sample);
+        }
+        var outside = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
+        outside.name = "not predicted then";
+        var known = NearbyKnown.at(List.of(body, outside), T0 + 3_600_000L);
+        assertEquals(1, known.size());
+        assertEquals(150 + 36 / 3600.0, known.getFirst().ra(), 1e-9);
+        assertEquals(18 / 3600.0, known.getFirst().dec(), 1e-9);
+        assertEquals(36, known.getFirst().raRateArcsecPerHour(), 0.01);
+        assertEquals(18, known.getFirst().decRateArcsecPerHour(), 0.01);
+        assertEquals(20.4, known.getFirst().magnitude(), 1e-9);
+        assertTrue("an hour around the time is needed", NearbyKnown.at(List.of(body), T0).isEmpty());
+    }
+
     @Test
     public void notesANearerFinding() {
         var byFinding = new LinkedHashMap<String, List<NearbyKnown.Match>>();

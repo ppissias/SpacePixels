@@ -236,6 +236,11 @@ public class AsteroidsCometsWindowTest {
         }
     }
 
+    /**
+     * Identify all fetches the objects near the findings and matches them as the report and Compare again do: an
+     * object on FM1's path is confirmed Known; one 20 pixels off fails the frame-by-frame match but lies within 1′ with
+     * agreeing motion, so FM1 becomes Possible; with saved predictions, the objects they lack are added to them.
+     */
     @Test(timeout = 120_000)
     public void identifyAllPromotesConfirmedMatchesToKnownAndKeepsLooserOnesPossible() throws Exception {
         assumeFalse("needs a display", GraphicsEnvironment.isHeadless());
@@ -243,46 +248,21 @@ public class AsteroidsCometsWindowTest {
         FitsFileInformation[] files = files(session);
         WcsCoordinateTransformer wcs = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
         long start = files[0].getObservationTimestamp();
-        File reportFolder = report(folder.newFolder("identify-all-report"), files);
-        var report = ReportedObjects.load(reportFolder);
-        long first = report.frames().stream().mapToLong(ReportedObjects.Frame::timestampMillis).min().orElseThrow();
-        long last = report.frames().stream().mapToLong(f -> f.timestampMillis() + Math.max(0, f.exposureMillis())).max().orElseThrow();
-        long epoch = first + (last - first) / 2;
-
-        // Place one known asteroid squarely on T1 (already Known) and one right on FM1 (unidentified).
-        var t1Place = eu.startales.spacepixels.mpc.NearbyKnown.place(
-                eu.startales.spacepixels.mpc.LightCurve.samples(report, report.objects().get(0)), null, epoch, wcs);
-        var fm1Place = eu.startales.spacepixels.mpc.NearbyKnown.place(
-                eu.startales.spacepixels.mpc.LightCurve.samples(report, report.objects().get(1)), report.objects().get(1).motion(), epoch, wcs);
-        var knownT1 = new eu.startales.spacepixels.solarsystem.SolarSystemClient.Known(
-                "649341 (2011 DK30)", false, t1Place.ra(), t1Place.dec(), 18.2, t1Place.raRateArcsecPerHour(), t1Place.decRateArcsecPerHour());
-        var knownFm1 = new eu.startales.spacepixels.solarsystem.SolarSystemClient.Known(
-                "2026 AB1", false, fm1Place.ra(), fm1Place.dec(), 20.5, fm1Place.raRateArcsecPerHour(), fm1Place.decRateArcsecPerHour());
-        var fieldObjects = new eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects(
-                List.of(knownT1, knownFm1), List.of(), List.of());
-
-        var rawNearby = new java.util.LinkedHashMap<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>>();
-        for (var obj : report.objects()) {
-            var p = eu.startales.spacepixels.mpc.NearbyKnown.place(
-                    eu.startales.spacepixels.mpc.LightCurve.samples(report, obj), obj.motion(), epoch, wcs);
-            rawNearby.put(obj.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(p, fieldObjects.objects()));
-        }
-        var byFinding = eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(rawNearby);
-        var selected = AsteroidsCometsWindow.agreeingKnownForUnidentified(report.objects(), fieldObjects.objects(), byFinding);
-        assertEquals(List.of("2026 AB1"), selected.stream().map(eu.startales.spacepixels.solarsystem.SolarSystemClient.Known::name).toList());
-
         var config = new AppConfig();
         config.observatoryCode = "500";
         ApplicationSettings settings = ApplicationSettings.inMemory(config);
 
-        // 1) Ephemeris matches FM1 -> promoted to Known (same PredictionMatch rules as Compare again).
+        // 1) Without saved predictions: the fetched object on FM1's path confirms it, in this window only.
+        File reportFolder = report(folder.newFolder("identify-all-report"), files);
+        var report = ReportedObjects.load(reportFolder);
+        var places = places(report, wcs);
         AsteroidsCometsWindow w1 = onEdt(() -> new AsteroidsCometsWindow(null, files, report, wcs, correction(wcs), settings,
                 new ApplicationStorage(), VisualizationSettings.defaults(), null, null, () -> null));
         try {
-            var exactEphem = predictions(wcs, start);
-            exactEphem.magnitudeLimit = Double.NaN;
+            var exact = predictions(wcs, start);
+            exact.magnitudeLimit = Double.NaN;
             onEdt(() -> {
-                w1.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fieldObjects, byFinding, exactEphem));
+                w1.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(exact, places, epoch(report)));
                 return null;
             });
             JTable objects = onEdt(() -> tables(w1).getFirst());
@@ -299,7 +279,7 @@ public class AsteroidsCometsWindowTest {
             onEdt(() -> { w1.dispose(); return null; });
         }
 
-        // 2) Ephemeris fails strict PredictionMatch (e.g. shifted by 20 px) -> falls back to Possible from 1' nearby match.
+        // 2) The fetched object 20 px off FM1's path fails the frame-by-frame match: Possible from the 1′ list.
         File reportFolder2 = report(folder.newFolder("identify-all-possible-report"), files);
         var report2 = ReportedObjects.load(reportFolder2);
         AsteroidsCometsWindow w2 = onEdt(() -> new AsteroidsCometsWindow(null, files, report2, wcs, correction(wcs), settings,
@@ -307,9 +287,10 @@ public class AsteroidsCometsWindowTest {
         try {
             var shifted = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
             shifted.magnitudeLimit = Double.NaN;
+            shifted.source = "JPL Horizons API 1.2";
             shifted.bodies = List.of(body(wcs, start, "2026 AB1", 80, 30, 0, 1.5));
             onEdt(() -> {
-                w2.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fieldObjects, byFinding, shifted));
+                w2.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(shifted, places(report2, wcs), epoch(report2)));
                 return null;
             });
             JTable objects = onEdt(() -> tables(w2).getFirst());
@@ -318,6 +299,55 @@ public class AsteroidsCometsWindowTest {
         } finally {
             onEdt(() -> { w2.dispose(); return null; });
         }
+
+        // 3) With saved predictions that lack the object: it is added to them, marked, and confirms FM1.
+        File reportFolder3 = report(folder.newFolder("identify-all-merged-report"), files);
+        var report3 = ReportedObjects.load(reportFolder3);
+        var saved = predictions(wcs, start);
+        saved.source = "JPL SB-Ident API 1.1, JPL Horizons API 1.2";
+        saved.bodies = new ArrayList<>(List.of(saved.bodies.getFirst()));
+        var installed = new ArrayList<eu.startales.spacepixels.solarsystem.SolarSystemObjects>();
+        AsteroidsCometsWindow w3 = onEdt(() -> new AsteroidsCometsWindow(null, files, report3, wcs, () -> correction(wcs), settings,
+                new ApplicationStorage(), VisualizationSettings.defaults(), null, null, () -> saved, installed::add));
+        try {
+            var fetched = predictions(wcs, start);
+            fetched.magnitudeLimit = Double.NaN;
+            fetched.bodies = new ArrayList<>(List.of(fetched.bodies.get(1)));
+            onEdt(() -> {
+                w3.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fetched, places(report3, wcs), epoch(report3)));
+                return null;
+            });
+            assertEquals(1, installed.size());
+            assertEquals(List.of("649341 (2011 DK30)", "2026 AB1"), installed.getFirst().bodies.stream().map(b -> b.name).toList());
+            assertEquals("Identify all", installed.getFirst().bodies.get(1).addedBy);
+            assertEquals("the saved limit stays", 25, installed.getFirst().magnitudeLimit, 0);
+            assertEquals("the saved predictions are not changed", 1, saved.bodies.size());
+            JTable objects = onEdt(() -> tables(w3).getFirst());
+            assertEquals("Known", onEdt(() -> objects.getValueAt(0, 2)));
+            assertEquals("Known", onEdt(() -> objects.getValueAt(1, 2)));
+            assertEquals("2026 AB1", onEdt(() -> objects.getValueAt(1, 3)));
+        } finally {
+            onEdt(() -> { w3.dispose(); return null; });
+        }
+    }
+
+    /** The middle of the report's span, where Identify all takes the findings' places. */
+    private static long epoch(ReportedObjects.Report report) {
+        long first = report.frames().stream().mapToLong(ReportedObjects.Frame::timestampMillis).min().orElseThrow();
+        long last = report.frames().stream().mapToLong(f -> f.timestampMillis() + Math.max(0, f.exposureMillis())).max().orElseThrow();
+        return first + (last - first) / 2;
+    }
+
+    /** Each finding's place on the sky at {@link #epoch}, as Identify all takes it. */
+    private static Map<String, eu.startales.spacepixels.mpc.NearbyKnown.Place> places(ReportedObjects.Report report,
+                                                                                       WcsCoordinateTransformer wcs) {
+        var places = new java.util.LinkedHashMap<String, eu.startales.spacepixels.mpc.NearbyKnown.Place>();
+        for (var object : report.objects()) {
+            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(eu.startales.spacepixels.mpc.LightCurve.samples(report, object),
+                    object.motion(), epoch(report), wcs);
+            if (place != null) places.put(object.id(), place);
+        }
+        return places;
     }
 
     /**
@@ -352,12 +382,12 @@ public class AsteroidsCometsWindowTest {
             var predictions = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
             predictions.magnitudeLimit = Double.NaN;
             predictions.bodies = List.of(body(corrected, start, "2026 AB1", 60, 30, 0, 1.5));
-            var fieldObjects = new eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects(List.of(), List.of(), List.of());
+            predictions.source = "JPL Horizons API 1.2";
             AsteroidsCometsWindow window = onEdt(() -> new AsteroidsCometsWindow(null, files, report, wcs, correction, settings,
                     new ApplicationStorage(), VisualizationSettings.defaults(), null, null, () -> null));
             try {
                 onEdt(() -> {
-                    window.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fieldObjects, Map.of(), predictions));
+                    window.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(predictions, Map.of(), start));
                     return null;
                 });
                 JTable objects = onEdt(() -> tables(window).getFirst());
@@ -488,15 +518,16 @@ public class AsteroidsCometsWindowTest {
         objects.endMillis = start + 900_000;
         objects.bodies = new ArrayList<>(List.of(body(wcs, start, "649341 (2011 DK30)", 30, 40, 2, 0), body(wcs, start, "2026 AB1", 60, 30, 0, 1.5)));
         objects.fetchedAtUtc = "2026-11-15T00:00:00Z";
+        objects.source = "JPL Horizons API 1.2";
         return objects;
     }
 
-    /** A predicted object at (x, y) at {@code start}, moving (vx, vy) pixels per minute, sampled every minute. */
+    /** A predicted object at (x, y) at {@code start}, moving (vx, vy) pixels per minute, sampled every minute for an hour on each side. */
     private static eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body body(WcsCoordinateTransformer wcs, long start, String name,
                                                                                     double x, double y, double vx, double vy) {
         var body = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Body();
         body.name = name;
-        for (int minute = -5; minute <= 15; minute++) {
+        for (int minute = -60; minute <= 60; minute++) {
             var sky = wcs.pixelToSky(x + vx * minute, y + vy * minute);
             var sample = new eu.startales.spacepixels.solarsystem.SolarSystemObjects.Sample();
             sample.timeMillis = start + minute * 60_000L;
