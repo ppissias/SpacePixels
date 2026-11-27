@@ -1676,8 +1676,11 @@ public class DetectionConfigurationPanel extends JPanel {
         var files = owner == null ? new FitsFileInformation[0] : owner.getFiles();
         var session = FaintMoverRuntimeEstimate.importedSession(files);
         double starSize = faintMoverStarSize(owner);
+        // The unit conversion of the speed controls uses the measured width only: a setting must not change how
+        // another one is stored. The previews below use the width the next run will use.
+        double measuredStarSize = measuredFaintMoverStarSize(owner);
         double displacementScale = session.hasSpan() ? session.spanMinutes()
-                / (Double.isFinite(starSize) ? starSize : FaintMoverRuntimeEstimate.ASSUMED_FWHM_PIXELS) : 1;
+                / (Double.isFinite(measuredStarSize) ? measuredStarSize : FaintMoverRuntimeEstimate.ASSUMED_FWHM_PIXELS) : 1;
         faintMoverAngularScale = FaintMoverRuntimeEstimate.angularPixelScale(files);
         double maximumScale = Double.isFinite(faintMoverAngularScale) ? faintMoverAngularScale : 1;
         double minimumScale = session.hasSpan() ? maximumScale / displacementScale : 1;
@@ -1902,6 +1905,11 @@ public class DetectionConfigurationPanel extends JPanel {
         if (jTransientConfig.starFwhmPixels > 0 && Double.isFinite(jTransientConfig.starFwhmPixels)) {
             return jTransientConfig.starFwhmPixels;
         }
+        return measuredFaintMoverStarSize(owner);
+    }
+
+    /** The star width the session's last detection run or restored report measured, or NaN when none is known. */
+    private static double measuredFaintMoverStarSize(ProcessingSession owner) {
         var overlay = owner == null ? null : owner.getFaintMoverOverlay();
         return overlay == null ? Double.NaN : overlay.starSizePixels();
     }

@@ -112,16 +112,23 @@ final class VisibleText {
         throw new AssertionError("No single spinner beside \"" + labelText + "\"");
     }
 
+    /** A showing label whose text is exactly {@code labelText}, else the first that contains it. */
     private static JLabel findLabel(Component component, String labelText) {
+        JLabel exact = findLabel(component, labelText, true);
+        return exact != null ? exact : findLabel(component, labelText, false);
+    }
+
+    private static JLabel findLabel(Component component, String labelText, boolean exactly) {
         if (component instanceof JLabel label) {
             String shown = label.getText();
-            if (label.isShowing() && shown != null && shown.contains(labelText)) {
+            String plain = shown == null ? null : shown.replaceAll("<[^>]*>", "").strip();
+            if (label.isShowing() && shown != null && (exactly ? labelText.equals(plain) : shown.contains(labelText))) {
                 return label;
             }
         }
         if (component instanceof Container container) {
             for (Component child : container.getComponents()) {
-                JLabel found = findLabel(child, labelText);
+                JLabel found = findLabel(child, labelText, exactly);
                 if (found != null) {
                     return found;
                 }
