@@ -67,7 +67,7 @@ SpacePixels samples the first, middle and last frames for unusually sharp hot pi
 
 If import finds misalignment in at least three single-plane frames and Siril is configured, the warning also offers **Align with Siril**. This runs the normal preparation recipe without additional calibration inputs, writes aligned copies in a new preparation folder, and imports them after validation. Original frames remain unchanged. The offer is made once per import attempt; any remaining warning still lets you cancel or proceed. Alignment does not correct hot pixels or replace dark/bias calibration.
 
-**Raw colour exposures.** A frame with one image plane whose header names a Bayer pattern (`BAYERPAT`) is a raw colour mosaic, as a Seestar or another one-shot colour camera writes it. Import says so before anything else and offers three choices:
+**Raw colour exposures.** A frame with one image plane whose header names a Bayer pattern (`BAYERPAT`) is a raw colour mosaic, as a Seestar or another one-shot colour camera writes it. A `BAYERPAT` of `NONE`, which some capture programs write for a monochrome camera, names no pattern. Import says so before anything else and offers three choices:
 
 - **Prepare observing session…** opens [Preparing an observing session](#preparing-an-observing-session) on that folder and inspects it.
 - **Import as monochrome anyway** imports the mosaics as they are. The colour pattern then stays in every frame.
@@ -975,7 +975,7 @@ From an unpacked Windows archive:
 bin\batchDetect.bat "C:\astro\session1" "config\default_detection_profile.json" --auto-tune high
 ```
 
-On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`, and `--gpu=auto|gpu|cpu` (or `--gpu <mode>`) overrides the saved **First pass compute** policy for the run. The CLI requires already prepared, uncompressed unsigned 16-bit monochrome FITS. It does not calibrate, align or convert input images. It refuses raw colour exposures, frames with one image plane and a `BAYERPAT` card, and names their pattern: prepare them first, for example with **Prepare Frames…**. The example profile also runs variable-star photometry and the experimental faint-mover search, which add run time; switch them off in a copy for quicker runs. See the [command-line guide in the README](README.md#command-line-utilities) for launcher examples, profile files and memory settings; `--help` lists the accepted arguments.
+On Linux and macOS use `bin/batchDetect`. The profile can be `low`, `medium`, `high` or `maximum`, and `--gpu=auto|gpu|cpu` (or `--gpu <mode>`) overrides the saved **First pass compute** policy for the run. The CLI requires already prepared, uncompressed unsigned 16-bit monochrome FITS. It does not calibrate, align or convert input images. It refuses raw colour exposures, frames with one image plane and a `BAYERPAT` card that names a pattern (not `NONE`), and names their pattern: prepare them first, for example with **Prepare Frames…**. The example profile also runs variable-star photometry and the experimental faint-mover search, which add run time; switch them off in a copy for quicker runs. See the [command-line guide in the README](README.md#command-line-utilities) for launcher examples, profile files and memory settings; `--help` lists the accepted arguments.
 
 ---
 

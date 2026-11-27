@@ -2,6 +2,7 @@ package eu.startales.spacepixels.preparation;
 
 import com.google.gson.GsonBuilder;
 import eu.startales.spacepixels.fits.FitsInput;
+import eu.startales.spacepixels.fits.BayerMosaic;
 import eu.startales.spacepixels.fits.ExposureGroup;
 import eu.startales.spacepixels.preparation.PreparationInputs.Role;
 import eu.startales.spacepixels.util.StagedFile;
@@ -393,7 +394,8 @@ public final class FramePreparationService {
                         throw new IOException("Selected " + role + " images have different or inconsistently missing filter metadata. Choose one group.");
                     }
                 }
-                String pattern = header.getStringValue("BAYERPAT");
+                String card = header.getStringValue("BAYERPAT");
+                String pattern = BayerMosaic.namesMosaic(card) ? card : null;
                 if (request.sensor() == PreparationRequest.Sensor.CFA && pattern != null) {
                     String mosaic = pattern.toUpperCase(Locale.ROOT).replaceAll("[ _-]", "");
                     if (mosaic.contains("XTRANS") || mosaic.length() == 36 && mosaic.matches("[RGB]+")) {

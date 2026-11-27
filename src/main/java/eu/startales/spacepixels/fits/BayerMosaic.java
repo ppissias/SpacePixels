@@ -21,7 +21,7 @@ import java.util.Set;
  * but capture programs and Siril write and read them. A raw colour mosaic is a single image plane whose header names
  * a pattern; an image with three planes is already in colour and is never a mosaic, whatever cards it carries.
  * The camera names ({@code CREATOR}, {@code INSTRUME}) identify the device for camera presets. Immutable; reading
- * pixel data is never needed.
+ * pixel data is never needed. A {@code BAYERPAT} of {@code NONE} means no mosaic.
  *
  * @param pattern    the pattern as written, upper case without spaces, such as {@code GRBG}; never blank
  * @param rowOrder   {@code TOP-DOWN}, {@code BOTTOM-UP}, another value as written in upper case, or null when absent
@@ -170,11 +170,19 @@ public record BayerMosaic(String pattern, String rowOrder, Integer offsetX, Inte
         return value;
     }
 
-    /** Upper case without spaces, underscores or hyphens, or null when blank. */
+    /**
+     * Whether a {@code BAYERPAT} value names a colour mosaic: not absent, blank or {@code NONE} (in any case or
+     * spacing), which some capture programs write for a monochrome camera.
+     */
+    public static boolean namesMosaic(String value) {
+        return pattern(value) != null;
+    }
+
+    /** Upper case without spaces, underscores or hyphens, or null when blank or {@code NONE}. */
     private static String pattern(String value) {
         if (value == null) return null;
         String pattern = value.toUpperCase(Locale.ROOT).replaceAll("[\\s_-]", "");
-        return pattern.isEmpty() ? null : pattern;
+        return pattern.isEmpty() || "NONE".equals(pattern) ? null : pattern;
     }
 
     private static String rowOrder(String value) {

@@ -65,6 +65,21 @@ public class PreparationSensorTest {
         assertNull(request(PreparationRequest.Bayer.BGGR).cameraPreset());
     }
 
+    /**
+     * BAYERPAT = 'NONE', which some capture programs write for a monochrome camera, is no colour metadata: monochrome
+     * preparation accepts it, a real pattern is still refused, and the metadata mode still needs a real pattern.
+     */
+    @Test public void aPatternOfNoneIsMonochrome() throws Exception {
+        FramePreparationService.validateSensor(monoRequest(), List.of(image("NONE"), image(" none ")), PreparationInputs.Role.LIGHTS);
+        assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(monoRequest(),
+                List.of(image("RGGB")), PreparationInputs.Role.LIGHTS));
+        var metadata = new PreparationRequest(Path.of("siril-cli"), Map.of(), PreparationRequest.Sensor.CFA,
+                PreparationRequest.Bayer.METADATA, PreparationRequest.RowOrder.TOP_DOWN, 0, 0, temporary.getRoot().toPath(), false, false);
+        var refused = assertThrows(java.io.IOException.class, () -> FramePreparationService.validateSensor(metadata,
+                List.of(image("NONE")), PreparationInputs.Role.LIGHTS));
+        assertTrue(refused.getMessage().contains("Bayer pattern could not be resolved"));
+    }
+
     /** A manual four-letter override cannot disguise metadata identifying an unsupported six-by-six colour mosaic. */
     @Test public void refusesKnownNonBayerMosaicsEvenWithAnOverride() throws Exception {
         Path image = image("RGB".repeat(12));

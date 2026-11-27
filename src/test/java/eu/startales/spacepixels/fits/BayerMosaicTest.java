@@ -48,6 +48,37 @@ public class BayerMosaicTest {
         assertNull(BayerMosaic.of((Map<String, String>) null, 1));
     }
 
+    /** Some capture programs write BAYERPAT = 'NONE' for a monochrome camera: that is no mosaic, in any case or spacing. */
+    @Test public void aPatternOfNoneIsNoMosaic() throws Exception {
+        for (String none : List.of("NONE", "none", " None ", "N O N E")) {
+            assertNull(none, BayerMosaic.of(Map.of("BAYERPAT", none), 1));
+            assertFalse(none, BayerMosaic.namesMosaic(none));
+        }
+        assertTrue(BayerMosaic.namesMosaic("rggb"));
+        assertFalse(BayerMosaic.namesMosaic(null));
+        assertFalse(BayerMosaic.namesMosaic(" "));
+        Header image = new Header();
+        image.addValue("NAXIS", 2, null);
+        image.addValue("BAYERPAT", "NONE", null);
+        Header primary = new Header();
+        primary.addValue("BAYERPAT", "RGGB", null);
+        assertNull("A NONE on the image is not replaced by the primary's card", BayerMosaic.of(image, primary));
+
+        Path folder = temporary.newFolder("mono-none").toPath();
+        for (int i = 1; i <= 2; i++) {
+            try (Fits fits = new Fits()) {
+                var hdu = Fits.makeHDU(new short[][]{{1, 2}, {3, 4}});
+                hdu.getHeader().addValue("BAYERPAT", "NONE", null);
+                fits.addHDU(hdu);
+                fits.write(folder.resolve("frame_0" + i + ".fit").toFile());
+            }
+        }
+        assertNull(BayerMosaic.read(folder.resolve("frame_01.fit").toFile()));
+        assertNull(BayerMosaic.firstIn(folder.toFile()));
+        var frame = new FitsFileInformation("a.fit", "a.fit", true, 2, 2, Map.of("BAYERPAT", "NONE"));
+        assertNull(BayerMosaic.firstOf(new FitsFileInformation[]{frame}));
+    }
+
     /** Files are interpreted alike when pattern, rows and offsets agree; absent offsets count as 0, camera names not at all. */
     @Test public void commonInterpretationIgnoresCameraNamesButNotRows() {
         BayerMosaic a = BayerMosaic.of(Map.of("BAYERPAT", "GRBG", "CREATOR", "one"), 1);
