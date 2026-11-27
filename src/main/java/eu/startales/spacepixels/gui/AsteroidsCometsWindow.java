@@ -103,6 +103,12 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
     private final VisualizationSettings visualization;
     private final ObservingSite site;
     private final WcsCoordinateTransformer header;
+    /**
+     * The header solution with the session's plate correction while it is switched on, as the report and the viewers
+     * use it: for places on the sky (Identify all, Compare again, the MPC ITF check, comparison stars). The MPC
+     * reduction applies the correction itself, frame by frame, to {@link #header}.
+     */
+    private final WcsCoordinateTransformer sky;
     /** The session's sky catalogue, for comparison stars; null without one. */
     private final SkyCatalogue catalogue;
     /** Fainter Gaia stars fetched for comparison stars when the saved catalogue had too few usable ones; empty until then. */
@@ -323,6 +329,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         this.visualization = visualization;
         this.site = site;
         this.header = header;
+        this.sky = sessionSolution(header, correction, this.files);
         this.catalogue = catalogue;
         this.predictions = predictions == null ? () -> null : predictions;
         for (var object : report.objects()) {
@@ -702,7 +709,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                 double[] box = LightCurve.pathBox(samples);
                 short[][] middle = frames.pixels(samples.get(samples.size() / 2).frameNumber());
                 var candidates = PhotometryStars.candidates(catalogue);
-                var comparisons = LightCurve.comparisonStars(middle, header, candidates, box, fwhm);
+                var comparisons = LightCurve.comparisonStars(middle, sky, candidates, box, fwhm);
                 String note = null;
                 if (comparisons.size() < PhotometryStars.MIN_USABLE && catalogue != null && catalogue.field != null && header != null
                         && catalogue.field.widthDeg * catalogue.field.heightDeg <= MAX_DEEPER_FIELD_SQUARE_DEGREES) {
@@ -719,7 +726,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                     if (!fetchedStars.isEmpty()) {
                         var deeper = new ArrayList<>(candidates);
                         deeper.addAll(fetchedStars);
-                        var more = LightCurve.comparisonStars(middle, header, deeper, box, fwhm);
+                        var more = LightCurve.comparisonStars(middle, sky, deeper, box, fwhm);
                         if (more.size() > comparisons.size()) {
                             comparisons = more;
                             note = String.format(Locale.US, "comparison stars from Gaia to G %.1f, fetched for this window", DEEPER_COMPARISON_STARS);
@@ -2537,9 +2544,9 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
             }
             var motion = object.motion();
             var result = object.measured()
-                    ? eu.startales.spacepixels.report.PredictionMatch.track(points, objects, header, floor, diagonal)
+                    ? eu.startales.spacepixels.report.PredictionMatch.track(points, objects, sky, floor, diagonal)
                     : motion == null ? null : eu.startales.spacepixels.report.PredictionMatch.faintMover(motion.x(), motion.y(),
-                    motion.referenceMillis(), motion.vxPerMinute(), motion.vyPerMinute(), points, objects, header, fwhm, diagonal);
+                    motion.referenceMillis(), motion.vxPerMinute(), motion.vyPerMinute(), points, objects, sky, fwhm, diagonal);
             if (result == null
                     || (onlyPromoteUnidentified && ReportedObjects.NO_KNOWN_MATCH.equals(result.status()))
                     || (result.status().equals(object.status()) && result.names().equals(object.names()))) {
@@ -2602,7 +2609,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
                         eu.startales.spacepixels.mpc.NearbyKnown.RADIUS_ARCSEC / 3600 * 2);
                 var rawNearby = new java.util.LinkedHashMap<String, List<eu.startales.spacepixels.mpc.NearbyKnown.Match>>();
                 for (var object : objects) {
-                    var place = eu.startales.spacepixels.mpc.NearbyKnown.place(LightCurve.samples(report, object), object.motion(), epoch, header);
+                    var place = eu.startales.spacepixels.mpc.NearbyKnown.place(LightCurve.samples(report, object), object.motion(), epoch, sky);
                     rawNearby.put(object.id(), eu.startales.spacepixels.mpc.NearbyKnown.near(place, known.objects()));
                 }
                 var byFinding = eu.startales.spacepixels.mpc.NearbyKnown.noteNearer(rawNearby);
@@ -2660,6 +2667,17 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         return new eu.startales.spacepixels.solarsystem.SolarSystemQuery(header,
                 report.frames().getFirst().width(), report.frames().getFirst().height(),
                 first, Math.max(first, last), Double.NaN, observer);
+    }
+
+    /**
+     * The header solution with the session's plate correction, for the session as a whole, while the correction is
+     * switched on (as {@link eu.startales.spacepixels.fits.WcsSolutionResolver} gives it to the report and the
+     * viewers); the header solution itself without one, or for a correction fitted to another solution or frame size.
+     */
+    static WcsCoordinateTransformer sessionSolution(WcsCoordinateTransformer header, PlateSolutionCorrection correction,
+                                                    FitsFileInformation[] files) {
+        if (header == null || correction == null || !correction.enabled || files.length == 0 || files[0] == null) return header;
+        return correction.apply(header, null, files[0].getSizeWidth(), files[0].getSizeHeight());
     }
 
     static List<SolarSystemClient.Known> agreeingKnownForUnidentified(
@@ -2871,7 +2889,7 @@ final class AsteroidsCometsWindow extends JFrame implements SessionViewer {
         for (var object : report.objects()) {
             var samples = LightCurve.samples(report, object);
             long objEpoch = findingMidEpoch(samples, object.motion(), sessionMid);
-            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(samples, object.motion(), objEpoch, header);
+            var place = eu.startales.spacepixels.mpc.NearbyKnown.place(samples, object.motion(), objEpoch, sky);
             if (place != null) {
                 queries.add(new MpcItfCatalog.FindingQuery(object.id(), objEpoch,
                         place.ra(), place.dec(), place.raRateArcsecPerHour(), place.decRateArcsecPerHour()));

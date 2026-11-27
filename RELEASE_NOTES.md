@@ -3,6 +3,8 @@
 <!-- root-toc:start -->
 ## Contents
 
+- [2026.12-01](#202612-01)
+  - [Fixes](#fixes)
 - [2026.11-05](#202611-05)
   - [Built-in orbit solver and 3D orbit viewer](#built-in-orbit-solver-and-3d-orbit-viewer)
   - [Asteroids & Comets review and links](#asteroids--comets-review-and-links)
@@ -22,7 +24,7 @@
   - [Detection and the faint-mover search](#detection-and-the-faint-mover-search)
   - [Import, plate solving and preparation](#import-plate-solving-and-preparation)
   - [Astrometry settings and the main window](#astrometry-settings-and-the-main-window)
-  - [Fixes](#fixes)
+  - [Fixes](#fixes-1)
   - [Acknowledgements](#acknowledgements)
   - [Upgrading and API changes](#upgrading-and-api-changes)
 - [2026.11-01](#202611-01)
@@ -38,24 +40,30 @@
   - [Detection changes](#detection-changes)
   - [Import](#import)
   - [The settings tab and the application](#the-settings-tab-and-the-application)
-  - [Fixes](#fixes-1)
+  - [Fixes](#fixes-2)
   - [Upgrading and API changes](#upgrading-and-api-changes-2)
 - [2026.10-02](#202610-02)
   - [Highlights](#highlights-2)
   - [Detection changes](#detection-changes-1)
   - [Variable-star photometry](#variable-star-photometry)
   - [The report and application](#the-report-and-application)
-  - [Fixes](#fixes-2)
+  - [Fixes](#fixes-3)
   - [Upgrading and API changes](#upgrading-and-api-changes-3)
 - [2026.10-01](#202610-01)
   - [Highlights](#highlights-3)
   - [The report](#the-report)
   - [The application](#the-application)
   - [Detection changes](#detection-changes-2)
-  - [Fixes](#fixes-3)
+  - [Fixes](#fixes-4)
   - [Upgrading](#upgrading)
   - [Under the hood](#under-the-hood)
 <!-- root-toc:end -->
+
+## 2026.12-01
+
+### Fixes
+
+- **Asteroids & Comets uses the plate correction.** **Identify all**, **Compare again**, **Check MPC ITF…** and the choice of light-curve comparison stars used the frames' header plate solution without the correction fitted to the Gaia stars, while the report, Preview and Blink use it. Where the header solution is several pixels off the stars, real identifications read 5–20″ away and stayed **Possible** instead of **Known**, and comparison-star apertures could miss their stars. They now use the corrected solution. The MPC export was not affected: it always applied the correction, frame by frame.
 
 ## 2026.11-05
 

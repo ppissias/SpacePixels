@@ -321,6 +321,56 @@ public class AsteroidsCometsWindowTest {
     }
 
     /**
+     * The window matches with the plate correction, as the report and the viewers do: when the header solution is 10
+     * pixels off the stars and the correction fixes it, predictions computed on the corrected solution confirm FM1.
+     * With the correction switched off, the same predictions lie 10 pixels away and do not.
+     */
+    @Test(timeout = 120_000)
+    public void identificationUsesThePlateCorrection() throws Exception {
+        assumeFalse("needs a display", GraphicsEnvironment.isHeadless());
+        Path session = session(folder.newFolder("corrected-session").toPath());
+        FitsFileInformation[] files = files(session);
+        WcsCoordinateTransformer wcs = WcsCoordinateTransformer.fromHeader(files[0].getFitsHeader());
+        long start = files[0].getObservationTimestamp();
+        PlateSolutionCorrection correction = correction(wcs);
+        correction.global.ax = new double[]{8};
+        correction.global.ay = new double[]{-6};
+        correction.enabled = true;
+        WcsCoordinateTransformer corrected = AsteroidsCometsWindow.sessionSolution(wcs, correction, files);
+        var shift = wcs.skyToPixel(corrected.pixelToSky(60, 30).getRaDegrees(), corrected.pixelToSky(60, 30).getDecDegrees());
+        assertEquals("the correction moves positions by 10 px", 10, Math.hypot(shift[0] - 60, shift[1] - 30), 1e-6);
+        correction.enabled = false;
+        assertTrue("switched off: the header solution", AsteroidsCometsWindow.sessionSolution(wcs, correction, files) == wcs);
+
+        var config = new AppConfig();
+        config.observatoryCode = "500";
+        ApplicationSettings settings = ApplicationSettings.inMemory(config);
+        for (boolean enabled : new boolean[]{true, false}) {
+            correction.enabled = enabled;
+            File reportFolder = report(folder.newFolder("corrected-report-" + enabled), files);
+            var report = ReportedObjects.load(reportFolder);
+            var predictions = new eu.startales.spacepixels.solarsystem.SolarSystemObjects();
+            predictions.magnitudeLimit = Double.NaN;
+            predictions.bodies = List.of(body(corrected, start, "2026 AB1", 60, 30, 0, 1.5));
+            var fieldObjects = new eu.startales.spacepixels.solarsystem.SolarSystemClient.FieldObjects(List.of(), List.of(), List.of());
+            AsteroidsCometsWindow window = onEdt(() -> new AsteroidsCometsWindow(null, files, report, wcs, correction, settings,
+                    new ApplicationStorage(), VisualizationSettings.defaults(), null, null, () -> null));
+            try {
+                onEdt(() -> {
+                    window.applyIdentifyOutcome(new AsteroidsCometsWindow.IdentifyOutcome(fieldObjects, Map.of(), predictions));
+                    return null;
+                });
+                JTable objects = onEdt(() -> tables(window).getFirst());
+                String status = onEdt(() -> String.valueOf(objects.getValueAt(1, 2)));
+                if (enabled) assertEquals("Known", status);
+                else assertTrue("not confirmed 10 px away: " + status, !"Known".equals(status));
+            } finally {
+                onEdt(() -> { window.dispose(); return null; });
+            }
+        }
+    }
+
+    /**
      * Five solved 96 x 96 frames, two minutes apart, of sky 1000 with noise 10 and an object of FWHM 3 moving along
      * T1's path at (30 + 4k, 40).
      */
