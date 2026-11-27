@@ -123,12 +123,12 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
         window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
-        window().checkBox(VisibleText.checkBox("Automatic fastest motion (2 FWHM/frame)")).requireSelected();
+        window().checkBox(VisibleText.checkBox("Automatic fastest motion")).requireSelected();
         assertFalse(GuiActionRunner.execute(() -> spinner("Fastest motion").isEnabled()));
-        assertTrue(motionInfo("Automatic fastest motion status").contains("Active:"));
+        assertTrue(motionInfo("Automatic fastest motion status").contains("The run chooses the final speed"));
         double originalScale = faintMoverDisplayScale();
         assertEquals(originalScale, number(spinner("Fastest motion")), originalScale * 0.000005);
-        window().checkBox(VisibleText.checkBox("Automatic fastest motion (2 FWHM/frame)")).uncheck();
+        window().checkBox(VisibleText.checkBox("Automatic fastest motion")).uncheck();
         assertTrue(GuiActionRunner.execute(() -> spinner("Fastest motion").isEnabled()));
         assertTrue(motionInfo("Slowest motion equivalents").contains("FWHM/session"));
         assertTrue(motionInfo("Fastest motion equivalents").contains("px/min"));
@@ -147,7 +147,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
             var profile = eu.startales.spacepixels.config.SpacePixelsDetectionProfileIO.load(reader);
             var config = profile.getDetectionConfig();
             assertTrue(config.enableFaintMoverSearch);
-            assertFalse(profile.isFaintMoverAutoMaxSpeed());
+            assertFalse(config.faintMoverAutoMaxSpeed);
             assertEquals(30, config.faintMoverMaxSeconds, 1e-9);
             assertEquals(123.123 / originalScale, config.faintMoverMaxSpeedPixelsPerMinute, 1e-9);
         }
@@ -162,7 +162,7 @@ public class SettingsMechanicsTest extends MechanicsTestCase {
         window().tabbedPane().selectTab("Detection Settings");
         showPage("Faint Movers (experimental)");
         window().checkBox(VisibleText.checkBox("Search for faint movers")).requireSelected();
-        window().checkBox(VisibleText.checkBox("Automatic fastest motion (2 FWHM/frame)")).requireNotSelected();
+        window().checkBox(VisibleText.checkBox("Automatic fastest motion")).requireNotSelected();
         assertTrue(GuiActionRunner.execute(() -> spinner("Fastest motion").isEnabled()));
         assertEquals(0.5, number(spinner("Time limit (minutes)")), 1e-9);
         assertEquals(123.123, number(spinner("Fastest motion")), 1e-9);

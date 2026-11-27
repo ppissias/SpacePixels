@@ -40,6 +40,7 @@
   "qualityMaxRegistrationJumpFwhm": 0.5,
   "qualityMaxRegistrationCreepFwhm": 0.3,
   "maxStarJitter": 1.0,
+  "starFwhmPixels": 0.0,
   "maxMaskOverlapFraction": 0.75,
   "maxJumpPixels": 400.0,
   "predictionTolerance": 3.0,
@@ -114,12 +115,12 @@
   "enableFaintMoverSearch": true,
   "faintMoverMinDisplacementFwhm": 2.0,
   "faintMoverMaxSpeedPixelsPerMinute": 1.0,
+  "faintMoverAutoMaxSpeed": true,
   "faintMoverMinScore": 8.0,
   "enableFaintMoverFrameLimit": true,
   "faintMoverSearchSpeed": 1,
   "faintMoverMaxSeconds": 600.0,
   "autoTuneMaxCandidateFrames": 30,
   "variableStarMaxCandidateCards": 40,
-  "variableStarSortOrder": "OBSERVED_CHANGES",
-  "faintMoverAutoMaxSpeed": true
+  "variableStarSortOrder": "OBSERVED_CHANGES"
 }

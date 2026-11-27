@@ -35,7 +35,9 @@ final class FaintMoverSectionWriter {
                 telemetry.truncated ? "Search truncated at its time limit" : "Search completed", telemetry.tilesSearched, telemetry.tiles,
                 telemetry.searchedPixels, telemetry.frames, telemetry.sessionMinutes, telemetry.framesOutsideSession,
                 telemetry.minSpeedPixelsPerMinute, telemetry.maxSpeedPixelsPerMinute, telemetry.coarseMotions,
-                telemetry.fwhmPixels, telemetry.fwhmFromStars ? "measured" : "fallback", telemetry.elapsedMs / 1000.0);
+                telemetry.fwhmPixels, StarWidthPresentation.source(telemetry), telemetry.elapsedMs / 1000.0);
+        String fastest = StarWidthPresentation.fastestMotion(telemetry);
+        if (fastest != null) out.println("<p>" + escape(fastest) + "</p>");
         String speed = eu.startales.spacepixels.detection.FaintMoverRuntimeEstimate.SPEED_NAMES[Math.max(0, Math.min(2, telemetry.searchSpeed))];
         if (telemetry.coarseBin > 1 || telemetry.coarseFrames < telemetry.frames) out.printf(Locale.ROOT,
                 "<p>Search speed: %s. The first pass added %s%s. Every peak was refined and checked on all %d frames "

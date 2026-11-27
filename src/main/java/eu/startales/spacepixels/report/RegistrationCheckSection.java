@@ -107,10 +107,12 @@ final class RegistrationCheckSection {
             report.println("</section>");
             return;
         }
-        report.printf(Locale.US, "<p>%d frames, %d reference stars, star width %.2f px. Frames rejected for a jump: "
+        String widthSource = StarWidthPresentation.source(telemetry);
+        report.printf(Locale.US, "<p>%d frames, %d reference stars, star width %.2f px%s. Frames rejected for a jump: "
                         + "%d (largest jump among the kept frames %.2f FWHM). Whole-frame change over the session: "
                         + "<strong>%.2f FWHM</strong> (%.1f px).</p>%n",
-                r.framesMeasured, r.referenceStars, r.fwhmPixels, r.framesRejected, r.largestKeptJumpFwhm,
+                r.framesMeasured, r.referenceStars, r.fwhmPixels,
+                widthSource.isEmpty() ? "" : " (" + ReportFormat.escapeHtml(widthSource) + ")", r.framesRejected, r.largestKeptJumpFwhm,
                 r.overallCreepFwhm, r.overallCreepFwhm * r.fwhmPixels);
         report.println("<table class='registration-grid' aria-label='Change of the star positions over the session, "
                 + "by zone of the frame'>");

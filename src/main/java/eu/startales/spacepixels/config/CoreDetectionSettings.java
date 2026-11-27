@@ -2,7 +2,7 @@ package eu.startales.spacepixels.config;
 
 import java.util.List;
 
-/** Typed definitions for the eight Overview values managed by Auto-Tune and shared with frame previews. */
+/** Typed definitions for the nine Overview values managed by Auto-Tune and shared with frame previews. */
 public final class CoreDetectionSettings {
     public static final DetectionSetting<Double> DETECTION_SIGMA_MULTIPLIER = new DetectionSetting<>(
             "detectionSigmaMultiplier", "Detection Sigma", "sigma",
@@ -44,12 +44,19 @@ public final class CoreDetectionSettings {
             "Baseline radius under which detections are treated as stationary star jitter instead of true moving points. Higher values are more conservative around registration residuals.",
             false, Double.class, config -> config.maxStarJitter,
             (config, value) -> config.maxStarJitter = value);
+    public static final DetectionSetting<Double> STAR_FWHM_PIXELS = new DetectionSetting<>(
+            "starFwhmPixels", "Star Width (FWHM)", "pixels",
+            "The stars' width as a Gaussian FWHM: the core of bright, isolated, round stars, from the area above half their peak. "
+                    + "The faint-streak and faint-mover searches and the registration check use it. Auto-Tune measures it and sets it here; "
+                    + "0 measures it on the frames each run keeps, and the report says which was used.",
+            false, Double.class, config -> config.starFwhmPixels,
+            (config, value) -> config.starFwhmPixels = value);
 
     /** Prevents constructing the fixed Overview definitions. */
     private CoreDetectionSettings() {}
 
     /** Returns the immutable definitions in Overview display order. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(DETECTION_SIGMA_MULTIPLIER, GROW_SIGMA_MULTIPLIER, MIN_DETECTION_PIXELS, MASTER_SIGMA_MULTIPLIER, MASTER_GROW_SIGMA_MULTIPLIER, MASTER_MIN_DETECTION_PIXELS, MAX_MASK_OVERLAP_FRACTION, MAX_STAR_JITTER);
+        return List.of(DETECTION_SIGMA_MULTIPLIER, GROW_SIGMA_MULTIPLIER, MIN_DETECTION_PIXELS, MASTER_SIGMA_MULTIPLIER, MASTER_GROW_SIGMA_MULTIPLIER, MASTER_MIN_DETECTION_PIXELS, MAX_MASK_OVERLAP_FRACTION, MAX_STAR_JITTER, STAR_FWHM_PIXELS);
     }
 }

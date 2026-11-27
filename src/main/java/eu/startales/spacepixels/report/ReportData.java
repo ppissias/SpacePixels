@@ -41,6 +41,7 @@ final class ReportData {
     private final Map<String, Object> faintMoverSearch;
     /** The quality-control registration check, or null when it did not run. */
     private final Map<String, Object> registrationCheck;
+    private final Map<String, Object> starWidth;
     private final List<RescueTrackAssociations.Match> rescueAssociations;
     private final KnownSolarSystemReport.Summary knownSolarSystem;
     private final List<eu.startales.spacepixels.detection.SavedReportOverlays.FrameIdentity> inputFrames;
@@ -63,6 +64,7 @@ final class ReportData {
         faintMovers = context.faintMoverPresentation;
         faintMoverSearch = FaintMoverPresentation.search(context);
         registrationCheck = RegistrationCheckSection.data(telemetry);
+        starWidth = StarWidthPresentation.data(telemetry);
         rescueAssociations = context.rescueAssociations;
         knownSolarSystem = context.knownSolarSystem;
         totalFrames = context.rawFrames.size();
@@ -203,6 +205,7 @@ final class ReportData {
         data.put("frameNumbering", "one-based; empty frames on stack candidates means per-frame evidence is unavailable");
         data.put("rejectedFrames", rejectedFrames.stream().sorted().map(i -> i + 1).toList());
         if (!excludedAreas.isEmpty()) data.put("excludedAreas", excludedAreas);
+        if (starWidth != null) data.put("starWidth", starWidth);
         if (registrationCheck != null) data.put("registrationCheck", registrationCheck);
         var groups = new LinkedHashMap<String, Boolean>();
         groups.put("anomalies", inclusion.anomalies); groups.put("slowMovers", inclusion.slowMovers);

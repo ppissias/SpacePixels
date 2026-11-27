@@ -51,6 +51,14 @@ public final class SpacePixelsDetectionProfileIO {
     public static SpacePixelsDetectionProfile load(Reader reader) throws IOException {
         JsonObject root = readRoot(reader);
         migrateLegacyQualityFields(root);
+        // The automatic fastest motion was a SpacePixels key under the same name before it became the engine's
+        // DetectionConfig.faintMoverAutoMaxSpeed, so earlier profiles load it as they are. Gson would read any string as
+        // false; a value that is not a JSON boolean is refused.
+        JsonElement autoMaxElement = root.get(FAINT_MOVER_AUTO_MAX_SPEED_FIELD);
+        if (autoMaxElement != null && !autoMaxElement.isJsonNull()
+                && (!autoMaxElement.isJsonPrimitive() || !autoMaxElement.getAsJsonPrimitive().isBoolean())) {
+            throw new IOException("Invalid value for " + FAINT_MOVER_AUTO_MAX_SPEED_FIELD + ".");
+        }
         DetectionConfig detectionConfig = GSON.fromJson(root, DetectionConfig.class);
         if (detectionConfig == null) {
             throw new IOException("Configuration file did not contain a DetectionConfig object.");
@@ -82,15 +90,7 @@ public final class SpacePixelsDetectionProfileIO {
         } catch (RuntimeException e) {
             throw new IOException("Invalid variable-star report presentation settings.", e);
         }
-        boolean faintMoverAutoMaxSpeed = SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED;
-        JsonElement autoMaxElement = root.get(FAINT_MOVER_AUTO_MAX_SPEED_FIELD);
-        if (autoMaxElement != null && !autoMaxElement.isJsonNull()) {
-            if (!autoMaxElement.isJsonPrimitive() || !autoMaxElement.getAsJsonPrimitive().isBoolean()) {
-                throw new IOException("Invalid value for " + FAINT_MOVER_AUTO_MAX_SPEED_FIELD + ".");
-            }
-            faintMoverAutoMaxSpeed = autoMaxElement.getAsBoolean();
-        }
-        return new SpacePixelsDetectionProfile(detectionConfig, autoTuneMaxCandidateFrames, options, faintMoverAutoMaxSpeed);
+        return new SpacePixelsDetectionProfile(detectionConfig, autoTuneMaxCandidateFrames, options);
     }
 
     public static boolean needsMigration(Reader reader) throws IOException {
@@ -99,7 +99,6 @@ public final class SpacePixelsDetectionProfileIO {
         current.addProperty(AUTO_TUNE_MAX_CANDIDATE_FRAMES_FIELD, SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES);
         current.addProperty(VARIABLE_CARD_LIMIT_FIELD, VariableStarReportOptions.DEFAULT_MAX_CANDIDATE_CARDS);
         current.addProperty(VARIABLE_SORT_ORDER_FIELD, VariableStarReportOptions.DEFAULT.sortOrder().name());
-        current.addProperty(FAINT_MOVER_AUTO_MAX_SPEED_FIELD, SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED);
         return !saved.keySet().equals(current.keySet());
     }
 
@@ -134,29 +133,21 @@ public final class SpacePixelsDetectionProfileIO {
 
     public static void write(Writer writer, SpacePixelsDetectionProfile detectionProfile) {
         write(writer, detectionProfile.getDetectionConfig(), detectionProfile.getAutoTuneMaxCandidateFrames(),
-                detectionProfile.getVariableStarReportOptions(), detectionProfile.isFaintMoverAutoMaxSpeed());
+                detectionProfile.getVariableStarReportOptions());
     }
 
     public static void write(Writer writer, DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames) {
-        write(writer, detectionConfig, autoTuneMaxCandidateFrames, VariableStarReportOptions.DEFAULT,
-                SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED);
+        write(writer, detectionConfig, autoTuneMaxCandidateFrames, VariableStarReportOptions.DEFAULT);
     }
 
     public static void write(Writer writer, DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames,
                              VariableStarReportOptions options) {
-        write(writer, detectionConfig, autoTuneMaxCandidateFrames, options,
-                SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED);
-    }
-
-    public static void write(Writer writer, DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames,
-                             VariableStarReportOptions options, boolean faintMoverAutoMaxSpeed) {
         JsonObject root = GSON.toJsonTree(detectionConfig).getAsJsonObject();
         root.addProperty(
                 AUTO_TUNE_MAX_CANDIDATE_FRAMES_FIELD,
                 SpacePixelsDetectionProfile.normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames));
         root.addProperty(VARIABLE_CARD_LIMIT_FIELD, options.maxCandidateCards());
         root.addProperty(VARIABLE_SORT_ORDER_FIELD, options.sortOrder().name());
-        root.addProperty(FAINT_MOVER_AUTO_MAX_SPEED_FIELD, faintMoverAutoMaxSpeed);
         GSON.toJson(root, writer);
     }
 

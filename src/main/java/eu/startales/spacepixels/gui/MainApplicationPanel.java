@@ -1298,7 +1298,8 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         activeMaskSigma.setText(String.format(Locale.US, "%.2f", config.masterSigmaMultiplier));
         activeMaskGrow.setText(String.format(Locale.US, "%.2f", config.masterGrowSigmaMultiplier));
         activeMaskPixels.setText(Integer.toString(config.masterMinDetectionPixels));
-        activeLimits.setText(String.format(Locale.US, "Overlap %.2f · Jitter %.2f px", config.maxMaskOverlapFraction, config.maxStarJitter));
+        activeLimits.setText(String.format(Locale.US, "Overlap %.2f · Jitter %.2f px · Star width %s", config.maxMaskOverlapFraction,
+                config.maxStarJitter, config.starFwhmPixels > 0 ? String.format(Locale.US, "%.2f px", config.starFwhmPixels) : "measured"));
         refreshActionEmphasis();
     }
 
@@ -1335,7 +1336,9 @@ public class MainApplicationPanel extends JPanel implements ActiveSettingsReadou
         c.anchor = GridBagConstraints.WEST;
         activeLimits.setFont(small);
         activeLimits.setToolTipText("<html>Max Mask Overlap Fraction: the share of a detection that may overlap the star mask.<br>"
-                + "Base Star Jitter Radius: detections that move less than this are treated as star jitter.</html>");
+                + "Base Star Jitter Radius: detections that move less than this are treated as star jitter.<br>"
+                + "Star Width (FWHM): the stars' core width for the faint searches and the registration check; Auto-Tune measures it, "
+                + "and \"measured\" means each run measures it on the frames it keeps.</html>");
         c.gridy = 3;
         c.gridx = 0;
         c.gridwidth = 4;

@@ -85,22 +85,32 @@ public class SpacePixelsDetectionProfileIOTest {
         }
         assertEquals(SpacePixelsDetectionProfile.DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES, shipped.getAutoTuneMaxCandidateFrames());
         assertEquals(VariableStarReportOptions.DEFAULT, shipped.getVariableStarReportOptions());
-        assertEquals(SpacePixelsDetectionProfile.DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED, shipped.isFaintMoverAutoMaxSpeed());
         assertFalse(SpacePixelsDetectionProfileIO.needsMigration(new StringReader(json)));
     }
 
-    /** Automatic faint-mover fastest motion defaults on for older profiles, round-trips explicitly, and rejects non-booleans. */
+    /**
+     * The automatic faint-mover fastest motion and the star width are engine settings: a profile without them, as
+     * earlier versions saved, loads with the automatic speed on and the width measured; the automatic speed keeps the key
+     * it had as a SpacePixels setting, round-trips, and refuses a value that is not a boolean.
+     */
     @Test
     public void faintMoverAutoMaxSpeedDefaultsRoundTripsAndValidates() throws Exception {
         var old = SpacePixelsDetectionProfileIO.load(new StringReader("{\"detectionSigmaMultiplier\":6.5}"));
-        assertTrue(old.isFaintMoverAutoMaxSpeed());
+        assertTrue(old.getDetectionConfig().faintMoverAutoMaxSpeed);
+        assertEquals(0.0, old.getDetectionConfig().starFwhmPixels, 0.0);
+        var earlier = SpacePixelsDetectionProfileIO.load(new StringReader("{\"faintMoverAutoMaxSpeed\":false}"));
+        assertFalse(earlier.getDetectionConfig().faintMoverAutoMaxSpeed);
 
+        DetectionConfig config = old.getDetectionConfig().clone();
+        config.faintMoverAutoMaxSpeed = false;
+        config.starFwhmPixels = 2.87;
         StringWriter out = new StringWriter();
-        SpacePixelsDetectionProfileIO.write(out, new SpacePixelsDetectionProfile(
-                old.getDetectionConfig(), 30, VariableStarReportOptions.DEFAULT, false));
+        SpacePixelsDetectionProfileIO.write(out, new SpacePixelsDetectionProfile(config, 30, VariableStarReportOptions.DEFAULT));
         assertTrue(out.toString().contains("\"faintMoverAutoMaxSpeed\": false"));
+        assertEquals(1, out.toString().split("\"faintMoverAutoMaxSpeed\"", -1).length - 1);
         var loaded = SpacePixelsDetectionProfileIO.load(new StringReader(out.toString()));
-        assertFalse(loaded.isFaintMoverAutoMaxSpeed());
+        assertFalse(loaded.getDetectionConfig().faintMoverAutoMaxSpeed);
+        assertEquals(2.87, loaded.getDetectionConfig().starFwhmPixels, 0.0);
         assertFalse(SpacePixelsDetectionProfileIO.needsMigration(new StringReader(out.toString())));
 
         try {

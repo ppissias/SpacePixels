@@ -19,38 +19,23 @@ public final class SpacePixelsDetectionProfile {
 
     public static final int DEFAULT_AUTO_TUNE_MAX_CANDIDATE_FRAMES = 30;
     public static final int MIN_AUTO_TUNE_MAX_CANDIDATE_FRAMES = 4;
-    /** Default policy: size the faint-mover fastest motion automatically to 2 FWHM per exposure (clamped to the motion cap). */
-    public static final boolean DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED = true;
 
     private final DetectionConfig detectionConfig;
     private final int autoTuneMaxCandidateFrames;
     private final VariableStarReportOptions variableStarReportOptions;
-    private final boolean faintMoverAutoMaxSpeed;
 
     public SpacePixelsDetectionProfile(DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames) {
-        this(detectionConfig, autoTuneMaxCandidateFrames, VariableStarReportOptions.DEFAULT, DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED);
+        this(detectionConfig, autoTuneMaxCandidateFrames, VariableStarReportOptions.DEFAULT);
     }
 
     public SpacePixelsDetectionProfile(DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames,
                                        VariableStarReportOptions variableStarReportOptions) {
-        this(detectionConfig, autoTuneMaxCandidateFrames, variableStarReportOptions, DEFAULT_FAINT_MOVER_AUTO_MAX_SPEED);
-    }
-
-    public SpacePixelsDetectionProfile(DetectionConfig detectionConfig, int autoTuneMaxCandidateFrames,
-                                       VariableStarReportOptions variableStarReportOptions,
-                                       boolean faintMoverAutoMaxSpeed) {
         this.detectionConfig = Objects.requireNonNull(detectionConfig, "detectionConfig");
         this.autoTuneMaxCandidateFrames = normalizeAutoTuneMaxCandidateFrames(autoTuneMaxCandidateFrames);
         this.variableStarReportOptions = Objects.requireNonNull(variableStarReportOptions, "variableStarReportOptions");
-        this.faintMoverAutoMaxSpeed = faintMoverAutoMaxSpeed;
     }
 
     public VariableStarReportOptions getVariableStarReportOptions() { return variableStarReportOptions; }
-
-    /** Whether SpacePixels sets the faint-mover fastest motion automatically to 2 FWHM per exposure (clamped to the motion cap). */
-    public boolean isFaintMoverAutoMaxSpeed() {
-        return faintMoverAutoMaxSpeed;
-    }
 
     public DetectionConfig getDetectionConfig() {
         return detectionConfig;

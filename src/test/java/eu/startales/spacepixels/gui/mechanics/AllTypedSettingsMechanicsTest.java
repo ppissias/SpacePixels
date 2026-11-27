@@ -59,7 +59,7 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
         Map<String, ControlMetadata> controls = GuiActionRunner.execute(() -> controls(application().getDetectionConfigurationPanel()));
         Map<String, JComponent> inputs = controls.entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey, entry -> entry.getValue().input(), (first, second) -> first, LinkedHashMap::new));
-        assertEquals("79 engine fields, 14 application fields and the rejection preset", 94, inputs.size());
+        assertEquals("81 engine fields, 13 application fields and the rejection preset", 95, inputs.size());
         for (String hidden : Set.of("linearityMaxConcentrationDrift", "linearityMinRangeMag", "linearityMaxFrameSlope",
                 "linearityMaxFailingFrameFraction", "variableLimitedMinAmplitudeMag", "variableAmplitudeNoiseFactor",
                 "variableMinSplitHalfCorrelation", "variableMaxApertureAmplitudeDifference",
@@ -71,7 +71,6 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             assertEquals(setting.expert(), controls.get(setting.id()).expert());
         }
         Map<String, Boolean> expectedApplicationExpert = Map.ofEntries(
-                Map.entry("faintMoverAutoMaxSpeed", false),
                 Map.entry("variableStarMaxCandidateCards", false),
                 Map.entry("variableStarSortOrder", false),
                 Map.entry("frameRejectionPreset", false),
@@ -110,7 +109,6 @@ public class AllTypedSettingsMechanicsTest extends MechanicsTestCase {
             } else sameValue(setting.id(), canonicalValue(setting.id(), expected.get(setting.id())), stored);
         }
         assertEquals(expected.get("autoTuneMaxCandidateFrames"), saved.getAutoTuneMaxCandidateFrames());
-        assertEquals(expected.get("faintMoverAutoMaxSpeed"), saved.isFaintMoverAutoMaxSpeed());
         assertEquals(expected.get("variableStarMaxCandidateCards"), saved.getVariableStarReportOptions().maxCandidateCards());
         assertEquals(expected.get("variableStarSortOrder"), saved.getVariableStarReportOptions().sortOrder());
         JsonObject before = new Gson().toJsonTree(seed).getAsJsonObject();

@@ -16,9 +16,16 @@ public final class FaintMoversSettings {
                     + "slower sources can disappear into the static reference. Before a run the seeing and retained time span are estimated. "
                     + "Without WCS the rate uses px/min; without timing it uses FWHM/session. The report gives the measured search domain.",
             false, Double.class, c -> c.faintMoverMinDisplacementFwhm, (c, v) -> c.faintMoverMinDisplacementFwhm = v);
+    public static final DetectionSetting<Boolean> AUTO_MAX_SPEED = new DetectionSetting<>(
+            "faintMoverAutoMaxSpeed", "Automatic fastest motion", "",
+            "Let the run choose the fastest motion: 2 star widths per exposure, the fastest a mover stays point-like at, lowered "
+                    + "when the motion limit of the CPU or GPU, the memory, or the time limit requires it. The time limit never lowers it "
+                    + "below Fastest motion, which is also used when the frames have no exposure times. The report says what set it. "
+                    + "Untick to search up to Fastest motion.",
+            false, Boolean.class, c -> c.faintMoverAutoMaxSpeed, (c, v) -> c.faintMoverAutoMaxSpeed = v);
     public static final DetectionSetting<Double> MAX_SPEED = new DetectionSetting<>(
             "faintMoverMaxSpeedPixelsPerMinute", "Fastest motion", "",
-            "Largest rate searched, in arcsec/min when WCS is available, otherwise px/min. When it is not above the slowest rate, the run skips the search. "
+            "Largest rate searched when Automatic fastest motion is off or the frames have no exposure times, in arcsec/min when WCS is available, otherwise px/min. With the automatic speed, the time limit never lowers it below this. When it is not above the slowest rate, the run skips the search. "
                     + "The profile preserves the pixel rate; the default is 1 px/min converted through this field's WCS. "
                     + "Cost grows approximately with the square of the maximum speed.",
             false, Double.class, c -> c.faintMoverMaxSpeedPixelsPerMinute, (c, v) -> c.faintMoverMaxSpeedPixelsPerMinute = v);
@@ -52,6 +59,6 @@ public final class FaintMoversSettings {
 
     /** Returns all bindings in display order; Auto-Tune preserves these values. */
     public static List<DetectionSetting<?>> all() {
-        return List.of(ENABLE, MIN_DISPLACEMENT, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, SEARCH_SPEED, TIME_LIMIT);
+        return List.of(ENABLE, MIN_DISPLACEMENT, AUTO_MAX_SPEED, MAX_SPEED, MIN_SCORE, FRAME_LIMIT, SEARCH_SPEED, TIME_LIMIT);
     }
 }

@@ -232,6 +232,12 @@ final class FaintMoverPresentation {
         data.put("frameNumbers", c.faintMoverFrames.stream().map(i -> i + 1).toList());
         data.put("sessionMinutes", finite(t.sessionMinutes)); data.put("fwhmPixels", finite(t.fwhmPixels));
         data.put("fwhmFromStars", t.fwhmFromStars);
+        data.put("fwhmSource", t.fwhmSource);
+        data.put("autoMaxSpeed", t.autoMaxSpeed);
+        data.put("maxSpeedLimit", t.maxSpeedLimit);
+        data.put("speedBeforeTimeLimitPixelsPerMinute", finite(t.speedBeforeTimeLimitPixelsPerMinute));
+        data.put("estimatedSeconds", finite(t.estimatedSeconds));
+        data.put("sampleMs", t.sampleMs);
         data.put("minSpeedPixelsPerMinute", finite(t.minSpeedPixelsPerMinute));
         data.put("maxSpeedPixelsPerMinute", finite(t.maxSpeedPixelsPerMinute));
         Double angularScale = angularPixelScale(c);

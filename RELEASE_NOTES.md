@@ -7,7 +7,9 @@
   - [Built-in orbit solver and 3D orbit viewer](#built-in-orbit-solver-and-3d-orbit-viewer)
   - [Asteroids & Comets review and links](#asteroids--comets-review-and-links)
   - [Reports, SkyBoT lookups and FITS handling](#reports-skybot-lookups-and-fits-handling)
+  - [Star width and the faint-mover search](#star-width-and-the-faint-mover-search)
   - [Windows installer and libraries](#windows-installer-and-libraries)
+  - [Upgrading to 2026.11-05](#upgrading-to-202611-05)
 - [2026.11-04](#202611-04)
   - [GPU acceleration for digital tracking](#gpu-acceleration-for-digital-tracking)
   - [Detection and quality control](#detection-and-quality-control)
@@ -76,16 +78,28 @@
 
 - **In-report SkyBoT results and Chromium compatibility.** Report browser links to IMCCE's SkyBoT now use plain-text output (`-mime=text`) to avoid Chromium's XSLT deprecation warning, and track/faint-mover cards add **Render SkyBoT Results Here** and **Render SkyBoT Wide Cone Here** buttons that fetch and display SkyBoT JSON results directly inside the report.
 - **Faint-mover card layout.** Interactive faint-mover review controls and the three-panel animation now sit at the top of each faint-mover card, directly below the stack score.
-- **Automatic faint-mover fastest motion and timeout warnings.** On **Detection Settings → Faint Movers (experimental)**, **Automatic fastest motion (2 FWHM/frame)** is now on by default, setting the upper searched speed to the point-search limit (2 star widths per exposure, clamped safely below the active CPU/GPU motion cap on short exposures). When the selected search speed's estimated runtime is likely to exceed **Time limit (minutes)**, the settings page flags it both beside **Time limit** and in the runtime estimate.
 - **Bayer colour metadata and Seestar presets.** SpacePixels reads Bayer CFA metadata from FITS headers, adds ZWO Seestar presets for session preparation, and stops un-debayered raw colour frames before monochrome detection with a clear explanation. A `BAYERPAT` of `NONE`, which some capture programs write for monochrome cameras, is read as monochrome by import, preparation, the batch tools and the API.
 - **Preserved FITS commentary cards during conversion.** 16-bit conversion now preserves repeated `HISTORY`, `COMMENT`, and blank-keyword FITS header cards in their original order.
 - **`LATITUDE` / `LONGITUD` observing-site support.** FITS headers using `LATITUDE` and `LONGITUD` (such as CFHT MegaCam archive exposures) are now read automatically for observing-site resolution while keeping more specific site keywords ahead in precedence.
 
+### Star width and the faint-mover search
+
+- **Auto-Tune's star width is now a setting.** Auto-Tune measures how wide the stars are and now fills it in as **Star Width (FWHM)** on the Overview, below **Base Star Jitter Radius**, marked with the other tuned values. The main window's settings box shows it too. The faint-streak and faint-mover searches and the registration check use it. At **0**, the default, each run measures the width the same way on the frames it keeps. Before, these stages used the frames' quality-control star size divided by √2, which read about 20 % below a Gaussian fit to the stars on 23 reference sessions; the new width reads 3 % below it (median), within 8 % of Auto-Tune's. The report says which width was used and where it came from. [Auto-Tune](MANUAL.md#step-3-auto-tune)
+  - *Effect.* On 23 reference sessions the same frames were rejected and no registration-check result changed; the faint-streak search changed one streak on three sessions and found one more streak track on Klangwolke-2.
+- **Automatic fastest motion, chosen during the run.** **Automatic fastest motion** on **Detection Settings → Faint Movers (experimental)** is on by default. The detection engine now chooses the speed while it runs, the same for the window, the batch tool and the API: 2 star widths per exposure, the fastest a mover still looks like a point, lowered to 90 % of the motion limit of the CPU or GPU in use, until one search tile fits in a quarter of the memory, and until the search should finish within **Time limit**, judged by timing a sample of the search on your computer. The time limit never lowers it below **Fastest motion**. The settings page shows the speed it expects; the report and `report-data.json` give the speed searched and what set it. [Faint-mover settings](MANUAL.md#faint-movers-experimental)
+  - *Effect.* With an NVIDIA GeForce RTX 5060 Laptop GPU, the 23 reference sessions were searched to 2.3–43 px/min instead of 1 px/min, and every search finished within its limit. B1m went from 3 to 21 candidates, 19 of them moving alike at 22–32″/h with no catalogue match (the search took 208 s instead of 23 s); Klangwolke-2, Helix and Lagoon kept every catalogue match. On a laptop CPU, a 97-frame session was lowered from 5.1 to 2.7 px/min to fit the 10-minute limit; before, a search to 4 px/min stopped after 4 of its 20 tiles.
+- **No false faint movers along the image edges.** A search tile at the edge of the frames measured too low a noise, because the stacks it sampled ran off the image. With wide searches this gave bands of false candidates along a thin last row or column of tiles: 8, 22 and 54 on three reference sessions, all removed. Candidates close to the edges can score lower than before.
+- **Faint-mover star mask unchanged.** The search keeps the 2026.11-04 star mask, which also finds star cores above the local background. On fields with gradients or nebulosity this removes many false paths. A faint asteroid passing close to a star can lose part of its signal. [Faint-mover settings](MANUAL.md#faint-movers-experimental) · [Investigation](docs/research/README.md#faint-mover-star-mask)
+
 ### Windows installer and libraries
 
 - **Updated Windows installer.** The per-user Windows EXE installer now uses SpacePixels dialog and banner artwork, `Segoe UI` wizard typography, and an optional **Launch SpacePixels** checkbox on the completion screen.
-- **Faint-mover star mask unchanged.** The search keeps the 2026.11-04 star mask, which also finds star cores above the local background. On fields with gradients or nebulosity this removes many false paths. A faint asteroid passing close to a star can lose part of its signal. [Faint-mover settings](MANUAL.md#faint-movers-experimental) · [Investigation](docs/research/README.md#faint-mover-star-mask)
-- **Libraries.** This release uses **JTransient 1.1.2**, which detects the same as 1.1.1, and **JPlateSolve 1.0.3**.
+- **Libraries.** This release uses **JTransient 1.1.2** (the star width, the automatic fastest motion and the edge-tile fix below) and **JPlateSolve 1.0.3**.
+
+### Upgrading to 2026.11-05
+
+- **Saved settings.** Detection profiles saved by earlier versions load with **Automatic fastest motion** on and **Star Width (FWHM)** at 0 (measured), and SpacePixels offers to update the saved profile, keeping a backup. If you used a manual **Fastest motion**, untick **Automatic fastest motion** again. Run Auto-Tune to fill in the star width.
+- **API.** `SpacePixelsDetectionProfile` no longer has its own automatic-speed flag: it is `DetectionConfig.faintMoverAutoMaxSpeed`, and profile files keep the same `faintMoverAutoMaxSpeed` key. `report-data.json` adds `starWidth` and, under `faintMoverSearch`, the fastest motion's choice. [API and CLI guide](API.md)
 
 ## 2026.11-04
 
