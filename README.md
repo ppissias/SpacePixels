@@ -90,12 +90,37 @@ These videos show the versions available when recorded. Use the [user manual](MA
 <table>
   <tr>
     <td width="50%" valign="top" align="center">
-      <a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer">
-        <img src="docs/images/video-tutorial-latest-thumbnail.jpg" alt="Watch the latest SpacePixels full tutorial on YouTube" width="380" />
+      <a href="https://youtu.be/AwND7nSByDk" target="_blank" rel="noopener noreferrer">
+        <img src="docs/images/video-tutorial-basic-workflow-thumbnail.jpg" alt="Watch the SpacePixels basic workflow tutorial on YouTube" width="380" />
       </a>
       <br />
-      <a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer"><strong>Latest tutorial — watch on YouTube →</strong></a>
+      <a href="https://youtu.be/AwND7nSByDk" target="_blank" rel="noopener noreferrer"><strong>Basic workflow: moving objects and variable stars — watch on YouTube →</strong></a>
     </td>
+    <td width="50%" valign="top" align="center">
+      <a href="https://youtu.be/cY2vQhim680" target="_blank" rel="noopener noreferrer">
+        <img src="docs/images/video-tutorial-siril-thumbnail.jpg" alt="Watch the SpacePixels tutorial on preparing data with Siril on YouTube" width="380" />
+      </a>
+      <br />
+      <a href="https://youtu.be/cY2vQhim680" target="_blank" rel="noopener noreferrer"><strong>Preparing your data with Siril — watch on YouTube →</strong></a>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top" align="center">
+      <a href="https://youtu.be/0dVAD4w90Oo" target="_blank" rel="noopener noreferrer">
+        <img src="docs/images/video-tutorial-asteroids-comets-thumbnail.jpg" alt="Watch the SpacePixels Asteroids and Comets screen tutorial on YouTube" width="380" />
+      </a>
+      <br />
+      <a href="https://youtu.be/0dVAD4w90Oo" target="_blank" rel="noopener noreferrer"><strong>The Asteroids &amp; Comets screen — watch on YouTube →</strong></a>
+    </td>
+    <td width="50%" valign="top" align="center">
+      <a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer">
+        <img src="docs/images/video-tutorial-latest-thumbnail.jpg" alt="Watch the SpacePixels full tutorial (version 2026.10-02) on YouTube" width="380" />
+      </a>
+      <br />
+      <a href="https://youtu.be/LhA1izPFql0" target="_blank" rel="noopener noreferrer"><strong>Full tutorial (version 2026.10-02) — watch on YouTube →</strong></a>
+    </td>
+  </tr>
+  <tr>
     <td width="50%" valign="top" align="center">
       <a href="https://youtu.be/7XBdYh0Wn7A?si=ymQmXHg92X651RmZ" target="_blank" rel="noopener noreferrer">
         <img src="docs/images/video-tutorial-thumbnail.jpg" alt="Watch the earlier SpacePixels tutorial on YouTube" width="380" />
